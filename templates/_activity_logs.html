@@ -7,23 +7,27 @@
 <!-- 筛选表单 -->
 <form method="get" action="{{ url_for('activity_logs') }}">
     <div class="grid">
+        <input type="search" name="search_term" placeholder="搜索详细信息..."
+            value="{{ request.args.get('search_term', '') }}">
         <select name="actor">
             <option value="">所有执行者</option>
             {% for actor in distinct_actors %}
-                <option value="{{ actor }}" {% if request.args.get('actor') == actor %}selected{% endif %}>{{ actor }}</option>
+            <option value="{{ actor }}" {% if request.args.get('actor')==actor %}selected{% endif %}>{{ actor }}
+            </option>
             {% endfor %}
         </select>
         <select name="action">
             <option value="">所有操作类型</option>
             {% for action in distinct_actions %}
-                <option value="{{ action }}" {% if request.args.get('action') == action %}selected{% endif %}>{{ action }}</option>
+            <option value="{{ action }}" {% if request.args.get('action')==action %}selected{% endif %}>{{ action }}
+            </option>
             {% endfor %}
         </select>
         <select name="status">
             <option value="">所有状态</option>
-            <option value="成功" {% if request.args.get('status') == '成功' %}selected{% endif %}>成功</option>
-            <option value="失败" {% if request.args.get('status') == '失败' %}selected{% endif %}>失败</option>
-            <option value="信息" {% if request.args.get('status') == '信息' %}selected{% endif %}>信息</option>
+            <option value="成功" {% if request.args.get('status')=='成功' %}selected{% endif %}>成功</option>
+            <option value="失败" {% if request.args.get('status')=='失败' %}selected{% endif %}>失败</option>
+            <option value="信息" {% if request.args.get('status')=='信息' %}selected{% endif %}>信息</option>
         </select>
         <button type="submit">筛选</button>
     </div>
@@ -49,11 +53,11 @@
                 <td><code>{{ log.action }}</code></td>
                 <td>
                     {% if log.status == '成功' %}
-                        <span class="status-normal">成功</span>
+                    <span class="status-normal">成功</span>
                     {% elif log.status == '失败' %}
-                        <span class="status-expired">失败</span>
+                    <span class="status-expired">失败</span>
                     {% else %}
-                        <span class="status-suspended">信息</span>
+                    <span class="status-suspended">信息</span>
                     {% endif %}
                 </td>
                 <td>{{ log.details }}</td>
@@ -74,9 +78,10 @@
 <nav>
     <ul>
         {% if pagination.has_prev %}
-            <li><a href="{{ url_for('activity_logs', page=pagination.prev_num, **args_without_page) }}" rel="prev">‹ 上一页</a></li>
+        <li><a href="{{ url_for('activity_logs', page=pagination.prev_num, **args_without_page) }}" rel="prev">‹ 上一页</a>
+        </li>
         {% else %}
-            <li><span role="link" aria-disabled="true">‹ 上一页</span></li>
+        <li><span role="link" aria-disabled="true">‹ 上一页</span></li>
         {% endif %}
     </ul>
     <ul>
@@ -84,9 +89,10 @@
     </ul>
     <ul>
         {% if pagination.has_next %}
-            <li><a href="{{ url_for('activity_logs', page=pagination.next_num, **args_without_page) }}" rel="next">下一页 ›</a></li>
+        <li><a href="{{ url_for('activity_logs', page=pagination.next_num, **args_without_page) }}" rel="next">下一页 ›</a>
+        </li>
         {% else %}
-            <li><span role="link" aria-disabled="true">下一页 ›</span></li>
+        <li><span role="link" aria-disabled="true">下一页 ›</span></li>
         {% endif %}
     </ul>
 </nav>

@@ -1238,6 +1238,11 @@ def activity_logs():
     
     query = ActivityLog.query
 
+    # 搜索
+    search_term = request.args.get('search_term', '').strip()
+    if search_term:
+        query = query.filter(ActivityLog.details.ilike(f'%{search_term}%'))
+
     # 筛选
     actor_filter = request.args.get('actor')
     action_filter = request.args.get('action')
