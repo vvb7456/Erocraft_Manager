@@ -1,0 +1,120 @@
+/* ── Shared styles for list pages (servers, users, logs, etc.) ── */
+
+/* Toolbar end-row (create button + filter select) */
+.toolbar-end-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Batch controls (desktop: inline flex, mobile: hidden) */
+.batch-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Action group (desktop row actions) */
+.action-group {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+/* Modal form label */
+.modal-label {
+  display: block;
+  font-size: .82rem;
+  color: var(--t2);
+  margin-bottom: var(--sp-1);
+}
+
+/* ── Mobile card common styles ── */
+.dt-card-tap {
+  cursor: pointer;
+}
+
+.card-row--main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.card-id-inline {
+  font-size: .78rem;
+  font-weight: 400;
+  color: var(--t3);
+  margin-left: var(--sp-1);
+}
+
+.card-row--sub {
+  font-size: .82rem;
+  color: var(--t2);
+  margin-top: 2px;
+}
+
+.card-row--tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-2);
+}
+
+.card-row--actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  justify-content: flex-end;
+}
+
+/* ── Action Sheet (inside BottomSheet) ── */
+.action-sheet__info {
+  font-size: .82rem;
+  color: var(--t2);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--bd);
+  margin-bottom: var(--sp-1);
+}
+
+.action-sheet__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-1);
+  background: none;
+  border: none;
+  font-size: .88rem;
+  color: var(--t1);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  text-decoration: none;
+}
+
+.action-sheet__item:active {
+  background: var(--bg2);
+}
+
+.action-sheet__item--danger {
+  color: var(--red);
+  margin-top: var(--sp-2);
+  border-top: 1px solid var(--bd);
+  padding-top: var(--sp-3);
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .batch-controls {
+    display: none;
+  }
+  .toolbar-end-row {
+    width: 100%;
+  }
+  .toolbar-half {
+    flex: 1;
+    min-width: 0;
+  }
+}

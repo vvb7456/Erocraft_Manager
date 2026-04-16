@@ -1,0 +1,73 @@
+{
+  "title": "用户列表",
+  "search_placeholder": "搜索用户名或邮箱…",
+  "filter": {
+    "all": "全部",
+    "has_servers": "有服务器",
+    "no_servers": "无服务器"
+  },
+  "sort": {
+    "id": "ID",
+    "username": "用户名",
+    "server_count": "服务器数"
+  },
+  "table": {
+    "id": "ID",
+    "username": "用户名",
+    "email": "邮箱",
+    "server_count": "服务器",
+    "created_at": "创建时间",
+    "role": "角色",
+    "actions": "操作"
+  },
+  "role": {
+    "admin": "管理员",
+    "user": "普通用户"
+  },
+  "action": {
+    "edit": "编辑",
+    "delete": "删除",
+    "create": "创建用户"
+  },
+  "create": {
+    "title": "创建用户",
+    "email": "邮箱",
+    "username": "用户名",
+    "send_welcome": "发送欢迎邮件",
+    "send_welcome_hint": "邮件将引导用户前往面板设置密码",
+    "email_sent": "欢迎邮件已发送",
+    "email_failed": "欢迎邮件发送失败",
+    "create_and_server": "创建并开通服务器",
+    "success": "用户 {name} 创建成功"
+  },
+  "edit": {
+    "title": "编辑用户",
+    "username": "用户名",
+    "email": "邮箱",
+    "first_name": "名",
+    "last_name": "姓",
+    "password": "新密码",
+    "password_hint": "留空则不修改密码",
+    "success": "用户已更新"
+  },
+  "confirm": {
+    "delete_title": "删除用户",
+    "delete_msg": "确定要删除用户「{name}」吗？其名下所有服务器也将被删除。此操作不可逆。",
+    "batch_delete_title": "批量删除用户",
+    "batch_delete_msg": "确定要删除选中的 {n} 位用户吗？其名下所有服务器也将被删除。此操作不可逆。",
+    "batch_email_title": "发送通知邮件",
+    "batch_email_msg": "确定要向选中的 {n} 位用户发送通知邮件吗？"
+  },
+  "batch": {
+    "select_action": "批量操作...",
+    "execute": "执行",
+    "selected": "已选择 {n} 位用户",
+    "email": "发送通知邮件",
+    "delete": "删除"
+  },
+  "empty": "暂无用户数据",
+  "total": "共 {n} 位用户",
+  "pagination": {
+    "per_page": "条/页"
+  }
+}

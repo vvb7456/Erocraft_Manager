@@ -1,0 +1,25 @@
+{
+  "title": "仪表盘",
+  "stats": {
+    "totalServers": "服务器总数",
+    "totalUsers": "用户总数",
+    "normalRate": "正常运行率",
+    "expiringSoon": "即将到期",
+    "expired": "已过期",
+    "suspended": "已冻结"
+  },
+  "status": {
+    "normal": "正常",
+    "suspended": "已冻结",
+    "installing": "安装中",
+    "expired": "已到期",
+    "expiringSoon": "即将到期",
+    "permanent": "永久"
+  },
+  "chart": {
+    "title": "服务器状态分布"
+  },
+  "notConfigured": "Pterodactyl API 未配置",
+  "notConfiguredMsg": "请先在系统设置中填写面板地址和 API Key",
+  "goToSettings": "前往设置"
+}

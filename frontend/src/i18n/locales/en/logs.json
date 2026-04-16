@@ -1,0 +1,29 @@
+{
+  "title": "Activity Logs",
+  "filter": {
+    "actor": "Actor",
+    "action": "Action",
+    "status": "Status",
+    "all": "All"
+  },
+  "table": {
+    "time": "Time",
+    "actor": "Actor",
+    "action": "Action",
+    "status": "Status",
+    "details": "Details"
+  },
+  "status_label": {
+    "成功": "Success",
+    "失败": "Failed",
+    "信息": "Info"
+  },
+  "pagination": {
+    "prev": "Previous",
+    "next": "Next",
+    "page": "Page {page} of {total}",
+    "per_page": "per page"
+  },
+  "empty": "No activity logs",
+  "total": "{n} records total"
+}

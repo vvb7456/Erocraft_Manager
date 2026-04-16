@@ -1,0 +1,9 @@
+{
+  "dashboard": "Dashboard",
+  "servers": "Servers",
+  "users": "Users",
+  "activityLogs": "Activity Logs",
+  "emailTemplates": "Email Templates",
+  "automation": "Automation",
+  "settings": "Settings"
+}

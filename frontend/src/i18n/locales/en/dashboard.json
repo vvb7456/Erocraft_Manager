@@ -1,0 +1,25 @@
+{
+  "title": "Dashboard",
+  "stats": {
+    "totalServers": "Total Servers",
+    "totalUsers": "Total Users",
+    "normalRate": "Normal Rate",
+    "expiringSoon": "Expiring Soon",
+    "expired": "Expired",
+    "suspended": "Suspended"
+  },
+  "status": {
+    "normal": "Normal",
+    "suspended": "Suspended",
+    "installing": "Installing",
+    "expired": "Expired",
+    "expiringSoon": "Expiring Soon",
+    "permanent": "Permanent"
+  },
+  "chart": {
+    "title": "Server Status Distribution"
+  },
+  "notConfigured": "Pterodactyl API Not Configured",
+  "notConfiguredMsg": "Please set the panel URL and API key in system settings first",
+  "goToSettings": "Go to Settings"
+}

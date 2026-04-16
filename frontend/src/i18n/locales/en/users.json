@@ -1,0 +1,73 @@
+{
+  "title": "User List",
+  "search_placeholder": "Search username or email…",
+  "filter": {
+    "all": "All",
+    "has_servers": "Has Servers",
+    "no_servers": "No Servers"
+  },
+  "sort": {
+    "id": "ID",
+    "username": "Username",
+    "server_count": "Server Count"
+  },
+  "table": {
+    "id": "ID",
+    "username": "Username",
+    "email": "Email",
+    "server_count": "Servers",
+    "created_at": "Created",
+    "role": "Role",
+    "actions": "Actions"
+  },
+  "role": {
+    "admin": "Admin",
+    "user": "User"
+  },
+  "action": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "create": "Create User"
+  },
+  "create": {
+    "title": "Create User",
+    "email": "Email",
+    "username": "Username",
+    "send_welcome": "Send welcome email",
+    "send_welcome_hint": "Email will guide the user to set their password on the panel",
+    "email_sent": "Welcome email sent",
+    "email_failed": "Welcome email failed",
+    "create_and_server": "Create & Add Server",
+    "success": "User {name} created successfully"
+  },
+  "edit": {
+    "title": "Edit User",
+    "username": "Username",
+    "email": "Email",
+    "first_name": "First Name",
+    "last_name": "Last Name",
+    "password": "New Password",
+    "password_hint": "Leave blank to keep current password",
+    "success": "User updated"
+  },
+  "confirm": {
+    "delete_title": "Delete User",
+    "delete_msg": "Are you sure you want to delete user \"{name}\"? All their servers will also be deleted. This cannot be undone.",
+    "batch_delete_title": "Batch Delete Users",
+    "batch_delete_msg": "Are you sure you want to delete {n} selected users? All their servers will also be deleted. This cannot be undone.",
+    "batch_email_title": "Send Notification",
+    "batch_email_msg": "Are you sure you want to send notification emails to {n} selected users?"
+  },
+  "batch": {
+    "select_action": "Batch action...",
+    "execute": "Execute",
+    "selected": "{n} users selected",
+    "email": "Send Notification",
+    "delete": "Delete"
+  },
+  "empty": "No users found",
+  "total": "{n} users total",
+  "pagination": {
+    "per_page": "per page"
+  }
+}

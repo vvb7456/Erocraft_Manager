@@ -1,0 +1,74 @@
+{
+  "btn": {
+    "save": "保存",
+    "all": "全部",
+    "cancel": "取消",
+    "delete": "删除",
+    "download": "下载",
+    "start": "启动",
+    "stop": "停止",
+    "restart": "重启",
+    "close": "关闭",
+    "confirm": "确认",
+    "dont_ask": "不再提示",
+    "add": "添加",
+    "copy": "复制",
+    "show": "显示",
+    "hide": "隐藏",
+    "clear": "清空",
+    "logout": "登出"
+  },
+  "status": {
+    "loading": "加载中...",
+    "enabled": "已启用",
+    "disabled": "已禁用"
+  },
+  "sidebar": {
+    "toggle": "收起/展开"
+  },
+  "lang": {
+    "switch_zh": "切换到中文",
+    "switch_en": "Switch to English"
+  },
+  "unit": {
+    "items": "个",
+    "seconds": "秒"
+  },
+  "filter": {
+    "all": "全部",
+    "all_types": "全部类型",
+    "all_status": "全部状态",
+    "all_folders": "全部文件夹"
+  },
+  "log": {
+    "title": "日志",
+    "clear": "清空日志",
+    "empty": "暂无输出",
+    "live": "实时",
+    "standby": "就绪",
+    "loading": "加载中",
+    "error": "连接错误",
+    "follow_on": "始终跟随最新行",
+    "follow_off": "取消跟随最新行"
+  },
+  "scroll_top": "返回顶部",
+  "theme_toggle": "切换主题",
+  "clipboard_copied": "已复制到剪贴板",
+  "no_results": "没有找到匹配的结果",
+  "no_matches": "无匹配项",
+  "search_hint": "搜索…",
+  "loading": "加载中...",
+  "empty": "暂无数据",
+  "filter_hint": "筛选…",
+  "chip_more": "+{n} 更多",
+  "chip_collapse": "收起",
+  "upload": {
+    "drop_hint": "拖拽文件到此处",
+    "click_hint": "或点击选择文件",
+    "pick_label": "从 input 选择",
+    "upload_label": "拖放或点击上传",
+    "or_divider": "或",
+    "unsupported_type": "不支持的文件类型: {name}",
+    "remove": "移除"
+  }
+}

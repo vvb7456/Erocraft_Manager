@@ -1,0 +1,109 @@
+{
+  "title": "服务器列表",
+  "search_placeholder": "搜索服务器名称或所有者…",
+  "filter": {
+    "all": "全部",
+    "normal": "正常",
+    "expiring_soon": "即将到期",
+    "expired": "已到期",
+    "permanent": "永久"
+  },
+  "sort": {
+    "expiration_date": "到期时间",
+    "ptero_server_id": "ID",
+    "server_name": "名称"
+  },
+  "table": {
+    "id": "ID",
+    "name": "服务器名称",
+    "owner": "所有者",
+    "expiration": "到期时间",
+    "panel_status": "状态",
+    "actions": "操作"
+  },
+  "status": {
+    "normal": "正常",
+    "expiring_soon": "即将到期",
+    "expired": "已过期",
+    "suspended": "已冻结",
+    "permanent": "永久",
+    "days_left": "{n} 天",
+    "today": "今天",
+    "expired_days": "已过期 {n} 天"
+  },
+  "action": {
+    "renew": "续期",
+    "suspend": "冻结",
+    "unsuspend": "解冻",
+    "delete": "删除",
+    "edit": "编辑",
+    "batch": "批量操作",
+    "create": "创建服务器",
+    "renew_days": "续期天数",
+    "renew_date": "续期至",
+    "open_panel": "面板",
+    "quick_renew": "快速续期",
+    "custom_date": "自定义日期"
+  },
+  "batch": {
+    "select_action": "批量操作...",
+    "execute": "执行",
+    "selected": "已选择 {n} 台服务器",
+    "suspend": "冻结",
+    "unsuspend": "解冻",
+    "renew": "续期",
+    "email": "发送通知邮件",
+    "delete": "删除"
+  },
+  "confirm": {
+    "delete_title": "删除服务器",
+    "delete_msg": "确定要删除服务器「{name}」吗？此操作不可逆。",
+    "batch_delete_title": "批量删除",
+    "batch_delete_msg": "确定要删除选中的 {n} 台服务器吗？此操作不可逆。",
+    "batch_email_title": "发送通知邮件",
+    "batch_email_msg": "确定要向选中的 {n} 台服务器的所有者发送通知邮件吗？",
+    "suspend_title": "冻结服务器",
+    "suspend_msg": "确定要冻结服务器「{name}」吗？",
+    "unsuspend_title": "解冻服务器",
+    "unsuspend_msg": "确定要解冻服务器「{name}」吗？"
+  },
+  "empty": "暂无服务器数据",
+  "total": "共 {n} 台服务器",
+  "pagination": {
+    "per_page": "条/页"
+  },
+  "create": {
+    "title": "创建服务器",
+    "section_basic": "基础信息",
+    "section_image": "预设 & 镜像",
+    "section_node": "节点 & 端口",
+    "section_resources": "资源配置",
+    "section_env": "环境变量",
+    "user": "所有者",
+    "user_placeholder": "选择用户…",
+    "server_name": "服务器名称",
+    "server_name_placeholder": "输入服务器名称",
+    "nest": "预设组 (Nest)",
+    "nest_placeholder": "选择预设组…",
+    "egg": "预设 (Egg)",
+    "egg_placeholder": "选择预设…",
+    "egg_hint": "请先选择预设组",
+    "docker_image": "Docker 镜像",
+    "startup_command": "启动指令",
+    "node": "节点",
+    "node_placeholder": "选择节点…",
+    "allocation": "主端口",
+    "allocation_placeholder": "选择端口…",
+    "allocation_hint": "请先选择节点",
+    "no_allocations": "无可用端口",
+    "cpu": "CPU 限制 (%)",
+    "memory": "内存 (MB)",
+    "disk": "磁盘 (MB)",
+    "databases": "数据库数量",
+    "backups": "备份数量",
+    "extra_allocations": "额外端口数",
+    "expiration_days": "有效天数",
+    "creating": "正在创建…",
+    "success": "服务器创建成功"
+  }
+}

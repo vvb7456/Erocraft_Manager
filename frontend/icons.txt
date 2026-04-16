@@ -1,0 +1,94 @@
+# Material Symbols Outlined — 手动补充清单
+# build-fonts.sh 会自动从源码提取 MsIcon 的 name="..." 和 :name="'...'"
+# 此文件仅用于记录无法自动提取的间接引用
+
+# AutomationPage / EmailTemplatesPage
+pause_circle
+delete_forever
+campaign
+notifications_active
+
+# ThemeToggle.vue
+dark_mode
+light_mode
+contrast
+
+# LogPanel.vue
+gps_fixed
+gps_not_fixed
+
+# LoginPage.vue
+login
+
+# AppSidebar nav icons
+dashboard
+dns
+group
+history
+mail
+schedule
+settings
+
+# ICON_COLORS keys used in the project
+play_arrow
+cloud_sync
+sync
+trending_up
+cloud_upload
+save
+public
+refresh
+arrow_upward
+stop
+cancel
+error
+warning
+hourglass_top
+timer
+bolt
+restart_alt
+pause
+download
+upload
+link
+cloud
+cloud_download
+language
+zoom_in
+storage
+extension
+inventory_2
+label
+monitoring
+package_2
+edit
+rule
+palette
+image
+videocam
+brush
+push_pin
+thumb_up
+auto_awesome
+terminal
+memory
+developer_board
+smart_toy
+book_2
+build
+deployed_code
+key
+lock
+folder
+folder_open
+pan_tool
+star
+wifi_tethering
+person_add
+tune
+description
+receipt_long
+person
+hard_drive_2
+image_not_supported
+arrow_back

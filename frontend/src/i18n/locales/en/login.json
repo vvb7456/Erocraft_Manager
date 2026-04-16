@@ -1,0 +1,14 @@
+{
+  "subtitle": "Administrator Login",
+  "username": "Username",
+  "username_placeholder": "Enter username",
+  "password": "Password",
+  "password_placeholder": "Enter password",
+  "submit": "Sign In",
+  "success": "Login successful",
+  "error": {
+    "empty": "Please enter username and password",
+    "invalid": "Invalid username or password",
+    "network": "Network connection failed"
+  }
+}

@@ -1,0 +1,297 @@
+<script setup lang="ts">
+import { computed, ref, onMounted, onUnmounted } from 'vue'
+import MsIcon from './MsIcon.vue'
+import Spinner from './Spinner.vue'
+import EmptyState from './EmptyState.vue'
+
+export interface DataTableColumn {
+  key: string
+  label: string
+  sortable?: boolean
+  class?: string
+}
+
+const props = withDefaults(defineProps<{
+  /** Rows to display on the current page */
+  items: any[]
+  /** Current page (1-indexed) */
+  page: number
+  /** Total page count */
+  totalPages: number
+  /** Items per page */
+  perPage: number
+  /** Label for the per-page input (e.g. "条/页") */
+  perPageLabel?: string
+  /** Current sort column key */
+  sortBy?: string
+  /** Current sort direction */
+  sortOrder?: 'asc' | 'desc'
+  /** Show loading spinner */
+  loading?: boolean
+  /** Empty icon */
+  emptyIcon?: string
+  /** Empty message */
+  emptyText?: string
+  /** Row key field */
+  rowKey?: string
+}>(), {
+  perPageLabel: '',
+  sortBy: '',
+  sortOrder: 'asc',
+  loading: false,
+  emptyIcon: 'table_rows',
+  emptyText: 'No data',
+  rowKey: 'id',
+})
+
+const emit = defineEmits<{
+  'update:page': [value: number]
+  'update:perPage': [value: number]
+  sort: [column: string]
+}>()
+
+function onPerPageChange(e: Event) {
+  const v = Math.max(1, Math.min(500, Number((e.target as HTMLInputElement).value) || 20))
+  emit('update:perPage', v)
+  emit('update:page', 1)
+}
+
+const sortIcon = computed(() =>
+  props.sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward',
+)
+
+const isMobile = ref(false)
+const mql = typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)') : null
+function onMediaChange(e: MediaQueryListEvent | MediaQueryList) { isMobile.value = e.matches }
+onMounted(() => { if (mql) { onMediaChange(mql); mql.addEventListener('change', onMediaChange) } })
+onUnmounted(() => { mql?.removeEventListener('change', onMediaChange) })
+</script>
+
+<template>
+  <!-- Loading -->
+  <div v-if="loading" class="dt-center-loading">
+    <Spinner size="lg" />
+  </div>
+
+  <!-- Empty -->
+  <EmptyState v-else-if="items.length === 0" :icon="emptyIcon" :title="emptyText" />
+
+  <!-- Table (desktop) or Cards (mobile) -->
+  <template v-else>
+    <!-- Mobile card view -->
+    <div v-if="isMobile && $slots.card" class="dt-card-list">
+      <div
+        v-for="(item, index) in items"
+        :key="rowKey ? item[rowKey] : index"
+        class="dt-card"
+      >
+        <slot name="card" :item="item" :index="index" />
+      </div>
+    </div>
+
+    <!-- Desktop table view -->
+    <div v-else class="dt-table-wrap">
+      <table class="dt-table">
+        <thead>
+          <tr>
+            <slot name="header" :sort-by="sortBy" :sort-order="sortOrder" :sort-icon="sortIcon" />
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="(item, index) in items"
+            :key="rowKey ? item[rowKey] : index"
+          >
+            <slot name="row" :item="item" :index="index" />
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination footer -->
+    <div class="dt-footer" :class="{ 'dt-footer--mobile': isMobile }">
+      <div class="dt-footer-spacer" />
+      <div class="dt-pagination">
+        <button class="dt-page-btn" :disabled="page <= 1" @click="emit('update:page', page - 1)">
+          <MsIcon name="chevron_left" size="xs" />
+        </button>
+        <span class="dt-page-info">{{ page }} / {{ totalPages }}</span>
+        <button class="dt-page-btn" :disabled="page >= totalPages" @click="emit('update:page', page + 1)">
+          <MsIcon name="chevron_right" size="xs" />
+        </button>
+      </div>
+      <div class="dt-footer-right">
+        <input
+          type="number"
+          class="dt-per-page-input"
+          :value="perPage"
+          min="1"
+          max="500"
+          @change="onPerPageChange"
+        />
+        <span v-if="perPageLabel" class="dt-per-page-label">{{ perPageLabel }}</span>
+      </div>
+    </div>
+  </template>
+</template>
+
+<style scoped>
+.dt-center-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-8);
+}
+
+.dt-table-wrap {
+  overflow-x: auto;
+}
+
+.dt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+}
+
+.dt-table :deep(th),
+.dt-table :deep(td) {
+  padding: var(--sp-3) var(--sp-3);
+  text-align: left;
+  border-bottom: 1px solid var(--bd);
+  white-space: nowrap;
+}
+
+.dt-table :deep(th) {
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  background: var(--bg2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.dt-table :deep(th.sortable) {
+  cursor: pointer;
+  user-select: none;
+}
+
+.dt-table :deep(th.sortable:hover) {
+  color: var(--t1);
+}
+
+.dt-table :deep(tbody tr:hover) {
+  background: color-mix(in srgb, var(--ac) 4%, transparent);
+}
+
+/* Footer */
+.dt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--bd);
+  font-size: .78rem;
+  color: var(--t3);
+}
+
+.dt-footer-spacer {
+  flex: 1;
+}
+
+.dt-pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.dt-page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--bd);
+  border-radius: var(--r-sm);
+  background: var(--bg2);
+  color: var(--t2);
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.dt-page-btn:hover:not(:disabled) {
+  background: var(--bg2);
+}
+
+.dt-page-btn:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+.dt-page-info {
+  font-variant-numeric: tabular-nums;
+  min-width: 48px;
+  text-align: center;
+}
+
+.dt-footer-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+.dt-per-page-input {
+  width: 56px;
+  padding: 2px 6px;
+  border: 1px solid var(--bd);
+  border-radius: var(--r-sm);
+  background: var(--bg2);
+  color: var(--t1);
+  font-size: .78rem;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.dt-per-page-input::-webkit-inner-spin-button,
+.dt-per-page-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.dt-per-page-label {
+  white-space: nowrap;
+}
+
+/* Card list (mobile) */
+.dt-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.dt-card {
+  background: var(--bg2);
+  border: 1px solid var(--bd);
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dt-card:active {
+  background: var(--bg2);
+}
+
+/* Mobile pagination */
+.dt-footer--mobile {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.dt-footer--mobile .dt-footer-spacer,
+.dt-footer--mobile .dt-footer-right {
+  display: none;
+}
+</style>

@@ -1,0 +1,36 @@
+{
+  "title": "邮件模板",
+  "save": "保存模板",
+  "saved": "模板已保存",
+  "subject": "邮件主题",
+  "body": "邮件正文",
+  "placeholders": "可用变量",
+  "bulk": {
+    "title": "批量通知",
+    "desc": "用于向服务器关联用户发送批量通知邮件"
+  },
+  "reminder": {
+    "title": "到期提醒",
+    "desc": "服务器即将到期时自动发送的提醒邮件"
+  },
+  "preDelete": {
+    "title": "删除前提醒",
+    "desc": "服务器即将被自动删除时发送的最终警告"
+  },
+  "createUser": {
+    "title": "新用户通知",
+    "desc": "创建新用户时发送的欢迎邮件"
+  },
+  "var": {
+    "brand_name": "品牌名",
+    "username": "用户名",
+    "email": "邮箱",
+    "server_name": "服务器名",
+    "server_id": "服务器 ID",
+    "expiration_date": "到期日期",
+    "server_count": "服务器数量",
+    "server_list": "服务器列表",
+    "deletion_date": "删除日期",
+    "password": "初始密码"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "title": "Email Templates",
+  "save": "Save Template",
+  "saved": "Template saved",
+  "subject": "Subject",
+  "body": "Body",
+  "placeholders": "Available Variables",
+  "bulk": {
+    "title": "Bulk Notification",
+    "desc": "Bulk notification emails sent to server-associated users"
+  },
+  "reminder": {
+    "title": "Expiration Reminder",
+    "desc": "Automatic reminders sent when servers are about to expire"
+  },
+  "preDelete": {
+    "title": "Pre-Delete Warning",
+    "desc": "Final warning before automatic server deletion"
+  },
+  "createUser": {
+    "title": "New User Notification",
+    "desc": "Welcome email sent when a new user account is created"
+  },
+  "var": {
+    "brand_name": "Brand Name",
+    "username": "Username",
+    "email": "Email",
+    "server_name": "Server Name",
+    "server_id": "Server ID",
+    "expiration_date": "Expiration Date",
+    "server_count": "Server Count",
+    "server_list": "Server List",
+    "deletion_date": "Deletion Date",
+    "password": "Initial Password"
+  }
+}

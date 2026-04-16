@@ -1,0 +1,29 @@
+{
+  "title": "操作日志",
+  "filter": {
+    "actor": "执行者",
+    "action": "操作类型",
+    "status": "状态",
+    "all": "全部"
+  },
+  "table": {
+    "time": "时间",
+    "actor": "执行者",
+    "action": "操作类型",
+    "status": "状态",
+    "details": "详细信息"
+  },
+  "status_label": {
+    "成功": "成功",
+    "失败": "失败",
+    "信息": "信息"
+  },
+  "pagination": {
+    "prev": "上一页",
+    "next": "下一页",
+    "page": "第 {page} / {total} 页",
+    "per_page": "条/页"
+  },
+  "empty": "暂无日志记录",
+  "total": "共 {n} 条记录"
+}
