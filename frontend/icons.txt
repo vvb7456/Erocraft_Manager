@@ -8,6 +8,11 @@ delete_forever
 campaign
 notifications_active
 
+# ConsolePage — dynamic/conditional icons
+cloud_off
+power_settings_new
+power_off
+
 # ThemeToggle.vue
 dark_mode
 light_mode
@@ -92,3 +97,16 @@ person
 hard_drive_2
 image_not_supported
 arrow_back
+
+# FileManager page — dynamic icons
+note_add
+drive_file_move
+unarchive
+search_off
+more_vert
+data_object
+draft
+code
+audio_file
+video_file
+save

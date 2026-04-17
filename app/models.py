@@ -71,6 +71,7 @@ class PteroServer(db.Model):
     name = db.Column(db.String(191), nullable=False)
     description = db.Column(db.Text, nullable=False, default='')
     status = db.Column(db.String(191), nullable=True)
+    installed_at = db.Column(db.DateTime, nullable=True)  # NULL=not installed yet
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     memory = db.Column(db.Integer, nullable=False, default=0)
     swap = db.Column(db.Integer, nullable=False, default=0)

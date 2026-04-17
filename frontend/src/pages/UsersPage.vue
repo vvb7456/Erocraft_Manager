@@ -16,7 +16,10 @@ import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
-import BottomSheet from '@/components/ui/BottomSheet.vue'
+import ActionSheet from '@/components/ui/ActionSheet.vue'
+import CardTap from '@/components/ui/CardTap.vue'
+import CardKV from '@/components/ui/CardKV.vue'
+import FormField from '@/components/form/FormField.vue'
 
 defineOptions({ name: 'UsersPage' })
 
@@ -411,60 +414,54 @@ const mobileSortOpen = ref(false)
 
       <!-- Mobile card -->
       <template #card="{ item: u }">
-        <div class="dt-card-tap" @click="openMobileAction(u)">
-          <div class="card-row card-row--main">
-            <span class="card-username">{{ u.username }} <span class="card-id-inline">#{{ u.id }}</span></span>
+        <CardTap @tap="openMobileAction(u)">
+          <div class="card-row--main">
+            <span class="card-name">{{ u.username }} <span class="card-id-inline">#{{ u.id }}</span></span>
             <Badge :color="u.root_admin ? 'var(--amber)' : undefined" size="sm">
               {{ u.root_admin ? t('users.role.admin') : t('users.role.user') }}
             </Badge>
           </div>
-          <div class="card-row card-row--sub">{{ u.email }}</div>
-          <div class="card-row card-row--tags">
-            <Badge :color="u.server_count > 0 ? 'var(--ac)' : 'var(--t3)'" size="sm">
-              {{ t('users.table.server_count') }} {{ u.server_count }}
-            </Badge>
-            <span class="card-tag">{{ u.created_at ? new Date(u.created_at).toLocaleDateString() : '-' }}</span>
+          <div class="card-row--sub">{{ u.email }}</div>
+          <div class="card-detail">
+            <CardKV :label="t('users.table.server_count')">
+              <span :class="u.server_count > 0 ? '' : 'count-zero'">{{ u.server_count }}</span>
+            </CardKV>
+            <CardKV :label="t('users.table.created_at')">{{ u.created_at ? new Date(u.created_at).toLocaleDateString() : '-' }}</CardKV>
           </div>
-        </div>
+        </CardTap>
       </template>
     </DataTable>
   </div>
 
   <!-- Mobile Action Sheet -->
-  <BottomSheet v-model="mobileActionOpen" :title="mobileActionUser?.username">
-    <div v-if="mobileActionUser" class="action-sheet">
-      <div class="action-sheet__info">
-        {{ mobileActionUser.email }}
-      </div>
-      <button class="action-sheet__item" @click="mobileActionOpen = false; openEdit(mobileActionUser!)">
+  <ActionSheet v-model="mobileActionOpen" :title="mobileActionUser?.username">
+    <template v-if="mobileActionUser" #info>
+      {{ mobileActionUser.email }}
+    </template>
+    <template v-if="mobileActionUser">
+      <button @click="mobileActionOpen = false; openEdit(mobileActionUser!)">
         <MsIcon name="edit" size="sm" /> {{ t('users.action.edit') }}
       </button>
-      <button v-if="mobileActionUser.server_count > 0" class="action-sheet__item" @click="mobileActionOpen = false; router.push({ name: 'servers', query: { q: mobileActionUser!.username } })">
+      <button v-if="mobileActionUser.server_count > 0" @click="mobileActionOpen = false; router.push({ name: 'servers', query: { q: mobileActionUser!.username } })">
         <MsIcon name="dns" size="sm" /> {{ t('users.table.server_count') }} ({{ mobileActionUser.server_count }})
       </button>
-      <button class="action-sheet__item action-sheet__item--danger" @click="mobileActionOpen = false; deleteUser(mobileActionUser!)">
+      <button class="action-sheet--danger" @click="mobileActionOpen = false; deleteUser(mobileActionUser!)">
         <MsIcon name="delete" size="sm" /> {{ t('users.action.delete') }}
       </button>
-    </div>
-  </BottomSheet>
+    </template>
+  </ActionSheet>
 
   <!-- Create User Modal -->
   <BaseModal v-model="createModalOpen" :title="t('users.create.title')" icon="person_add" size="sm">
-    <div class="form-stack">
-      <div class="form-field">
-        <label class="modal-label">{{ t('users.create.email') }}</label>
-        <BaseInput :modelValue="createEmail" type="email" @update:modelValue="onEmailInput" />
-      </div>
-      <div class="form-field">
-        <label class="modal-label">{{ t('users.create.username') }}</label>
-        <BaseInput v-model="createUsername" />
-      </div>
-      <div class="form-field">
-        <label class="checkbox-label">
-          {{ t('users.create.send_welcome') }}
-          <input type="checkbox" v-model="createSendWelcome" />
-        </label>
-      </div>
+    <FormField :label="t('users.create.email')" density="compact">
+      <BaseInput :modelValue="createEmail" type="email" @update:modelValue="onEmailInput" />
+    </FormField>
+    <FormField :label="t('users.create.username')" density="compact">
+      <BaseInput v-model="createUsername" />
+    </FormField>
+    <div class="checkbox-label">
+      {{ t('users.create.send_welcome') }}
+      <input type="checkbox" v-model="createSendWelcome" />
     </div>
     <template #footer>
       <BaseButton @click="createModalOpen = false">{{ t('common.btn.cancel') }}</BaseButton>
@@ -477,32 +474,25 @@ const mobileSortOpen = ref(false)
 
   <!-- Edit User Modal -->
   <BaseModal v-model="editModalOpen" :title="t('users.edit.title')" icon="edit" size="md">
-    <div class="form-stack">
-      <div class="form-row">
-        <div class="form-field">
-          <label class="modal-label">{{ t('users.edit.username') }}</label>
-          <BaseInput v-model="editForm.username" />
-        </div>
-        <div class="form-field">
-          <label class="modal-label">{{ t('users.edit.email') }}</label>
-          <BaseInput v-model="editForm.email" type="email" />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-field">
-          <label class="modal-label">{{ t('users.edit.first_name') }}</label>
-          <BaseInput v-model="editForm.firstName" />
-        </div>
-        <div class="form-field">
-          <label class="modal-label">{{ t('users.edit.last_name') }}</label>
-          <BaseInput v-model="editForm.lastName" />
-        </div>
-      </div>
-      <div class="form-field">
-        <label class="modal-label">{{ t('users.edit.password') }}</label>
-        <SecretInput v-model="editForm.password" :placeholder="t('users.edit.password_hint')" />
-      </div>
+    <div class="form-row">
+      <FormField :label="t('users.edit.username')" density="compact">
+        <BaseInput v-model="editForm.username" />
+      </FormField>
+      <FormField :label="t('users.edit.email')" density="compact">
+        <BaseInput v-model="editForm.email" type="email" />
+      </FormField>
     </div>
+    <div class="form-row">
+      <FormField :label="t('users.edit.first_name')" density="compact">
+        <BaseInput v-model="editForm.firstName" />
+      </FormField>
+      <FormField :label="t('users.edit.last_name')" density="compact">
+        <BaseInput v-model="editForm.lastName" />
+      </FormField>
+    </div>
+    <FormField :label="t('users.edit.password')" density="compact">
+      <SecretInput v-model="editForm.password" :placeholder="t('users.edit.password_hint')" />
+    </FormField>
     <template #footer>
       <BaseButton @click="editModalOpen = false">{{ t('common.btn.cancel') }}</BaseButton>
       <BaseButton variant="primary" :loading="editLoading" @click="doEdit">{{ t('common.btn.save') }}</BaseButton>
@@ -535,6 +525,12 @@ const mobileSortOpen = ref(false)
 
 .col-check { width: 36px; text-align: center !important; }
 .col-id { width: 56px; }
+
+.toolbar-status {
+  font-size: .82rem;
+  color: var(--t3);
+  white-space: nowrap;
+}
 .col-username { width: 14%; }
 .col-email { width: 22%; }
 .col-count { width: 64px; text-align: center !important; }
@@ -554,38 +550,42 @@ const mobileSortOpen = ref(false)
   color: var(--t3);
 }
 
-/* Modal form styles */
-.form-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-
+/* Modal form layout */
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-3);
 }
 
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.field-hint {
-  font-size: .75rem;
-  color: var(--t3);
-  margin: 0;
-}
-
-/* Mobile card styles */
-.card-username {
+/* Mobile card styles — page-specific */
+.card-name {
   font-weight: 600;
   font-size: .92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
-.card-tag {
-  font-size: .75rem;
+
+.card-id-inline {
+  font-size: .78rem;
+  font-weight: 400;
   color: var(--t3);
+  margin-left: var(--sp-1);
+}
+
+/* ── Table row actions ── */
+.action-group {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .toolbar-half {
+    flex: 1;
+    min-width: 0;
+  }
 }
 </style>

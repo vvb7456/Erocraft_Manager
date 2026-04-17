@@ -30,7 +30,7 @@ def automation_get():
 @bp.route('/automation', methods=['POST'])
 def automation_save():
     data = request.get_json(silent=True) or {}
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
 
     automation_settings = {
         'AUTOMATION_RUN_HOUR': _clamp_int(data.get('AUTOMATION_RUN_HOUR'), 0, 23, 2),

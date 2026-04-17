@@ -22,7 +22,7 @@ def settings_get():
 @bp.route('/settings', methods=['POST'])
 def settings_save():
     data = request.get_json(silent=True) or {}
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
     whitelist = config_manager.SETTINGS_WHITELIST
 
     settings_to_save = {}

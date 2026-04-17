@@ -9,6 +9,7 @@ import BaseInput from '@/components/form/BaseInput.vue'
 import BaseTextarea from '@/components/form/BaseTextarea.vue'
 import TabSwitcher, { type TabItem } from '@/components/ui/TabSwitcher.vue'
 import Spinner from '@/components/ui/Spinner.vue'
+import FormField from '@/components/form/FormField.vue'
 
 defineOptions({ name: 'EmailTemplatesPage' })
 
@@ -106,15 +107,13 @@ async function save() {
           </div>
         </div>
 
-        <div class="form-field">
-          <label class="s-label">{{ t('emailTemplates.subject') }}</label>
+        <FormField :label="t('emailTemplates.subject')">
           <BaseInput v-model="templates[activeTab].subject" />
-        </div>
+        </FormField>
 
-        <div class="form-field">
-          <label class="s-label">{{ t('emailTemplates.body') }}</label>
+        <FormField :label="t('emailTemplates.body')">
           <BaseTextarea v-model="templates[activeTab].body" :rows="12" mono />
-        </div>
+        </FormField>
 
         <div class="form-actions">
           <BaseButton variant="primary" :loading="saveLoading" @click="save">
@@ -172,12 +171,6 @@ async function save() {
 
 .tpl-var-desc {
   color: var(--t3);
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
 }
 
 .s-label {

@@ -36,6 +36,7 @@ class ConfigManager:
         'DEFAULT_CPU', 'DEFAULT_MEMORY', 'DEFAULT_DISK',
         'DEFAULT_DATABASES', 'DEFAULT_BACKUPS', 'DEFAULT_ALLOCATIONS',
         'SERVER_NAME_PREFIX',
+        'PANEL_APP_KEY',
     })
 
     AUTOMATION_WHITELIST = frozenset({

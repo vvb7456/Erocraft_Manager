@@ -55,10 +55,37 @@ defineOptions({ name: 'SectionToolbar' })
   }
 }
 
-/* Utility: toolbar status text — apply class="toolbar-status" to slot content */
+/* ── Slot content utilities ── */
+:slotted(.batch-controls) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+:slotted(.toolbar-end-row) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 :slotted(.toolbar-status) {
-  font-size: var(--text-sm);
-  color: var(--t2);
+  font-size: .82rem;
+  color: var(--t3);
   white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  :slotted(.batch-controls) {
+    display: none;
+  }
+
+  :slotted(.toolbar-end-row) {
+    width: 100%;
+  }
+
+  :slotted(.toolbar-half) {
+    flex: 1;
+    min-width: 0;
+  }
 }
 </style>

@@ -136,7 +136,7 @@ def create_user():
     if PteroUser.query.filter_by(username=username).first():
         return jsonify({'error': f'用户名 {username} 已存在'}), 422
 
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
 
     try:
         now = datetime.utcnow()
@@ -195,7 +195,7 @@ def create_user():
 @bp.route('/users/<int:user_id>', methods=['PUT'])
 def update_user(user_id):
     data = request.get_json(silent=True) or {}
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
 
     # Fetch current data
     current = ptero.get_single(f"users/{user_id}")
@@ -222,7 +222,7 @@ def update_user(user_id):
 
 @bp.route('/users/<int:user_id>', methods=['DELETE'])
 def delete_user(user_id):
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
 
     # Delete owned servers first via API (DB cascade handles manager_server_meta)
     owned = PteroServer.query.filter_by(owner_id=user_id).all()
@@ -247,7 +247,7 @@ def batch_users():
     if not action or not user_ids:
         return jsonify({'error': '未选择操作或用户'}), 400
 
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
     success, errors = 0, 0
 
     if action == 'email':

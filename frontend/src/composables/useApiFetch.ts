@@ -20,14 +20,15 @@ export function useApiFetch() {
 
   async function request<T = unknown>(
     url: string,
-    opts: RequestInit = {},
+    opts: RequestInit & { silent?: boolean } = {},
   ): Promise<T | null> {
     loading.value = true
     error.value = null
+    const { silent, ...fetchOpts } = opts
     try {
       const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json', ...opts.headers as Record<string, string> },
-        ...opts,
+        headers: { 'Content-Type': 'application/json', ...fetchOpts.headers as Record<string, string> },
+        ...fetchOpts,
       })
       if (!res.ok) {
         // 401: session expired — redirect to login
@@ -41,7 +42,7 @@ export function useApiFetch() {
           msg = body.error || body.message || msg
         } catch { /* ignore parse error */ }
         error.value = msg
-        toast(msg, 'error')
+        if (!silent) toast(msg, 'error')
         return null
       }
       // Handle 204 No Content
@@ -50,15 +51,15 @@ export function useApiFetch() {
     } catch (e: any) {
       const msg = e?.message || 'Network error'
       error.value = msg
-      toast(msg, 'error')
+      if (!silent) toast(msg, 'error')
       return null
     } finally {
       loading.value = false
     }
   }
 
-  async function get<T = unknown>(url: string): Promise<T | null> {
-    return request<T>(url, { method: 'GET' })
+  async function get<T = unknown>(url: string, opts?: { silent?: boolean }): Promise<T | null> {
+    return request<T>(url, { method: 'GET', ...opts })
   }
 
   async function post<T = unknown>(url: string, body?: Record<string, unknown> | unknown[]): Promise<T | null> {

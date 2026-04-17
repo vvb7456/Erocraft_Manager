@@ -37,7 +37,7 @@ def templates_get():
 def templates_save():
     data = request.get_json(silent=True) or {}
     form_type = data.get('type')
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
 
     if form_type not in _TYPE_MAP:
         return jsonify({'error': '未知模板类型'}), 400

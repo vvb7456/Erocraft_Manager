@@ -7,6 +7,8 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
+import AlertBanner from '@/components/ui/AlertBanner.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 
 defineOptions({ name: 'DashboardPage' })
@@ -77,14 +79,14 @@ onMounted(async () => {
       :title="t('dashboard.notConfigured')"
       :message="t('dashboard.notConfiguredMsg')"
     >
-      <router-link to="/settings" class="empty-action">
+      <BaseButton variant="primary" href="#/settings" style="margin-top: var(--sp-3)">
         {{ t('dashboard.goToSettings') }}
-      </router-link>
+      </BaseButton>
     </EmptyState>
 
-    <div v-else-if="error" class="error-banner">
+    <AlertBanner v-else-if="error" tone="danger" icon="error">
       {{ error }}
-    </div>
+    </AlertBanner>
 
     <!-- Content -->
     <template v-else-if="data">
@@ -203,29 +205,5 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--t1);
   font-variant-numeric: tabular-nums;
-}
-
-.error-banner {
-  padding: var(--sp-4);
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: var(--rs);
-  color: var(--red);
-  text-align: center;
-}
-
-.empty-action {
-  display: inline-block;
-  margin-top: var(--sp-3);
-  padding: var(--sp-2) var(--sp-4);
-  background: var(--ac);
-  color: var(--t-inv);
-  border-radius: var(--rs);
-  text-decoration: none;
-  font-size: var(--text-sm);
-  font-weight: 500;
-}
-.empty-action:hover {
-  background: var(--ac2);
 }
 </style>

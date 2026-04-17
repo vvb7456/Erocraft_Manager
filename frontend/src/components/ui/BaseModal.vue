@@ -181,11 +181,11 @@ const footerClass = computed(() => {
           :aria-labelledby="title ? titleId : undefined"
           :aria-label="!title ? ariaLabel : undefined"
         >
-          <div v-if="title || $slots.header" class="modal-header">
+          <div v-if="title || $slots.header || showClose" class="modal-header">
             <slot name="header">
               <div class="modal-header__title-group">
                 <MsIcon v-if="icon" :name="icon" :style="iconColor ? { color: iconColor } : undefined" />
-                <div>
+                <div v-if="title || subtitle">
                   <h3 :id="title ? titleId : undefined" class="modal-title">{{ title }}</h3>
                   <p v-if="subtitle" class="modal-subtitle">{{ subtitle }}</p>
                 </div>

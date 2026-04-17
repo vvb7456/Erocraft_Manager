@@ -130,10 +130,6 @@
             background: rgba(240, 244, 243, .85)
         }
 
-        [data-theme="light"] .sidebar {
-            background: #dce4e2
-        }
-
         html {
             font-size: 100%
         }
@@ -241,8 +237,7 @@
         }
 
         /* ── Global: Focus Visible ── */
-        .tab:focus-visible,
-        .nav-item:focus-visible {
+        .tab:focus-visible {
             outline: 2px solid var(--ac);
             outline-offset: 2px
         }

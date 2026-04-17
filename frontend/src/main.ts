@@ -8,7 +8,6 @@ import i18n from './i18n/vue-i18n'
 import './css/base.css'
 import './css/layout.css'
 import './css/forms.css'
-import './css/list-page.css'
 
 const app = createApp(App)
 

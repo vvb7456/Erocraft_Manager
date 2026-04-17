@@ -5,9 +5,6 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "download": "Download",
-    "start": "Start",
-    "stop": "Stop",
-    "restart": "Restart",
     "close": "Close",
     "confirm": "Confirm",
     "dont_ask": "Don't ask again",
@@ -62,6 +59,11 @@
   "filter_hint": "Filter\u2026",
   "chip_more": "+{n} more",
   "chip_collapse": "Collapse",
+  "confirm": {
+    "title": "Confirm",
+    "dangerTitle": "Warning",
+    "deleteTitle": "Confirm Delete"
+  },
   "upload": {
     "drop_hint": "Drop file here",
     "click_hint": "or click to select",

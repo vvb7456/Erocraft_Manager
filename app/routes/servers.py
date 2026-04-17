@@ -94,6 +94,19 @@ def list_servers():
     servers = _filtered_servers(request.args)
     today = get_today()
     panel_url = config_manager.get('PTERO_PANEL_URL', '').rstrip('/')
+
+    # Batch-fetch egg names for all servers
+    egg_ids = {s.egg_id for s in servers if s.egg_id}
+    egg_names = {}
+    if egg_ids:
+        placeholders = ','.join([':e' + str(i) for i in range(len(egg_ids))])
+        params = {'e' + str(i): eid for i, eid in enumerate(egg_ids)}
+        rows = db.session.execute(
+            db.text(f'SELECT id, name FROM eggs WHERE id IN ({placeholders})'),
+            params,
+        )
+        egg_names = {r[0]: r[1] for r in rows}
+
     result = []
     for s in servers:
         exp_date = s.expiration_date  # via meta relationship
@@ -104,10 +117,13 @@ def list_servers():
             'name': s.name,
             'ownerId': s.owner_id,
             'ownerUsername': s.owner.username if s.owner else '未知',
+            'eggName': egg_names.get(s.egg_id),
             'expirationDate': exp_date.isoformat() if exp_date else None,
             'daysLeft': days_left,
             'statusLabel': status_label,
             'isSuspended': s.is_suspended,
+            'isInstalling': s.status == 'installing' or s.installed_at is None,
+            'isInstalled': s.installed_at is not None and s.status != 'installing',
             'panelUrl': f"{panel_url}/server/{s.uuid}" if s.uuid else None,
         })
     return jsonify({'servers': result, 'panelUrl': panel_url})
@@ -131,7 +147,7 @@ def renew(ptero_id):
     except (ValueError, TypeError):
         return jsonify({'error': '日期格式无效，请使用 YYYY-MM-DD'}), 400
 
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
     was_suspended = server.is_suspended
 
     meta = _get_or_create_meta(ptero_id)
@@ -157,7 +173,7 @@ def toggle_suspend(ptero_id):
     if not server:
         return jsonify({'error': '服务器不存在'}), 404
 
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
     is_suspended = server.is_suspended
     action = 'unsuspend' if is_suspended else 'suspend'
     action_text = '解冻' if is_suspended else '冻结'
@@ -178,7 +194,7 @@ def toggle_suspend(ptero_id):
 def delete(ptero_id):
     server = PteroServer.query.get(ptero_id)
     server_name = server.name if server else f"ID {ptero_id}"
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
 
     if ptero.delete_server_from_panel(ptero_id):
         db.session.expire_all()
@@ -198,7 +214,7 @@ def update_server(ptero_id):
         return jsonify({'error': '服务器不存在'}), 404
 
     data = request.get_json(silent=True) or {}
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
 
     new_date_str = data.get('expirationDate')
     if new_date_str:
@@ -225,7 +241,7 @@ def update_server(ptero_id):
 @bp.route('/servers', methods=['POST'])
 def create():
     data = request.get_json(silent=True) or {}
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
     cfg = config_manager.config
 
     required = ['user_id', 'server_name', 'egg_id', 'startup_command', 'node_id', 'allocation_id', 'expiration_days']
@@ -273,7 +289,7 @@ def batch():
     if not action or not server_ids:
         return jsonify({'error': '未选择操作或服务器'}), 400
 
-    actor = session.get('admin_username', '未知管理员')
+    actor = session.get('username', '未知管理员')
     success, errors = 0, 0
 
     if action in ('suspend', 'unsuspend'):

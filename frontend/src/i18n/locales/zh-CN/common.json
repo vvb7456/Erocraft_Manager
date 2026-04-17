@@ -5,9 +5,6 @@
     "cancel": "取消",
     "delete": "删除",
     "download": "下载",
-    "start": "启动",
-    "stop": "停止",
-    "restart": "重启",
     "close": "关闭",
     "confirm": "确认",
     "dont_ask": "不再提示",
@@ -62,6 +59,11 @@
   "filter_hint": "筛选…",
   "chip_more": "+{n} 更多",
   "chip_collapse": "收起",
+  "confirm": {
+    "title": "确认操作",
+    "dangerTitle": "危险操作",
+    "deleteTitle": "确认删除"
+  },
   "upload": {
     "drop_hint": "拖拽文件到此处",
     "click_hint": "或点击选择文件",

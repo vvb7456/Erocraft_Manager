@@ -9,40 +9,68 @@ const router = createRouter({
       component: () => import('@/pages/LoginPage.vue'),
       meta: { public: true, layout: 'blank' },
     },
-    { path: '/', redirect: '/dashboard' },
-    {
-      path: '/dashboard',
-      name: 'dashboard',
-      component: () => import('@/pages/DashboardPage.vue'),
-    },
+    { path: '/', redirect: '/servers' },
+
+    // ── User routes ──
     {
       path: '/servers',
+      name: 'user-servers',
+      component: () => import('@/pages/user/UserServersPage.vue'),
+      meta: { layout: 'user' },
+    },
+    {
+      path: '/servers/:id',
+      component: () => import('@/pages/user/ServerDetailPage.vue'),
+      meta: { layout: 'user' },
+      children: [
+        { path: '', redirect: (to) => ({ name: 'server-console', params: to.params }) },
+        { path: 'console', name: 'server-console', component: () => import('@/pages/user/ServerConsolePage.vue') },
+        { path: 'files', name: 'server-files', component: () => import('@/pages/user/ServerFilesPage.vue') },
+        { path: 'settings', name: 'server-settings', component: () => import('@/pages/user/ServerSettingsPage.vue') },
+      ],
+    },
+
+    // ── Admin routes ──
+    { path: '/admin', redirect: '/admin/dashboard' },
+    {
+      path: '/admin/dashboard',
+      name: 'dashboard',
+      component: () => import('@/pages/DashboardPage.vue'),
+      meta: { admin: true },
+    },
+    {
+      path: '/admin/servers',
       name: 'servers',
       component: () => import('@/pages/ServersPage.vue'),
+      meta: { admin: true },
     },
     {
-      path: '/users',
+      path: '/admin/users',
       name: 'users',
       component: () => import('@/pages/UsersPage.vue'),
+      meta: { admin: true },
     },
     {
-      path: '/activity-logs',
+      path: '/admin/activity-logs',
       name: 'activity-logs',
       component: () => import('@/pages/ActivityLogsPage.vue'),
+      meta: { admin: true },
     },
     {
-      path: '/email-templates',
+      path: '/admin/email-templates',
       name: 'email-templates',
       component: () => import('@/pages/EmailTemplatesPage.vue'),
+      meta: { admin: true },
     },
     {
-      path: '/automation',
-      redirect: '/settings',
+      path: '/admin/automation',
+      redirect: '/admin/settings',
     },
     {
-      path: '/settings',
+      path: '/admin/settings',
       name: 'settings',
       component: () => import('@/pages/SettingsPage.vue'),
+      meta: { admin: true },
     },
   ],
 })
@@ -53,6 +81,11 @@ router.beforeEach(async (to) => {
   try {
     const res = await fetch('/api/me')
     if (!res.ok) return { name: 'login' }
+    const data = await res.json()
+    // Admin routes require admin role
+    if (to.meta.admin && !data.is_admin) {
+      return { name: 'user-servers' }
+    }
   } catch {
     return { name: 'login' }
   }

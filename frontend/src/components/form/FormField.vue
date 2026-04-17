@@ -15,11 +15,13 @@ defineProps<{
   density?: 'default' | 'compact'
   /** Layout direction: vertical (default) or horizontal (label left, control right) */
   layout?: 'vertical' | 'horizontal'
+  /** Show border-bottom separator (for settings rows) */
+  bordered?: boolean
 }>()
 </script>
 
 <template>
-  <div class="form-field" :class="[`form-field--${density ?? 'default'}`, layout === 'horizontal' && 'form-field--h']">
+  <div class="form-field" :class="[`form-field--${density ?? 'default'}`, layout === 'horizontal' && 'form-field--h', bordered && 'form-field--bordered']">
     <!-- Horizontal layout: label+hint on left, control on right -->
     <template v-if="layout === 'horizontal'">
       <div class="form-field__h-left">
@@ -104,20 +106,45 @@ export default { components: { FieldLabel } }
 .form-field--h {
   flex-direction: row;
   align-items: center;
-  gap: 16px;
+  gap: var(--sp-4);
 }
 .form-field__h-left {
-  flex: 1;
-  min-width: 0;
+  flex-shrink: 0;
+  min-width: 160px;
 }
 .form-field__h-left .form-field__hint,
 .form-field__h-left .form-field__error {
   margin-top: 2px;
 }
 .form-field__h-right {
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.form-field__h-right > :only-child {
+  width: 100%;
+}
+
+/* Bordered variant — settings rows */
+.form-field--bordered {
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--bd) 50%, transparent);
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .form-field--h {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .form-field__h-left {
+    min-width: 0;
+  }
+  .form-field__h-right {
+    max-width: none;
+  }
 }
 </style>

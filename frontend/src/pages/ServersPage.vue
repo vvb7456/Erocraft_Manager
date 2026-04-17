@@ -15,7 +15,10 @@ import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import NumberInput from '@/components/form/NumberInput.vue'
-import BottomSheet from '@/components/ui/BottomSheet.vue'
+import ActionSheet from '@/components/ui/ActionSheet.vue'
+import CardTap from '@/components/ui/CardTap.vue'
+import CardKV from '@/components/ui/CardKV.vue'
+import FormField from '@/components/form/FormField.vue'
 import CreateServerModal from '@/components/servers/CreateServerModal.vue'
 import RenewBottomSheet from '@/components/servers/RenewBottomSheet.vue'
 
@@ -35,6 +38,7 @@ interface ServerItem {
   name: string
   ownerId: number | null
   ownerUsername: string | null
+  eggName: string | null
   expirationDate: string | null
   daysLeft: number | null
   statusLabel: 'normal' | 'expiring_soon' | 'expired' | 'permanent'
@@ -422,6 +426,7 @@ function openMobileRenew(s: ServerItem) {
           {{ t('servers.table.name') }}
           <MsIcon v-if="sortBy === 'server_name'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
         </th>
+        <th class="col-egg">{{ t('servers.table.egg') }}</th>
         <th class="col-owner sortable" @click="toggleSort('owner_username')">
           {{ t('servers.table.owner') }}
           <MsIcon v-if="sortBy === 'owner_username'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
@@ -444,6 +449,7 @@ function openMobileRenew(s: ServerItem) {
           </a>
           <span v-else>{{ s.name }}</span>
         </td>
+        <td class="col-egg">{{ s.eggName || '—' }}</td>
         <td class="col-owner">
           <a v-if="s.ownerUsername" href="#" class="owner-link" @click.prevent="router.push({ name: 'users', query: { q: s.ownerUsername } })">{{ s.ownerUsername }}</a>
           <span v-else>—</span>
@@ -482,48 +488,49 @@ function openMobileRenew(s: ServerItem) {
 
       <!-- Mobile card -->
       <template #card="{ item: s }">
-        <div class="dt-card-tap" @click="openMobileServerAction(s)">
-          <div class="card-row card-row--main">
+        <CardTap @tap="openMobileServerAction(s)">
+          <div class="card-row--main">
             <span class="card-name">{{ s.name }} <span class="card-id-inline">#{{ s.pteroId }}</span></span>
             <Badge :color="s.isSuspended ? 'var(--red)' : 'var(--green)'" size="sm">
               {{ panelStatusText(s) }}
             </Badge>
           </div>
-          <div class="card-row card-row--sub">
-            <span v-if="s.ownerUsername">{{ s.ownerUsername }}</span>
-            <span v-else>—</span>
+          <div class="card-expiry-row">
+            <span class="card-kv-label">{{ t('servers.table.expiration') }}</span>
+            <span :style="{ color: statusColor(s) }">{{ expirationText(s) }}</span>
           </div>
-          <div class="card-expiry" :style="{ color: statusColor(s) }">
-            {{ expirationText(s) }}
+          <div class="card-detail">
+            <CardKV :label="t('servers.table.owner')">{{ s.ownerUsername || '—' }}</CardKV>
+            <CardKV :label="t('servers.table.egg')">{{ s.eggName || '—' }}</CardKV>
           </div>
-        </div>
+        </CardTap>
       </template>
     </DataTable>
 
     <!-- Mobile Action Sheet -->
-    <BottomSheet v-model="mobileActionOpen" :title="mobileActionServer?.name">
-      <div v-if="mobileActionServer" class="action-sheet">
-        <div class="action-sheet__info">
-          {{ mobileActionServer.ownerUsername || '—' }} · <span :style="{ color: statusColor(mobileActionServer) }">{{ expirationText(mobileActionServer) }}</span>
-        </div>
-        <a v-if="mobileActionServer.panelUrl" :href="mobileActionServer.panelUrl" target="_blank" rel="noopener" class="action-sheet__item">
+    <ActionSheet v-model="mobileActionOpen" :title="mobileActionServer?.name">
+      <template v-if="mobileActionServer" #info>
+        {{ mobileActionServer.ownerUsername || '—' }} · <span :style="{ color: statusColor(mobileActionServer) }">{{ expirationText(mobileActionServer) }}</span>
+      </template>
+      <template v-if="mobileActionServer">
+        <a v-if="mobileActionServer.panelUrl" :href="mobileActionServer.panelUrl" target="_blank" rel="noopener">
           <MsIcon name="link" size="sm" /> {{ t('servers.action.open_panel') }}
         </a>
-        <button class="action-sheet__item" @click="mobileActionOpen = false; openMobileRenew(mobileActionServer!)">
+        <button @click="mobileActionOpen = false; openMobileRenew(mobileActionServer!)">
           <MsIcon name="update" size="sm" /> {{ t('servers.action.renew') }}
         </button>
-        <button class="action-sheet__item" @click="mobileActionOpen = false; toggleSuspend(mobileActionServer!)">
+        <button @click="mobileActionOpen = false; toggleSuspend(mobileActionServer!)">
           <MsIcon :name="mobileActionServer.isSuspended ? 'check_circle' : 'block'" size="sm" />
           {{ mobileActionServer.isSuspended ? t('servers.action.unsuspend') : t('servers.action.suspend') }}
         </button>
-        <button v-if="mobileActionServer.ownerUsername" class="action-sheet__item" @click="mobileActionOpen = false; router.push({ name: 'users', query: { q: mobileActionServer!.ownerUsername! } })">
+        <button v-if="mobileActionServer.ownerUsername" @click="mobileActionOpen = false; router.push({ name: 'users', query: { q: mobileActionServer!.ownerUsername! } })">
           <MsIcon name="person" size="sm" /> {{ mobileActionServer.ownerUsername }}
         </button>
-        <button class="action-sheet__item action-sheet__item--danger" @click="mobileActionOpen = false; deleteServer(mobileActionServer!)">
+        <button class="action-sheet--danger" @click="mobileActionOpen = false; deleteServer(mobileActionServer!)">
           <MsIcon name="delete" size="sm" /> {{ t('servers.action.delete') }}
         </button>
-      </div>
-    </BottomSheet>
+      </template>
+    </ActionSheet>
 
     <!-- Mobile Renew BottomSheet -->
     <RenewBottomSheet v-model="mobileRenewOpen" :server="mobileRenewServer" @renewed="loadServers(true)" />
@@ -534,8 +541,9 @@ function openMobileRenew(s: ServerItem) {
     <p style="margin-bottom: var(--sp-3); color: var(--t2)">
       {{ t('servers.batch.selected', { n: selectedIds.size }) }}
     </p>
-    <label class="modal-label">{{ t('servers.action.renew_days') }}</label>
-    <NumberInput v-model="batchRenewDays" :min="1" :max="3650" />
+    <FormField :label="t('servers.action.renew_days')" density="compact">
+      <NumberInput v-model="batchRenewDays" :min="1" :max="3650" />
+    </FormField>
     <template #footer>
       <BaseButton @click="batchRenewModalOpen = false">{{ t('common.btn.cancel') }}</BaseButton>
       <BaseButton variant="primary" :loading="loading" @click="doBatchRenew">{{ t('common.btn.confirm') }}</BaseButton>
@@ -564,12 +572,18 @@ function openMobileRenew(s: ServerItem) {
 }
 
 .col-check { width: 36px; text-align: center !important; }
-.col-id { width: 56px; color: var(--t3); font-size: .82rem; }
-.col-name { width: 20%; }
-.col-owner { width: 12%; }
-.col-expiry { width: 12%; }
-.col-status { width: 80px; }
-.col-actions { width: 360px; }
+.col-id { width: 48px; color: var(--t3); font-size: .82rem; }
+
+.toolbar-status {
+  font-size: .82rem;
+  color: var(--t3);
+  white-space: nowrap;
+}
+.col-name { width: 18%; }
+.col-egg { width: 14%; color: var(--t2); font-size: .85rem; }
+.col-owner { width: 10%; }
+.col-expiry { width: 11%; }
+.col-status { width: 6%; }
 
 .server-link,
 .owner-link {
@@ -601,21 +615,42 @@ function openMobileRenew(s: ServerItem) {
   border-color: var(--ac);
 }
 
-/* Mobile card styles */
+/* Mobile card styles — page-specific */
 .card-name {
   font-weight: 600;
   font-size: .92rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
 }
-.card-expiry {
-  font-size: .85rem;
-  font-weight: 500;
-  margin-top: var(--sp-2);
-  padding: var(--sp-1) var(--sp-2);
-  background: var(--bg2);
-  border-radius: var(--r-sm);
-  display: inline-block;
+
+.card-id-inline {
+  font-size: .78rem;
+  font-weight: 400;
+  color: var(--t3);
+  margin-left: var(--sp-1);
+}
+
+.card-kv-label {
+  font-size: .72rem;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+/* ── Table row actions ── */
+.action-group {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .toolbar-half {
+    flex: 1;
+    min-width: 0;
+  }
 }
 </style>

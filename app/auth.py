@@ -16,9 +16,14 @@ def init_auth(app):
         if request.path in ('/api/login', '/api/me', '/api/version', '/api/logout'):
             return None
 
-        if not session.get('admin_user_id'):
+        if not session.get('user_id'):
             if request.path.startswith('/api/'):
                 return jsonify({'error': 'Unauthorized'}), 401
             # For non-API requests (SPA fallback), let them through — the Vue
             # router will handle redirect to login.
             return None
+
+        # Admin-only API routes (all except /api/user/*)
+        if request.path.startswith('/api/') and not request.path.startswith('/api/user/'):
+            if not session.get('is_admin'):
+                return jsonify({'error': 'Forbidden'}), 403

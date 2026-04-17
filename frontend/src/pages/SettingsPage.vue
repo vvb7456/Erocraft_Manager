@@ -12,6 +12,7 @@ import NumberInput from '@/components/form/NumberInput.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import Spinner from '@/components/ui/Spinner.vue'
+import FormField from '@/components/form/FormField.vue'
 import { TIMEZONE_OPTIONS } from '@/config/timezones'
 
 defineOptions({ name: 'SettingsPage' })
@@ -113,193 +114,147 @@ async function saveAll() {
       <div class="st-panel">
         <!-- General / Pterodactyl -->
         <template v-if="activeTab === 'general'">
-          <div class="st-row">
-            <div class="st-info">
-              <div class="st-label">{{ t('settings.ptero.url') }}</div>
-            </div>
-            <div class="st-control"><BaseInput :modelValue="getStr('PTERO_PANEL_URL')" :placeholder="t('settings.ptero.url_placeholder')" @update:modelValue="setStr('PTERO_PANEL_URL', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info">
-              <div class="st-label">{{ t('settings.ptero.apiKey') }}</div>
-            </div>
-            <div class="st-control"><SecretInput :modelValue="getStr('PTERO_API_KEY')" :placeholder="t('settings.ptero.apiKey_placeholder')" @update:modelValue="setStr('PTERO_API_KEY', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info">
-              <div class="st-label">{{ t('settings.ptero.dbHost') }}</div>
-            </div>
-            <div class="st-control"><BaseInput :modelValue="getStr('DB_HOST')" placeholder="127.0.0.1" @update:modelValue="setStr('DB_HOST', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info">
-              <div class="st-label">{{ t('settings.ptero.dbPort') }}</div>
-            </div>
-            <div class="st-control"><NumberInput :modelValue="getNum('DB_PORT', 3306)" @update:modelValue="setNum('DB_PORT', $event)" :min="1" :max="65535" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info">
-              <div class="st-label">{{ t('settings.ptero.dbUser') }}</div>
-            </div>
-            <div class="st-control"><BaseInput :modelValue="getStr('DB_USER')" @update:modelValue="setStr('DB_USER', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info">
-              <div class="st-label">{{ t('settings.ptero.dbPassword') }}</div>
-            </div>
-            <div class="st-control"><SecretInput :modelValue="getStr('DB_PASSWORD')" @update:modelValue="setStr('DB_PASSWORD', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info">
-              <div class="st-label">{{ t('settings.ptero.dbName') }}</div>
-            </div>
-            <div class="st-control"><BaseInput :modelValue="getStr('DB_NAME')" placeholder="panel" @update:modelValue="setStr('DB_NAME', $event)" /></div>
-          </div>
+          <p class="st-desc">{{ t('settings.ptero.desc') }}</p>
+          <FormField :label="t('settings.ptero.url')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('PTERO_PANEL_URL')" :placeholder="t('settings.ptero.url_placeholder')" @update:modelValue="setStr('PTERO_PANEL_URL', $event)" />
+          </FormField>
+          <FormField :label="t('settings.ptero.apiKey')" layout="horizontal" bordered>
+            <SecretInput :modelValue="getStr('PTERO_API_KEY')" :placeholder="t('settings.ptero.apiKey_placeholder')" @update:modelValue="setStr('PTERO_API_KEY', $event)" />
+          </FormField>
+          <FormField :label="t('settings.ptero.dbHost')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('DB_HOST')" placeholder="127.0.0.1" @update:modelValue="setStr('DB_HOST', $event)" />
+          </FormField>
+          <FormField :label="t('settings.ptero.dbPort')" layout="horizontal" bordered>
+            <NumberInput :modelValue="getNum('DB_PORT', 3306)" @update:modelValue="setNum('DB_PORT', $event)" :min="1" :max="65535" />
+          </FormField>
+          <FormField :label="t('settings.ptero.dbUser')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('DB_USER')" @update:modelValue="setStr('DB_USER', $event)" />
+          </FormField>
+          <FormField :label="t('settings.ptero.dbPassword')" layout="horizontal" bordered>
+            <SecretInput :modelValue="getStr('DB_PASSWORD')" @update:modelValue="setStr('DB_PASSWORD', $event)" />
+          </FormField>
+          <FormField :label="t('settings.ptero.dbName')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('DB_NAME')" placeholder="panel" @update:modelValue="setStr('DB_NAME', $event)" />
+          </FormField>
         </template>
 
         <!-- SMTP -->
         <template v-if="activeTab === 'smtp'">
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.smtp.host') }}</div></div>
-            <div class="st-control"><BaseInput :modelValue="getStr('SMTP_HOST')" @update:modelValue="setStr('SMTP_HOST', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.smtp.port') }}</div></div>
-            <div class="st-control"><NumberInput :modelValue="getNum('SMTP_PORT', 587)" @update:modelValue="setNum('SMTP_PORT', $event)" :min="1" :max="65535" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.smtp.sender') }}</div></div>
-            <div class="st-control"><BaseInput :modelValue="getStr('SENDER_EMAIL')" type="email" @update:modelValue="setStr('SENDER_EMAIL', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.smtp.password') }}</div></div>
-            <div class="st-control"><SecretInput :modelValue="getStr('SMTP_PASSWORD')" @update:modelValue="setStr('SMTP_PASSWORD', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.smtp.delay') }}</div></div>
-            <div class="st-control"><NumberInput :modelValue="getNum('EMAIL_SEND_DELAY', 2)" @update:modelValue="setNum('EMAIL_SEND_DELAY', $event)" :min="0" :max="60" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.smtp.ssl') }}</div></div>
-            <div class="st-control"><ToggleSwitch :modelValue="getBool('SMTP_USE_SSL')" @update:modelValue="setBool('SMTP_USE_SSL', $event)" size="sm" /></div>
-          </div>
+          <p class="st-desc">{{ t('settings.smtp.desc') }}</p>
+          <FormField :label="t('settings.smtp.host')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('SMTP_HOST')" @update:modelValue="setStr('SMTP_HOST', $event)" />
+          </FormField>
+          <FormField :label="t('settings.smtp.port')" layout="horizontal" bordered>
+            <NumberInput :modelValue="getNum('SMTP_PORT', 587)" @update:modelValue="setNum('SMTP_PORT', $event)" :min="1" :max="65535" />
+          </FormField>
+          <FormField :label="t('settings.smtp.sender')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('SENDER_EMAIL')" type="email" @update:modelValue="setStr('SENDER_EMAIL', $event)" />
+          </FormField>
+          <FormField :label="t('settings.smtp.password')" layout="horizontal" bordered>
+            <SecretInput :modelValue="getStr('SMTP_PASSWORD')" @update:modelValue="setStr('SMTP_PASSWORD', $event)" />
+          </FormField>
+          <FormField :label="t('settings.smtp.delay')" layout="horizontal" bordered>
+            <NumberInput :modelValue="getNum('EMAIL_SEND_DELAY', 2)" @update:modelValue="setNum('EMAIL_SEND_DELAY', $event)" :min="0" :max="60" />
+          </FormField>
+          <FormField :label="t('settings.smtp.ssl')" layout="horizontal" bordered>
+            <ToggleSwitch :modelValue="getBool('SMTP_USE_SSL')" @update:modelValue="setBool('SMTP_USE_SSL', $event)" size="sm" />
+          </FormField>
         </template>
 
         <!-- Branding -->
         <template v-if="activeTab === 'branding'">
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.branding.brandName') }}</div></div>
-            <div class="st-control"><BaseInput :modelValue="getStr('BRAND_NAME')" @update:modelValue="setStr('BRAND_NAME', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.branding.systemName') }}</div></div>
-            <div class="st-control"><BaseInput :modelValue="getStr('UI_SYSTEM_NAME')" @update:modelValue="setStr('UI_SYSTEM_NAME', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.branding.bannerUrl') }}</div></div>
-            <div class="st-control"><BaseInput :modelValue="getStr('UI_BANNER_URL')" @update:modelValue="setStr('UI_BANNER_URL', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.branding.icpRecord') }}</div></div>
-            <div class="st-control"><BaseInput :modelValue="getStr('UI_ICP_RECORD')" @update:modelValue="setStr('UI_ICP_RECORD', $event)" /></div>
-          </div>
+          <p class="st-desc">{{ t('settings.branding.desc') }}</p>
+          <FormField :label="t('settings.branding.brandName')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('BRAND_NAME')" @update:modelValue="setStr('BRAND_NAME', $event)" />
+          </FormField>
+          <FormField :label="t('settings.branding.systemName')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('UI_SYSTEM_NAME')" @update:modelValue="setStr('UI_SYSTEM_NAME', $event)" />
+          </FormField>
+          <FormField :label="t('settings.branding.bannerUrl')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('UI_BANNER_URL')" @update:modelValue="setStr('UI_BANNER_URL', $event)" />
+          </FormField>
+          <FormField :label="t('settings.branding.icpRecord')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('UI_ICP_RECORD')" @update:modelValue="setStr('UI_ICP_RECORD', $event)" />
+          </FormField>
         </template>
 
         <!-- Server Defaults -->
         <template v-if="activeTab === 'defaults'">
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.defaults.nest') }}</div></div>
-            <div class="st-control"><BaseSelect :modelValue="getNum('DEFAULT_NEST_ID')" :options="nestOptions" :placeholder="t('settings.defaults.nest')" @update:modelValue="setNum('DEFAULT_NEST_ID', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.defaults.egg') }}</div></div>
-            <div class="st-control"><BaseSelect :modelValue="getNum('DEFAULT_EGG_ID')" :options="eggOptions" :placeholder="t('settings.defaults.egg')" :disabled="!getNum('DEFAULT_NEST_ID')" @update:modelValue="setNum('DEFAULT_EGG_ID', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.defaults.node') }}</div></div>
-            <div class="st-control"><BaseSelect :modelValue="getNum('DEFAULT_NODE_ID')" :options="nodeOptions" :placeholder="t('settings.defaults.node')" @update:modelValue="setNum('DEFAULT_NODE_ID', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.defaults.serverNamePrefix') }}</div></div>
-            <div class="st-control"><BaseInput :modelValue="getStr('SERVER_NAME_PREFIX')" :placeholder="t('settings.defaults.serverNamePrefix_placeholder')" @update:modelValue="setStr('SERVER_NAME_PREFIX', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.defaults.dockerImage') }}</div></div>
-            <div class="st-control"><BaseInput :modelValue="getStr('DOCKER_IMAGE')" @update:modelValue="setStr('DOCKER_IMAGE', $event)" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.defaults.cpu') }}</div></div>
-            <div class="st-control"><NumberInput :modelValue="getNum('DEFAULT_CPU', 100)" @update:modelValue="setNum('DEFAULT_CPU', $event)" :min="0" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.defaults.memory') }}</div></div>
-            <div class="st-control"><NumberInput :modelValue="getNum('DEFAULT_MEMORY', 1024)" @update:modelValue="setNum('DEFAULT_MEMORY', $event)" :min="0" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.defaults.disk') }}</div></div>
-            <div class="st-control"><NumberInput :modelValue="getNum('DEFAULT_DISK', 5120)" @update:modelValue="setNum('DEFAULT_DISK', $event)" :min="0" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.defaults.databases') }}</div></div>
-            <div class="st-control"><NumberInput :modelValue="getNum('DEFAULT_DATABASES')" @update:modelValue="setNum('DEFAULT_DATABASES', $event)" :min="0" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.defaults.backups') }}</div></div>
-            <div class="st-control"><NumberInput :modelValue="getNum('DEFAULT_BACKUPS')" @update:modelValue="setNum('DEFAULT_BACKUPS', $event)" :min="0" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.defaults.allocations') }}</div></div>
-            <div class="st-control"><NumberInput :modelValue="getNum('DEFAULT_ALLOCATIONS', 1)" @update:modelValue="setNum('DEFAULT_ALLOCATIONS', $event)" :min="0" /></div>
-          </div>
+          <p class="st-desc">{{ t('settings.defaults.desc') }}</p>
+          <FormField :label="t('settings.defaults.nest')" layout="horizontal" bordered>
+            <BaseSelect :modelValue="getNum('DEFAULT_NEST_ID')" :options="nestOptions" :placeholder="t('settings.defaults.nest')" @update:modelValue="setNum('DEFAULT_NEST_ID', $event)" />
+          </FormField>
+          <FormField :label="t('settings.defaults.egg')" layout="horizontal" bordered>
+            <BaseSelect :modelValue="getNum('DEFAULT_EGG_ID')" :options="eggOptions" :placeholder="t('settings.defaults.egg')" :disabled="!getNum('DEFAULT_NEST_ID')" @update:modelValue="setNum('DEFAULT_EGG_ID', $event)" />
+          </FormField>
+          <FormField :label="t('settings.defaults.node')" layout="horizontal" bordered>
+            <BaseSelect :modelValue="getNum('DEFAULT_NODE_ID')" :options="nodeOptions" :placeholder="t('settings.defaults.node')" @update:modelValue="setNum('DEFAULT_NODE_ID', $event)" />
+          </FormField>
+          <FormField :label="t('settings.defaults.serverNamePrefix')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('SERVER_NAME_PREFIX')" :placeholder="t('settings.defaults.serverNamePrefix_placeholder')" @update:modelValue="setStr('SERVER_NAME_PREFIX', $event)" />
+          </FormField>
+          <FormField :label="t('settings.defaults.dockerImage')" layout="horizontal" bordered>
+            <BaseInput :modelValue="getStr('DOCKER_IMAGE')" @update:modelValue="setStr('DOCKER_IMAGE', $event)" />
+          </FormField>
+          <FormField :label="t('settings.defaults.cpu')" layout="horizontal" bordered>
+            <NumberInput :modelValue="getNum('DEFAULT_CPU', 100)" @update:modelValue="setNum('DEFAULT_CPU', $event)" :min="0" />
+          </FormField>
+          <FormField :label="t('settings.defaults.memory')" layout="horizontal" bordered>
+            <NumberInput :modelValue="getNum('DEFAULT_MEMORY', 1024)" @update:modelValue="setNum('DEFAULT_MEMORY', $event)" :min="0" />
+          </FormField>
+          <FormField :label="t('settings.defaults.disk')" layout="horizontal" bordered>
+            <NumberInput :modelValue="getNum('DEFAULT_DISK', 5120)" @update:modelValue="setNum('DEFAULT_DISK', $event)" :min="0" />
+          </FormField>
+          <FormField :label="t('settings.defaults.databases')" layout="horizontal" bordered>
+            <NumberInput :modelValue="getNum('DEFAULT_DATABASES')" @update:modelValue="setNum('DEFAULT_DATABASES', $event)" :min="0" />
+          </FormField>
+          <FormField :label="t('settings.defaults.backups')" layout="horizontal" bordered>
+            <NumberInput :modelValue="getNum('DEFAULT_BACKUPS')" @update:modelValue="setNum('DEFAULT_BACKUPS', $event)" :min="0" />
+          </FormField>
+          <FormField :label="t('settings.defaults.allocations')" layout="horizontal" bordered>
+            <NumberInput :modelValue="getNum('DEFAULT_ALLOCATIONS', 1)" @update:modelValue="setNum('DEFAULT_ALLOCATIONS', $event)" :min="0" />
+          </FormField>
         </template>
 
         <!-- Automation -->
         <template v-if="activeTab === 'automation'">
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.automation.timezone') }}</div></div>
-            <div class="st-control"><BaseSelect :modelValue="automation.TIMEZONE" :options="TIMEZONE_OPTIONS" searchable @update:modelValue="automation.TIMEZONE = $event" /></div>
-          </div>
+          <p class="st-desc">{{ t('settings.automation.desc') }}</p>
+          <FormField :label="t('settings.automation.timezone')" layout="horizontal" bordered>
+            <BaseSelect :modelValue="automation.TIMEZONE" :options="TIMEZONE_OPTIONS" searchable @update:modelValue="automation.TIMEZONE = $event" />
+          </FormField>
 
           <div class="st-sub">{{ t('settings.automation.suspend.title') }}</div>
           <p class="st-desc">{{ t('settings.automation.suspend.desc') }}</p>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.automation.suspend.enabled') }}</div></div>
-            <div class="st-control"><ToggleSwitch v-model="automation.AUTOMATION_SUSPEND_ENABLED" size="sm" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.automation.suspend.runHour') }}</div></div>
-            <div class="st-control"><NumberInput v-model="automation.AUTOMATION_RUN_HOUR" :min="0" :max="23" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.automation.suspend.runMinute') }}</div></div>
-            <div class="st-control"><NumberInput v-model="automation.AUTOMATION_RUN_MINUTE" :min="0" :max="59" /></div>
-          </div>
+          <FormField :label="t('settings.automation.suspend.enabled')" layout="horizontal" bordered>
+            <ToggleSwitch v-model="automation.AUTOMATION_SUSPEND_ENABLED" size="sm" />
+          </FormField>
+          <FormField :label="t('settings.automation.suspend.runHour')" layout="horizontal" bordered>
+            <NumberInput v-model="automation.AUTOMATION_RUN_HOUR" :min="0" :max="23" />
+          </FormField>
+          <FormField :label="t('settings.automation.suspend.runMinute')" layout="horizontal" bordered>
+            <NumberInput v-model="automation.AUTOMATION_RUN_MINUTE" :min="0" :max="59" />
+          </FormField>
 
           <div class="st-sub">{{ t('settings.automation.delete.title') }}</div>
           <p class="st-desc">{{ t('settings.automation.delete.desc') }}</p>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.automation.delete.enabled') }}</div></div>
-            <div class="st-control"><ToggleSwitch v-model="automation.AUTOMATION_DELETE_ENABLED" size="sm" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.automation.delete.days') }}</div></div>
-            <div class="st-control"><NumberInput v-model="automation.AUTOMATION_DELETE_DAYS" :min="0" :max="365" /></div>
-          </div>
+          <FormField :label="t('settings.automation.delete.enabled')" layout="horizontal" bordered>
+            <ToggleSwitch v-model="automation.AUTOMATION_DELETE_ENABLED" size="sm" />
+          </FormField>
+          <FormField :label="t('settings.automation.delete.days')" layout="horizontal" bordered>
+            <NumberInput v-model="automation.AUTOMATION_DELETE_DAYS" :min="0" :max="365" />
+          </FormField>
 
           <div class="st-sub">{{ t('settings.automation.email.title') }}</div>
           <p class="st-desc">{{ t('settings.automation.email.desc') }}</p>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.automation.email.enabled') }}</div></div>
-            <div class="st-control"><ToggleSwitch v-model="automation.AUTOMATION_EMAIL_ENABLED" size="sm" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.automation.email.runHour') }}</div></div>
-            <div class="st-control"><NumberInput v-model="automation.AUTOMATION_EMAIL_RUN_HOUR" :min="0" :max="23" /></div>
-          </div>
-          <div class="st-row">
-            <div class="st-info"><div class="st-label">{{ t('settings.automation.email.runMinute') }}</div></div>
-            <div class="st-control"><NumberInput v-model="automation.AUTOMATION_EMAIL_RUN_MINUTE" :min="0" :max="59" /></div>
-          </div>
+          <FormField :label="t('settings.automation.email.enabled')" layout="horizontal" bordered>
+            <ToggleSwitch v-model="automation.AUTOMATION_EMAIL_ENABLED" size="sm" />
+          </FormField>
+          <FormField :label="t('settings.automation.email.runHour')" layout="horizontal" bordered>
+            <NumberInput v-model="automation.AUTOMATION_EMAIL_RUN_HOUR" :min="0" :max="23" />
+          </FormField>
+          <FormField :label="t('settings.automation.email.runMinute')" layout="horizontal" bordered>
+            <NumberInput v-model="automation.AUTOMATION_EMAIL_RUN_MINUTE" :min="0" :max="59" />
+          </FormField>
         </template>
       </div>
 
@@ -323,32 +278,7 @@ async function saveAll() {
   margin-right: auto;
 }
 
-/* Setting row */
-.st-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  padding: var(--sp-2) 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--bd) 50%, transparent);
-}
-
-.st-info {
-  min-width: 160px;
-  flex-shrink: 0;
-}
-
-.st-label {
-  font-size: .84rem;
-  color: var(--t2);
-}
-
-.st-control {
-  flex: 1;
-  min-width: 0;
-  max-width: 360px;
-}
-
-/* Sub-heading / hint / description */
+/* Sub-heading / description */
 .st-sub {
   font-size: .84rem;
   font-weight: 600;
@@ -357,9 +287,10 @@ async function saveAll() {
 }
 
 .st-desc {
-  font-size: .82rem;
-  color: var(--t3);
-  margin: 0 0 var(--sp-1);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--t1);
+  margin: 0 0 var(--sp-4);
 }
 
 /* Save bar */
@@ -370,19 +301,5 @@ async function saveAll() {
   max-width: 640px;
   margin-left: auto;
   margin-right: auto;
-}
-
-@media (max-width: 768px) {
-  .st-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--sp-1);
-  }
-  .st-info {
-    min-width: 0;
-  }
-  .st-control {
-    max-width: none;
-  }
 }
 </style>

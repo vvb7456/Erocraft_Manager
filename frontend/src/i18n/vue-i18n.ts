@@ -11,6 +11,7 @@ import zhUsers from './locales/zh-CN/users.json'
 import zhLogs from './locales/zh-CN/logs.json'
 import zhAutomation from './locales/zh-CN/automation.json'
 import zhEmailTemplates from './locales/zh-CN/email-templates.json'
+import zhUserServers from './locales/zh-CN/user-servers.json'
 
 import enCommon from './locales/en/common.json'
 import enNav from './locales/en/nav.json'
@@ -22,6 +23,7 @@ import enUsers from './locales/en/users.json'
 import enLogs from './locales/en/logs.json'
 import enAutomation from './locales/en/automation.json'
 import enEmailTemplates from './locales/en/email-templates.json'
+import enUserServers from './locales/en/user-servers.json'
 
 function detectLanguage(): string {
   const stored = localStorage.getItem('lang')
@@ -40,12 +42,14 @@ const i18n = createI18n({
       settings: zhSettings, login: zhLogin, servers: zhServers,
       users: zhUsers, logs: zhLogs,
       automation: zhAutomation, emailTemplates: zhEmailTemplates,
+      userServers: zhUserServers,
     },
     en: {
       common: enCommon, nav: enNav, dashboard: enDashboard,
       settings: enSettings, login: enLogin, servers: enServers,
       users: enUsers, logs: enLogs,
       automation: enAutomation, emailTemplates: enEmailTemplates,
+      userServers: enUserServers,
     },
   },
 })

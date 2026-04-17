@@ -25,31 +25,29 @@ def login():
         log_activity(username or '未知', 'login', '失败', f"尝试使用 {username} 登录失败。")
         return jsonify({'ok': False, 'error': '用户名或密码无效'}), 401
 
-    if not user.root_admin:
-        log_activity(user.username, 'login', '失败', f"用户 {user.username} 非管理员，拒绝登录。")
-        return jsonify({'ok': False, 'error': '该用户不是管理员，无权访问'}), 403
-
     session.clear()
-    session['admin_user_id'] = user.id
-    session['admin_username'] = user.username
+    session['user_id'] = user.id
+    session['username'] = user.username
+    session['is_admin'] = bool(user.root_admin)
     session.permanent = True
     log_activity(user.username, 'login', '成功', f"用户 {user.username} 成功登录。")
-    return jsonify({'ok': True, 'username': user.username})
+    return jsonify({'ok': True, 'username': user.username, 'is_admin': bool(user.root_admin)})
 
 
 @bp.route('/me')
 def me():
-    if session.get('admin_user_id'):
+    if session.get('user_id'):
         return jsonify({
             'ok': True,
-            'username': session.get('admin_username', ''),
+            'username': session.get('username', ''),
+            'is_admin': session.get('is_admin', False),
         })
     return jsonify({'ok': False}), 401
 
 
 @bp.route('/logout', methods=['POST'])
 def logout():
-    username = session.get('admin_username', '未知用户')
+    username = session.get('username', '未知用户')
     session.clear()
     log_activity(username, 'logout', '信息', f"用户 {username} 退出登录。")
     return jsonify({'ok': True})

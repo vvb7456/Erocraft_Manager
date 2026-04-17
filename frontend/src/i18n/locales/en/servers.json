@@ -19,6 +19,7 @@
     "owner": "Owner",
     "expiration": "Expiration",
     "panel_status": "Status",
+    "egg": "Egg",
     "actions": "Actions"
   },
   "status": {
