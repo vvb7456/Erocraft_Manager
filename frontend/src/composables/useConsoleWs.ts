@@ -2,6 +2,7 @@ import { ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
+import { useServerActivityReporter } from '@/composables/useServerActivityReporter'
 import { useServerResourceStore } from '@/stores/serverResources'
 import router from '@/router'
 
@@ -14,6 +15,7 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
   const { t } = useI18n({ useScope: 'global' })
   const { get } = useApiFetch()
   const { toast } = useToast()
+  const { reportServerActivity } = useServerActivityReporter(serverId)
   const resourceStore = useServerResourceStore()
 
   const wsConnected = ref(false)
@@ -60,7 +62,7 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
   }
 
   // ── Message handler factory ──
-  function createMessageHandler(): (e: MessageEvent) => void {
+  function createMessageHandler(boundServerId: number): (e: MessageEvent) => void {
     return (e: MessageEvent) => {
       try {
         const msg = JSON.parse(e.data)
@@ -85,25 +87,21 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
             term?.writeln('\x1b[1m\x1b[41m' + msg.args[0] + '\x1b[0m')
             break
           case 'status':
-            if (serverId.value) {
-              resourceStore.updateOne(serverId.value, { state: msg.args[0] })
-              term?.writeln('\x1b[1m\x1b[33m* ' + t('userServers.status.' + msg.args[0]) + '\x1b[0m')
-            }
+            resourceStore.updateOne(boundServerId, { state: msg.args[0] })
+            term?.writeln('\x1b[1m\x1b[33m* ' + t('userServers.status.' + msg.args[0]) + '\x1b[0m')
             break
           case 'stats':
             try {
               const stats = JSON.parse(msg.args[0])
-              if (serverId.value) {
-                resourceStore.updateOne(serverId.value, {
-                  cpu: stats.cpu_absolute ?? 0,
-                  memoryBytes: stats.memory_bytes ?? 0,
-                  diskBytes: stats.disk_bytes ?? 0,
-                  networkRx: stats.network?.rx_bytes ?? 0,
-                  networkTx: stats.network?.tx_bytes ?? 0,
-                  uptime: stats.uptime ?? 0,
-                  state: stats.state ?? resourceStore.getState(serverId.value),
-                })
-              }
+              resourceStore.updateOne(boundServerId, {
+                cpu: stats.cpu_absolute ?? 0,
+                memoryBytes: stats.memory_bytes ?? 0,
+                diskBytes: stats.disk_bytes ?? 0,
+                networkRx: stats.network?.rx_bytes ?? 0,
+                networkTx: stats.network?.tx_bytes ?? 0,
+                uptime: stats.uptime ?? 0,
+                state: stats.state ?? resourceStore.getState(boundServerId),
+              })
             } catch { /* ignore malformed stats */ }
             break
           case 'token expiring':
@@ -165,7 +163,7 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
       socket.send(JSON.stringify({ event: 'auth', args: [data.token] }))
     }
 
-    socket.onmessage = createMessageHandler()
+    socket.onmessage = createMessageHandler(serverId.value!)
 
     socket.onclose = () => {
       // Ignore close events from stale sockets (e.g. replaced by reconnectWs)
@@ -354,6 +352,7 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
     const cmd = commandInput.value.trim()
     if (!cmd || !ws || ws.readyState !== WebSocket.OPEN) return
     ws.send(JSON.stringify({ event: 'send command', args: [cmd] }))
+    void reportServerActivity('server:console.command', { command: cmd })
     commandHistory = [cmd, ...commandHistory.filter(c => c !== cmd)].slice(0, HISTORY_MAX)
     historyIndex = -1
     saveHistory()
@@ -386,6 +385,11 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
   function dispose() {
     disconnect()
     if (term) { term.dispose(); term = null }
+  }
+
+  /** Clear terminal content (scrollback + viewport) */
+  function clearTerminal() {
+    term?.clear()
   }
 
   /** Manual reconnect from user button — reset counters and try again */
@@ -424,6 +428,7 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
     loadHistory,
     fit,
     dispose,
+    clearTerminal,
     manualReconnect,
     /** Fetch a fresh wings token (for upload, etc.) */
     fetchWingsToken,

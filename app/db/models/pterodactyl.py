@@ -210,7 +210,7 @@ class PteroServer(Base):
     oom_disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     allocation_id: Mapped[int] = mapped_column(ForeignKey("allocations.id"), nullable=False)
     nest_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    egg_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    egg_id: Mapped[int] = mapped_column(ForeignKey("eggs.id"), nullable=False)
     startup: Mapped[str] = mapped_column(Text, nullable=False)
     image: Mapped[str] = mapped_column(String(191), nullable=False)
     allocation_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -233,6 +233,7 @@ class PteroServer(Base):
         uselist=False,
         lazy="selectin",
     )
+    egg: Mapped[Egg] = relationship("Egg", lazy="joined")
 
     @property
     def is_suspended(self) -> bool:

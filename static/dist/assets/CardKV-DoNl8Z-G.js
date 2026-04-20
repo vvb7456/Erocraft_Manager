@@ -1,0 +1,1 @@
+import{d as t,h as o,s as a,t as c,v as r,o as n,k as _}from"./main-BXVeJc7M.js";const d={class:"card-kv"},l={class:"card-kv__label"},p={class:"card-kv__value"},i=t({name:"CardKV",__name:"CardKV",props:{label:{}},setup(s){return(e,m)=>(n(),o("div",d,[a("span",l,c(s.label),1),a("span",p,[r(e.$slots,"default")])]))}}),f=_(i,[["__scopeId","data-v-e11f0ae4"]]);export{f as C};

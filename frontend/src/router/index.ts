@@ -51,6 +51,7 @@ const router = createRouter({
         { path: 'console', name: 'server-console', component: () => import('@/pages/user/ServerConsolePage.vue') },
         { path: 'files', name: 'server-files', component: () => import('@/pages/user/ServerFilesPage.vue') },
         { path: 'settings', name: 'server-settings', component: () => import('@/pages/user/ServerSettingsPage.vue') },
+        { path: 'activity', name: 'server-activity', component: () => import('@/pages/user/ServerActivityPage.vue') },
       ],
     },
 

@@ -1,0 +1,63 @@
+{
+  "title": "活动日志",
+  "total": "共 {n} 条",
+  "empty": "暂无活动记录",
+  "emptyFiltered": "没有找到匹配的活动记录",
+  "filter": {
+    "all": "全部",
+    "label": "类型",
+    "power": "电源",
+    "file": "文件",
+    "settings": "设置",
+    "console": "控制台",
+    "system": "系统"
+  },
+  "today": "今天",
+  "yesterday": "昨天",
+  "col": {
+    "time": "时间",
+    "event": "事件",
+    "detail": "详情",
+    "user": "用户",
+    "ip": "IP"
+  },
+  "server": {
+    "power": {
+      "start": "启动服务器",
+      "stop": "关闭服务器",
+      "restart": "重启服务器",
+      "kill": "关闭电源"
+    },
+    "file": {
+      "read": "读取文件",
+      "download": "下载文件",
+      "write": "写入文件",
+      "create-directory": "创建目录",
+      "rename": "重命名文件",
+      "copy": "复制文件",
+      "compress": "压缩文件",
+      "decompress": "解压文件",
+      "delete": "删除文件",
+      "pull": "拉取远程文件",
+      "uploaded": "上传文件"
+    },
+    "startup": {
+      "edit": "修改启动变量"
+    },
+    "settings": {
+      "rename": "修改服务器名称",
+      "description": "修改服务器描述"
+    },
+    "console": {
+      "command": "发送控制台命令"
+    },
+    "reinstall": "重新安装服务器"
+  },
+  "props": {
+    "filesCount": "等 {n} 个文件",
+    "inDir": "目录: {dir}"
+  },
+  "pagination": {
+    "perPage": "条/页"
+  }
+}

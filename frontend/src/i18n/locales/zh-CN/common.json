@@ -65,7 +65,8 @@
       "suspended": "服务器已被暂停",
       "installing": "服务器正在安装中，请稍后",
       "invalid_power_action": "无效的电源操作",
-      "power_conflict": "另一个电源操作正在进行中"
+      "power_conflict": "另一个电源操作正在进行中",
+      "startup_credentials_required": "请先在设置中填写用户名和密码"
     },
     "wings": {
       "unknown_error": "服务器通信异常，请稍后再试",

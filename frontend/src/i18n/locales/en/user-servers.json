@@ -1,7 +1,8 @@
 {
   "title": "My Servers",
   "empty": "No Servers",
-  "openApp": "Open SillyTavern",
+  "openApp": "Open {name}",
+  "openAppGeneric": "Open App",
   "renew": "Renew",
   "searchPlaceholder": "Search servers...",
   "batch": {
@@ -14,6 +15,7 @@
   },
   "table": {
     "name": "Server Name",
+    "preset": "Preset",
     "status": "Status",
     "expiry": "Expiration",
     "actions": "Actions"
@@ -31,18 +33,22 @@
     "running": "Running",
     "starting": "Starting",
     "stopping": "Stopping",
+    "restarting": "Restarting",
+    "killingPower": "Killing",
     "offline": "Offline",
     "suspended": "Suspended",
     "installing": "Installing",
     "disconnected": "Disconnected"
   },
   "expiration": "Expiration",
+  "serverInfo": "Server Info",
   "daysLeft": "{n} days left",
   "expired": "Expired",
   "permanent": "Permanent",
   "console": "Console",
   "files": "Files",
-  "settings": "SillyTavern",
+  "settings": "{name} Settings",
+  "settingsGeneric": "Settings",
   "commandPlaceholder": "Type a command...",
   "consoleFailed": "Console connection failed",
   "consoleDisconnected": "Connection lost",
@@ -52,6 +58,7 @@
   "reconnectFailed": "Cannot connect to server node",
   "suspendedHint": "Server has expired. Please renew to continue.",
   "reconnectHint": "Please check your network or contact support",
+  "serverOfflineHint": "Use power controls to start the server",
   "power": {
     "title": "Power Controls",
     "start": "Start",
@@ -60,7 +67,11 @@
     "kill": "Kill",
     "confirmStop": "Are you sure you want to stop the server?",
     "confirmKill": "Are you sure you want to kill the server? This may cause data loss.",
-    "confirmRestart": "Are you sure you want to restart the server?"
+    "confirmRestart": "Are you sure you want to restart the server?",
+    "credentialsRequiredTitle": "Required Parameters Missing",
+    "credentialsRequiredMessage": "Please fill in all required startup variables in settings first.",
+    "credentialsRequiredMessageST": "Please set the required username and password in settings first.",
+    "goToSettings": "Go to Settings"
   },
   "resources": {
     "title": "Resources",

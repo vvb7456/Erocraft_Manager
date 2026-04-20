@@ -4,7 +4,10 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
+import { useToast } from '@/composables/useToast'
 import { useServerResourceStore } from '@/stores/serverResources'
+import { usePowerPendingStore, type PowerAction } from '@/stores/powerPending'
+import { getEggMeta, hasWebUi } from '@/config/eggRegistry'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -24,9 +27,11 @@ defineOptions({ name: 'UserServersPage' })
 
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
-const { get, post } = useApiFetch()
+const { get } = useApiFetch()
 const { confirm } = useConfirm()
+const { toast } = useToast()
 const resourceStore = useServerResourceStore()
+const pendingStore = usePowerPendingStore()
 
 interface Server {
   id: number
@@ -37,6 +42,8 @@ interface Server {
   isInstalling: boolean
   isInstalled: boolean
   nodeId: number
+  eggId: number
+  eggName: string
   limits: { memory: number; disk: number; cpu: number }
   allocation: { ip: string | null; port: number | null }
   node: { fqdn: string | null }
@@ -47,7 +54,6 @@ interface Server {
 
 const servers = ref<Server[]>([])
 const initialLoading = ref(true)
-const powerLoading = ref<Record<number, boolean>>({})
 const searchTerm = ref('')
 const page = ref(1)
 const perPage = ref(20)
@@ -96,8 +102,18 @@ async function executeBatchAction() {
     })
     if (!ok) return
   }
-  const promises = ids.map(id => post(`/api/user/servers/${id}/power`, { action }))
-  await Promise.all(promises)
+  const actionTyped = action as PowerAction
+  // Filter: skip servers with pending actions, and skip servers in inapplicable states
+  const allowedIds = ids.filter(id => {
+    if (!pendingStore.isActionAllowed(id, actionTyped)) return false
+    const state = resourceStore.getState(id)
+    if (actionTyped === 'start' && state !== 'offline' && state !== 'stopped') return false
+    if ((actionTyped === 'stop' || actionTyped === 'restart') && state !== 'running') return false
+    if (actionTyped === 'kill' && state !== 'running' && state !== 'stopping') return false
+    return true
+  })
+  if (!allowedIds.length) return
+  await Promise.allSettled(allowedIds.map(id => pendingStore.sendPower(id, actionTyped, toast)))
   selectedIds.value = new Set()
   batchActionType.value = ''
 }
@@ -249,10 +265,18 @@ function openUrl(s: Server) {
   if (s.address) window.open(`http://${s.address}`, '_blank')
 }
 
+function openLabel(eggName: string): string {
+  const lbl = getEggMeta(eggName).label
+  return lbl ? t('userServers.openApp', { name: lbl }) : t('userServers.openAppGeneric')
+}
+
 // ── Power action ──
+const CREDENTIALS_ERROR = 'server.startup_credentials_required'
+
 async function togglePower(s: Server) {
+  if (pendingStore.has(s.id)) return
   const st = liveState(s)
-  const action = st === 'running' ? 'restart' : 'start'
+  const action: PowerAction = st === 'running' ? 'restart' : 'start'
   if (action === 'restart') {
     const ok = await confirm({
       title: t('common.confirm.title'),
@@ -261,17 +285,37 @@ async function togglePower(s: Server) {
     })
     if (!ok) return
   }
-  powerLoading.value[s.id] = true
-  await post(`/api/user/servers/${s.id}/power`, { action })
-  powerLoading.value[s.id] = false
+  const err = await pendingStore.sendPower(s.id, action, toast, [CREDENTIALS_ERROR])
+  if (err === CREDENTIALS_ERROR) {
+    const msgKey = getEggMeta(s.eggName).credentialMessageKey ?? 'credentialsRequiredMessage'
+    const goSettings = await confirm({
+      title: t('userServers.power.credentialsRequiredTitle'),
+      message: t(`userServers.power.${msgKey}`),
+      confirmText: t('userServers.power.goToSettings'),
+    })
+    if (goSettings) {
+      router.push({ name: 'server-settings', params: { id: s.id } })
+    }
+  }
 }
 
 function powerBtnLabel(s: Server): string {
-  return liveState(s) === 'running' ? t('userServers.power.restart') : t('userServers.power.start')
+  const pa = pendingStore.get(s.id)
+  if (pa === 'restart') return t('userServers.status.restarting')
+  if (pa === 'start') return t('userServers.status.starting')
+  if (pa === 'kill') return t('userServers.status.killingPower')
+  if (pa === 'stop') return t('userServers.status.stopping')
+  const st = liveState(s)
+  if (st === 'starting') return t('userServers.status.starting')
+  if (st === 'stopping') return t('userServers.status.stopping')
+  return st === 'running' ? t('userServers.power.restart') : t('userServers.power.start')
 }
 
 function powerBtnIcon(s: Server): string {
-  return liveState(s) === 'running' ? 'refresh' : 'play_arrow'
+  if (pendingStore.has(s.id)) return 'hourglass_empty'
+  const st = liveState(s)
+  if (st === 'starting' || st === 'stopping') return 'hourglass_empty'
+  return st === 'running' ? 'refresh' : 'play_arrow'
 }
 
 function goToDetail(s: Server) {
@@ -338,6 +382,7 @@ function openMobileAction(s: Server) {
         </th>
         <th class="col-dot"></th>
         <th class="col-name">{{ t('userServers.table.name') }}</th>
+        <th class="col-preset">{{ t('userServers.table.preset') }}</th>
         <th class="col-status">{{ t('userServers.table.status') }}</th>
         <th class="col-cpu">CPU</th>
         <th class="col-mem">{{ t('userServers.resources.memory') }}</th>
@@ -358,6 +403,7 @@ function openMobileAction(s: Server) {
         <td class="col-name">
           <a class="server-link" href="#" @click.prevent="goToDetail(s)">{{ s.name }}</a>
         </td>
+        <td class="col-preset">{{ s.eggName }}</td>
         <td class="col-status" :style="{ color: statusBadgeColor(s), fontWeight: s.isSuspended || s.isInstalling ? 600 : undefined }">{{ t(`userServers.status.${displayState(s)}`) }}</td>
         <td class="col-cpu mono">{{ cpuText(s) }}</td>
         <td class="col-mem mono">
@@ -381,14 +427,14 @@ function openMobileAction(s: Server) {
             <BaseButton size="sm" @click="goToDetail(s)">
               {{ t('userServers.console') }}
             </BaseButton>
-            <BaseButton size="sm" :loading="powerLoading[s.id]" :disabled="s.isSuspended || s.isInstalling || resourceStore.isStale(s.id)" @click="togglePower(s)">
+            <BaseButton size="sm" :loading="pendingStore.has(s.id)" :disabled="s.isSuspended || s.isInstalling || resourceStore.isStale(s.id) || pendingStore.has(s.id) || liveState(s) === 'starting' || liveState(s) === 'stopping'" @click="togglePower(s)">
               <MsIcon :name="powerBtnIcon(s)" size="xs" /> {{ powerBtnLabel(s) }}
             </BaseButton>
             <BaseButton size="sm" disabled>
               {{ t('userServers.renew') }}
             </BaseButton>
-            <BaseButton v-if="s.address" variant="primary" size="sm" :disabled="s.isSuspended || s.isInstalling || liveState(s) !== 'running'" @click="openUrl(s)">
-              <MsIcon name="open_in_new" size="xs" /> {{ t('userServers.openApp') }}
+            <BaseButton v-if="s.address && hasWebUi(s.eggName)" variant="primary" size="sm" :disabled="s.isSuspended || s.isInstalling || liveState(s) !== 'running'" @click="openUrl(s)">
+              <MsIcon name="open_in_new" size="xs" /> {{ openLabel(s.eggName) }}
             </BaseButton>
           </div>
         </td>
@@ -403,6 +449,11 @@ function openMobileAction(s: Server) {
               <span v-if="uptimeText(s) !== '—'" class="mobile-server-card__uptime mono">{{ uptimeText(s) }}</span>
             </div>
             <Badge :color="statusBadgeColor(s)">{{ t(`userServers.status.${displayState(s)}`) }}</Badge>
+          </div>
+          <div class="mobile-server-card__meta">
+            <MsIcon name="widgets" size="sm" class="mobile-server-card__meta-icon" />
+            <span class="mobile-server-card__meta-label">{{ t('userServers.table.preset') }}：</span>
+            <span class="mobile-server-card__meta-value">{{ s.eggName }}</span>
           </div>
           <div class="mobile-server-card__expiry">
             <MsIcon name="schedule" size="sm" class="mobile-server-card__expiry-icon" />
@@ -468,14 +519,14 @@ function openMobileAction(s: Server) {
         <button @click="mobileActionOpen = false; goToDetail(mobileActionServer!)">
           <MsIcon name="terminal" size="sm" /> {{ t('userServers.console') }}
         </button>
-        <button :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling || resourceStore.isStale(mobileActionServer.id)" @click="mobileActionOpen = false; togglePower(mobileActionServer!)">
+        <button :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling || resourceStore.isStale(mobileActionServer.id) || pendingStore.has(mobileActionServer.id) || liveState(mobileActionServer) === 'starting' || liveState(mobileActionServer) === 'stopping'" @click="mobileActionOpen = false; togglePower(mobileActionServer!)">
           <MsIcon :name="powerBtnIcon(mobileActionServer)" size="sm" /> {{ powerBtnLabel(mobileActionServer) }}
         </button>
         <button disabled>
           <MsIcon name="shopping_cart" size="sm" /> {{ t('userServers.renew') }}
         </button>
-        <button v-if="mobileActionServer.address" :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling || liveState(mobileActionServer) !== 'running'" @click="mobileActionOpen = false; openUrl(mobileActionServer!)">
-          <MsIcon name="open_in_new" size="sm" /> {{ t('userServers.openApp') }}
+        <button v-if="mobileActionServer.address && hasWebUi(mobileActionServer.eggName)" :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling || liveState(mobileActionServer) !== 'running'" @click="mobileActionOpen = false; openUrl(mobileActionServer!)">
+          <MsIcon name="open_in_new" size="sm" /> {{ openLabel(mobileActionServer!.eggName) }}
         </button>
       </template>
     </ActionSheet>
@@ -509,7 +560,8 @@ function openMobileAction(s: Server) {
 /* ── Table columns ── */
 .col-check { width: 1%; text-align: center !important; vertical-align: middle; }
 .col-dot { width: 1%; text-align: center !important; vertical-align: middle; }
-.col-name { width: 14%; }
+.col-name { width: 13%; }
+.col-preset { width: 8%; color: var(--t2); }
 .col-status { width: 7%; }
 .col-cpu { width: 8%; }
 .col-mem { width: 8%; }
@@ -598,6 +650,32 @@ function openMobileAction(s: Server) {
   color: var(--t3);
   font-size: .72rem;
   flex-shrink: 0;
+}
+
+.mobile-server-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--bd);
+  font-size: .82rem;
+  color: var(--t2);
+}
+
+.mobile-server-card__meta-icon {
+  color: var(--t3);
+  flex-shrink: 0;
+}
+
+.mobile-server-card__meta-label {
+  color: var(--t2);
+  white-space: nowrap;
+}
+
+.mobile-server-card__meta-value {
+  font-weight: 500;
+  color: var(--t1);
 }
 
 .mobile-server-card__expiry {

@@ -2,12 +2,13 @@
 import { ref, inject, computed, watch, onMounted, onBeforeUnmount, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useServerResourceStore } from '@/stores/serverResources'
-import { WEB_ACCESSIBLE_EGGS } from '@/utils/constants'
+import { hasWebUi } from '@/config/eggRegistry'
 import { getStatusDotKey, getStatusColor } from '@/utils/status'
 import { useConsoleWs } from '@/composables/useConsoleWs'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import PowerControls from '@/components/server/PowerControls.vue'
@@ -22,7 +23,7 @@ const resourceStore = useServerResourceStore()
 
 interface ServerDetail {
   id: number; uuid: string; nodeId: number; isSuspended: boolean
-  eggId: number; status: string | null; address: string | null
+  eggId: number; eggName: string; status: string | null; address: string | null
   limits: { memory: number; disk: number; cpu: number }
   expirationDate: string | null; daysLeft: number | null
 }
@@ -78,7 +79,7 @@ const expirationColor = computed(() => {
 })
 
 // ── Server address ──
-const isWebEgg = computed(() => server.value ? WEB_ACCESSIBLE_EGGS.includes(server.value.eggId) : false)
+const isWebEgg = computed(() => server.value ? hasWebUi(server.value.eggName) : false)
 const serverUrl = computed(() => server.value?.address ? `http://${server.value.address}` : null)
 
 // ── Console ──
@@ -90,7 +91,7 @@ const {
   suspended,
   commandInput,
   connect: connectConsole, sendCommand, handleCommandKey,
-  loadHistory, fit, dispose, manualReconnect,
+  loadHistory, fit, dispose, clearTerminal, manualReconnect,
 } = useConsoleWs({ serverId, termEl })
 
 // ── Resize ──
@@ -108,6 +109,15 @@ watch(isStale, (newVal, oldVal) => {
 const reloadServer = inject<() => Promise<void>>('reloadServer')
 watch(suspended, () => {
   if (reloadServer) reloadServer()
+})
+
+// ── Offline: clear terminal + show EmptyState ──
+const isServerOff = computed(() => state.value === 'offline' || state.value === 'stopped')
+
+// Clear terminal on any transition: entering offline (hide stale output) and
+// leaving offline (remove old session logs before fresh output arrives).
+watch(isServerOff, () => {
+  clearTerminal()
 })
 
 onMounted(() => {
@@ -133,6 +143,7 @@ onBeforeUnmount(() => {
           :addresses="[server.address]"
           :open-url="isWebEgg ? serverUrl! : undefined"
           :open-disabled="state !== 'running'"
+          :egg-name="server.eggName"
           compact
         />
       </BaseCard>
@@ -147,6 +158,7 @@ onBeforeUnmount(() => {
           :is-installing="isInstalling"
           :disabled="!wsConnected || reconnecting"
           :disabled-reason="t('userServers.consoleDisconnected')"
+          :egg-name="server.eggName"
           layout="row"
         />
       </BaseCard>
@@ -181,6 +193,10 @@ onBeforeUnmount(() => {
             <MsIcon name="refresh" /> {{ t('userServers.consoleReconnect') }}
           </BaseButton>
         </div>
+        <!-- Server offline -->
+        <div v-else-if="isServerOff && wsConnected" class="terminal-overlay terminal-overlay--reconnect">
+          <EmptyState icon="power_settings_new" :title="t('userServers.status.offline')" :message="t('userServers.serverOfflineHint')" density="compact" />
+        </div>
         <!-- Terminal -->
         <div ref="termEl" class="terminal-container" />
         <!-- Command input -->
@@ -190,7 +206,7 @@ onBeforeUnmount(() => {
             v-model="commandInput"
             class="command-input"
             :placeholder="t('userServers.commandPlaceholder')"
-            :disabled="!wsConnected || isInstalling || reconnecting"
+            :disabled="!wsConnected || isInstalling || reconnecting || isServerOff"
             @keydown.enter="sendCommand"
             @keydown="handleCommandKey"
           />
@@ -232,6 +248,7 @@ onBeforeUnmount(() => {
           :addresses="[server.address]"
           :open-url="isWebEgg ? serverUrl! : undefined"
           :open-disabled="state !== 'running'"
+          :egg-name="server.eggName"
         />
       </BaseCard>
 
@@ -249,14 +266,20 @@ onBeforeUnmount(() => {
           :is-installing="isInstalling"
           :disabled="!wsConnected || reconnecting"
           :disabled-reason="t('userServers.consoleDisconnected')"
+          :egg-name="server.eggName"
         />
       </BaseCard>
 
-      <!-- Resource stats -->
+      <!-- Server info -->
       <BaseCard variant="bg3" class="sidebar-card">
         <div class="sidebar-section-title">
-          <MsIcon name="monitoring" class="section-icon" />
-          {{ t('userServers.resources.title') }}
+          <MsIcon name="info" class="section-icon" />
+          {{ t('userServers.serverInfo') }}
+        </div>
+        <div class="info-preset">
+          <MsIcon name="widgets" class="info-preset-icon" />
+          <span class="info-preset-label">{{ t('userServers.table.preset') }}</span>
+          <span class="info-preset-value">{{ server?.eggName ?? '—' }}</span>
         </div>
         <ResourceStats
           v-if="server"
@@ -274,6 +297,12 @@ onBeforeUnmount(() => {
     <!-- ═══ Mobile bottom: Resource stats ═══ -->
     <div class="mobile-bottom">
       <BaseCard variant="bg3" class="mobile-card">
+        <!-- Preset -->
+        <div class="mobile-preset">
+          <MsIcon name="widgets" class="section-icon" />
+          <span class="mobile-preset-label">{{ t('userServers.table.preset') }}：</span>
+          <span class="mobile-preset-value">{{ server?.eggName ?? '—' }}</span>
+        </div>
         <!-- Lifecycle (single line) -->
         <div class="mobile-lifecycle">
           <div class="mobile-lifecycle-left">
@@ -490,6 +519,55 @@ onBeforeUnmount(() => {
 .section-icon {
   font-size: 1rem;
   color: var(--t3);
+}
+
+/* ── Server info: preset row ── */
+.info-preset {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--bd);
+}
+
+.info-preset-icon {
+  font-size: 1rem;
+  color: var(--t3);
+}
+
+.info-preset-label {
+  font-size: var(--text-sm);
+  color: var(--t2);
+}
+
+.info-preset-value {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--t1);
+  margin-left: auto;
+}
+
+/* ── Mobile preset ── */
+.mobile-preset {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--bd);
+}
+
+.mobile-preset-label {
+  font-size: var(--text-sm);
+  color: var(--t2);
+  white-space: nowrap;
+}
+
+.mobile-preset-value {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--t1);
 }
 
 /* ── Lifecycle ── */

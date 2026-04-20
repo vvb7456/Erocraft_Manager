@@ -1,0 +1,1 @@
+import{d as o,h as n,v as r,o as p,k as d}from"./main-BXVeJc7M.js";const c=o({name:"CardTap",__name:"CardTap",emits:["tap"],setup(m,{emit:e}){const t=e;return(s,a)=>(p(),n("div",{class:"card-tap",onClick:a[0]||(a[0]=_=>t("tap"))},[r(s.$slots,"default")]))}}),l=d(c,[["__scopeId","data-v-a210cd31"]]);export{l as C};

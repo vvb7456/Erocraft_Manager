@@ -1,0 +1,1 @@
+function a(t){async function e(r,i){if(t.value)try{await fetch(`/api/user/servers/${t.value}/activity`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({event:r,properties:i})})}catch{}}return{reportServerActivity:e}}export{a as u};

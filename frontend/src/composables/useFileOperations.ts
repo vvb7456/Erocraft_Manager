@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { useServerActivityReporter } from '@/composables/useServerActivityReporter'
 import type { FileEntry } from '@/composables/useFileTree'
 import { validateFileName, sanitizeMovePath } from '@/utils/path'
 
@@ -11,6 +12,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
   const { get, post } = useApiFetch()
   const { toast } = useToast()
   const { confirm } = useConfirm()
+  const { reportServerActivity } = useServerActivityReporter(serverId)
 
   // ── State ──
   const currentPath = ref('/')
@@ -434,6 +436,13 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
       })
     } catch {
       // handled
+    }
+
+    if (tasks.value[idx]?.status === 'done') {
+      void reportServerActivity('server:file.uploaded', {
+        directory: currentPath.value,
+        file: file.name,
+      })
     }
 
     loadFiles()

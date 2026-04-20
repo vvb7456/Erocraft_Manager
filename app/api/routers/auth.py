@@ -12,6 +12,7 @@ from app.db.models.pterodactyl import PteroUser
 from app.db.repositories.users import user_repository
 from app.schemas.auth import LoginRequest, LoginResponse, LogoutResponse, MeResponse
 from app.services.audit import log_manager_activity
+from app.services.pterodactyl_activity import get_request_ip, pterodactyl_activity_logger
 
 router = APIRouter(tags=["auth"])
 
@@ -29,6 +30,20 @@ async def login(
 
     user = await user_repository.get_by_username_or_email(db, username)
     if not user or not user.check_password(password):
+        if user:
+            await pterodactyl_activity_logger.log_account_activity(
+                db,
+                user=user,
+                actor=None,
+                event="auth:fail",
+                properties={
+                    "username": username,
+                    "ip": get_request_ip(request),
+                    "useragent": request.headers.get("user-agent"),
+                },
+                request=request,
+            )
+            await db.commit()
         await log_manager_activity(
             db,
             actor=username or "unknown",
@@ -41,6 +56,19 @@ async def login(
 
     request.session.clear()
     request.session[SESSION_USER_ID_KEY] = int(user.id)
+
+    await pterodactyl_activity_logger.log_account_activity(
+        db,
+        user=user,
+        actor=user,
+        event="auth:success",
+        properties={
+            "ip": get_request_ip(request),
+            "useragent": request.headers.get("user-agent"),
+        },
+        request=request,
+    )
+    await db.commit()
 
     await log_manager_activity(
         db,

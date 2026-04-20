@@ -54,6 +54,7 @@ export const ICON_CODEPOINTS: Record<string, string> = {
   'group': '\uea21',
   'hard_drive_2': '\uf7a4',
   'history': '\ue8b3',
+  'hourglass_empty': '\ue88b',
   'hourglass_top': '\uea5b',
   'image': '\ue3f4',
   'image_not_supported': '\uf116',
@@ -118,6 +119,7 @@ export const ICON_CODEPOINTS: Record<string, string> = {
   'visibility': '\ue8f4',
   'visibility_off': '\ue8f5',
   'warning': '\uf083',
+  'widgets': '\ue1bd',
   'wifi_tethering': '\ue1e2',
   'zoom_in': '\ue8ff',
 }

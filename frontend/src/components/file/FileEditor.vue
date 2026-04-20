@@ -28,8 +28,8 @@ const content = ref('')
 const editorLoading = ref(false)
 const saving = ref(false)
 const editorRef = ref<HTMLDivElement | null>(null)
+const mouseDownOnOverlay = ref(false)
 let editorView: any = null
-let mouseDownOnOverlay = false
 
 async function openFile(name: string, fileSize?: number) {
   if (fileSize && fileSize > 5 * 1024 * 1024) {

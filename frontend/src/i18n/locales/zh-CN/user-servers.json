@@ -1,7 +1,8 @@
 {
   "title": "我的服务器",
   "empty": "暂无服务器",
-  "openApp": "打开 SillyTavern",
+  "openApp": "打开 {name}",
+  "openAppGeneric": "打开应用",
   "renew": "续费",
   "searchPlaceholder": "搜索服务器...",
   "batch": {
@@ -14,6 +15,7 @@
   },
   "table": {
     "name": "服务器名称",
+    "preset": "预设",
     "status": "状态",
     "expiry": "到期时间",
     "actions": "操作"
@@ -31,18 +33,22 @@
     "running": "正在运行",
     "starting": "正在启动",
     "stopping": "正在关机",
+    "restarting": "正在重启",
+    "killingPower": "正在关闭电源",
     "offline": "关机",
     "suspended": "已冻结",
     "installing": "正在安装",
     "disconnected": "连接中断"
   },
   "expiration": "到期时间",
+  "serverInfo": "服务器详情",
   "daysLeft": "剩余 {n} 天",
   "expired": "已过期",
   "permanent": "永久",
   "console": "控制台",
   "files": "文件",
-  "settings": "SillyTavern 设置",
+  "settings": "{name} 设置",
+  "settingsGeneric": "设置",
   "commandPlaceholder": "输入命令...",
   "consoleFailed": "控制台连接失败",
   "consoleDisconnected": "连接已断开",
@@ -52,6 +58,7 @@
   "reconnectFailed": "无法连接到服务器节点",
   "suspendedHint": "服务器已到期，请及时续费",
   "reconnectHint": "请检查网络或联系客服",
+  "serverOfflineHint": "使用电源控制开启服务器",
   "power": {
     "title": "电源控制",
     "start": "开机",
@@ -60,7 +67,11 @@
     "kill": "关闭电源",
     "confirmStop": "确定要关机吗？",
     "confirmKill": "确定要关闭电源吗？这可能导致数据丢失。",
-    "confirmRestart": "确定要重启服务器吗？"
+    "confirmRestart": "确定要重启服务器吗？",
+    "credentialsRequiredTitle": "需要填写参数",
+    "credentialsRequiredMessage": "请先在设置页填写所有必填的启动参数。",
+    "credentialsRequiredMessageST": "请先在设置页填写必要的用户名和密码。",
+    "goToSettings": "前往设置"
   },
   "resources": {
     "title": "资源使用",

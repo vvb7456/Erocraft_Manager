@@ -10,6 +10,7 @@ import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import Badge from '@/components/ui/Badge.vue'
 import { getStatusDotKey, getStatusColor } from '@/utils/status'
+import { getEggMeta } from '@/config/eggRegistry'
 
 defineOptions({ name: 'ServerDetailPage' })
 
@@ -31,12 +32,30 @@ interface ServerDetail {
   isInstalled: boolean
   nodeId: number
   eggId: number
+  eggName: string
   limits: { memory: number; disk: number; cpu: number }
   allocation: { ip: string | null; port: number | null }
   node: { fqdn: string | null }
   expirationDate: string | null
   daysLeft: number | null
   address: string | null
+}
+
+interface ServerResourcesPayload {
+  state: string
+  isSuspended: boolean
+  resources: {
+    cpu_absolute?: number
+    memory_bytes?: number
+    disk_bytes?: number
+    network?: {
+      rx_bytes?: number
+      tx_bytes?: number
+    }
+    network_rx_bytes?: number
+    network_tx_bytes?: number
+    uptime?: number
+  }
 }
 
 const server = ref<ServerDetail | null>(null)
@@ -48,7 +67,12 @@ async function loadServer() {
 }
 
 onMounted(loadServer)
-watch(serverId, loadServer)
+watch(serverId, () => {
+  // Clear stale server data immediately so child components (especially console WS)
+  // don't mount with the previous server's identity
+  server.value = null
+  loadServer()
+})
 
 // Provide server data to child pages
 provide('server', server)
@@ -62,7 +86,8 @@ const isSuspended = computed(() => server.value?.isSuspended ?? false)
 const tabs = computed(() => [
   { key: 'server-console', label: t('userServers.console'), icon: 'terminal' },
   { key: 'server-files', label: t('userServers.files'), icon: 'folder', disabled: isInstalling.value || stale.value || isSuspended.value },
-  { key: 'server-settings', label: t('userServers.settings'), icon: 'settings', disabled: isInstalling.value || stale.value || isSuspended.value },
+  { key: 'server-settings', label: (() => { const lbl = getEggMeta(server.value?.eggName ?? '').label; return lbl ? t('userServers.settings', { name: lbl }) : t('userServers.settingsGeneric') })(), icon: 'settings', disabled: isInstalling.value || stale.value || isSuspended.value },
+  { key: 'server-activity', label: t('activity.title'), icon: 'history', disabled: isInstalling.value || stale.value || isSuspended.value },
 ])
 
 const activeTab = computed(() => route.name as string)
@@ -138,7 +163,7 @@ function startResourcePoll() {
     if (activeTab.value === 'server-console') return
     if (!server.value) return
     try {
-      const data = await get<{ state: string; isSuspended: boolean; resources: Record<string, number> }>(
+      const data = await get<ServerResourcesPayload>(
         `/api/user/servers/${server.value.id}/resources`,
       )
       if (data) {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -34,6 +35,7 @@ class UserServerItem(BaseModel):
     isSuspended: bool
     nodeId: int
     eggId: int
+    eggName: str
     limits: UserServerLimits
     allocation: UserServerAllocation
     node: UserServerNode
@@ -54,6 +56,11 @@ class ServerResourcesResponse(BaseModel):
 
 class PowerActionRequest(BaseModel):
     action: Literal["start", "stop", "restart", "kill"]
+
+
+class UserActivityReportRequest(BaseModel):
+    event: Literal["server:console.command", "server:file.uploaded"]
+    properties: dict[str, Any] = Field(default_factory=dict)
 
 
 class WingsTokenResponse(BaseModel):
@@ -142,3 +149,31 @@ class STDefaultPasswordRequest(BaseModel):
 
 class STDefaultPasswordResponse(BaseModel):
     hasPassword: bool
+
+
+class UserActivityActor(BaseModel):
+    id: int
+    uuid: str
+    username: str
+    email: str
+
+
+class UserActivityLogItem(BaseModel):
+    id: int
+    batch: str | None
+    event: str
+    ip: str
+    description: str | None
+    actorType: str | None
+    actorId: int | None
+    apiKeyId: int | None
+    properties: dict[str, Any] | list[Any]
+    timestamp: datetime
+    actor: UserActivityActor | None = None
+
+
+class UserActivityLogsResponse(BaseModel):
+    logs: list[UserActivityLogItem]
+    total: int
+    page: int
+    perPage: int

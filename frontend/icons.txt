@@ -13,6 +13,9 @@ cloud_off
 power_settings_new
 power_off
 
+# PowerControls / UserServersPage — dynamic icons
+hourglass_empty
+
 # ThemeToggle.vue
 dark_mode
 light_mode

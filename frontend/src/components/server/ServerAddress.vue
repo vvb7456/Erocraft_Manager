@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { getEggMeta } from '@/config/eggRegistry'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 
@@ -15,6 +16,8 @@ const props = defineProps<{
   openDisabled?: boolean
   /** Compact layout for mobile */
   compact?: boolean
+  /** Egg name for display labels */
+  eggName?: string
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
@@ -27,6 +30,11 @@ async function copy(address: string, index: number) {
     setTimeout(() => { copiedIndex.value = null }, 2000)
   } catch { /* clipboard API not available */ }
 }
+
+const openBtnLabel = computed(() => {
+  const lbl = getEggMeta(props.eggName ?? '').label
+  return lbl ? t('userServers.openApp', { name: lbl }) : t('userServers.openAppGeneric')
+})
 
 function openLink() {
   if (props.openUrl) window.open(props.openUrl, '_blank')
@@ -44,7 +52,7 @@ function openLink() {
     @click="openLink"
   >
     <MsIcon name="open_in_new" />
-    {{ t('userServers.openApp') }}
+    {{ openBtnLabel }}
   </BaseButton>
 
   <!-- Address lines -->

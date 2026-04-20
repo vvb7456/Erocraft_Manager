@@ -65,7 +65,8 @@
       "suspended": "Server is suspended",
       "installing": "Server is currently installing, please wait",
       "invalid_power_action": "Invalid power action",
-      "power_conflict": "Another power action is already in progress"
+      "power_conflict": "Another power action is already in progress",
+      "startup_credentials_required": "Please set username and password in settings first"
     },
     "wings": {
       "unknown_error": "Server communication error, please try again later",

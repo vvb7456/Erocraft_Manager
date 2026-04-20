@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 
 from sqlalchemy import and_, select
@@ -10,6 +11,17 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models.manager import ServerMeta
 from app.db.models.pterodactyl import EggVariable, PteroServer, ServerVariable
+
+
+@dataclass(slots=True)
+class StartupVariableUpdateResult:
+    variable: EggVariable
+    old_value: str
+    new_value: str
+
+    @property
+    def changed(self) -> bool:
+        return self.old_value != self.new_value
 
 
 class ServerRepository:
@@ -71,8 +83,8 @@ class ServerRepository:
         egg_id: int,
         env_variable: str,
         value: str,
-    ) -> bool:
-        """Update a single startup variable value. Returns True if successful."""
+    ) -> StartupVariableUpdateResult | None:
+        """Update a single startup variable value and return Panel-style change data."""
         result = await db.execute(
             select(EggVariable).where(
                 EggVariable.egg_id == egg_id,
@@ -82,7 +94,7 @@ class ServerRepository:
         )
         egg_var = result.scalar_one_or_none()
         if egg_var is None:
-            return False
+            return None
 
         sv_result = await db.execute(
             select(ServerVariable).where(
@@ -91,15 +103,21 @@ class ServerRepository:
             )
         )
         sv = sv_result.scalar_one_or_none()
+        old_value = sv.variable_value if sv is not None and sv.variable_value is not None else egg_var.default_value
+        new_value = value or ""
         if sv is not None:
-            sv.variable_value = value
+            sv.variable_value = new_value
         else:
             db.add(ServerVariable(
                 server_id=server_id,
                 variable_id=egg_var.id,
-                variable_value=value,
+                variable_value=new_value,
             ))
-        return True
+        return StartupVariableUpdateResult(
+            variable=egg_var,
+            old_value=old_value,
+            new_value=new_value,
+        )
 
     async def list_suspend_candidates(self, db: AsyncSession, today: date) -> list[PteroServer]:
         """Return servers whose expiration_date < today and not yet suspended."""

@@ -5,9 +5,11 @@ from __future__ import annotations
 import base64
 import json
 import time
+import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
@@ -16,7 +18,7 @@ from app.api.deps.ownership import get_owned_server
 from app.core.runtime_settings import AUTOMATION_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.time import local_today
-from app.db.models.pterodactyl import PteroServer, PteroUser
+from app.db.models.pterodactyl import ActivityLog, ActivityLogSubject, PteroServer, PteroUser
 from app.db.repositories.servers import server_repository
 from app.schemas.user_servers import (
     PowerActionRequest,
@@ -26,13 +28,24 @@ from app.schemas.user_servers import (
     ServerResourcesResponse,
     StartupVariableItem,
     StartupVariableUpdate,
+    UserActivityActor,
+    UserActivityLogItem,
+    UserActivityLogsResponse,
+    UserActivityReportRequest,
     UserServerDetail,
     UserServerItem,
     WingsTokenResponse,
 )
+from app.services.pterodactyl_activity import (
+    PTERODACTYL_DISABLED_ACTIVITY_EVENTS,
+    SUBJECT_EGG_VARIABLE,
+    decode_activity_properties,
+    pterodactyl_activity_logger,
+)
 from app.services.pterodactyl import PterodactylServiceError, pterodactyl_service
 from app.services.wings import WingsServiceError, wings_service
 from app.api.utils.wings_errors import translate_wings_error
+
 
 router = APIRouter(prefix="/user", tags=["user_servers"])
 
@@ -66,6 +79,7 @@ def _serialize_server(server: PteroServer, today: date) -> UserServerItem:
         isSuspended=server.is_suspended,
         nodeId=server.node_id,
         eggId=server.egg_id,
+        eggName=server.egg.name if server.egg else "Unknown",
         limits={
             "memory": server.memory,
             "disk": server.disk,
@@ -82,6 +96,24 @@ def _serialize_server(server: PteroServer, today: date) -> UserServerItem:
         daysLeft=days_left,
         address=address,
     )
+
+
+def _validate_activity_report(payload: UserActivityReportRequest) -> dict[str, str]:
+    props = payload.properties
+    if payload.event == "server:console.command":
+        command = str(props.get("command") or "").strip()
+        if not command:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="activity.command_required")
+        return {"command": command}
+
+    if payload.event == "server:file.uploaded":
+        directory = str(props.get("directory") or "").strip() or "/"
+        file = str(props.get("file") or "").strip()
+        if not file:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="activity.file_required")
+        return {"directory": directory, "file": file}
+
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="activity.event_not_allowed")
 
 
 @router.get("/servers", response_model=list[UserServerItem])
@@ -124,17 +156,43 @@ async def get_user_server_resources(
 @router.post("/servers/{server_id}/power", status_code=status.HTTP_204_NO_CONTENT)
 async def send_user_server_power_action(
     payload: PowerActionRequest,
+    request: Request,
+    current_user: PteroUser = Depends(get_current_user),
     server: PteroServer = Depends(get_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     if server.is_suspended:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Server is suspended")
 
+    # For 'start' or 'restart', ensure required startup variables are filled
+    if payload.action in ("start", "restart"):
+        rows = await server_repository.list_startup_variables(
+            db, server_id=server.id, egg_id=server.egg_id,
+        )
+        for variable, value in rows:
+            rules = variable.rules or ""
+            is_required = "required" in rules and "nullable" not in rules
+            if is_required:
+                effective = value if value is not None else variable.default_value
+                if not effective or not effective.strip():
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="server.startup_credentials_required",
+                    )
+
     try:
         await wings_service.send_power_action(db, server.node_id, server.uuid, payload.action)
     except WingsServiceError as exc:
         raise translate_wings_error(exc) from exc
 
+    await pterodactyl_activity_logger.log_server_activity(
+        db,
+        server=server,
+        actor=current_user,
+        event=f"server:power.{payload.action}",
+        request=request,
+    )
+    await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -187,16 +245,35 @@ async def list_user_server_startup_variables(
 @router.put("/servers/{server_id}/startup", status_code=status.HTTP_204_NO_CONTENT)
 async def update_user_server_startup(
     payload: StartupVariableUpdate,
+    request: Request,
+    current_user: PteroUser = Depends(get_current_user),
     server: PteroServer = Depends(get_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    batch = str(uuid.uuid4()) if len(payload.variables) > 1 else None
     for env_var, value in payload.variables.items():
-        await server_repository.update_startup_variable(
+        result = await server_repository.update_startup_variable(
             db,
             server_id=server.id,
             egg_id=server.egg_id,
             env_variable=env_var,
             value=value,
+        )
+        if result is None or not result.changed:
+            continue
+        await pterodactyl_activity_logger.log_server_activity(
+            db,
+            server=server,
+            actor=current_user,
+            event="server:startup.edit",
+            properties={
+                "variable": result.variable.env_variable,
+                "old": result.old_value,
+                "new": result.new_value,
+            },
+            request=request,
+            subjects=[(SUBJECT_EGG_VARIABLE, result.variable.id)],
+            batch=batch,
         )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -205,6 +282,8 @@ async def update_user_server_startup(
 @router.post("/servers/{server_id}/reinstall", status_code=status.HTTP_204_NO_CONTENT)
 async def reinstall_user_server(
     payload: ReinstallRequest,
+    request: Request,
+    current_user: PteroUser = Depends(get_current_user),
     server: PteroServer = Depends(get_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
@@ -234,9 +313,114 @@ async def reinstall_user_server(
             env_variable="FORCE_REINSTALL",
             value="false",
         )
-        await db.commit()
+
+    await pterodactyl_activity_logger.log_server_activity(
+        db,
+        server=server,
+        actor=current_user,
+        event="server:reinstall",
+        request=request,
+    )
+    await db.commit()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/servers/{server_id}/activity", status_code=status.HTTP_204_NO_CONTENT)
+async def report_user_server_activity(
+    payload: UserActivityReportRequest,
+    request: Request,
+    current_user: PteroUser = Depends(get_current_user),
+    server: PteroServer = Depends(get_owned_server),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    properties = _validate_activity_report(payload)
+    await pterodactyl_activity_logger.log_server_activity(
+        db,
+        server=server,
+        actor=current_user,
+        event=payload.event,
+        properties=properties,
+        request=request,
+    )
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/servers/{server_id}/activity", response_model=UserActivityLogsResponse)
+async def list_user_server_activity(
+    server: PteroServer = Depends(get_owned_server),
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    event: str | None = Query(default=None, min_length=1),
+    include_disabled: bool = Query(default=False),
+) -> UserActivityLogsResponse:
+    filters = [
+        ActivityLogSubject.subject_type == "server",
+        ActivityLogSubject.subject_id == server.id,
+    ]
+    if event:
+        event_parts = [e.strip() for e in event.split(",") if e.strip()]
+        if len(event_parts) == 1:
+            filters.append(ActivityLog.event.like(f"%{event_parts[0]}%"))
+        elif event_parts:
+            filters.append(or_(*(ActivityLog.event.like(f"%{ep}%") for ep in event_parts)))
+    if not include_disabled:
+        filters.append(ActivityLog.event.notin_(PTERODACTYL_DISABLED_ACTIVITY_EVENTS))
+
+    count_result = await db.execute(
+        select(func.count(ActivityLog.id))
+        .join(ActivityLogSubject, ActivityLogSubject.activity_log_id == ActivityLog.id)
+        .where(*filters)
+    )
+    total = int(count_result.scalar_one() or 0)
+
+    result = await db.execute(
+        select(ActivityLog, PteroUser)
+        .join(ActivityLogSubject, ActivityLogSubject.activity_log_id == ActivityLog.id)
+        .outerjoin(
+            PteroUser,
+            and_(
+                ActivityLog.actor_type == "user",
+                ActivityLog.actor_id == PteroUser.id,
+            ),
+        )
+        .where(*filters)
+        .order_by(ActivityLog.timestamp.desc(), ActivityLog.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    )
+
+    logs: list[UserActivityLogItem] = []
+    for activity, actor in result.all():
+        logs.append(
+            UserActivityLogItem(
+                id=activity.id,
+                batch=activity.batch,
+                event=activity.event,
+                ip=activity.ip,
+                description=activity.description,
+                actorType=activity.actor_type,
+                actorId=activity.actor_id,
+                apiKeyId=activity.api_key_id,
+                properties=decode_activity_properties(activity.properties),
+                timestamp=activity.timestamp,
+                actor=UserActivityActor(
+                    id=actor.id,
+                    uuid=actor.uuid,
+                    username=actor.username,
+                    email=actor.email,
+                ) if actor is not None else None,
+            )
+        )
+
+    return UserActivityLogsResponse(
+        logs=logs,
+        total=total,
+        page=page,
+        perPage=per_page,
+    )
 
 
 _ST_DEFAULT_USER_KEY = "user:default-user"
@@ -285,6 +469,8 @@ async def get_st_default_password_status(
 @router.put("/servers/{server_id}/st-default-password", status_code=status.HTTP_204_NO_CONTENT)
 async def set_st_default_password(
     payload: STDefaultPasswordRequest,
+    request: Request,
+    current_user: PteroUser = Depends(get_current_user),
     server: PteroServer = Depends(get_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
@@ -326,4 +512,13 @@ async def set_st_default_password(
         )
     except WingsServiceError as exc:
         raise translate_wings_error(exc) from exc
+    await pterodactyl_activity_logger.log_server_activity(
+        db,
+        server=server,
+        actor=current_user,
+        event="server:file.write",
+        properties={"file": file_path},
+        request=request,
+    )
+    await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useConfirm } from '@/composables/useConfirm'
-import { useApiFetch } from '@/composables/useApiFetch'
+import { useToast } from '@/composables/useToast'
+import { usePowerPendingStore, type PowerAction } from '@/stores/powerPending'
+import { getEggMeta } from '@/config/eggRegistry'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
@@ -16,13 +20,26 @@ const props = defineProps<{
   /** External disable (e.g. WS disconnected on console page) */
   disabled?: boolean
   disabledReason?: string
+  /** Egg name for context-sensitive messages */
+  eggName?: string
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
+const router = useRouter()
 const { confirm } = useConfirm()
-const { post } = useApiFetch()
+const { toast } = useToast()
+const pendingStore = usePowerPendingStore()
 
-async function sendPower(action: string) {
+const CREDENTIALS_ERROR = 'server.startup_credentials_required'
+
+const pendingAction = computed(() => pendingStore.get(props.serverId))
+const btnSize = computed(() => props.layout === 'row' ? 'sm' as const : undefined)
+const btnClass = computed(() => ({ 'power-btn': props.layout !== 'row' }))
+
+async function sendPower(action: PowerAction) {
+  // Check if this action is allowed given current pending state
+  if (!pendingStore.isActionAllowed(props.serverId, action)) return
+
   if (action === 'stop') {
     const ok = await confirm({
       title: t('common.confirm.title'),
@@ -40,7 +57,18 @@ async function sendPower(action: string) {
     if (!ok) return
   }
 
-  await post(`/api/user/servers/${props.serverId}/power`, { action })
+  const err = await pendingStore.sendPower(props.serverId, action, toast, [CREDENTIALS_ERROR])
+  if (err === CREDENTIALS_ERROR) {
+    const msgKey = getEggMeta(props.eggName ?? '').credentialMessageKey ?? 'credentialsRequiredMessage'
+    const goSettings = await confirm({
+      title: t('userServers.power.credentialsRequiredTitle'),
+      message: t(`userServers.power.${msgKey}`),
+      confirmText: t('userServers.power.goToSettings'),
+    })
+    if (goSettings) {
+      router.push({ name: 'server-settings', params: { id: props.serverId } })
+    }
+  }
 }
 </script>
 
@@ -48,109 +76,84 @@ async function sendPower(action: string) {
   <div class="power-controls" :class="['power-controls--' + (layout ?? 'column'), { 'power-controls--disabled': disabled }]">
     <!-- External disabled overlay -->
     <template v-if="disabled">
-      <BaseButton
-        :size="layout === 'row' ? 'sm' : undefined"
-        :class="{ 'power-btn': layout !== 'row' }"
-        disabled
-      >
+      <BaseButton :size="btnSize" :class="btnClass" disabled>
         <MsIcon name="power_settings_new" /> {{ disabledReason || t('userServers.power.title') }}
       </BaseButton>
     </template>
 
     <!-- Installing -->
-    <BaseButton
-      v-else-if="isInstalling"
-      variant="primary"
-      :size="layout === 'row' ? 'sm' : undefined"
-      :class="{ 'power-btn': layout !== 'row' }"
-      disabled
-    >
+    <BaseButton v-else-if="isInstalling" variant="primary" :size="btnSize" :class="btnClass" disabled>
       <Spinner size="xs" /> {{ t('userServers.status.installing') }}
     </BaseButton>
 
     <!-- Suspended -->
-    <BaseButton
-      v-else-if="isSuspended"
-      variant="primary"
-      :size="layout === 'row' ? 'sm' : undefined"
-      :class="{ 'power-btn': layout !== 'row' }"
-      disabled
-    >
+    <BaseButton v-else-if="isSuspended" variant="primary" :size="btnSize" :class="btnClass" disabled>
       <MsIcon name="play_arrow" /> {{ t('userServers.power.start') }}
     </BaseButton>
+
+    <!-- ═══ Pending states (override real state) ═══ -->
+
+    <!-- pending=restart: show "重启中..." until server enters 'starting' (staged clear) -->
+    <BaseButton v-else-if="pendingAction === 'restart'" :size="btnSize" :class="btnClass" disabled>
+      <Spinner size="xs" /> {{ t('userServers.status.restarting') }}
+    </BaseButton>
+
+    <!-- pending=start: show "启动中..." -->
+    <BaseButton v-else-if="pendingAction === 'start'" :size="btnSize" :class="btnClass" disabled>
+      <Spinner size="xs" /> {{ t('userServers.status.starting') }}
+    </BaseButton>
+
+    <!-- pending=stop: show "关闭中..." + kill allowed -->
+    <template v-else-if="pendingAction === 'stop'">
+      <BaseButton :size="btnSize" :class="btnClass" disabled>
+        <Spinner size="xs" /> {{ t('userServers.status.stopping') }}
+      </BaseButton>
+      <BaseButton :size="btnSize" :class="btnClass" variant="danger" @click="sendPower('kill')">
+        <MsIcon name="power_off" /> {{ t('userServers.power.kill') }}
+      </BaseButton>
+    </template>
+
+    <!-- pending=kill: show "关闭电源中..." -->
+    <BaseButton v-else-if="pendingAction === 'kill'" :size="btnSize" :class="btnClass" disabled>
+      <Spinner size="xs" /> {{ t('userServers.status.killingPower') }}
+    </BaseButton>
+
+    <!-- ═══ Normal states (no pending) ═══ -->
 
     <!-- Offline / Stopped -->
     <BaseButton
       v-else-if="state === 'offline' || state === 'stopped'"
-      variant="primary"
-      :size="layout === 'row' ? 'sm' : undefined"
-      :class="{ 'power-btn': layout !== 'row' }"
+      variant="primary" :size="btnSize" :class="btnClass"
       @click="sendPower('start')"
     >
       <MsIcon name="play_arrow" /> {{ t('userServers.power.start') }}
     </BaseButton>
 
-    <!-- Starting -->
-    <template v-else-if="state === 'starting'">
-      <BaseButton
-        :size="layout === 'row' ? 'sm' : undefined"
-        :class="{ 'power-btn': layout !== 'row' }"
-        disabled
-      >
-        <Spinner size="xs" /> {{ t('userServers.status.starting') }}
-      </BaseButton>
-      <BaseButton
-        :size="layout === 'row' ? 'sm' : undefined"
-        :class="{ 'power-btn': layout !== 'row' }"
-        variant="danger"
-        @click="sendPower('kill')"
-      >
-        <MsIcon name="power_off" /> {{ t('userServers.power.kill') }}
-      </BaseButton>
-    </template>
+    <!-- Starting (no pending — e.g. page loaded while server is starting) -->
+    <!-- Wings ignores all power commands during starting phase, so no buttons -->
+    <BaseButton v-else-if="state === 'starting'" :size="btnSize" :class="btnClass" disabled>
+      <Spinner size="xs" /> {{ t('userServers.status.starting') }}
+    </BaseButton>
 
     <!-- Running -->
     <template v-else-if="state === 'running'">
-      <BaseButton
-        :size="layout === 'row' ? 'sm' : undefined"
-        :class="{ 'power-btn': layout !== 'row' }"
-        @click="sendPower('restart')"
-      >
+      <BaseButton :size="btnSize" :class="btnClass" @click="sendPower('restart')">
         <MsIcon name="refresh" /> {{ t('userServers.power.restart') }}
       </BaseButton>
-      <BaseButton
-        :size="layout === 'row' ? 'sm' : undefined"
-        :class="{ 'power-btn': layout !== 'row' }"
-        variant="warning"
-        @click="sendPower('stop')"
-      >
+      <BaseButton :size="btnSize" :class="btnClass" variant="warning" @click="sendPower('stop')">
         <MsIcon name="power_settings_new" /> {{ t('userServers.power.stop') }}
       </BaseButton>
-      <BaseButton
-        :size="layout === 'row' ? 'sm' : undefined"
-        :class="{ 'power-btn': layout !== 'row' }"
-        variant="danger"
-        @click="sendPower('kill')"
-      >
+      <BaseButton :size="btnSize" :class="btnClass" variant="danger" @click="sendPower('kill')">
         <MsIcon name="power_off" /> {{ t('userServers.power.kill') }}
       </BaseButton>
     </template>
 
-    <!-- Stopping -->
+    <!-- Stopping (no pending — e.g. page loaded while server is stopping) -->
     <template v-else-if="state === 'stopping'">
-      <BaseButton
-        :size="layout === 'row' ? 'sm' : undefined"
-        :class="{ 'power-btn': layout !== 'row' }"
-        disabled
-      >
+      <BaseButton :size="btnSize" :class="btnClass" disabled>
         <Spinner size="xs" /> {{ t('userServers.status.stopping') }}
       </BaseButton>
-      <BaseButton
-        :size="layout === 'row' ? 'sm' : undefined"
-        :class="{ 'power-btn': layout !== 'row' }"
-        variant="danger"
-        @click="sendPower('kill')"
-      >
+      <BaseButton :size="btnSize" :class="btnClass" variant="danger" @click="sendPower('kill')">
         <MsIcon name="power_off" /> {{ t('userServers.power.kill') }}
       </BaseButton>
     </template>
