@@ -1,241 +1,290 @@
-"""Pterodactyl Application API client — write operations only.
+"""Pterodactyl Application API client — async, for FastAPI.
 
-Server/user listing is now done via direct MySQL queries (see models.py).
+Server/user listing is done via direct MySQL queries (see db/models/).
 This module retains API calls for: create/delete/suspend/unsuspend servers,
-create/update/delete users, and fetching nests/eggs/nodes/allocations.
+create/update/delete users, reinstall, and updating server descriptions.
 """
 
+from __future__ import annotations
+
+import logging
 import re
-import requests
-from datetime import timedelta
-from flask import current_app
-from app.extensions import db
-from app.models import ServerMeta
-from app.config import config_manager
+from datetime import date
+
+import httpx
+
+from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
+
+_TIMEOUT = 20.0
 
 
-# ── Helpers ──
-
-def _panel_url() -> str:
-    return (config_manager.get('PTERO_PANEL_URL') or '').rstrip('/')
+class PterodactylServiceError(Exception):
+    """Raised when a Pterodactyl API call fails."""
 
 
-def _api_headers() -> dict:
-    return {
-        'Authorization': f"Bearer {config_manager.get('PTERO_API_KEY')}",
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-    }
+class PterodactylService:
+    """Async wrapper around the Pterodactyl Application API."""
 
+    def __init__(self) -> None:
+        self._client: httpx.AsyncClient | None = None
 
-def _check_configured():
-    """Raise ValueError if panel URL or API key is missing."""
-    if not _panel_url() or not config_manager.get('PTERO_API_KEY'):
-        raise ValueError('Pterodactyl API 未配置')
+    async def startup(self) -> None:
+        """Create a persistent httpx client (call during app lifespan)."""
+        self._client = httpx.AsyncClient(timeout=_TIMEOUT)
 
+    async def shutdown(self) -> None:
+        """Close the persistent httpx client."""
+        if self._client:
+            await self._client.aclose()
+            self._client = None
 
-# ── Generic data fetchers (kept for nests/eggs/nodes/allocations) ──
+    def _base_url(self) -> str:
+        return (get_settings().ptero_panel_url or "").rstrip("/")
 
-def get_data(endpoint: str, params: dict | None = None) -> list | None:
-    """Fetch all pages from a Pterodactyl Application API list endpoint.
-
-    Returns a list of raw item dicts (each containing 'attributes'), or None on error.
-    """
-    _check_configured()
-    all_items: list = []
-    page = 1
-    base_url = f"{_panel_url()}/api/application/{endpoint}"
-    headers = _api_headers()
-    is_single = bool(re.search(r'/\d+(\?|$)', endpoint))
-
-    while True:
-        try:
-            query_params = {'page': page, 'per_page': 100}
-            if params:
-                query_params.update(params)
-            final_params = query_params if not is_single else params
-            res = requests.get(base_url, headers=headers, params=final_params, timeout=15)
-            res.raise_for_status()
-            data = res.json()
-
-            if data.get('object') != 'list':
-                return [data] if 'attributes' in data else []
-
-            current_items = data.get('data', [])
-            if not current_items:
-                break
-            all_items.extend(current_items)
-
-            meta = data.get('meta', {}).get('pagination', {})
-            cp = meta.get('current_page')
-            tp = meta.get('total_pages')
-            if is_single or cp is None or tp is None or cp >= tp:
-                break
-            page += 1
-        except requests.RequestException as e:
-            current_app.logger.error(f"Error fetching {endpoint}: {e}")
-            return None
-
-    return all_items
-
-
-def get_single(endpoint: str):
-    """Fetch a single resource's attributes dict, or None on error."""
-    _check_configured()
-    try:
-        res = requests.get(
-            f"{_panel_url()}/api/application/{endpoint}",
-            headers=_api_headers(), timeout=10,
-        )
-        res.raise_for_status()
-        return res.json().get('attributes')
-    except requests.RequestException:
-        return None
-
-
-# ── Server operations ──
-
-def suspend_server(ptero_id: int) -> bool:
-    try:
-        res = requests.post(f"{_panel_url()}/api/application/servers/{ptero_id}/suspend",
-                            headers=_api_headers(), timeout=20)
-        res.raise_for_status()
-        return True
-    except requests.RequestException:
-        return False
-
-
-def unsuspend_server(ptero_id: int) -> bool:
-    try:
-        res = requests.post(f"{_panel_url()}/api/application/servers/{ptero_id}/unsuspend",
-                            headers=_api_headers(), timeout=20)
-        res.raise_for_status()
-        return True
-    except requests.RequestException:
-        return False
-
-
-def delete_server_from_panel(ptero_id: int) -> bool:
-    try:
-        res = requests.delete(f"{_panel_url()}/api/application/servers/{ptero_id}",
-                              headers=_api_headers(), timeout=20)
-        if res.status_code not in (204, 404):
-            res.raise_for_status()
-        return True
-    except requests.RequestException:
-        return False
-
-
-def create_server(user_id: int, server_name: str, expiration_days: int,
-                  node_id: int, allocation_id: int, egg_id: int, docker_image: str,
-                  startup_command: str, environment: dict,
-                  cpu: int, memory: int, disk: int,
-                  databases: int, backups: int, allocations: int):
-    """Create a server via the Pterodactyl API and store its expiration meta.
-
-    Returns the server attributes dict on success, or None.
-    """
-    from app.utils import get_today
-    expiration_date = get_today() + timedelta(days=expiration_days)
-    description = f"到期时间：{expiration_date.strftime('%Y/%m/%d')}"
-    payload = {
-        'name': server_name, 'user': user_id, 'egg': egg_id,
-        'description': description, 'docker_image': docker_image,
-        'startup': startup_command, 'environment': environment,
-        'limits': {'memory': memory, 'swap': 0, 'disk': disk, 'io': 500, 'cpu': cpu},
-        'feature_limits': {'databases': databases, 'allocations': allocations, 'backups': backups},
-        'allocation': {'default': allocation_id},
-    }
-    try:
-        res = requests.post(f"{_panel_url()}/api/application/servers",
-                            headers=_api_headers(), json=payload, timeout=20)
-        res.raise_for_status()
-        server_data = res.json().get('attributes')
-
-        # Store expiration in our custom meta table
-        meta = ServerMeta(server_id=server_data['id'], expiration_date=expiration_date)
-        db.session.add(meta)
-        db.session.commit()
-
-        return server_data
-    except requests.RequestException as e:
-        current_app.logger.error(f"创建服务器失败: {e}")
-        return None
-
-
-def update_server_description(ptero_id: int, new_expiration_date) -> bool:
-    """Update the expiration date line in a server's Pterodactyl description."""
-    try:
-        server_data = get_single(f"servers/{ptero_id}")
-        if not server_data:
-            return False
-
-        old_desc = server_data.get('description', '') or ''
-        new_line = f"到期时间：{new_expiration_date.strftime('%Y/%m/%d')}"
-        # Replace existing line or append
-        new_desc = re.sub(r'到期时间[：:]\s*\d{4}[/-]\d{1,2}[/-]\d{1,2}', new_line, old_desc)
-        if new_line not in new_desc:
-            new_desc = f"{new_line}\n{old_desc}".strip()
-
-        payload = {
-            'name': server_data['name'],
-            'user': server_data['user'],
-            'description': new_desc,
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {get_settings().ptero_api_key}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
         }
-        res = requests.patch(f"{_panel_url()}/api/application/servers/{ptero_id}/details",
-                             headers=_api_headers(), json=payload, timeout=20)
-        res.raise_for_status()
-        return True
-    except requests.RequestException as e:
-        current_app.logger.error(f"更新服务器描述失败 (ID {ptero_id}): {e}")
-        return False
+
+    def _check(self) -> None:
+        s = get_settings()
+        if not s.ptero_panel_url or not s.ptero_api_key:
+            raise PterodactylServiceError("Pterodactyl API 未配置")
+
+    async def _request(
+        self,
+        method: str,
+        endpoint: str,
+        *,
+        json: dict | None = None,
+        timeout: float = _TIMEOUT,
+    ) -> httpx.Response:
+        self._check()
+        url = f"{self._base_url()}/api/application/{endpoint}"
+        client = self._client or httpx.AsyncClient(timeout=timeout)
+        try:
+            resp = await client.request(
+                method, url, headers=self._headers(), json=json, timeout=timeout,
+            )
+        except httpx.HTTPError as exc:
+            raise PterodactylServiceError(f"Pterodactyl API 请求失败: {exc}") from exc
+        finally:
+            if client is not self._client:
+                await client.aclose()
+        return resp
+
+    # ── Server operations ──
+
+    async def suspend_server(self, server_id: int) -> None:
+        resp = await self._request("POST", f"servers/{server_id}/suspend")
+        if resp.status_code >= 400:
+            raise PterodactylServiceError(
+                f"冻结服务器 {server_id} 失败 (HTTP {resp.status_code})"
+            )
+
+    async def unsuspend_server(self, server_id: int) -> None:
+        resp = await self._request("POST", f"servers/{server_id}/unsuspend")
+        if resp.status_code >= 400:
+            raise PterodactylServiceError(
+                f"解冻服务器 {server_id} 失败 (HTTP {resp.status_code})"
+            )
+
+    async def delete_server(self, server_id: int) -> None:
+        resp = await self._request("DELETE", f"servers/{server_id}")
+        if resp.status_code not in (204, 404) and resp.status_code >= 400:
+            raise PterodactylServiceError(
+                f"删除服务器 {server_id} 失败 (HTTP {resp.status_code})"
+            )
+
+    async def reinstall_server(self, server_id: int) -> None:
+        resp = await self._request("POST", f"servers/{server_id}/reinstall")
+        if resp.status_code >= 400:
+            raise PterodactylServiceError(
+                f"重装服务器 {server_id} 失败 (HTTP {resp.status_code})"
+            )
+
+    async def create_server(
+        self,
+        *,
+        user_id: int,
+        server_name: str,
+        egg_id: int,
+        node_id: int,
+        allocation_id: int,
+        docker_image: str,
+        startup_command: str,
+        environment: dict,
+        cpu: int,
+        memory: int,
+        disk: int,
+        databases: int,
+        backups: int,
+        allocations: int,
+        expiration_date: date,
+    ) -> dict:
+        """Create a server via the Pterodactyl API.
+
+        Returns the server attributes dict. ServerMeta is managed by the caller.
+        """
+        description = f"到期时间：{expiration_date.strftime('%Y/%m/%d')}"
+        payload = {
+            "name": server_name,
+            "user": user_id,
+            "egg": egg_id,
+            "description": description,
+            "docker_image": docker_image,
+            "startup": startup_command,
+            "environment": environment,
+            "limits": {
+                "memory": memory,
+                "swap": 0,
+                "disk": disk,
+                "io": 500,
+                "cpu": cpu,
+            },
+            "feature_limits": {
+                "databases": databases,
+                "allocations": allocations,
+                "backups": backups,
+            },
+            "allocation": {"default": allocation_id},
+        }
+        resp = await self._request("POST", "servers", json=payload)
+        if resp.status_code == 422:
+            detail = self._extract_validation_error(resp)
+            raise PterodactylServiceError(f"创建服务器验证失败: {detail}")
+        if resp.status_code >= 400:
+            raise PterodactylServiceError(
+                f"创建服务器失败 (HTTP {resp.status_code})"
+            )
+        attrs = resp.json().get("attributes")
+        if not attrs:
+            raise PterodactylServiceError("创建服务器返回数据异常")
+        return attrs
+
+    async def update_server_description(
+        self, server_id: int, new_expiration_date: date
+    ) -> None:
+        """Backward-compatible wrapper for syncing expiration into description."""
+        await self.sync_server_expiration(server_id, new_expiration_date)
+
+    async def sync_server_expiration(self, server_id: int, expiration_date: date | None) -> None:
+        """Ensure the Panel description carries the current expiration line.
+
+        When expiration_date is None, any existing expiration line is removed.
+        """
+        resp = await self._request("GET", f"servers/{server_id}")
+        if resp.status_code >= 400:
+            raise PterodactylServiceError(
+                f"获取服务器 {server_id} 详情失败 (HTTP {resp.status_code})"
+            )
+
+        server_data = resp.json().get("attributes", {})
+        old_desc = server_data.get("description", "") or ""
+        cleaned_desc = re.sub(
+            r"(^|\n)到期时间[：:]\s*\d{4}[/-]\d{1,2}[/-]\d{1,2}(?=\n|$)",
+            "",
+            old_desc,
+        ).strip()
+
+        if expiration_date is None:
+            new_desc = cleaned_desc
+        else:
+            new_line = f"到期时间：{expiration_date.strftime('%Y/%m/%d')}"
+            new_desc = f"{new_line}\n{cleaned_desc}".strip() if cleaned_desc else new_line
+
+        patch_payload = {
+            "name": server_data.get("name", ""),
+            "user": server_data.get("user", 0),
+            "description": new_desc,
+        }
+        resp2 = await self._request(
+            "PATCH", f"servers/{server_id}/details", json=patch_payload
+        )
+        if resp2.status_code >= 400:
+            raise PterodactylServiceError(
+                f"同步服务器 {server_id} 到期描述失败 (HTTP {resp2.status_code})"
+            )
+
+    # ── User operations ──
+
+    async def create_user(
+        self,
+        *,
+        email: str,
+        username: str,
+        first_name: str = "New",
+        last_name: str = "User",
+        password: str,
+    ) -> dict:
+        payload = {
+            "email": email,
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+            "password": password,
+            "root_admin": False,
+        }
+        resp = await self._request("POST", "users", json=payload)
+        if resp.status_code == 422:
+            detail = self._extract_validation_error(resp)
+            raise PterodactylServiceError(f"创建用户验证失败: {detail}")
+        if resp.status_code >= 400:
+            raise PterodactylServiceError(
+                f"创建用户失败 (HTTP {resp.status_code})"
+            )
+        attrs = resp.json().get("attributes")
+        if not attrs:
+            raise PterodactylServiceError("创建用户返回数据异常")
+        return attrs
+
+    async def update_user(
+        self,
+        user_id: int,
+        *,
+        email: str,
+        username: str,
+        first_name: str,
+        last_name: str,
+        password: str | None = None,
+    ) -> None:
+        payload: dict = {
+            "email": email,
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+        }
+        if password:
+            payload["password"] = password
+        resp = await self._request("PATCH", f"users/{user_id}", json=payload)
+        if resp.status_code == 422:
+            detail = self._extract_validation_error(resp)
+            raise PterodactylServiceError(f"更新用户验证失败: {detail}")
+        if resp.status_code >= 400:
+            raise PterodactylServiceError(
+                f"更新用户 {user_id} 失败 (HTTP {resp.status_code})"
+            )
+
+    async def delete_user(self, user_id: int) -> None:
+        resp = await self._request("DELETE", f"users/{user_id}")
+        if resp.status_code not in (204, 404) and resp.status_code >= 400:
+            raise PterodactylServiceError(
+                f"删除用户 {user_id} 失败 (HTTP {resp.status_code})"
+            )
+
+    # ── Helpers ──
+
+    @staticmethod
+    def _extract_validation_error(resp: httpx.Response) -> str:
+        try:
+            errors = resp.json().get("errors", [])
+            return "; ".join(e.get("detail", "") for e in errors) if errors else "验证失败"
+        except Exception:
+            return "验证失败"
 
 
-# ── User operations ──
-
-def create_user(email: str, username: str):
-    """Create a user via the Pterodactyl API. Returns attributes dict or None."""
-    payload = {
-        'email': email, 'username': username,
-        'first_name': 'New', 'last_name': 'User', 'root_admin': False,
-    }
-    try:
-        res = requests.post(f"{_panel_url()}/api/application/users",
-                            headers=_api_headers(), json=payload, timeout=20)
-        if res.status_code == 422:
-            errors = res.json().get('errors', [])
-            msg = '; '.join(e.get('detail', '') for e in errors) if errors else '验证失败'
-            return None, msg
-        res.raise_for_status()
-        return res.json().get('attributes'), None
-    except requests.RequestException as e:
-        return None, str(e)
-
-
-def update_user(user_id: int, payload: dict):
-    """PATCH a user via the Pterodactyl API.
-
-    Returns (attributes_dict, None) on success, or (None, error_message) on failure.
-    """
-    url = f"{_panel_url()}/api/application/users/{user_id}"
-    try:
-        res = requests.patch(url, headers=_api_headers(), json=payload, timeout=20)
-        if res.status_code == 422:
-            errors = res.json().get('errors', [])
-            msg = '; '.join(e.get('detail', '') for e in errors) if errors else '验证失败'
-            return None, msg
-        res.raise_for_status()
-        return res.json().get('attributes'), None
-    except requests.RequestException as e:
-        return None, str(e)
-
-
-def delete_user_from_panel(user_id: int) -> bool:
-    try:
-        res = requests.delete(f"{_panel_url()}/api/application/users/{user_id}",
-                              headers=_api_headers(), timeout=20)
-        if res.status_code not in (204, 404):
-            res.raise_for_status()
-        return True
-    except requests.RequestException:
-        return False
+pterodactyl_service = PterodactylService()

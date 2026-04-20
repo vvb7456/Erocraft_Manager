@@ -188,7 +188,7 @@ watch(() => props.modelValue, async (open) => {
 async function doCreateServer() {
   const f = createForm.value
   if (!f.user_id || !f.server_name || !f.egg_id || !f.startup_command || !f.node_id || !f.allocation_id) {
-    toast(t('servers.create.title') + ': missing required fields', 'error')
+    toast(t('servers.create.validation.requiredFields'), 'error')
     return
   }
   createLoading.value = true

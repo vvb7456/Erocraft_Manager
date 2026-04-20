@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import MsIcon from './MsIcon.vue'
 import Spinner from './Spinner.vue'
 import EmptyState from './EmptyState.vue'
@@ -40,9 +41,10 @@ const props = withDefaults(defineProps<{
   sortOrder: 'asc',
   loading: false,
   emptyIcon: 'table_rows',
-  emptyText: 'No data',
   rowKey: 'id',
 })
+
+const { t } = useI18n({ useScope: 'global' })
 
 const emit = defineEmits<{
   'update:page': [value: number]
@@ -74,7 +76,7 @@ onUnmounted(() => { mql?.removeEventListener('change', onMediaChange) })
   </div>
 
   <!-- Empty -->
-  <EmptyState v-else-if="items.length === 0" :icon="emptyIcon" :title="emptyText" />
+  <EmptyState v-else-if="items.length === 0" :icon="emptyIcon" :title="emptyText || t('common.empty')" />
 
   <!-- Table (desktop) or Cards (mobile) -->
   <template v-else>

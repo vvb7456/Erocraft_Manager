@@ -1,26 +1,23 @@
 <script setup lang="ts">
-import { ref, inject, computed, onMounted, onBeforeUnmount, type Ref } from 'vue'
+import { ref, inject, computed, watch, onMounted, onBeforeUnmount, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useApiFetch } from '@/composables/useApiFetch'
-import { useToast } from '@/composables/useToast'
-import { useConfirm } from '@/composables/useConfirm'
 import { useServerResourceStore } from '@/stores/serverResources'
 import { WEB_ACCESSIBLE_EGGS } from '@/utils/constants'
-import { fmtBytes } from '@/utils/format'
+import { getStatusDotKey, getStatusColor } from '@/utils/status'
+import { useConsoleWs } from '@/composables/useConsoleWs'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import UsageBar from '@/components/ui/UsageBar.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
+import PowerControls from '@/components/server/PowerControls.vue'
+import ResourceStats from '@/components/server/ResourceStats.vue'
+import ServerAddress from '@/components/server/ServerAddress.vue'
 import 'xterm/css/xterm.css'
 
 defineOptions({ name: 'ServerConsolePage' })
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, post } = useApiFetch()
-const { toast } = useToast()
-const { confirm } = useConfirm()
 const resourceStore = useServerResourceStore()
 
 interface ServerDetail {
@@ -44,27 +41,21 @@ const networkTx = computed(() => res.value?.networkTx ?? 0)
 const uptimeMs = computed(() => res.value?.uptime ?? 0)
 
 // ── Status display ──
-const statusColor = computed(() => {
-  if (server.value?.isSuspended) return 'var(--red)'
-  const s = state.value
-  if (s === 'running') return 'var(--green)'
-  if (s === 'starting' || s === 'stopping') return 'var(--amber)'
-  return 'var(--t3)'
-})
+const statusColor = computed(() =>
+  getStatusColor(state.value, !!server.value?.isSuspended, isInstalling.value, server.value ? resourceStore.isStale(server.value.id) : false),
+)
 
 const statusText = computed(() => {
+  if (server.value && resourceStore.isStale(server.value.id)) return t('userServers.status.disconnected')
   if (server.value?.isSuspended) return t('userServers.status.suspended')
+  if (isInstalling.value) return t('userServers.status.installing')
   const s = state.value
   return t(`userServers.status.${s === 'stopped' ? 'offline' : s}`)
 })
 
-function statusDotKey(): 'running' | 'loading' | 'error' | 'stopped' {
-  if (server.value?.isSuspended) return 'error'
-  const s = state.value
-  if (s === 'running') return 'running'
-  if (s === 'starting' || s === 'stopping' || s === 'installing') return 'loading'
-  return 'stopped'
-}
+const dotKey = computed(() =>
+  getStatusDotKey(state.value, !!server.value?.isSuspended, isInstalling.value, server.value ? resourceStore.isStale(server.value.id) : false),
+)
 
 // ── Lifecycle display ──
 const expirationText = computed(() => {
@@ -89,326 +80,45 @@ const expirationColor = computed(() => {
 // ── Server address ──
 const isWebEgg = computed(() => server.value ? WEB_ACCESSIBLE_EGGS.includes(server.value.eggId) : false)
 const serverUrl = computed(() => server.value?.address ? `http://${server.value.address}` : null)
-const copied = ref(false)
 
-async function copyAddress() {
-  if (!server.value?.address) return
-  try {
-    await navigator.clipboard.writeText(server.value.address)
-    copied.value = true
-    setTimeout(() => { copied.value = false }, 2000)
-  } catch { /* clipboard API not available */ }
-}
-
-function openSillyTavern() {
-  if (serverUrl.value) window.open(serverUrl.value, '_blank')
-}
-
-// ── Console state ──
+// ── Console ──
 const termEl = ref<HTMLElement | null>(null)
-const commandInput = ref('')
-const wsConnected = ref(false)
-const connecting = ref(false)
-const disconnected = ref(false)
+const serverId = computed(() => server.value?.id)
 
-let ws: WebSocket | null = null
-let term: any = null
-let fitAddon: any = null
-
-// ── Command history ──
-const HISTORY_MAX = 32
-let commandHistory: string[] = []
-let historyIndex = -1
-
-function loadHistory() {
-  try {
-    const raw = sessionStorage.getItem(`console_history_${server.value?.id}`)
-    commandHistory = raw ? JSON.parse(raw) : []
-  } catch { commandHistory = [] }
-}
-
-function saveHistory() {
-  try {
-    sessionStorage.setItem(`console_history_${server.value?.id}`, JSON.stringify(commandHistory))
-  } catch { /* quota exceeded */ }
-}
-
-// ── WebSocket console ──
-async function connectConsole() {
-  if (!server.value || connecting.value) return
-  connecting.value = true
-  disconnected.value = false
-
-  const data = await get<{ token: string; socket: string }>(
-    `/api/user/servers/${server.value.id}/console`,
-    { silent: true },
-  )
-  if (!data) {
-    connecting.value = false
-    disconnected.value = true
-    toast(t('userServers.consoleFailed'), 'error')
-    return
-  }
-
-  const [{ Terminal }, { FitAddon }, { WebLinksAddon }] = await Promise.all([
-    import('xterm'),
-    import('xterm-addon-fit'),
-    import('xterm-addon-web-links'),
-  ])
-
-  if (term) term.dispose()
-
-  term = new Terminal({
-    disableStdin: true,
-    cursorBlink: false,
-    cursorStyle: 'underline',
-    cursorInactiveStyle: 'none',
-    fontSize: 13,
-    fontFamily: '"IBM Plex Mono", monospace',
-    theme: {
-      background: '#0b0f0f',
-      foreground: '#e4ece8',
-      cursor: '#14b8a6',
-      selectionBackground: '#263434',
-      black: '#0b0f0f',
-      red: '#ef6060',
-      green: '#34d399',
-      yellow: '#f59e0b',
-      blue: '#60a5fa',
-      magenta: '#c084fc',
-      cyan: '#2dd4bf',
-      white: '#e4ece8',
-      brightBlack: '#5a706a',
-      brightRed: '#ef6060',
-      brightGreen: '#34d399',
-      brightYellow: '#f59e0b',
-      brightBlue: '#60a5fa',
-      brightMagenta: '#c084fc',
-      brightCyan: '#2dd4bf',
-      brightWhite: '#ffffff',
-    },
-    scrollback: 5000,
-    convertEol: true,
-    allowProposedApi: true,
-  })
-
-  fitAddon = new FitAddon()
-  const webLinksAddon = new WebLinksAddon()
-  term.loadAddon(fitAddon)
-  term.loadAddon(webLinksAddon)
-
-  // Ctrl+C: copy selected text
-  term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-    if (e.type !== 'keydown') return true
-    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-      const selection = term!.getSelection()
-      if (selection) {
-        navigator.clipboard.writeText(selection)
-        term!.clearSelection()
-      }
-      return false
-    }
-    return true
-  })
-
-  term.open(termEl.value!)
-  fitAddon.fit()
-
-  ws = new WebSocket(data.socket)
-
-  ws.onopen = () => {
-    ws!.send(JSON.stringify({ event: 'auth', args: [data.token] }))
-  }
-
-  ws.onmessage = (e) => {
-    try {
-      const msg = JSON.parse(e.data)
-      switch (msg.event) {
-        case 'auth success':
-          wsConnected.value = true
-          connecting.value = false
-          ws!.send(JSON.stringify({ event: 'send logs', args: [null] }))
-          break
-        case 'console output':
-        case 'install output':
-          term.writeln(msg.args[0])
-          break
-        case 'daemon message':
-          term.writeln('\x1b[1m\x1b[33m' + msg.args[0] + '\x1b[0m')
-          break
-        case 'daemon error':
-          term.writeln('\x1b[1m\x1b[41m' + msg.args[0] + '\x1b[0m')
-          break
-        case 'status':
-          if (server.value) {
-            resourceStore.updateOne(server.value.id, { state: msg.args[0] })
-            // Write status change to terminal
-            term.writeln('\x1b[1m\x1b[33m* ' + t('userServers.status.' + msg.args[0]) + '\x1b[0m')
-          }
-          break
-        case 'stats':
-          try {
-            const stats = JSON.parse(msg.args[0])
-            if (server.value) {
-              resourceStore.updateOne(server.value.id, {
-                cpu: stats.cpu_absolute ?? 0,
-                memoryBytes: stats.memory_bytes ?? 0,
-                diskBytes: stats.disk_bytes ?? 0,
-                networkRx: stats.network?.rx_bytes ?? 0,
-                networkTx: stats.network?.tx_bytes ?? 0,
-                uptime: stats.uptime ?? 0,
-                state: stats.state ?? resourceStore.getState(server.value.id),
-              })
-            }
-          } catch { /* ignore malformed stats */ }
-          break
-        case 'token expiring':
-          renewToken()
-          break
-        case 'token expired':
-          disconnectConsole()
-          connectConsole()
-          break
-      }
-    } catch { /* non-JSON message */ }
-  }
-
-  ws.onclose = () => {
-    wsConnected.value = false
-    connecting.value = false
-    disconnected.value = true
-  }
-
-  ws.onerror = () => {
-    wsConnected.value = false
-    connecting.value = false
-    disconnected.value = true
-    toast(t('userServers.consoleFailed'), 'error')
-  }
-}
-
-async function renewToken() {
-  if (!server.value || !ws || ws.readyState !== WebSocket.OPEN) return
-  const data = await get<{ token: string }>(
-    `/api/user/servers/${server.value.id}/console`,
-    { silent: true },
-  )
-  if (data) {
-    ws.send(JSON.stringify({ event: 'auth', args: [data.token] }))
-  }
-}
-
-function disconnectConsole() {
-  if (ws) { ws.close(); ws = null }
-  wsConnected.value = false
-}
-
-function sendCommand() {
-  const cmd = commandInput.value.trim()
-  if (!cmd || !ws || ws.readyState !== WebSocket.OPEN) return
-  ws.send(JSON.stringify({ event: 'send command', args: [cmd] }))
-  // Add to history
-  commandHistory = [cmd, ...commandHistory.filter(c => c !== cmd)].slice(0, HISTORY_MAX)
-  historyIndex = -1
-  saveHistory()
-  commandInput.value = ''
-}
-
-function handleCommandKey(e: KeyboardEvent) {
-  if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    if (historyIndex < commandHistory.length - 1) {
-      historyIndex++
-      commandInput.value = commandHistory[historyIndex] || ''
-    }
-  } else if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    if (historyIndex > 0) {
-      historyIndex--
-      commandInput.value = commandHistory[historyIndex] || ''
-    } else {
-      historyIndex = -1
-      commandInput.value = ''
-    }
-  }
-}
-
-// ── Power actions ──
-async function sendPower(action: string) {
-  if (!server.value) return
-
-  if (action === 'stop') {
-    const ok = await confirm({
-      title: t('common.confirm.title'),
-      message: t('userServers.power.confirmStop'),
-      confirmText: t('userServers.power.stop'),
-    })
-    if (!ok) return
-  } else if (action === 'kill') {
-    const ok = await confirm({
-      title: t('common.confirm.dangerTitle'),
-      message: t('userServers.power.confirmKill'),
-      confirmText: t('userServers.power.kill'),
-      variant: 'danger',
-    })
-    if (!ok) return
-  }
-
-  await post(`/api/user/servers/${server.value.id}/power`, { action })
-}
-
-// ── Formatting helpers ──
-function formatUptime(ms: number): string {
-  if (ms <= 0) return '—'
-  const s = Math.floor(ms / 1000)
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m ${s % 60}s`
-}
-
-function memPercent(): number {
-  if (!server.value?.limits.memory) return 0
-  return Math.min(100, (memoryBytes.value / (server.value.limits.memory * 1024 * 1024)) * 100)
-}
-
-function diskPercent(): number {
-  if (!server.value?.limits.disk) return 0
-  return Math.min(100, (diskBytes.value / (server.value.limits.disk * 1024 * 1024)) * 100)
-}
-
-function memLimit(): string {
-  if (!server.value?.limits.memory) return '∞'
-  const mb = server.value.limits.memory
-  return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB'
-}
-
-function diskLimit(): string {
-  if (!server.value?.limits.disk) return '∞'
-  const mb = server.value.limits.disk
-  return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB'
-}
-
-function cpuLimit(): string {
-  if (!server.value?.limits.cpu) return '∞'
-  return server.value.limits.cpu + '%'
-}
+const {
+  wsConnected, connecting, disconnected, reconnecting, reconnectAttempt, reconnectCountdown,
+  suspended,
+  commandInput,
+  connect: connectConsole, sendCommand, handleCommandKey,
+  loadHistory, fit, dispose, manualReconnect,
+} = useConsoleWs({ serverId, termEl })
 
 // ── Resize ──
-function handleResize() { fitAddon?.fit() }
-
 let resizeObserver: ResizeObserver | null = null
+
+// Auto-reconnect when resource polling recovers (stale → non-stale)
+const isStale = computed(() => server.value ? resourceStore.isStale(server.value.id) : false)
+watch(isStale, (newVal, oldVal) => {
+  if (oldVal && !newVal && disconnected.value) {
+    manualReconnect()
+  }
+})
+
+// Reload server data when suspended state changes (so DetailPage badge updates)
+const reloadServer = inject<() => Promise<void>>('reloadServer')
+watch(suspended, () => {
+  if (reloadServer) reloadServer()
+})
 
 onMounted(() => {
   loadHistory()
   connectConsole()
-  resizeObserver = new ResizeObserver(handleResize)
+  resizeObserver = new ResizeObserver(() => fit())
   if (termEl.value) resizeObserver.observe(termEl.value)
 })
 
 onBeforeUnmount(() => {
-  disconnectConsole()
-  if (term) { term.dispose(); term = null }
+  dispose()
   if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null }
 })
 </script>
@@ -419,79 +129,26 @@ onBeforeUnmount(() => {
     <div class="mobile-top">
       <!-- Address -->
       <BaseCard v-if="server?.address" variant="bg3" class="mobile-card">
-        <template v-if="isWebEgg">
-          <BaseButton
-            variant="primary"
-            size="sm"
-            class="mobile-open-btn"
-            :disabled="state !== 'running'"
-            @click="openSillyTavern"
-          >
-            <MsIcon name="open_in_new" />
-            {{ t('userServers.openApp') }}
-          </BaseButton>
-        </template>
-        <div class="address-line" :style="isWebEgg ? { marginTop: 'var(--sp-2)' } : undefined">
-          <span class="address-text">{{ server.address }}</span>
-          <button class="copy-btn" :title="t('userServers.address.copy')" @click="copyAddress">
-            <MsIcon :name="copied ? 'check' : 'content_copy'" />
-          </button>
-        </div>
+        <ServerAddress
+          :addresses="[server.address]"
+          :open-url="isWebEgg ? serverUrl! : undefined"
+          :open-disabled="state !== 'running'"
+          compact
+        />
       </BaseCard>
 
       <!-- Power controls -->
       <BaseCard variant="bg3" class="mobile-card">
-        <div class="mobile-power-row">
-          <!-- Installing: disabled -->
-          <BaseButton
-            v-if="isInstalling"
-            variant="primary"
-            size="sm"
-            disabled
-          >
-            <Spinner size="xs" /> {{ t('userServers.status.installing') }}
-          </BaseButton>
-          <!-- Suspended: disabled start -->
-          <BaseButton
-            v-else-if="server?.isSuspended"
-            variant="primary"
-            size="sm"
-            disabled
-          >
-            <MsIcon name="play_arrow" /> {{ t('userServers.power.start') }}
-          </BaseButton>
-          <BaseButton
-            v-else-if="state === 'offline' || state === 'stopped'"
-            variant="primary"
-            size="sm"
-            @click="sendPower('start')"
-          >
-            <MsIcon name="play_arrow" /> {{ t('userServers.power.start') }}
-          </BaseButton>
-          <template v-else-if="state === 'starting'">
-            <BaseButton size="sm" disabled><Spinner size="xs" /> {{ t('userServers.status.starting') }}</BaseButton>
-            <BaseButton size="sm" variant="danger" @click="sendPower('kill')">
-              <MsIcon name="power_off" /> {{ t('userServers.power.kill') }}
-            </BaseButton>
-          </template>
-          <template v-else-if="state === 'running'">
-            <BaseButton size="sm" @click="sendPower('restart')">
-              <MsIcon name="refresh" /> {{ t('userServers.power.restart') }}
-            </BaseButton>
-            <BaseButton size="sm" variant="warning" @click="sendPower('stop')">
-              <MsIcon name="power_settings_new" /> {{ t('userServers.power.stop') }}
-            </BaseButton>
-            <BaseButton size="sm" variant="danger" @click="sendPower('kill')">
-              <MsIcon name="power_off" /> {{ t('userServers.power.kill') }}
-            </BaseButton>
-          </template>
-          <template v-else-if="state === 'stopping'">
-            <BaseButton size="sm" disabled><Spinner size="xs" /></BaseButton>
-            <BaseButton size="sm" variant="danger" @click="sendPower('kill')">
-              <MsIcon name="power_off" /> {{ t('userServers.power.kill') }}
-            </BaseButton>
-          </template>
-        </div>
+        <PowerControls
+          v-if="server"
+          :server-id="server.id"
+          :state="state"
+          :is-suspended="server.isSuspended"
+          :is-installing="isInstalling"
+          :disabled="!wsConnected || reconnecting"
+          :disabled-reason="t('userServers.consoleDisconnected')"
+          layout="row"
+        />
       </BaseCard>
     </div>
 
@@ -502,11 +159,25 @@ onBeforeUnmount(() => {
         <div v-if="connecting && !wsConnected" class="terminal-overlay">
           <Spinner />
         </div>
-        <!-- Disconnected overlay -->
+        <!-- Suspended overlay -->
+        <div v-else-if="suspended" class="terminal-overlay terminal-overlay--reconnect">
+          <MsIcon name="block" class="reconnect-icon" />
+          <span class="reconnect-text">{{ t('userServers.status.suspended') }}</span>
+          <span class="reconnect-hint">{{ t('userServers.suspendedHint') }}</span>
+        </div>
+        <!-- Reconnecting overlay -->
+        <div v-else-if="reconnecting" class="terminal-overlay terminal-overlay--reconnect">
+          <MsIcon name="cloud_off" class="reconnect-icon" />
+          <span class="reconnect-text">{{ t('userServers.reconnectFailed') }}</span>
+          <span class="reconnect-hint">{{ t('userServers.reconnecting', { seconds: reconnectCountdown, current: reconnectAttempt, max: 5 }) }}</span>
+          <Spinner size="sm" />
+        </div>
+        <!-- Disconnected (all retries exhausted or initial connect failed) -->
         <div v-else-if="disconnected && !wsConnected" class="terminal-overlay terminal-overlay--reconnect">
           <MsIcon name="cloud_off" class="reconnect-icon" />
-          <span class="reconnect-text">{{ t('userServers.consoleDisconnected') }}</span>
-          <BaseButton size="sm" variant="primary" @click="connectConsole">
+          <span class="reconnect-text">{{ t('userServers.reconnectFailed') }}</span>
+          <span class="reconnect-hint">{{ t('userServers.reconnectHint') }}</span>
+          <BaseButton size="sm" variant="primary" @click="manualReconnect">
             <MsIcon name="refresh" /> {{ t('userServers.consoleReconnect') }}
           </BaseButton>
         </div>
@@ -519,7 +190,7 @@ onBeforeUnmount(() => {
             v-model="commandInput"
             class="command-input"
             :placeholder="t('userServers.commandPlaceholder')"
-            :disabled="!wsConnected || isInstalling"
+            :disabled="!wsConnected || isInstalling || reconnecting"
             @keydown.enter="sendCommand"
             @keydown="handleCommandKey"
           />
@@ -531,7 +202,7 @@ onBeforeUnmount(() => {
     <aside class="console-sidebar">
       <!-- Status indicator -->
       <div class="status-card" :style="{ '--status-color': statusColor }">
-        <StatusDot :status="statusDotKey()" />
+        <StatusDot :status="dotKey" />
         <span class="status-label">{{ statusText }}</span>
       </div>
 
@@ -557,36 +228,11 @@ onBeforeUnmount(() => {
           <MsIcon name="language" class="section-icon" />
           {{ t('userServers.address.label') }}
         </div>
-        <template v-if="isWebEgg">
-          <BaseButton
-            variant="primary"
-            size="sm"
-            class="address-open-btn"
-            :disabled="state !== 'running'"
-            @click="openSillyTavern"
-          >
-            <MsIcon name="open_in_new" />
-            {{ t('userServers.openApp') }}
-          </BaseButton>
-          <div class="address-lines">
-            <div class="address-line">
-              <span class="address-text">{{ server.address }}</span>
-              <button class="copy-btn" :title="t('userServers.address.copy')" @click="copyAddress">
-                <MsIcon :name="copied ? 'check' : 'content_copy'" />
-              </button>
-            </div>
-          </div>
-        </template>
-        <template v-else>
-          <div class="address-lines">
-            <div class="address-line address-line--large">
-              <span class="address-text">{{ server.address }}</span>
-              <button class="copy-btn" :title="t('userServers.address.copy')" @click="copyAddress">
-                <MsIcon :name="copied ? 'check' : 'content_copy'" />
-              </button>
-            </div>
-          </div>
-        </template>
+        <ServerAddress
+          :addresses="[server.address]"
+          :open-url="isWebEgg ? serverUrl! : undefined"
+          :open-disabled="state !== 'running'"
+        />
       </BaseCard>
 
       <!-- Power controls -->
@@ -595,68 +241,15 @@ onBeforeUnmount(() => {
           <MsIcon name="power_settings_new" class="section-icon" />
           {{ t('userServers.power.title') }}
         </div>
-        <div class="power-buttons">
-          <!-- Installing: disabled -->
-          <BaseButton
-            v-if="isInstalling"
-            variant="primary"
-            class="power-btn"
-            disabled
-          >
-            <Spinner size="xs" /> {{ t('userServers.status.installing') }}
-          </BaseButton>
-          <!-- Suspended: disabled start -->
-          <BaseButton
-            v-else-if="server?.isSuspended"
-            variant="primary"
-            class="power-btn"
-            disabled
-          >
-            <MsIcon name="play_arrow" />
-            {{ t('userServers.power.start') }}
-          </BaseButton>
-          <BaseButton
-            v-else-if="state === 'offline' || state === 'stopped'"
-            variant="primary"
-            class="power-btn"
-            @click="sendPower('start')"
-          >
-            <MsIcon name="play_arrow" />
-            {{ t('userServers.power.start') }}
-          </BaseButton>
-          <template v-else-if="state === 'starting'">
-            <BaseButton class="power-btn" disabled>
-              <Spinner size="xs" /> {{ t('userServers.status.starting') }}
-            </BaseButton>
-            <BaseButton class="power-btn" variant="danger" @click="sendPower('kill')">
-              <MsIcon name="power_off" />
-              {{ t('userServers.power.kill') }}
-            </BaseButton>
-          </template>
-          <template v-else-if="state === 'running'">
-            <BaseButton class="power-btn" @click="sendPower('restart')">
-              <MsIcon name="refresh" />
-              {{ t('userServers.power.restart') }}
-            </BaseButton>
-            <BaseButton class="power-btn" variant="warning" @click="sendPower('stop')">
-              <MsIcon name="power_settings_new" />
-              {{ t('userServers.power.stop') }}
-            </BaseButton>
-            <BaseButton class="power-btn" variant="danger" @click="sendPower('kill')">
-              <MsIcon name="power_off" />
-              {{ t('userServers.power.kill') }}
-            </BaseButton>
-          </template>
-          <template v-else-if="state === 'stopping'">
-            <BaseButton class="power-btn" disabled>
-              <Spinner size="xs" /> {{ t('userServers.status.stopping') }}
-            </BaseButton>
-            <BaseButton class="power-btn" variant="danger" @click="sendPower('kill')">
-              <MsIcon name="power_off" />
-              {{ t('userServers.power.kill') }}
-            </BaseButton>
-          </template>
-        </div>
+        <PowerControls
+          v-if="server"
+          :server-id="server.id"
+          :state="state"
+          :is-suspended="server.isSuspended"
+          :is-installing="isInstalling"
+          :disabled="!wsConnected || reconnecting"
+          :disabled-reason="t('userServers.consoleDisconnected')"
+        />
       </BaseCard>
 
       <!-- Resource stats -->
@@ -665,40 +258,16 @@ onBeforeUnmount(() => {
           <MsIcon name="monitoring" class="section-icon" />
           {{ t('userServers.resources.title') }}
         </div>
-        <div class="stats-grid">
-          <div class="stat-row">
-            <div class="stat-header">
-              <span class="stat-label">{{ t('userServers.resources.cpu') }}</span>
-              <span class="stat-value">{{ cpuPercent.toFixed(1) }}% <span class="stat-limit">/ {{ cpuLimit() }}</span></span>
-            </div>
-            <UsageBar :percent="cpuPercent" />
-          </div>
-          <div class="stat-row">
-            <div class="stat-header">
-              <span class="stat-label">{{ t('userServers.resources.memory') }}</span>
-              <span class="stat-value">{{ fmtBytes(memoryBytes) }} <span class="stat-limit">/ {{ memLimit() }}</span></span>
-            </div>
-            <UsageBar :percent="memPercent()" />
-          </div>
-          <div class="stat-row">
-            <div class="stat-header">
-              <span class="stat-label">{{ t('userServers.resources.disk') }}</span>
-              <span class="stat-value">{{ fmtBytes(diskBytes) }} <span class="stat-limit">/ {{ diskLimit() }}</span></span>
-            </div>
-            <UsageBar :percent="diskPercent()" />
-          </div>
-          <div class="stat-row stat-row--inline">
-            <span class="stat-label">{{ t('userServers.resources.network') }}</span>
-            <span class="stat-value">
-              <span class="net-up">↑ {{ fmtBytes(networkTx) }}</span>
-              <span class="net-down">↓ {{ fmtBytes(networkRx) }}</span>
-            </span>
-          </div>
-          <div class="stat-row stat-row--inline">
-            <span class="stat-label">{{ t('userServers.resources.uptime') }}</span>
-            <span class="stat-value">{{ formatUptime(uptimeMs) }}</span>
-          </div>
-        </div>
+        <ResourceStats
+          v-if="server"
+          :cpu-percent="cpuPercent"
+          :memory-bytes="memoryBytes"
+          :disk-bytes="diskBytes"
+          :network-rx="networkRx"
+          :network-tx="networkTx"
+          :uptime-ms="uptimeMs"
+          :limits="server.limits"
+        />
       </BaseCard>
     </aside>
 
@@ -719,33 +288,17 @@ onBeforeUnmount(() => {
           <span v-if="server?.isSuspended" class="mobile-suspended-badge">{{ t('userServers.status.suspended') }}</span>
         </div>
         <!-- Stats -->
-        <div class="mobile-stats">
-          <div class="mobile-stat">
-            <div class="stat-header" style="margin-top: auto">
-              <span class="mobile-stat-label">CPU</span>
-              <span class="mobile-stat-value">{{ cpuPercent.toFixed(1) }}% / {{ cpuLimit() }}</span>
-            </div>
-            <UsageBar :percent="cpuPercent" class="mobile-stat-bar" />
-          </div>
-          <div class="mobile-stat">
-            <div class="stat-header" style="margin-top: auto">
-              <span class="mobile-stat-label">{{ t('userServers.resources.memory') }}</span>
-              <span class="mobile-stat-value">{{ fmtBytes(memoryBytes) }} / {{ memLimit() }}</span>
-            </div>
-            <UsageBar :percent="memPercent()" class="mobile-stat-bar" />
-          </div>
-          <div class="mobile-stat">
-            <div class="stat-header" style="margin-top: auto">
-              <span class="mobile-stat-label">{{ t('userServers.resources.disk') }}</span>
-              <span class="mobile-stat-value">{{ fmtBytes(diskBytes) }} / {{ diskLimit() }}</span>
-            </div>
-            <UsageBar :percent="diskPercent()" class="mobile-stat-bar" />
-          </div>
-          <div class="mobile-stat">
-            <span class="mobile-stat-label">{{ t('userServers.resources.network') }}</span>
-            <span class="mobile-stat-value" style="margin-top: auto">↑{{ fmtBytes(networkTx) }} ↓{{ fmtBytes(networkRx) }}</span>
-          </div>
-        </div>
+        <ResourceStats
+          v-if="server"
+          :cpu-percent="cpuPercent"
+          :memory-bytes="memoryBytes"
+          :disk-bytes="diskBytes"
+          :network-rx="networkRx"
+          :network-tx="networkTx"
+          :uptime-ms="uptimeMs"
+          :limits="server.limits"
+          layout="mobile"
+        />
       </BaseCard>
     </div>
   </div>
@@ -864,6 +417,11 @@ onBeforeUnmount(() => {
   color: var(--t2);
 }
 
+.reconnect-hint {
+  font-size: var(--text-xs);
+  color: var(--t3);
+}
+
 .terminal-container {
   height: clamp(300px, 55vh, 700px);
   overflow: hidden;
@@ -934,12 +492,6 @@ onBeforeUnmount(() => {
   color: var(--t3);
 }
 
-/* ── Address ── */
-.address-open-btn {
-  width: 100%;
-  margin-bottom: var(--sp-2);
-}
-
 /* ── Lifecycle ── */
 .lifecycle-row {
   display: flex;
@@ -957,114 +509,6 @@ onBeforeUnmount(() => {
   font-size: var(--text-xs);
   font-weight: 600;
 }
-
-.address-lines {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.address-line {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-1) var(--sp-2);
-  background: var(--bg-in);
-  border-radius: var(--r-sm);
-  border: 1px solid var(--bd);
-}
-
-.address-line--large {
-  padding: var(--sp-2);
-}
-
-.address-text {
-  flex: 1;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: var(--text-xs);
-  color: var(--t2);
-  word-break: break-all;
-}
-
-.copy-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: var(--r-xs);
-  background: none;
-  color: var(--t3);
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-
-.copy-btn:hover {
-  color: var(--ac);
-  background: var(--bg4);
-}
-
-/* ── Power ── */
-.power-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-
-.power-btn {
-  width: 100%;
-}
-
-/* ── Stats ── */
-.stats-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-
-.stat-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.stat-row--inline {
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--sp-2);
-}
-
-.stat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.stat-label {
-  font-size: var(--text-xs);
-  color: var(--t3);
-  font-weight: 500;
-}
-
-.stat-value {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: var(--text-xs);
-  color: var(--t1);
-}
-
-.stat-limit {
-  color: var(--t3);
-}
-
-.net-up, .net-down {
-  margin-left: var(--sp-1);
-}
-
-.net-up { color: var(--ac2); }
-.net-down { color: var(--blue); }
 
 /* ═══ Mobile layout ═══ */
 @media (max-width: 1023px) {
@@ -1096,57 +540,8 @@ onBeforeUnmount(() => {
     padding: var(--sp-3) !important;
   }
 
-  .mobile-open-btn {
-    width: 100%;
-  }
-
-  .mobile-power-row {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-  }
-
-  .mobile-power-row > * {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .mobile-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: var(--sp-3);
-  }
-
-  .mobile-stat {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .mobile-stat-label {
-    font-size: var(--text-xs);
-    color: var(--t3);
-    font-weight: 500;
-  }
-
-  .mobile-stat-value {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: var(--text-xs);
-    color: var(--t1);
-  }
-
-  .mobile-stat-bar {
-    margin-top: 2px;
-  }
-
   .terminal-container {
     height: clamp(250px, 45vh, 500px);
-  }
-}
-
-@media (max-width: 480px) {
-  .mobile-stats {
-    grid-template-columns: 1fr 1fr;
   }
 }
 </style>

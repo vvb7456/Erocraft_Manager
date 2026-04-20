@@ -1,0 +1,13 @@
+{
+  "subtitle": "Confirm Email Change",
+  "loading": "Confirming email...",
+  "success": "Your email has been changed.",
+  "redirecting": "Redirecting to account settings...",
+  "account": "Go to Account Settings",
+  "back": "Back to Sign In",
+  "error": {
+    "invalidLink": "The confirmation link is invalid or incomplete",
+    "failed": "Email confirmation failed. Please try again later",
+    "network": "Network connection failed"
+  }
+}

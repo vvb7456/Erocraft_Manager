@@ -1,9 +1,7 @@
 {
   "title": "我的服务器",
   "empty": "暂无服务器",
-  "emptyDesc": "你还没有任何服务器",
   "openApp": "打开 SillyTavern",
-  "detail": "详情",
   "renew": "续费",
   "searchPlaceholder": "搜索服务器...",
   "batch": {
@@ -27,8 +25,7 @@
   },
   "address": {
     "label": "服务器地址",
-    "copy": "复制地址",
-    "copied": "已复制"
+    "copy": "复制地址"
   },
   "status": {
     "running": "正在运行",
@@ -36,7 +33,8 @@
     "stopping": "正在关机",
     "offline": "关机",
     "suspended": "已冻结",
-    "installing": "正在安装"
+    "installing": "正在安装",
+    "disconnected": "连接中断"
   },
   "expiration": "到期时间",
   "daysLeft": "剩余 {n} 天",
@@ -44,12 +42,16 @@
   "permanent": "永久",
   "console": "控制台",
   "files": "文件",
-  "settings": "设置",
-  "startup": "启动参数",
+  "settings": "SillyTavern 设置",
   "commandPlaceholder": "输入命令...",
   "consoleFailed": "控制台连接失败",
   "consoleDisconnected": "连接已断开",
   "consoleReconnect": "重新连接",
+  "reconnected": "已重连",
+  "reconnecting": "连接失败({current}/{max})，{seconds} 秒后重试...",
+  "reconnectFailed": "无法连接到服务器节点",
+  "suspendedHint": "服务器已到期，请及时续费",
+  "reconnectHint": "请检查网络或联系客服",
   "power": {
     "title": "电源控制",
     "start": "开机",
@@ -58,9 +60,7 @@
     "kill": "关闭电源",
     "confirmStop": "确定要关机吗？",
     "confirmKill": "确定要关闭电源吗？这可能导致数据丢失。",
-    "confirmRestart": "确定要重启服务器吗？",
-    "sent": "电源操作已发送",
-    "failed": "电源操作失败"
+    "confirmRestart": "确定要重启服务器吗？"
   },
   "resources": {
     "title": "资源使用",
@@ -83,46 +83,42 @@
     "download": "下载",
     "rename": "重命名",
     "move": "移动",
-    "copy": "复制",
     "delete": "删除",
     "compress": "压缩",
     "decompress": "解压",
-    "open": "打开",
+    "compressing": "压缩中",
+    "decompressing": "解压中",
+    "compressComplete": "压缩完成",
+    "decompressComplete": "解压完成",
+    "compressFailed": "压缩失败",
+    "decompressFailed": "解压失败",
     "edit": "编辑",
     "save": "保存",
-    "saving": "保存中...",
     "saved": "文件已保存",
     "confirmDelete": "确定要删除选中的 {n} 个文件吗？",
     "folderName": "文件夹名称",
     "fileName": "文件名",
     "newName": "新名称",
-    "moveTo": "移动到",
-    "moveHint": "输入目标路径，如 /data/backup/",
+    "moveTo": "移动到：",
     "selected": "已选择 {n} 项",
-    "clearSelection": "取消选择",
     "tooLarge": "文件过大（> 5MB），请下载后本地编辑",
-    "language": "语言",
-    "line": "行",
-    "column": "列",
     "dragHint": "拖放文件到此处上传",
+    "singleFileOnly": "每次只能上传一个文件",
+    "folderUploadNotSupported": "不支持上传文件夹",
+    "validation": {
+      "emptyName": "名称不能为空",
+      "invalidChars": "名称包含非法字符",
+      "reservedName": "名称不能为 . 或 ..",
+      "nameTooLong": "名称过长（最多255个字符）"
+    },
     "uploadProgress": "上传中",
     "uploadComplete": "上传完成",
     "uploadFailed": "上传失败",
     "uploadWaiting": "等待中...",
     "root": "根目录",
-    "treePanel": "目录树",
-    "collapseTree": "收起目录树",
-    "expandTree": "展开目录树",
     "moreActions": "更多操作",
+    "openFile": "打开文件",
+    "openFolder": "打开文件夹",
     "actions": "操作"
-  },
-  "startup": {
-    "title": "启动参数",
-    "description": "配置服务器启动变量",
-    "variable": "变量",
-    "value": "值",
-    "default": "默认值",
-    "readonly": "只读",
-    "saved": "启动参数已保存"
   }
 }

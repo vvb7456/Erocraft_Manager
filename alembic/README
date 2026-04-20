@@ -1,0 +1,4 @@
+Single-database Alembic environment for the FastAPI backend.
+
+Only `manager_*` tables are migration-managed here. Pterodactyl's own tables
+already exist and are treated as external schema dependencies.

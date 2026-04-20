@@ -11,7 +11,6 @@
   "status": {
     "normal": "正常",
     "suspended": "已冻结",
-    "installing": "安装中",
     "expired": "已到期",
     "expiringSoon": "即将到期",
     "permanent": "永久"

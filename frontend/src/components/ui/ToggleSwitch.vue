@@ -1,80 +1,126 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 
 defineOptions({ name: 'ToggleSwitch' })
 
-defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: boolean
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md'
   disabled?: boolean
-}>()
+  labelOn?: string
+  labelOff?: string
+}>(), {
+  size: 'md',
+})
 
-defineEmits<{
+const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
+
+const { t } = useI18n({ useScope: 'global' })
+
+function toggle() {
+  if (!props.disabled) {
+    emit('update:modelValue', !props.modelValue)
+  }
+}
 </script>
 
 <template>
-  <label class="toggle-wrap" :class="`toggle-wrap--${size ?? 'md'}`">
-    <input
-      type="checkbox"
-      class="toggle-input"
-      :checked="modelValue"
-      :disabled="disabled"
-      @change="$emit('update:modelValue', ($event.target as HTMLInputElement).checked)"
-    />
-    <span class="toggle-track">
-      <span class="toggle-knob" />
-    </span>
-    <slot />
-  </label>
+  <div
+    class="seg-switch"
+    :class="[`seg-switch--${size}`, { 'seg-switch--disabled': disabled }]"
+    role="switch"
+    :aria-checked="modelValue"
+    @click="toggle"
+  >
+    <div class="seg-track">
+      <div class="seg-slider" :class="{ 'seg-slider--on': modelValue }" />
+      <span class="seg-btn" :class="{ active: !modelValue }">{{ labelOff ?? t('common.off') }}</span>
+      <span class="seg-btn" :class="{ active: modelValue }">{{ labelOn ?? t('common.on') }}</span>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.toggle-wrap {
+.seg-switch {
   display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
+  min-width: 0;
+  width: fit-content !important;
+  margin-left: auto;
+}
+
+.seg-switch--disabled {
+  opacity: .5;
+  pointer-events: none;
+}
+
+.seg-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--bd);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  overflow: hidden;
   cursor: pointer;
+}
+
+.seg-slider {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: calc(50% - 2px);
+  left: 2px;
+  border-radius: calc(var(--r-sm) - 2px);
+  background: var(--ac);
+  transition: left .2s ease;
+  z-index: 0;
+}
+
+.seg-slider--on {
+  left: calc(50%);
+}
+
+.seg-btn {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--t3);
+  transition: color .2s;
+  text-align: center;
+  white-space: nowrap;
   user-select: none;
 }
-.toggle-wrap:has(.toggle-input:disabled) {
-  opacity: .5;
-  cursor: not-allowed;
+
+.seg-btn.active {
+  color: var(--bg);
 }
 
-.toggle-input { display: none; }
-
-.toggle-track {
-  position: relative;
-  display: inline-block;
-  border-radius: 99px;
-  background: var(--bg4);
-  border: 1px solid var(--bd);
-  transition: background .2s, border-color .2s;
-  flex-shrink: 0;
+.seg-btn:not(.active):hover {
+  color: var(--t2);
 }
 
-.toggle-wrap--sm .toggle-track { width: 28px; height: 16px; }
-.toggle-wrap--md .toggle-track { width: 36px; height: 20px; }
-.toggle-wrap--lg .toggle-track { width: 44px; height: 24px; }
-
-.toggle-knob {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  border-radius: 50%;
-  background: var(--t3);
-  transition: left .2s, width .15s, background .2s;
+/* Size: md */
+.seg-switch--md .seg-track {
+  height: 34px;
+}
+.seg-switch--md .seg-btn {
+  padding: 0 16px;
+  font-size: var(--text-sm);
 }
 
-.toggle-wrap--sm  .toggle-knob { width: 10px; height: 10px; left: 2px; }
-.toggle-wrap--md  .toggle-knob { width: 14px; height: 14px; left: 2px; }
-.toggle-wrap--lg  .toggle-knob { width: 18px; height: 18px; left: 2px; }
-
-.toggle-input:checked ~ .toggle-track { background: var(--ac); border-color: var(--ac); }
-.toggle-input:checked ~ .toggle-track .toggle-knob { background: #fff; }
-
-.toggle-wrap--sm  .toggle-input:checked ~ .toggle-track .toggle-knob { left: 14px; }
-.toggle-wrap--md  .toggle-input:checked ~ .toggle-track .toggle-knob { left: 18px; }
-.toggle-wrap--lg  .toggle-input:checked ~ .toggle-track .toggle-knob { left: 22px; }
+/* Size: sm */
+.seg-switch--sm .seg-track {
+  height: 28px;
+}
+.seg-switch--sm .seg-btn {
+  padding: 0 12px;
+  font-size: var(--text-xs);
+}
 </style>

@@ -6,11 +6,6 @@
     "has_servers": "有服务器",
     "no_servers": "无服务器"
   },
-  "sort": {
-    "id": "ID",
-    "username": "用户名",
-    "server_count": "服务器数"
-  },
   "table": {
     "id": "ID",
     "username": "用户名",
@@ -34,11 +29,9 @@
     "email": "邮箱",
     "username": "用户名",
     "send_welcome": "发送欢迎邮件",
-    "send_welcome_hint": "邮件将引导用户前往面板设置密码",
     "email_sent": "欢迎邮件已发送",
     "email_failed": "欢迎邮件发送失败",
-    "create_and_server": "创建并开通服务器",
-    "success": "用户 {name} 创建成功"
+    "create_and_server": "创建并开通服务器"
   },
   "edit": {
     "title": "编辑用户",
@@ -66,7 +59,6 @@
     "delete": "删除"
   },
   "empty": "暂无用户数据",
-  "total": "共 {n} 位用户",
   "pagination": {
     "per_page": "条/页"
   }

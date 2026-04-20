@@ -1,7 +1,9 @@
 # 敏感配置（服务器上手动管理）
-settings.json
 .env
-templates/*.json
+settings.json
+
+# 旧代码归档
+_archive/
 
 # Python
 venv/
@@ -11,6 +13,8 @@ __pycache__/
 # 运行时
 logs/
 ptero_manager.pid
+ptero_manager_web.pid
+ptero_manager_jobs.pid
 
 # 前端构建产物
 frontend/node_modules/

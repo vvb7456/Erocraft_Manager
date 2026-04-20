@@ -8,11 +8,6 @@
     "expired": "已到期",
     "permanent": "永久"
   },
-  "sort": {
-    "expiration_date": "到期时间",
-    "ptero_server_id": "ID",
-    "server_name": "名称"
-  },
   "table": {
     "id": "ID",
     "name": "服务器名称",
@@ -24,24 +19,19 @@
   },
   "status": {
     "normal": "正常",
-    "expiring_soon": "即将到期",
     "expired": "已过期",
     "suspended": "已冻结",
     "permanent": "永久",
     "days_left": "{n} 天",
-    "today": "今天",
-    "expired_days": "已过期 {n} 天"
+    "today": "今天"
   },
   "action": {
     "renew": "续期",
     "suspend": "冻结",
     "unsuspend": "解冻",
     "delete": "删除",
-    "edit": "编辑",
-    "batch": "批量操作",
     "create": "创建服务器",
     "renew_days": "续期天数",
-    "renew_date": "续期至",
     "open_panel": "面板",
     "quick_renew": "快速续期",
     "custom_date": "自定义日期"
@@ -69,15 +59,12 @@
     "unsuspend_msg": "确定要解冻服务器「{name}」吗？"
   },
   "empty": "暂无服务器数据",
-  "total": "共 {n} 台服务器",
   "pagination": {
     "per_page": "条/页"
   },
   "create": {
     "title": "创建服务器",
-    "section_basic": "基础信息",
     "section_image": "预设 & 镜像",
-    "section_node": "节点 & 端口",
     "section_resources": "资源配置",
     "section_env": "环境变量",
     "user": "所有者",
@@ -105,6 +92,9 @@
     "extra_allocations": "额外端口数",
     "expiration_days": "有效天数",
     "creating": "正在创建…",
-    "success": "服务器创建成功"
+    "success": "服务器创建成功",
+    "validation": {
+      "requiredFields": "请填写必填项"
+    }
   }
 }

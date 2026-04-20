@@ -1,12 +1,29 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+
+const DEFAULT_BANNER_URL = '/banner.png'
 
 export const useAppStore = defineStore('app', () => {
   const sidebarCollapsed = ref(localStorage.getItem('sidebar_collapsed') === '1')
   const mobileSidebarOpen = ref(false)
   const version = ref('')
   const brandName = ref('Ptero Manager')
+  const systemName = ref('')
+  const bannerUrl = ref('')
+  const icpRecord = ref('')
   const timezone = ref('Asia/Shanghai')
+  const hasSystemName = computed(() => systemName.value.trim().length > 0)
+  const hasCustomBannerUrl = computed(() => bannerUrl.value.trim().length > 0)
+  const displayName = computed(() =>
+    hasSystemName.value ? systemName.value.trim() : brandName.value,
+  )
+  const authBannerUrl = computed(() =>
+    hasCustomBannerUrl.value ? bannerUrl.value.trim() : DEFAULT_BANNER_URL,
+  )
+  const sidebarBannerUrl = computed(() => {
+    if (hasCustomBannerUrl.value) return bannerUrl.value.trim()
+    return hasSystemName.value ? '' : DEFAULT_BANNER_URL
+  })
 
   function toggleSidebar() {
     sidebarCollapsed.value = !sidebarCollapsed.value
@@ -32,6 +49,9 @@ export const useAppStore = defineStore('app', () => {
         const data = await res.json()
         version.value = data.version || ''
         brandName.value = data.brandName || 'Ptero Manager'
+        systemName.value = data.systemName || ''
+        bannerUrl.value = data.bannerUrl || ''
+        icpRecord.value = data.icpRecord || ''
         timezone.value = data.timezone || 'Asia/Shanghai'
         document.title = brandName.value
       }
@@ -43,6 +63,14 @@ export const useAppStore = defineStore('app', () => {
     mobileSidebarOpen,
     version,
     brandName,
+    systemName,
+    bannerUrl,
+    hasSystemName,
+    hasCustomBannerUrl,
+    displayName,
+    authBannerUrl,
+    sidebarBannerUrl,
+    icpRecord,
     timezone,
     toggleSidebar,
     openMobileSidebar,

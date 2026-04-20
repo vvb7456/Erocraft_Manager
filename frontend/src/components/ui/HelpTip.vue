@@ -1,12 +1,30 @@
 <script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 defineOptions({ name: 'HelpTip' })
 
 defineProps<{ text: string }>()
+
+const open = ref(false)
+const el = ref<HTMLElement>()
+
+function toggle(e: Event) {
+  e.stopPropagation()
+  open.value = !open.value
+}
+
+function onDocClick(e: Event) {
+  if (el.value && !el.value.contains(e.target as Node)) {
+    open.value = false
+  }
+}
+
+onMounted(() => document.addEventListener('click', onDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 </script>
 
 <template>
-  <span class="cc-help-tip" :data-tip="text">?</span>
+  <span ref="el" class="cc-help-tip" :class="{ open }" :data-tip="text" @click="toggle">?</span>
 </template>
 
 <style scoped>
@@ -26,7 +44,8 @@ defineProps<{ text: string }>()
   vertical-align: middle;
   margin-left: 4px;
 }
-.cc-help-tip:hover::after {
+.cc-help-tip:hover::after,
+.cc-help-tip.open::after {
   content: attr(data-tip);
   position: absolute;
   bottom: calc(100% + 6px);

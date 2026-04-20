@@ -1,0 +1,41 @@
+{
+  "title": "账户设置",
+  "loading": "正在加载账户信息...",
+  "profile": {
+    "title": "基本信息",
+    "desc": "查看当前账户的基本资料。",
+    "username": "用户名",
+    "email": "当前邮箱",
+    "accountType": "账户类型",
+    "types": {
+      "admin": "管理员",
+      "user": "普通用户"
+    }
+  },
+  "email": {
+    "title": "修改邮箱",
+    "desc": "更新当前账户使用的邮箱地址。",
+    "new": "新邮箱",
+    "placeholder": "name＠example.com",
+    "submit": "发送验证邮件",
+    "success": "验证邮件已发送，请前往当前邮箱完成确认。",
+    "validation": {
+      "required": "请输入新邮箱",
+      "same": "新邮箱不能与当前邮箱相同"
+    }
+  },
+  "password": {
+    "title": "修改密码",
+    "desc": "修改当前账户的登录密码。",
+    "current": "当前密码",
+    "new": "新密码",
+    "confirm": "确认新密码",
+    "submit": "保存新密码",
+    "success": "密码已更新",
+    "validation": {
+      "required": "请完整填写密码表单",
+      "length": "新密码至少需要 8 个字符",
+      "mismatch": "两次输入的新密码不一致"
+    }
+  }
+}

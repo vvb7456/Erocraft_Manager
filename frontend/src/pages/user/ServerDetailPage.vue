@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, provide, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, provide, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -9,6 +9,7 @@ import TabSwitcher from '@/components/ui/TabSwitcher.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import Badge from '@/components/ui/Badge.vue'
+import { getStatusDotKey, getStatusColor } from '@/utils/status'
 
 defineOptions({ name: 'ServerDetailPage' })
 
@@ -56,10 +57,12 @@ provide('reloadServer', loadServer)
 const isInstalling = computed(() => server.value?.isInstalling ?? false)
 provide('isInstalling', isInstalling)
 
+const isSuspended = computed(() => server.value?.isSuspended ?? false)
+
 const tabs = computed(() => [
   { key: 'server-console', label: t('userServers.console'), icon: 'terminal' },
-  { key: 'server-files', label: t('userServers.files'), icon: 'folder', disabled: isInstalling.value },
-  { key: 'server-settings', label: t('userServers.settings'), icon: 'settings', disabled: isInstalling.value },
+  { key: 'server-files', label: t('userServers.files'), icon: 'folder', disabled: isInstalling.value || stale.value || isSuspended.value },
+  { key: 'server-settings', label: t('userServers.settings'), icon: 'settings', disabled: isInstalling.value || stale.value || isSuspended.value },
 ])
 
 const activeTab = computed(() => route.name as string)
@@ -74,18 +77,21 @@ const liveState = computed(() => {
   return resourceStore.getState(server.value.id) || server.value.status || 'offline'
 })
 
-function statusDotKey(): 'running' | 'loading' | 'error' | 'stopped' {
-  if (!server.value) return 'stopped'
-  if (server.value.isSuspended) return 'error'
-  if (server.value.isInstalling) return 'loading'
-  const st = liveState.value
-  if (st === 'running') return 'running'
-  if (st === 'starting' || st === 'stopping' || st === 'installing') return 'loading'
-  return 'stopped'
-}
+const stale = computed(() => server.value ? resourceStore.isStale(server.value.id) : false)
+
+const dotKey = computed(() => {
+  if (!server.value) return 'stopped' as const
+  return getStatusDotKey(
+    liveState.value,
+    server.value.isSuspended,
+    server.value.isInstalling,
+    stale.value,
+  )
+})
 
 function statusBadge(): { color: string; label: string } {
   if (!server.value) return { color: 'var(--t3)', label: t('userServers.status.offline') }
+  if (stale.value) return { color: 'var(--t3)', label: t('userServers.status.disconnected') }
   if (server.value.isSuspended) return { color: 'var(--red)', label: t('userServers.status.suspended') }
   if (server.value.isInstalling) return { color: 'var(--amber)', label: t('userServers.status.installing') }
   const st = liveState.value
@@ -104,6 +110,67 @@ watch(liveState, (newState, oldState) => {
     loadServer()
   }
 })
+
+// Kick to console tab when connection becomes stale or server gets suspended on non-console tabs
+watch([stale, isSuspended], ([isStale, isSusp]) => {
+  if ((isStale || isSusp) && activeTab.value !== 'server-console') {
+    router.replace({ name: 'server-console', params: { id: serverId.value } })
+  }
+})
+
+// Poll server data while installing (in case Wings never reports 'installing' state)
+let installPollTimer: ReturnType<typeof setInterval> | null = null
+watch(isInstalling, (val) => {
+  if (val && !installPollTimer) {
+    installPollTimer = setInterval(loadServer, 10000)
+  } else if (!val && installPollTimer) {
+    clearInterval(installPollTimer)
+    installPollTimer = null
+  }
+}, { immediate: true })
+
+// Independent resource polling for non-console tabs (console has WS push)
+let resourcePollTimer: ReturnType<typeof setInterval> | null = null
+
+function startResourcePoll() {
+  if (resourcePollTimer) return
+  resourcePollTimer = setInterval(async () => {
+    if (activeTab.value === 'server-console') return
+    if (!server.value) return
+    try {
+      const data = await get<{ state: string; isSuspended: boolean; resources: Record<string, number> }>(
+        `/api/user/servers/${server.value.id}/resources`,
+      )
+      if (data) {
+        const r = data.resources || {}
+        resourceStore.updateOne(server.value.id, {
+          state: data.state,
+          isSuspended: data.isSuspended,
+          cpu: r.cpu_absolute ?? 0,
+          memoryBytes: r.memory_bytes ?? 0,
+          diskBytes: r.disk_bytes ?? 0,
+          networkRx: r.network?.rx_bytes ?? r.network_rx_bytes ?? 0,
+          networkTx: r.network?.tx_bytes ?? r.network_tx_bytes ?? 0,
+          uptime: r.uptime ?? 0,
+        })
+      } else {
+        // Request failed — mark stale
+        const existing = resourceStore.resources[server.value.id]
+        if (existing) existing.stale = true
+      }
+    } catch {
+      const existing = resourceStore.resources[server.value!.id]
+      if (existing) existing.stale = true
+    }
+  }, 10_000)
+}
+
+onMounted(startResourcePoll)
+
+onUnmounted(() => {
+  if (installPollTimer) clearInterval(installPollTimer)
+  if (resourcePollTimer) { clearInterval(resourcePollTimer); resourcePollTimer = null }
+})
 </script>
 
 <template>
@@ -113,7 +180,7 @@ watch(liveState, (newState, oldState) => {
     <PageHeader icon="dns" :title="server.name">
       <template #badge>
         <Badge :color="statusBadge().color">
-          <StatusDot :status="statusDotKey()" size="sm" />
+          <StatusDot :status="dotKey" size="sm" />
           {{ statusBadge().label }}
         </Badge>
       </template>

@@ -8,11 +8,6 @@
     "expired": "Expired",
     "permanent": "Permanent"
   },
-  "sort": {
-    "expiration_date": "Expiration",
-    "ptero_server_id": "ID",
-    "server_name": "Name"
-  },
   "table": {
     "id": "ID",
     "name": "Server Name",
@@ -24,24 +19,19 @@
   },
   "status": {
     "normal": "Normal",
-    "expiring_soon": "Expiring Soon",
     "expired": "Expired",
     "suspended": "Suspended",
     "permanent": "Permanent",
     "days_left": "{n} days",
-    "today": "Today",
-    "expired_days": "Expired {n} days"
+    "today": "Today"
   },
   "action": {
     "renew": "Renew",
     "suspend": "Suspend",
     "unsuspend": "Unsuspend",
     "delete": "Delete",
-    "edit": "Edit",
-    "batch": "Batch Actions",
     "create": "Create Server",
     "renew_days": "Renew Days",
-    "renew_date": "Renew To",
     "open_panel": "Panel",
     "quick_renew": "Quick Renew",
     "custom_date": "Custom Date"
@@ -69,15 +59,12 @@
     "unsuspend_msg": "Are you sure you want to unsuspend server \"{name}\"?"
   },
   "empty": "No servers found",
-  "total": "{n} servers total",
   "pagination": {
     "per_page": "per page"
   },
   "create": {
     "title": "Create Server",
-    "section_basic": "Basic Info",
     "section_image": "Preset & Image",
-    "section_node": "Node & Port",
     "section_resources": "Resources",
     "section_env": "Environment Variables",
     "user": "Owner",
@@ -105,6 +92,9 @@
     "extra_allocations": "Extra Ports",
     "expiration_days": "Expiration Days",
     "creating": "Creating…",
-    "success": "Server created successfully"
+    "success": "Server created successfully",
+    "validation": {
+      "requiredFields": "Please fill in the required fields"
+    }
   }
 }

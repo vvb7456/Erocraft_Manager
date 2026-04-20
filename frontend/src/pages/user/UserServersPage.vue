@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -16,8 +16,9 @@ import BaseSelect from '@/components/form/BaseSelect.vue'
 import StatCard from '@/components/ui/StatCard.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
 import CardTap from '@/components/ui/CardTap.vue'
-import CardKV from '@/components/ui/CardKV.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
+import UsageBar from '@/components/ui/UsageBar.vue'
+import { getStatusDotKey, getStatusColor } from '@/utils/status'
 
 defineOptions({ name: 'UserServersPage' })
 
@@ -144,7 +145,20 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   resourceStore.unsubscribe('serverList')
+  if (installPollTimer) clearInterval(installPollTimer)
 })
+
+// Poll server list while any server is installing, to detect completion
+const hasInstalling = computed(() => servers.value.some(s => s.isInstalling))
+let installPollTimer: ReturnType<typeof setInterval> | null = null
+watch(hasInstalling, (val) => {
+  if (val && !installPollTimer) {
+    installPollTimer = setInterval(loadServers, 10000)
+  } else if (!val && installPollTimer) {
+    clearInterval(installPollTimer)
+    installPollTimer = null
+  }
+}, { immediate: true })
 
 // ── Helpers ──
 function liveState(s: Server): string {
@@ -152,42 +166,53 @@ function liveState(s: Server): string {
 }
 
 function displayState(s: Server): string {
+  if (resourceStore.isStale(s.id)) return 'disconnected'
   if (s.isSuspended) return 'suspended'
   if (s.isInstalling) return 'installing'
   const st = liveState(s)
   return st === 'stopped' ? 'offline' : st
 }
 
-function statusDotKey(s: Server): 'running' | 'loading' | 'error' | 'stopped' {
-  if (s.isSuspended) return 'error'
-  if (s.isInstalling) return 'loading'
-  const st = liveState(s)
-  if (st === 'running') return 'running'
-  if (st === 'starting' || st === 'stopping' || st === 'installing') return 'loading'
-  return 'stopped'
+function statusDotKeyFor(s: Server) {
+  return getStatusDotKey(liveState(s), s.isSuspended, s.isInstalling, resourceStore.isStale(s.id))
 }
 
 function statusBadgeColor(s: Server): string {
-  if (s.isSuspended) return 'var(--red)'
-  if (s.isInstalling) return 'var(--amber)'
-  const st = liveState(s)
-  if (st === 'running') return 'var(--green)'
-  if (st === 'starting' || st === 'stopping' || st === 'installing') return 'var(--amber)'
-  return 'var(--t3)'
+  return getStatusColor(liveState(s), s.isSuspended, s.isInstalling, resourceStore.isStale(s.id))
 }
 
 function cpuText(s: Server): string {
   return (resourceStore.resources[s.id]?.cpu ?? 0).toFixed(1) + '%'
 }
 
-function memText(s: Server): string {
-  const bytes = resourceStore.resources[s.id]?.memoryBytes ?? 0
-  return `${fmtBytes(bytes)} / ${s.limits.memory} MB`
+function cpuPercent(s: Server): number {
+  return Math.max(0, Math.min(100, resourceStore.resources[s.id]?.cpu ?? 0))
 }
 
-function diskText(s: Server): string {
+function memPercent(s: Server): number {
+  if (!s.limits.memory) return 0
+  const bytes = resourceStore.resources[s.id]?.memoryBytes ?? 0
+  return Math.max(0, Math.min(100, (bytes / (s.limits.memory * 1024 * 1024)) * 100))
+}
+
+function diskPercent(s: Server): number {
+  if (!s.limits.disk) return 0
   const bytes = resourceStore.resources[s.id]?.diskBytes ?? 0
-  return `${fmtBytes(bytes)} / ${s.limits.disk} MB`
+  return Math.max(0, Math.min(100, (bytes / (s.limits.disk * 1024 * 1024)) * 100))
+}
+
+function cpuLimitText(s: Server): string {
+  return s.limits.cpu ? `${s.limits.cpu}%` : '∞'
+}
+
+function memoryLimitText(s: Server): string {
+  if (!s.limits.memory) return '∞'
+  return s.limits.memory >= 1024 ? `${(s.limits.memory / 1024).toFixed(1)} GB` : `${s.limits.memory} MB`
+}
+
+function diskLimitText(s: Server): string {
+  if (!s.limits.disk) return '∞'
+  return s.limits.disk >= 1024 ? `${(s.limits.disk / 1024).toFixed(1)} GB` : `${s.limits.disk} MB`
 }
 
 function netText(s: Server): string {
@@ -328,12 +353,12 @@ function openMobileAction(s: Server) {
           <input type="checkbox" :checked="selectedIds.has(s.id)" @change="toggleSelect(s.id)" />
         </td>
         <td class="col-dot">
-          <StatusDot :status="statusDotKey(s)" size="sm" />
+          <StatusDot :status="statusDotKeyFor(s)" size="sm" />
         </td>
         <td class="col-name">
           <a class="server-link" href="#" @click.prevent="goToDetail(s)">{{ s.name }}</a>
         </td>
-        <td class="col-status" :style="s.isSuspended ? { color: 'var(--red)', fontWeight: 600 } : {}">{{ t(`userServers.status.${displayState(s)}`) }}</td>
+        <td class="col-status" :style="{ color: statusBadgeColor(s), fontWeight: s.isSuspended || s.isInstalling ? 600 : undefined }">{{ t(`userServers.status.${displayState(s)}`) }}</td>
         <td class="col-cpu mono">{{ cpuText(s) }}</td>
         <td class="col-mem mono">
           <div class="dual-line">{{ fmtBytes(resourceStore.resources[s.id]?.memoryBytes ?? 0) }}<span class="dual-sub">{{ s.limits.memory }} MB</span></div>
@@ -353,17 +378,17 @@ function openMobileAction(s: Server) {
         </td>
         <td class="col-actions">
           <div class="action-group">
-            <BaseButton v-if="s.address" variant="primary" size="sm" :disabled="s.isSuspended || s.isInstalling || liveState(s) !== 'running'" @click="openUrl(s)">
-              <MsIcon name="open_in_new" size="xs" /> {{ t('userServers.openApp') }}
-            </BaseButton>
-            <BaseButton size="sm" :loading="powerLoading[s.id]" :disabled="s.isSuspended || s.isInstalling" @click="togglePower(s)">
-              <MsIcon :name="powerBtnIcon(s)" size="xs" /> {{ powerBtnLabel(s) }}
-            </BaseButton>
             <BaseButton size="sm" @click="goToDetail(s)">
-              {{ t('userServers.detail') }}
+              {{ t('userServers.console') }}
+            </BaseButton>
+            <BaseButton size="sm" :loading="powerLoading[s.id]" :disabled="s.isSuspended || s.isInstalling || resourceStore.isStale(s.id)" @click="togglePower(s)">
+              <MsIcon :name="powerBtnIcon(s)" size="xs" /> {{ powerBtnLabel(s) }}
             </BaseButton>
             <BaseButton size="sm" disabled>
               {{ t('userServers.renew') }}
+            </BaseButton>
+            <BaseButton v-if="s.address" variant="primary" size="sm" :disabled="s.isSuspended || s.isInstalling || liveState(s) !== 'running'" @click="openUrl(s)">
+              <MsIcon name="open_in_new" size="xs" /> {{ t('userServers.openApp') }}
             </BaseButton>
           </div>
         </td>
@@ -373,34 +398,59 @@ function openMobileAction(s: Server) {
       <template #card="{ item: s }">
         <CardTap @tap="openMobileAction(s)">
           <div class="card-row--main">
-            <span class="card-name">{{ s.name }}</span>
+            <div class="mobile-server-card__title">
+              <span class="card-name">{{ s.name }}</span>
+              <span v-if="uptimeText(s) !== '—'" class="mobile-server-card__uptime mono">{{ uptimeText(s) }}</span>
+            </div>
             <Badge :color="statusBadgeColor(s)">{{ t(`userServers.status.${displayState(s)}`) }}</Badge>
           </div>
-          <div class="card-expiry-row">
-            <span class="card-kv-label">{{ t('userServers.table.expiry') }}</span>
-            <span :style="{ color: expirationDisplay(s).color }">
+          <div class="mobile-server-card__expiry">
+            <MsIcon name="schedule" size="sm" class="mobile-server-card__expiry-icon" />
+            <span class="mobile-server-card__expiry-label">{{ t('userServers.table.expiry') }}：</span>
+            <span class="mobile-server-card__expiry-value mono" :style="{ color: expirationDisplay(s).color }">
               {{ expirationDisplay(s).date }}
               <span v-if="expirationDisplay(s).tag"> · {{ expirationDisplay(s).tag }}</span>
             </span>
           </div>
-          <div class="card-detail card-detail--3col">
-            <CardKV label="CPU"><span class="mono">{{ cpuText(s) }}</span></CardKV>
-            <CardKV :label="t('userServers.resources.memory')">
-              <span class="mono">{{ fmtBytes(resourceStore.resources[s.id]?.memoryBytes ?? 0) }}</span>
-              <span class="card-kv-sub mono">{{ s.limits.memory }} MB</span>
-            </CardKV>
-            <CardKV :label="t('userServers.resources.disk')">
-              <span class="mono">{{ fmtBytes(resourceStore.resources[s.id]?.diskBytes ?? 0) }}</span>
-              <span class="card-kv-sub mono">{{ s.limits.disk }} MB</span>
-            </CardKV>
-          </div>
-          <div class="card-detail">
-            <CardKV :label="t('userServers.resources.network')">
-              <span class="mono">↑{{ fmtBytes(resourceStore.resources[s.id]?.networkTx ?? 0) }} ↓{{ fmtBytes(resourceStore.resources[s.id]?.networkRx ?? 0) }}</span>
-            </CardKV>
-            <CardKV :label="t('userServers.resources.uptime')">
-              <span class="mono">{{ uptimeText(s) }}</span>
-            </CardKV>
+
+          <div class="mobile-server-card__rows">
+            <div class="mobile-server-card__row">
+              <div class="mobile-server-card__item">
+                <div class="mobile-server-card__stat-head">
+                  <span class="mobile-server-card__label">CPU</span>
+                  <span class="mobile-server-card__value mono">{{ cpuText(s) }} / {{ cpuLimitText(s) }}</span>
+                </div>
+                <UsageBar :percent="cpuPercent(s)" class="mobile-server-card__usage" />
+              </div>
+
+              <div class="mobile-server-card__item">
+                <div class="mobile-server-card__stat-head">
+                  <span class="mobile-server-card__label">{{ t('userServers.resources.memory') }}</span>
+                  <span class="mobile-server-card__value mono">{{ fmtBytes(resourceStore.resources[s.id]?.memoryBytes ?? 0) }} / {{ memoryLimitText(s) }}</span>
+                </div>
+                <UsageBar :percent="memPercent(s)" class="mobile-server-card__usage" />
+              </div>
+            </div>
+
+            <div class="mobile-server-card__row">
+              <div class="mobile-server-card__item">
+                <div class="mobile-server-card__stat-head">
+                  <span class="mobile-server-card__label">{{ t('userServers.resources.disk') }}</span>
+                  <span class="mobile-server-card__value mono">{{ fmtBytes(resourceStore.resources[s.id]?.diskBytes ?? 0) }} / {{ diskLimitText(s) }}</span>
+                </div>
+                <UsageBar :percent="diskPercent(s)" class="mobile-server-card__usage" />
+              </div>
+
+              <div class="mobile-server-card__item">
+                <div class="mobile-server-card__stat-head">
+                  <span class="mobile-server-card__label">{{ t('userServers.resources.network') }}</span>
+                  <span class="mobile-server-card__value mono mobile-server-card__value--network">
+                    <span class="mobile-server-card__net-up">↑{{ fmtBytes(resourceStore.resources[s.id]?.networkTx ?? 0) }}</span>
+                    <span class="mobile-server-card__net-down">↓{{ fmtBytes(resourceStore.resources[s.id]?.networkRx ?? 0) }}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </CardTap>
       </template>
@@ -409,23 +459,23 @@ function openMobileAction(s: Server) {
     <!-- Mobile Action Sheet -->
     <ActionSheet v-model="mobileActionOpen" :title="mobileActionServer?.name">
       <template v-if="mobileActionServer" #info>
-        <StatusDot :status="statusDotKey(mobileActionServer)" size="sm" />
+        <StatusDot :status="statusDotKeyFor(mobileActionServer)" size="sm" />
         {{ t(`userServers.status.${displayState(mobileActionServer)}`) }}
         · {{ expirationDisplay(mobileActionServer).date }}
         <span :style="{ color: expirationDisplay(mobileActionServer).color }">{{ expirationDisplay(mobileActionServer).tag }}</span>
       </template>
       <template v-if="mobileActionServer">
-        <button v-if="mobileActionServer.address" :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling || liveState(mobileActionServer) !== 'running'" @click="mobileActionOpen = false; openUrl(mobileActionServer!)">
-          <MsIcon name="open_in_new" size="sm" /> {{ t('userServers.openApp') }}
-        </button>
-        <button :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling" @click="mobileActionOpen = false; togglePower(mobileActionServer!)">
-          <MsIcon :name="powerBtnIcon(mobileActionServer)" size="sm" /> {{ powerBtnLabel(mobileActionServer) }}
-        </button>
         <button @click="mobileActionOpen = false; goToDetail(mobileActionServer!)">
-          <MsIcon name="arrow_forward" size="sm" /> {{ t('userServers.detail') }}
+          <MsIcon name="terminal" size="sm" /> {{ t('userServers.console') }}
+        </button>
+        <button :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling || resourceStore.isStale(mobileActionServer.id)" @click="mobileActionOpen = false; togglePower(mobileActionServer!)">
+          <MsIcon :name="powerBtnIcon(mobileActionServer)" size="sm" /> {{ powerBtnLabel(mobileActionServer) }}
         </button>
         <button disabled>
           <MsIcon name="shopping_cart" size="sm" /> {{ t('userServers.renew') }}
+        </button>
+        <button v-if="mobileActionServer.address" :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling || liveState(mobileActionServer) !== 'running'" @click="mobileActionOpen = false; openUrl(mobileActionServer!)">
+          <MsIcon name="open_in_new" size="sm" /> {{ t('userServers.openApp') }}
         </button>
       </template>
     </ActionSheet>
@@ -527,14 +577,114 @@ function openMobileAction(s: Server) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
+  min-width: 0;
 }
 
-.card-kv-label {
+.card-row--main {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.mobile-server-card__title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-server-card__uptime {
+  color: var(--t3);
+  font-size: .72rem;
+  flex-shrink: 0;
+}
+
+.mobile-server-card__expiry {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  font-size: .82rem;
+  color: var(--t2);
+  min-width: 0;
+}
+
+.mobile-server-card__expiry-icon {
+  color: var(--t3);
+  flex-shrink: 0;
+}
+
+.mobile-server-card__expiry-label {
+  color: var(--t2);
+  white-space: nowrap;
+}
+
+.mobile-server-card__expiry-value {
+  font-size: .78rem;
+  min-width: 0;
+}
+
+.mobile-server-card__rows {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--bd);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.mobile-server-card__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--sp-4);
+}
+
+.mobile-server-card__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mobile-server-card__stat-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.mobile-server-card__label {
   font-size: .72rem;
   color: var(--t3);
   text-transform: uppercase;
   letter-spacing: .03em;
+  white-space: nowrap;
+}
+
+.mobile-server-card__value {
+  font-size: .76rem;
+  color: var(--t1);
+  text-align: right;
+}
+
+.mobile-server-card__usage {
+  margin-top: 2px;
+}
+
+.mobile-server-card__value--network {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mobile-server-card__net-up {
+  color: var(--ac2);
+}
+
+.mobile-server-card__net-down {
+  color: var(--blue);
 }
 
 @media (max-width: 768px) {

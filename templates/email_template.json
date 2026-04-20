@@ -1,0 +1,4 @@
+{
+    "subject": "来自 {{brand_name}} 的通知",
+    "body": "这是一封来自 {{brand_name}} 的通知邮件，请查看相关信息。"
+}

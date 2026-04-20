@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useToast } from './useToast'
 import router from '@/router'
 
@@ -12,11 +13,24 @@ function redirectToLogin() {
 /**
  * Unified HTTP client composable.
  * Wraps fetch with loading/error state, JSON parsing, and toast on error.
+ *
+ * If the backend returns a structured error code (e.g. "file.destination_exists"),
+ * it will attempt to find a translation at `apiErrors.{code}` before displaying.
  */
 export function useApiFetch() {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const { toast } = useToast()
+  const { t, te } = useI18n({ useScope: 'global' })
+
+  /** Translate a structured error code to i18n, fallback to raw message. */
+  function translateError(msg: string): string {
+    if (/^[a-z_]+\.[a-z_]+$/.test(msg)) {
+      const key = `common.apiErrors.${msg}`
+      if (te(key)) return t(key)
+    }
+    return msg
+  }
 
   async function request<T = unknown>(
     url: string,
@@ -42,14 +56,14 @@ export function useApiFetch() {
           msg = body.error || body.message || msg
         } catch { /* ignore parse error */ }
         error.value = msg
-        if (!silent) toast(msg, 'error')
+        if (!silent) toast(translateError(msg), 'error')
         return null
       }
       // Handle 204 No Content
       if (res.status === 204) return null
       return await res.json() as T
-    } catch (e: any) {
-      const msg = e?.message || 'Network error'
+    } catch {
+      const msg = t('common.apiErrors.network')
       error.value = msg
       if (!silent) toast(msg, 'error')
       return null
@@ -100,12 +114,12 @@ export function useApiFetch() {
           msg = body.error || body.message || msg
         } catch { /* ignore */ }
         error.value = msg
-        toast(msg, 'error')
+        toast(translateError(msg), 'error')
         return null
       }
       return res
-    } catch (e: any) {
-      const msg = e?.message || 'Network error'
+    } catch {
+      const msg = t('common.apiErrors.network')
       error.value = msg
       toast(msg, 'error')
       return null

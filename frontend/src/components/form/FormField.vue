@@ -17,11 +17,13 @@ defineProps<{
   layout?: 'vertical' | 'horizontal'
   /** Show border-bottom separator (for settings rows) */
   bordered?: boolean
+  /** Keep horizontal layout on mobile (useful for small controls like toggles) */
+  keepHorizontal?: boolean
 }>()
 </script>
 
 <template>
-  <div class="form-field" :class="[`form-field--${density ?? 'default'}`, layout === 'horizontal' && 'form-field--h', bordered && 'form-field--bordered']">
+  <div class="form-field" :class="[`form-field--${density ?? 'default'}`, layout === 'horizontal' && 'form-field--h', bordered && 'form-field--bordered', keepHorizontal && 'form-field--keep-h']">
     <!-- Horizontal layout: label+hint on left, control on right -->
     <template v-if="layout === 'horizontal'">
       <div class="form-field__h-left">
@@ -135,15 +137,15 @@ export default { components: { FieldLabel } }
 }
 
 @media (max-width: 768px) {
-  .form-field--h {
+  .form-field--h:not(.form-field--keep-h) {
     flex-direction: column;
     align-items: stretch;
     gap: 4px;
   }
-  .form-field__h-left {
+  .form-field--h:not(.form-field--keep-h) .form-field__h-left {
     min-width: 0;
   }
-  .form-field__h-right {
+  .form-field--h:not(.form-field--keep-h) .form-field__h-right {
     max-width: none;
   }
 }

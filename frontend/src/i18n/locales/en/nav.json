@@ -1,9 +1,10 @@
 {
   "dashboard": "Dashboard",
   "servers": "Servers",
+  "overview": "Overview",
   "users": "Users",
   "activityLogs": "Activity Logs",
   "emailTemplates": "Email Templates",
-  "automation": "Automation",
+  "account": "Account",
   "settings": "Settings"
 }

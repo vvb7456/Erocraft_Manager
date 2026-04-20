@@ -4,15 +4,16 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useServerResourceStore } from '@/stores/serverResources'
 import { useApiFetch } from '@/composables/useApiFetch'
-import { switchLanguage } from '@/i18n/vue-i18n'
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import MsIcon from '../ui/MsIcon.vue'
 import StatusDot from '../ui/StatusDot.vue'
+import { getStatusDotKey } from '@/utils/status'
 import BaseButton from '../ui/BaseButton.vue'
+import LanguageToggle from '../ui/LanguageToggle.vue'
 
 defineOptions({ name: 'AppSidebar' })
 
-const { t, locale } = useI18n({ useScope: 'global' })
+const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
 const route = useRoute()
 const app = useAppStore()
@@ -41,12 +42,17 @@ const settingsItem: NavItem = {
   page: 'settings', icon: 'settings', labelKey: 'nav.settings',
 }
 
+const accountItem: NavItem = {
+  page: 'account', icon: 'person', labelKey: 'nav.account',
+}
+
 // ── User server list ──
 interface ServerItem {
   id: number
   name: string
   status: string | null
   isSuspended: boolean
+  isInstalling: boolean
 }
 
 const servers = ref<ServerItem[]>([])
@@ -64,11 +70,8 @@ async function loadServers() {
 }
 
 function statusDotKey(s: ServerItem): 'running' | 'loading' | 'error' | 'stopped' {
-  if (s.isSuspended) return 'error'
   const st = resourceStore.getState(s.id) || s.status || 'offline'
-  if (st === 'running') return 'running'
-  if (st === 'starting' || st === 'stopping' || st === 'installing') return 'loading'
-  return 'stopped'
+  return getStatusDotKey(st, s.isSuspended, s.isInstalling, resourceStore.isStale(s.id))
 }
 
 function toggleExpand() {
@@ -94,15 +97,6 @@ function goToServer(id: number) {
   if (window.innerWidth <= 768) app.closeMobileSidebar()
 }
 
-// ── Lang & logout ──
-function toggleLang() {
-  switchLanguage(locale.value === 'zh-CN' ? 'en' : 'zh-CN')
-}
-
-function setLang(lng: string) {
-  switchLanguage(lng)
-}
-
 async function doLogout() {
   await fetch('/api/logout', { method: 'POST' })
   router.push({ name: 'login' })
@@ -126,9 +120,16 @@ onBeforeUnmount(() => {
   <nav class="sidebar" :class="{ collapsed: app.sidebarCollapsed, 'mobile-open': app.mobileSidebarOpen }">
     <button class="sidebar-toggle" :title="t('common.sidebar.toggle')" @click="app.toggleSidebar()">◀</button>
 
-    <div class="sidebar-logo">
-      <span class="logo-icon-text">PM</span>
-      <span class="logo-text">{{ app.brandName }}</span>
+    <div
+      class="sidebar-logo"
+      :class="{ 'sidebar-logo--banner-only': !!app.sidebarBannerUrl, 'sidebar-logo--text-only': !app.sidebarBannerUrl }"
+    >
+      <template v-if="app.sidebarBannerUrl">
+        <img class="logo-banner" :src="app.sidebarBannerUrl" :alt="app.displayName" />
+      </template>
+      <template v-else>
+        <span class="logo-text">{{ app.displayName }}</span>
+      </template>
     </div>
 
     <div class="sidebar-nav">
@@ -136,21 +137,27 @@ onBeforeUnmount(() => {
       <template v-if="isUserLayout">
         <div class="nav-group">
           <button
-            class="nav-item"
-            :class="{ active: currentPage === 'user-servers' }"
-            @click="goOverview"
+            class="nav-item nav-item--group"
+            @click="toggleExpand"
           >
             <span class="icon"><MsIcon name="dns" size="md" /></span>
             <span class="nav-label">{{ t('nav.servers') }}</span>
             <span
-              v-if="servers.length && !app.sidebarCollapsed"
+              v-if="!app.sidebarCollapsed"
               class="expand-arrow"
               :class="{ expanded: serversExpanded }"
-              @click.stop="toggleExpand"
             ><MsIcon name="expand_more" size="sm" /></span>
           </button>
 
-          <div v-if="serversExpanded && servers.length && !app.sidebarCollapsed" class="nav-sub">
+          <div v-if="serversExpanded && !app.sidebarCollapsed" class="nav-sub">
+            <button
+              class="nav-sub-item"
+              :class="{ active: currentPage === 'user-servers' }"
+              @click="goOverview"
+            >
+              <MsIcon name="monitoring" size="sm" />
+              <span class="nav-sub-label">{{ t('nav.overview') }}</span>
+            </button>
             <button
               v-for="s in servers"
               :key="s.id"
@@ -181,6 +188,16 @@ onBeforeUnmount(() => {
 
       <div style="flex: 1" />
 
+      <button
+        v-if="isUserLayout"
+        class="nav-item"
+        :class="{ active: currentPage === 'account' }"
+        @click="navTo(accountItem)"
+      >
+        <span class="icon"><MsIcon :name="accountItem.icon" size="md" /></span>
+        <span class="nav-label">{{ t(accountItem.labelKey) }}</span>
+      </button>
+
       <!-- Settings (admin only) -->
       <button
         v-if="!isUserLayout"
@@ -196,11 +213,7 @@ onBeforeUnmount(() => {
     <div class="sidebar-footer">
       <div class="footer-expanded">
         <div class="footer-logout-row">
-          <button
-            class="lang-toggle"
-            :title="locale === 'zh-CN' ? t('common.lang.switch_en') : t('common.lang.switch_zh')"
-            @click="toggleLang()"
-          >{{ locale === 'zh-CN' ? 'EN' : '中' }}</button>
+          <LanguageToggle />
           <BaseButton size="sm" style="font-size:.72rem;flex:1;text-align:center;justify-content:center" @click="doLogout">
             <MsIcon name="logout" />
             {{ t('common.btn.logout') }}
@@ -208,20 +221,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="footer-collapsed">
-        <div class="lang-switcher-collapsed">
-          <button
-            class="lang-btn-mini"
-            :class="{ active: locale === 'zh-CN' }"
-            :title="t('common.lang.switch_zh')"
-            @click="setLang('zh-CN')"
-          >中</button>
-          <button
-            class="lang-btn-mini"
-            :class="{ active: locale === 'en' }"
-            :title="t('common.lang.switch_en')"
-            @click="setLang('en')"
-          >EN</button>
-        </div>
+        <LanguageToggle mode="stacked" class="lang-switcher-collapsed" />
         <button @click="doLogout" :title="t('common.btn.logout')" class="logout-btn-mini">
           <MsIcon name="logout" />
         </button>
@@ -257,28 +257,49 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--bd);
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   white-space: nowrap;
   overflow: hidden;
 }
 
-.sidebar-logo .logo-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+.sidebar-logo--banner-only {
+  padding: 12px 16px;
+}
+
+.sidebar-logo--text-only {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.sidebar-logo--text-only::before {
+  content: '';
+  width: 8px;
+  height: 28px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--brand-title-accent) 0%, var(--brand-title-accent-2) 100%);
+  box-shadow: 0 0 14px var(--brand-glow);
   flex-shrink: 0;
-  transition: width .25s, height .25s;
-  display: none;
+}
+
+.logo-banner {
+  display: block;
+  width: 100%;
+  max-height: 46px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .sidebar-logo .logo-text {
-  font-size: 1.35rem;
+  display: inline-block;
+  max-width: 100%;
+  font-family: 'IBM Plex Sans', 'IBM Plex Sans SC', -apple-system, sans-serif;
+  font-size: 1.42rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #14b8a6, #06b6d4);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
+  line-height: 1.2;
+  color: var(--brand-title-solid);
+  letter-spacing: -0.035em;
+  text-wrap: balance;
 }
 
 .sidebar.collapsed .sidebar-logo {
@@ -286,14 +307,24 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
-.sidebar.collapsed .sidebar-logo .logo-icon {
-  display: block;
-  width: 30px;
-  height: 30px;
+.sidebar.collapsed .sidebar-logo--banner-only {
+  padding: 12px 8px;
+}
+
+.sidebar.collapsed .sidebar-logo--text-only {
+  justify-content: center;
+}
+
+.sidebar.collapsed .logo-banner {
+  max-height: 28px;
 }
 
 .sidebar.collapsed .sidebar-logo .logo-text {
   display: none;
+}
+
+.sidebar.collapsed .sidebar-logo--text-only::before {
+  height: 24px;
 }
 
 .sidebar-logo small {
@@ -302,22 +333,6 @@ onBeforeUnmount(() => {
   font-weight: 400;
   -webkit-text-fill-color: var(--t3);
   margin-top: 2px;
-}
-
-/* ── Logo icon text ── */
-.logo-icon-text {
-  font-size: var(--text-xl);
-  font-weight: 700;
-  background: linear-gradient(135deg, #14b8a6, #06b6d4);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  flex-shrink: 0;
-}
-
-.sidebar.collapsed .logo-icon-text {
-  font-size: var(--text-md);
 }
 
 /* ── Nav ── */
@@ -528,56 +543,8 @@ onBeforeUnmount(() => {
   align-items: stretch;
 }
 
-.lang-toggle {
-  background: var(--bg2);
-  border: 1px solid var(--bd);
-  color: var(--t2);
-  border-radius: 4px;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  padding: 4px 8px;
-  cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s;
-  letter-spacing: .03em;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.lang-toggle:hover {
-  background: var(--bg3);
-  color: var(--t1);
-}
-
 .lang-switcher-collapsed {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
   margin-bottom: 6px;
-}
-
-.lang-btn-mini {
-  background: var(--bg2);
-  border: 1px solid var(--bd);
-  color: var(--t2);
-  border-radius: 3px;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  padding: 2px 5px;
-  cursor: pointer;
-  transition: background .15s, color .15s;
-  line-height: 1;
-}
-
-.lang-btn-mini:hover {
-  background: var(--bg3);
-  color: var(--t1);
-}
-
-.lang-btn-mini.active {
-  background: var(--ac);
-  border-color: var(--ac);
-  color: #fff;
 }
 
 .logout-btn-mini {

@@ -1,0 +1,65 @@
+"""User repository helpers."""
+
+from __future__ import annotations
+
+from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models.pterodactyl import PteroServer, PteroUser
+
+
+class UserRepository:
+    async def get_by_id(self, db: AsyncSession, user_id: int) -> PteroUser | None:
+        return await db.get(PteroUser, user_id)
+
+    async def get_by_username_or_email(
+        self,
+        db: AsyncSession,
+        identifier: str,
+    ) -> PteroUser | None:
+        result = await db.execute(
+            select(PteroUser).where(
+                or_(PteroUser.username == identifier, PteroUser.email == identifier)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def count(self, db: AsyncSession) -> int:
+        result = await db.execute(select(func.count(PteroUser.id)))
+        return int(result.scalar_one() or 0)
+
+    async def get_by_email(self, db: AsyncSession, email: str) -> PteroUser | None:
+        result = await db.execute(select(PteroUser).where(PteroUser.email == email))
+        return result.scalar_one_or_none()
+
+    async def get_by_username(self, db: AsyncSession, username: str) -> PteroUser | None:
+        result = await db.execute(select(PteroUser).where(PteroUser.username == username))
+        return result.scalar_one_or_none()
+
+    async def list_for_admin(
+        self,
+        db: AsyncSession,
+    ) -> list[tuple[PteroUser, int]]:
+        result = await db.execute(
+            select(PteroUser, func.count(PteroServer.id))
+            .outerjoin(PteroServer, PteroServer.owner_id == PteroUser.id)
+            .group_by(PteroUser.id)
+            .order_by(PteroUser.id.asc())
+        )
+        return [(user, int(server_count or 0)) for user, server_count in result.all()]
+
+    async def list_by_ids(
+        self,
+        db: AsyncSession,
+        user_ids: list[int],
+    ) -> list[PteroUser]:
+        if not user_ids:
+            return []
+        result = await db.execute(
+            select(PteroUser)
+            .where(PteroUser.id.in_(user_ids))
+            .order_by(PteroUser.id.asc())
+        )
+        return list(result.scalars().all())
+
+user_repository = UserRepository()

@@ -1,0 +1,41 @@
+{
+  "title": "Account Settings",
+  "loading": "Loading account information...",
+  "profile": {
+    "title": "Profile",
+    "desc": "Review the basic details for this account.",
+    "username": "Username",
+    "email": "Current Email",
+    "accountType": "Account Type",
+    "types": {
+      "admin": "Administrator",
+      "user": "User"
+    }
+  },
+  "email": {
+    "title": "Change Email",
+    "desc": "Update the email address used for this account.",
+    "new": "New Email",
+    "placeholder": "name＠example.com",
+    "submit": "Send Verification Email",
+    "success": "Verification email sent. Finish the confirmation from your current inbox.",
+    "validation": {
+      "required": "Please enter a new email address",
+      "same": "The new email must be different from the current one"
+    }
+  },
+  "password": {
+    "title": "Change Password",
+    "desc": "Update the sign-in password for this account.",
+    "current": "Current Password",
+    "new": "New Password",
+    "confirm": "Confirm New Password",
+    "submit": "Save New Password",
+    "success": "Password updated",
+    "validation": {
+      "required": "Please complete the password form",
+      "length": "The new password must be at least 8 characters",
+      "mismatch": "The new passwords do not match"
+    }
+  }
+}

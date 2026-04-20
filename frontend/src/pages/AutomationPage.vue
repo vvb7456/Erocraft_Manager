@@ -69,9 +69,8 @@ async function save() {
         <p class="desc">{{ t('automation.suspend.desc') }}</p>
 
         <div class="field">
-          <ToggleSwitch v-model="form.AUTOMATION_SUSPEND_ENABLED">
-            {{ t('automation.suspend.enabled') }}
-          </ToggleSwitch>
+          <span class="field-label">{{ t('automation.suspend.enabled') }}</span>
+          <ToggleSwitch v-model="form.AUTOMATION_SUSPEND_ENABLED" />
         </div>
 
         <div class="form-grid">
@@ -88,9 +87,8 @@ async function save() {
         <p class="desc">{{ t('automation.delete.desc') }}</p>
 
         <div class="field">
-          <ToggleSwitch v-model="form.AUTOMATION_DELETE_ENABLED">
-            {{ t('automation.delete.enabled') }}
-          </ToggleSwitch>
+          <span class="field-label">{{ t('automation.delete.enabled') }}</span>
+          <ToggleSwitch v-model="form.AUTOMATION_DELETE_ENABLED" />
         </div>
 
         <div class="form-grid">
@@ -106,9 +104,8 @@ async function save() {
         <p class="desc">{{ t('automation.email.desc') }}</p>
 
         <div class="field">
-          <ToggleSwitch v-model="form.AUTOMATION_EMAIL_ENABLED">
-            {{ t('automation.email.enabled') }}
-          </ToggleSwitch>
+          <span class="field-label">{{ t('automation.email.enabled') }}</span>
+          <ToggleSwitch v-model="form.AUTOMATION_EMAIL_ENABLED" />
         </div>
 
         <div class="form-grid">
@@ -124,6 +121,16 @@ async function save() {
 .auto-card { max-width: 720px; }
 .hint { color: var(--t2); font-size: .85rem; margin-bottom: var(--sp-4); }
 .desc { color: var(--t2); font-size: .85rem; margin: var(--sp-1) 0 var(--sp-4); }
-.field { margin-bottom: var(--sp-4); }
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.field-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--t2);
+}
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--sp-4); }
 </style>

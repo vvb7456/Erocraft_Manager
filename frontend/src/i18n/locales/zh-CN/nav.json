@@ -1,9 +1,10 @@
 {
   "dashboard": "仪表盘",
   "servers": "服务器",
+  "overview": "总览",
   "users": "用户",
   "activityLogs": "操作日志",
   "emailTemplates": "邮件模板",
-  "automation": "自动化",
+  "account": "账户设置",
   "settings": "设置"
 }

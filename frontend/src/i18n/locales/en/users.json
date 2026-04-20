@@ -6,11 +6,6 @@
     "has_servers": "Has Servers",
     "no_servers": "No Servers"
   },
-  "sort": {
-    "id": "ID",
-    "username": "Username",
-    "server_count": "Server Count"
-  },
   "table": {
     "id": "ID",
     "username": "Username",
@@ -34,11 +29,9 @@
     "email": "Email",
     "username": "Username",
     "send_welcome": "Send welcome email",
-    "send_welcome_hint": "Email will guide the user to set their password on the panel",
     "email_sent": "Welcome email sent",
     "email_failed": "Welcome email failed",
-    "create_and_server": "Create & Add Server",
-    "success": "User {name} created successfully"
+    "create_and_server": "Create & Add Server"
   },
   "edit": {
     "title": "Edit User",
@@ -66,7 +59,6 @@
     "delete": "Delete"
   },
   "empty": "No users found",
-  "total": "{n} users total",
   "pagination": {
     "per_page": "per page"
   }

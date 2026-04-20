@@ -1,24 +1,15 @@
 {
   "btn": {
     "save": "Save",
-    "all": "All",
     "cancel": "Cancel",
     "delete": "Delete",
-    "download": "Download",
     "close": "Close",
     "confirm": "Confirm",
     "dont_ask": "Don't ask again",
-    "add": "Add",
     "copy": "Copy",
     "show": "Show",
     "hide": "Hide",
-    "clear": "Clear",
     "logout": "Logout"
-  },
-  "status": {
-    "loading": "Loading...",
-    "enabled": "Enabled",
-    "disabled": "Disabled"
   },
   "sidebar": {
     "toggle": "Collapse/Expand"
@@ -27,38 +18,16 @@
     "switch_zh": "Switch to Chinese",
     "switch_en": "Switch to English"
   },
-  "unit": {
-    "items": "items",
-    "seconds": "s"
-  },
-  "filter": {
-    "all": "All",
-    "all_types": "All Types",
-    "all_status": "All Status",
-    "all_folders": "All Folders"
-  },
-  "log": {
-    "title": "Logs",
-    "clear": "Clear Logs",
-    "empty": "No output yet.",
-    "live": "Live",
-    "standby": "Standby",
-    "loading": "Loading",
-    "error": "Error",
-    "follow_on": "Always follow latest line",
-    "follow_off": "Stop following latest line"
-  },
-  "scroll_top": "Back to top",
   "theme_toggle": "Toggle Theme",
-  "clipboard_copied": "Copied to clipboard",
-  "no_results": "No matching results found",
   "no_matches": "No matches",
   "search_hint": "Search\u2026",
-  "loading": "Loading...",
   "empty": "No data",
   "filter_hint": "Filter\u2026",
   "chip_more": "+{n} more",
   "chip_collapse": "Collapse",
+  "footer": {
+    "allRightsReserved": "All rights reserved."
+  },
   "confirm": {
     "title": "Confirm",
     "dangerTitle": "Warning",
@@ -70,7 +39,58 @@
     "pick_label": "Pick from input",
     "upload_label": "Drag & drop or click to upload",
     "or_divider": "or",
-    "unsupported_type": "Unsupported file type: {name}",
-    "remove": "Remove"
+    "unsupported_type": "Unsupported file type: {name}"
+  },
+  "on": "ON",
+  "off": "OFF",
+  "apiErrors": {
+    "file": {
+      "destination_exists": "Destination file or folder already exists",
+      "no_space": "Not enough disk space on server",
+      "unknown_archive": "Unsupported archive format",
+      "text_busy": "File is in use by another process, please try again later",
+      "name_conflict": "File name conflicts with an existing directory",
+      "unsupported_type": "Cannot open files of this type",
+      "not_a_directory": "Part of the path is not a directory",
+      "upload_too_large": "File exceeds upload size limit",
+      "not_found": "File or directory not found",
+      "permission_denied": "Permission denied",
+      "denylist": "This file is protected and cannot be modified",
+      "is_directory": "Cannot perform this action on a directory",
+      "name_too_long": "File name is too long",
+      "no_files_specified": "No files were specified for this operation"
+    },
+    "server": {
+      "offline": "Server is currently offline",
+      "suspended": "Server is suspended",
+      "installing": "Server is currently installing, please wait",
+      "invalid_power_action": "Invalid power action",
+      "power_conflict": "Another power action is already in progress"
+    },
+    "wings": {
+      "unknown_error": "Server communication error, please try again later",
+      "timeout": "Operation timed out, please try again later"
+    },
+    "network": "Network error. Please try again later",
+    "auth": {
+      "credentials_required": "Please enter your username and password",
+      "invalid_credentials": "Invalid username or password"
+    },
+    "account": {
+      "password_required": "Please enter a new password",
+      "current_password_incorrect": "Current password is incorrect",
+      "password_update_failed": "Password update failed. Please try again later",
+      "invalid_reset_link": "The reset link is invalid",
+      "reset_link_expired": "The reset link has expired. Please request a new one",
+      "password_reset_status_unknown": "Password reset status is unknown. Try signing in later, and request a new reset link if needed",
+      "email_same": "The new email must be different from the current one",
+      "email_unavailable": "This email address is not available",
+      "email_rate_limited": "Too many requests. Please try again later",
+      "email_send_failed": "Failed to send the verification email. Please try again later",
+      "invalid_confirm_link": "The confirmation link is invalid",
+      "confirm_link_expired": "The confirmation link has expired. Please request a new one",
+      "user_missing": "The user no longer exists",
+      "email_confirm_status_unknown": "Email change status is unknown. Refresh your account information later, and request a new change if needed"
+    }
   }
 }

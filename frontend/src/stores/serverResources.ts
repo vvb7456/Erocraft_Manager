@@ -11,6 +11,8 @@ export interface ServerResource {
   networkTx: number
   uptime: number
   updatedAt: number
+  /** True when resource polling fails (Wings unreachable) */
+  stale: boolean
 }
 
 interface Subscriber {
@@ -55,7 +57,21 @@ export const useServerResourceStore = defineStore('serverResources', () => {
     await Promise.allSettled(serverIds.map(async (id) => {
       try {
         const res = await fetch(`/api/user/servers/${id}/resources`)
-        if (!res.ok) return
+        if (!res.ok) {
+          // Mark stale on failure
+          const existing = resources.value[id]
+          if (existing) {
+            existing.stale = true
+          } else {
+            resources.value[id] = {
+              state: 'offline', isSuspended: false,
+              cpu: 0, memoryBytes: 0, diskBytes: 0,
+              networkRx: 0, networkTx: 0, uptime: 0,
+              updatedAt: Date.now(), stale: true,
+            }
+          }
+          return
+        }
         const data = await res.json()
         const utilization = data.resources || data.utilization || {}
         resources.value[id] = {
@@ -68,8 +84,22 @@ export const useServerResourceStore = defineStore('serverResources', () => {
           networkTx: utilization.network?.tx_bytes ?? utilization.network_tx_bytes ?? 0,
           uptime: utilization.uptime ?? 0,
           updatedAt: Date.now(),
+          stale: false,
         }
-      } catch { /* silent */ }
+      } catch {
+        // Mark stale on network error
+        const existing = resources.value[id]
+        if (existing) {
+          existing.stale = true
+        } else {
+          resources.value[id] = {
+            state: 'offline', isSuspended: false,
+            cpu: 0, memoryBytes: 0, diskBytes: 0,
+            networkRx: 0, networkTx: 0, uptime: 0,
+            updatedAt: Date.now(), stale: true,
+          }
+        }
+      }
     }))
   }
 
@@ -126,12 +156,17 @@ export const useServerResourceStore = defineStore('serverResources', () => {
       networkTx: data.networkTx ?? existing?.networkTx ?? 0,
       uptime: data.uptime ?? existing?.uptime ?? 0,
       updatedAt: Date.now(),
+      stale: data.stale ?? false,
     }
   }
 
   // ── Convenience getter for state ──
   function getState(serverId: number): string {
     return resources.value[serverId]?.state ?? 'offline'
+  }
+
+  function isStale(serverId: number): boolean {
+    return resources.value[serverId]?.stale ?? false
   }
 
   // ── Cleanup ──
@@ -148,6 +183,7 @@ export const useServerResourceStore = defineStore('serverResources', () => {
     updateOne,
     fetchResources,
     getState,
+    isStale,
     $reset,
     activeServerIds,
     effectiveInterval,

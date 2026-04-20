@@ -13,15 +13,69 @@
     "status": "状态",
     "details": "详细信息"
   },
+  "actor": {
+    "system": "系统",
+    "unknown": "未知用户"
+  },
   "status_label": {
-    "成功": "成功",
-    "失败": "失败",
-    "信息": "信息"
+    "success": "成功",
+    "failure": "失败",
+    "info": "信息"
+  },
+  "action": {
+    "auth": "认证",
+    "server": "服务器",
+    "user": "用户",
+    "account": "账户",
+    "settings": "设置",
+    "automation": "自动化"
+  },
+  "reminderType": {
+    "expiry": "到期提醒",
+    "pre_delete": "删除前提醒"
+  },
+  "detail": {
+    "login_failed": "尝试使用 {username} 登录失败。",
+    "login_success": "用户 {username} 成功登录。",
+    "logout": "用户 {username} 退出登录。",
+    "create_server": "管理员 {actor} 创建了服务器 {server_name} (ID: {server_id})。",
+    "renew_server": "管理员 {actor} 将服务器 {server_name} (ID: {server_id}) 续期到 {date}。",
+    "set_expiry": "管理员 {actor} 将服务器 {server_name} (ID: {server_id}) 日期设为 {date}。",
+    "suspend_server": "管理员 {actor} 冻结了服务器 {server_name} (ID: {server_id})。",
+    "unsuspend_server": "管理员 {actor} 解冻了服务器 {server_name} (ID: {server_id})。",
+    "batch_suspend": "批量冻结完成。成功: {success}, 失败: {failed}。",
+    "batch_unsuspend": "批量解冻完成。成功: {success}, 失败: {failed}。",
+    "batch_renew": "批量续期完成。成功: {success}, 失败: {failed}。",
+    "batch_delete": "批量删除完成。成功: {success}, 失败: {failed}。",
+    "batch_email": "批量邮件完成。成功: {success}, 失败: {failed}。",
+    "delete_server": "管理员 {actor} 删除了服务器 {server_name} (ID: {server_id})。",
+    "create_user": "创建用户 {username} (Email: {email})。",
+    "edit_user": "更新用户 ID {user_id}。",
+    "delete_user": "删除用户 ID {user_id} 及其 {server_count} 台服务器。",
+    "batch_email_users": "批量邮件(用户)完成。成功: {success}, 失败: {failed}。",
+    "batch_delete_users": "批量删除用户完成。成功: {success}, 失败: {failed}。",
+    "forgot_password": "用户 {username} 请求密码重置邮件。",
+    "reset_password": "用户 {username} 通过邮件链接重置了密码。",
+    "user_password_changed": "用户 {username} 修改了密码。",
+    "email_change_requested": "用户 {username} 发起了邮箱变更验证，新邮箱为 {new_email}。",
+    "email_changed": "用户 {username} 将邮箱从 {old_email} 更改为 {new_email}。",
+    "settings_change": "管理员 {actor} 保存了运行时设置。",
+    "automation_settings_change": "管理员 {actor} 保存了自动化设置。",
+    "email_template_change": "保存了{template}。",
+    "automated_suspend_started": "开始执行自动冻结任务。",
+    "automated_suspend_noop": "任务完成，没有需要冻结的服务器。",
+    "automated_suspend_finished": "任务完成，成功冻结了 {success} 台服务器，失败 {failed} 台。失败服务器: {failed_ids}",
+    "automated_suspend_failed": "执行冻结任务时发生意外错误: {error}",
+    "automated_delete_started": "开始执行自动删除任务。",
+    "automated_delete_noop": "任务完成，没有需要删除的服务器。",
+    "automated_delete_finished": "任务完成，成功删除了 {success} 台服务器，失败 {failed} 台。失败服务器: {failed_ids}",
+    "automated_delete_failed": "执行删除任务时发生意外错误: {error}",
+    "automated_reminder_started": "开始执行{type}任务。",
+    "automated_reminder_noop": "任务完成，没有需要发送{type}的服务器。",
+    "automated_reminder_finished": "任务完成，成功发送了 {sent} 封{type}邮件。",
+    "automated_reminder_failed": "执行{type}任务时发生意外错误: {error}"
   },
   "pagination": {
-    "prev": "上一页",
-    "next": "下一页",
-    "page": "第 {page} / {total} 页",
     "per_page": "条/页"
   },
   "empty": "暂无日志记录",

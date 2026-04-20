@@ -1,0 +1,13 @@
+{
+  "subtitle": "确认邮箱变更",
+  "loading": "正在确认邮箱...",
+  "success": "邮箱已成功更改。",
+  "redirecting": "即将返回账户设置页...",
+  "account": "前往账户设置",
+  "back": "返回登录",
+  "error": {
+    "invalidLink": "确认链接无效或不完整",
+    "failed": "邮箱确认失败，请稍后再试",
+    "network": "网络连接失败"
+  }
+}

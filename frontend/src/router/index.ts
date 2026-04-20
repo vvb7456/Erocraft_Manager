@@ -9,6 +9,24 @@ const router = createRouter({
       component: () => import('@/pages/LoginPage.vue'),
       meta: { public: true, layout: 'blank' },
     },
+    {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/pages/ForgotPasswordPage.vue'),
+      meta: { public: true, layout: 'blank' },
+    },
+    {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('@/pages/ResetPasswordPage.vue'),
+      meta: { public: true, layout: 'blank' },
+    },
+    {
+      path: '/confirm-email',
+      name: 'confirm-email',
+      component: () => import('@/pages/ConfirmEmailPage.vue'),
+      meta: { public: true, layout: 'blank' },
+    },
     { path: '/', redirect: '/servers' },
 
     // ── User routes ──
@@ -16,6 +34,12 @@ const router = createRouter({
       path: '/servers',
       name: 'user-servers',
       component: () => import('@/pages/user/UserServersPage.vue'),
+      meta: { layout: 'user' },
+    },
+    {
+      path: '/account',
+      name: 'account',
+      component: () => import('@/pages/user/AccountPage.vue'),
       meta: { layout: 'user' },
     },
     {
@@ -77,7 +101,20 @@ const router = createRouter({
 
 /** Check auth status before each navigation */
 router.beforeEach(async (to) => {
-  if (to.meta.public) return true
+  if (to.meta.public) {
+    if (to.name === 'login' || to.name === 'forgot-password') {
+      try {
+        const res = await fetch('/api/me')
+        if (res.ok) {
+          const data = await res.json()
+          return data.is_admin ? { name: 'dashboard' } : { name: 'user-servers' }
+        }
+      } catch {
+        return true
+      }
+    }
+    return true
+  }
   try {
     const res = await fetch('/api/me')
     if (!res.ok) return { name: 'login' }

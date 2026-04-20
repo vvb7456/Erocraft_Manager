@@ -2,35 +2,50 @@
   "title": "邮件模板",
   "save": "保存模板",
   "saved": "模板已保存",
+  "editor": "模板编辑",
+  "preview": "实时预览",
+  "previewSubject": "预览主题",
+  "previewEmpty": "暂无预览内容",
   "subject": "邮件主题",
   "body": "邮件正文",
   "placeholders": "可用变量",
   "bulk": {
     "title": "批量通知",
-    "desc": "用于向服务器关联用户发送批量通知邮件"
+    "desc": "用于管理员手动发送的一般通知邮件。"
   },
   "reminder": {
     "title": "到期提醒",
-    "desc": "服务器即将到期时自动发送的提醒邮件"
+    "desc": "用于服务器到期前的自动提醒邮件。"
   },
   "preDelete": {
     "title": "删除前提醒",
-    "desc": "服务器即将被自动删除时发送的最终警告"
+    "desc": "用于服务器删除前的最终提醒邮件。"
   },
   "createUser": {
     "title": "新用户通知",
-    "desc": "创建新用户时发送的欢迎邮件"
+    "desc": "用于创建用户后引导对方设置账户密码。"
+  },
+  "passwordReset": {
+    "title": "密码重置",
+    "desc": "用于忘记密码后的重置链接邮件。"
+  },
+  "emailChange": {
+    "title": "邮箱变更确认",
+    "desc": "用于确认账户邮箱变更请求。"
   },
   "var": {
-    "brand_name": "品牌名",
+    "brand_name": "品牌名称",
     "username": "用户名",
-    "email": "邮箱",
-    "server_name": "服务器名",
+    "email": "邮箱地址",
+    "server_name": "服务器名称",
     "server_id": "服务器 ID",
     "expiration_date": "到期日期",
     "server_count": "服务器数量",
     "server_list": "服务器列表",
     "deletion_date": "删除日期",
-    "password": "初始密码"
+    "password": "初始密码",
+    "new_email": "新邮箱地址",
+    "reset_url": "密码重置链接",
+    "confirm_url": "邮箱确认链接"
   }
 }

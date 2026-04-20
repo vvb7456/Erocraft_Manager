@@ -11,7 +11,7 @@ import DataTable from '@/components/ui/DataTable.vue'
 
 defineOptions({ name: 'ActivityLogsPage' })
 
-const { t } = useI18n({ useScope: 'global' })
+const { t, te } = useI18n({ useScope: 'global' })
 const { get, loading } = useApiFetch()
 const appStore = useAppStore()
 
@@ -22,7 +22,8 @@ interface LogItem {
   actor: string
   action: string
   status: string
-  details: string | null
+  detailKey: string | null
+  detailParams: Record<string, unknown>
 }
 
 interface LogResponse {
@@ -81,12 +82,36 @@ function formatTime(ts: string | null): string {
 }
 
 function statusColor(status: string): string {
-  if (status === '成功') return 'var(--green)'
-  if (status === '失败') return 'var(--red)'
+  if (status === 'success') return 'var(--green)'
+  if (status === 'failure') return 'var(--red)'
   return 'var(--blue)'
 }
 
-const statusOptions = ['成功', '失败', '信息']
+function actorLabel(actor: string): string {
+  if (actor === 'system') return t('logs.actor.system')
+  if (actor === 'unknown') return t('logs.actor.unknown')
+  return actor
+}
+
+function actionLabel(action: string): string {
+  const key = `logs.action.${action}`
+  return te(key) ? t(key) : action
+}
+
+function detailLabel(log: LogItem): string {
+  if (!log.detailKey) return '—'
+  const params = { ...(log.detailParams ?? {}) }
+  if (typeof params.template === 'string') {
+    params.template = t(`emailTemplates.${params.template}.title`, params.template)
+  }
+  if (typeof params.type === 'string') {
+    params.type = t(`logs.reminderType.${params.type}`, params.type)
+  }
+  const key = `logs.detail.${log.detailKey}`
+  return te(key) ? t(key, params) : log.detailKey
+}
+
+const statusOptions = ['success', 'failure', 'info']
 </script>
 
 <template>
@@ -101,14 +126,14 @@ const statusOptions = ['成功', '失败', '信息']
       <template #end>
         <BaseSelect
           v-model="filterActor"
-          :options="[{ value: '', label: t('logs.filter.all') }, ...actorOptions.map(a => ({ value: a, label: a }))]"
+          :options="[{ value: '', label: t('logs.filter.all') }, ...actorOptions.map(a => ({ value: a, label: actorLabel(a) }))]"
           :prefix="t('logs.filter.actor') + ': '"
           size="sm"
           fit
         />
         <BaseSelect
           v-model="filterAction"
-          :options="[{ value: '', label: t('logs.filter.all') }, ...actionOptions.map(a => ({ value: a, label: a }))]"
+          :options="[{ value: '', label: t('logs.filter.all') }, ...actionOptions.map(a => ({ value: a, label: actionLabel(a) }))]"
           :prefix="t('logs.filter.action') + ': '"
           size="sm"
           fit
@@ -145,15 +170,15 @@ const statusOptions = ['成功', '失败', '信息']
       </template>
       <template #row="{ item: log }">
         <td class="col-time">{{ formatTime(log.timestamp) }}</td>
-        <td class="col-actor">{{ log.actor }}</td>
-        <td class="col-action"><code class="action-code">{{ log.action }}</code></td>
+        <td class="col-actor">{{ actorLabel(log.actor) }}</td>
+        <td class="col-action"><code class="action-code">{{ actionLabel(log.action) }}</code></td>
         <td class="col-status">
           <Badge :color="statusColor(log.status)">
             {{ t(`logs.status_label.${log.status}`, log.status) }}
           </Badge>
         </td>
         <td class="col-details">
-          <span class="details-text">{{ log.details || '—' }}</span>
+          <span class="details-text">{{ detailLabel(log) }}</span>
         </td>
       </template>
 
@@ -161,13 +186,13 @@ const statusOptions = ['成功', '失败', '信息']
       <template #card="{ item: log }">
         <div class="log-card-time">{{ formatTime(log.timestamp) }}</div>
         <div class="log-card-row">
-          <span>{{ log.actor }}</span>
+          <span>{{ actorLabel(log.actor) }}</span>
           <Badge :color="statusColor(log.status)" size="sm">
             {{ t(`logs.status_label.${log.status}`, log.status) }}
           </Badge>
         </div>
-        <code class="action-code">{{ log.action }}</code>
-        <div v-if="log.details" class="log-card-details">{{ log.details }}</div>
+        <code class="action-code">{{ actionLabel(log.action) }}</code>
+        <div class="log-card-details">{{ detailLabel(log) }}</div>
       </template>
     </DataTable>
   </div>

@@ -13,15 +13,69 @@
     "status": "Status",
     "details": "Details"
   },
+  "actor": {
+    "system": "System",
+    "unknown": "Unknown user"
+  },
   "status_label": {
-    "成功": "Success",
-    "失败": "Failed",
-    "信息": "Info"
+    "success": "Success",
+    "failure": "Failed",
+    "info": "Info"
+  },
+  "action": {
+    "auth": "Authentication",
+    "server": "Servers",
+    "user": "Users",
+    "account": "Account",
+    "settings": "Settings",
+    "automation": "Automation"
+  },
+  "reminderType": {
+    "expiry": "expiry reminder",
+    "pre_delete": "pre-delete reminder"
+  },
+  "detail": {
+    "login_failed": "Failed login attempt for {username}.",
+    "login_success": "User {username} logged in.",
+    "logout": "User {username} logged out.",
+    "create_server": "Administrator {actor} created server {server_name} (ID: {server_id}).",
+    "renew_server": "Administrator {actor} renewed server {server_name} (ID: {server_id}) to {date}.",
+    "set_expiry": "Administrator {actor} set server {server_name} (ID: {server_id}) expiration to {date}.",
+    "suspend_server": "Administrator {actor} suspended server {server_name} (ID: {server_id}).",
+    "unsuspend_server": "Administrator {actor} unsuspended server {server_name} (ID: {server_id}).",
+    "batch_suspend": "Batch suspend complete. Success: {success}, failed: {failed}.",
+    "batch_unsuspend": "Batch unsuspend complete. Success: {success}, failed: {failed}.",
+    "batch_renew": "Batch renew complete. Success: {success}, failed: {failed}.",
+    "batch_delete": "Batch delete complete. Success: {success}, failed: {failed}.",
+    "batch_email": "Batch email complete. Success: {success}, failed: {failed}.",
+    "delete_server": "Administrator {actor} deleted server {server_name} (ID: {server_id}).",
+    "create_user": "Created user {username} (Email: {email}).",
+    "edit_user": "Updated user ID {user_id}.",
+    "delete_user": "Deleted user ID {user_id} and their {server_count} servers.",
+    "batch_email_users": "Batch user email complete. Success: {success}, failed: {failed}.",
+    "batch_delete_users": "Batch user delete complete. Success: {success}, failed: {failed}.",
+    "forgot_password": "User {username} requested a password reset email.",
+    "reset_password": "User {username} reset their password using an email link.",
+    "user_password_changed": "User {username} changed their password.",
+    "email_change_requested": "User {username} requested an email change verification to {new_email}.",
+    "email_changed": "User {username} changed email from {old_email} to {new_email}.",
+    "settings_change": "Administrator {actor} saved runtime settings.",
+    "automation_settings_change": "Administrator {actor} saved automation settings.",
+    "email_template_change": "Saved {template}.",
+    "automated_suspend_started": "Started auto suspend task.",
+    "automated_suspend_noop": "Task complete. No servers need suspension.",
+    "automated_suspend_finished": "Task complete. Suspended {success} servers, failed {failed}. Failed servers: {failed_ids}",
+    "automated_suspend_failed": "Auto suspend task failed unexpectedly: {error}",
+    "automated_delete_started": "Started auto delete task.",
+    "automated_delete_noop": "Task complete. No servers need deletion.",
+    "automated_delete_finished": "Task complete. Deleted {success} servers, failed {failed}. Failed servers: {failed_ids}",
+    "automated_delete_failed": "Auto delete task failed unexpectedly: {error}",
+    "automated_reminder_started": "Started {type} task.",
+    "automated_reminder_noop": "Task complete. No servers need {type} emails.",
+    "automated_reminder_finished": "Task complete. Sent {sent} {type} emails.",
+    "automated_reminder_failed": "{type} task failed unexpectedly: {error}"
   },
   "pagination": {
-    "prev": "Previous",
-    "next": "Next",
-    "page": "Page {page} of {total}",
     "per_page": "per page"
   },
   "empty": "No activity logs",

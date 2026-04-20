@@ -2,35 +2,50 @@
   "title": "Email Templates",
   "save": "Save Template",
   "saved": "Template saved",
-  "subject": "Subject",
-  "body": "Body",
+  "editor": "Template Editor",
+  "preview": "Live Preview",
+  "previewSubject": "Preview Subject",
+  "previewEmpty": "No preview available",
+  "subject": "Email Subject",
+  "body": "Email Body",
   "placeholders": "Available Variables",
   "bulk": {
     "title": "Bulk Notification",
-    "desc": "Bulk notification emails sent to server-associated users"
+    "desc": "Used for general notices sent manually by administrators."
   },
   "reminder": {
     "title": "Expiration Reminder",
-    "desc": "Automatic reminders sent when servers are about to expire"
+    "desc": "Used for automatic emails sent before server expiration."
   },
   "preDelete": {
     "title": "Pre-Delete Warning",
-    "desc": "Final warning before automatic server deletion"
+    "desc": "Used for the final notice before server deletion."
   },
   "createUser": {
     "title": "New User Notification",
-    "desc": "Welcome email sent when a new user account is created"
+    "desc": "Used to guide a new user to set their account password."
+  },
+  "passwordReset": {
+    "title": "Password Reset",
+    "desc": "Used for forgot-password reset link emails."
+  },
+  "emailChange": {
+    "title": "Email Change Confirmation",
+    "desc": "Used to confirm an account email change request."
   },
   "var": {
     "brand_name": "Brand Name",
     "username": "Username",
-    "email": "Email",
+    "email": "Email Address",
     "server_name": "Server Name",
     "server_id": "Server ID",
     "expiration_date": "Expiration Date",
     "server_count": "Server Count",
     "server_list": "Server List",
     "deletion_date": "Deletion Date",
-    "password": "Initial Password"
+    "password": "Initial Password",
+    "new_email": "New Email Address",
+    "reset_url": "Password Reset Link",
+    "confirm_url": "Email Confirmation Link"
   }
 }
