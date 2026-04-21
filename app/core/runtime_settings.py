@@ -70,22 +70,69 @@ def _int_clamper(low: int, high: int, default: int) -> Callable[[Any], int]:
     return normalize
 
 
+def _env_float(name: str, default: float) -> float:
+    get_settings()
+    value = os.getenv(name)
+    try:
+        return float(value) if value not in (None, "") else default
+    except ValueError:
+        return default
+
+
+def _float_clamper(low: float, high: float, default: float) -> Callable[[Any], float]:
+    def normalize(value: Any) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(low, min(high, parsed))
+
+    return normalize
+
+
+def _enum_normalizer(allowed: tuple[str, ...], default: str) -> Callable[[Any], str]:
+    def normalize(value: Any) -> str:
+        s = _normalize_str(value).lower()
+        return s if s in allowed else default
+
+    return normalize
+
+
 @dataclass(frozen=True, slots=True)
 class SettingSpec:
     key: str
     category: str
     default_factory: Callable[[], Any]
     normalize: Callable[[Any], Any]
+    sensitive: bool = False
 
     def default_value(self) -> Any:
         return self.default_factory()
 
 
-SETTINGS_SPECS: dict[str, SettingSpec] = {
+# ---------------------------------------------------------------------------
+# Spec registry
+# ---------------------------------------------------------------------------
+# Every ``*_SPECS`` dict in this module must be wrapped by :func:`_register`
+# so that :data:`SENSITIVE_KEYS` (and any future module-wide query) is derived
+# automatically. Previously ``SENSITIVE_KEYS`` hard-listed
+# ``(SETTINGS_SPECS, AUTOMATION_SPECS, MONITORING_SPECS)`` and forgetting to
+# add a new dict silently dropped its sensitive keys — see Phase-1 CR §4.6.
+# ---------------------------------------------------------------------------
+
+_ALL_SPEC_DICTS: list[dict[str, "SettingSpec"]] = []
+
+
+def _register(specs: dict[str, "SettingSpec"]) -> dict[str, "SettingSpec"]:
+    _ALL_SPEC_DICTS.append(specs)
+    return specs
+
+
+SETTINGS_SPECS: dict[str, SettingSpec] = _register({
     "SMTP_HOST": SettingSpec("SMTP_HOST", "smtp", lambda: _env_str("SMTP_HOST", ""), _normalize_str),
     "SMTP_PORT": SettingSpec("SMTP_PORT", "smtp", lambda: _env_int("SMTP_PORT", 587), _int_clamper(1, 65535, 587)),
     "SMTP_USE_SSL": SettingSpec("SMTP_USE_SSL", "smtp", lambda: _env_bool("SMTP_USE_SSL", True), _normalize_bool),
-    "SMTP_PASSWORD": SettingSpec("SMTP_PASSWORD", "smtp", lambda: _env_str("SMTP_PASSWORD", ""), _normalize_str),
+    "SMTP_PASSWORD": SettingSpec("SMTP_PASSWORD", "smtp", lambda: _env_str("SMTP_PASSWORD", ""), _normalize_str, sensitive=True),
     "SENDER_EMAIL": SettingSpec("SENDER_EMAIL", "smtp", lambda: _env_str("SENDER_EMAIL", ""), _normalize_str),
     "EMAIL_SEND_DELAY": SettingSpec(
         "EMAIL_SEND_DELAY",
@@ -179,9 +226,9 @@ SETTINGS_SPECS: dict[str, SettingSpec] = {
         lambda: _env_str("SERVER_NAME_PREFIX", ""),
         _normalize_str,
     ),
-}
+})
 
-AUTOMATION_SPECS: dict[str, SettingSpec] = {
+AUTOMATION_SPECS: dict[str, SettingSpec] = _register({
     "AUTOMATION_RUN_HOUR": SettingSpec(
         "AUTOMATION_RUN_HOUR",
         "automation",
@@ -236,8 +283,157 @@ AUTOMATION_SPECS: dict[str, SettingSpec] = {
         lambda: _env_str("TIMEZONE", get_settings().default_timezone),
         _normalize_timezone,
     ),
-}
+})
 
 
 def defaults_for(specs: dict[str, SettingSpec]) -> dict[str, Any]:
     return {key: spec.default_value() for key, spec in specs.items()}
+
+
+def _normalize_id_list(value: Any) -> str:
+    """Normalize a comma-separated list of integer IDs."""
+    raw = _normalize_str(value)
+    if not raw:
+        return ""
+    parts = [x.strip() for x in raw.split(",") if x.strip().isdigit()]
+    return ",".join(parts)
+
+
+MONITORING_SPECS: dict[str, SettingSpec] = _register({
+    "MONITOR_ENABLED": SettingSpec(
+        "MONITOR_ENABLED", "monitoring",
+        lambda: _env_bool("MONITOR_ENABLED", True), _normalize_bool,
+    ),
+    "MONITOR_NODE_IDS": SettingSpec(
+        "MONITOR_NODE_IDS", "monitoring",
+        lambda: _env_str("MONITOR_NODE_IDS", ""), _normalize_id_list,
+    ),
+    "MONITOR_RETENTION_DAYS": SettingSpec(
+        "MONITOR_RETENTION_DAYS", "monitoring",
+        lambda: _env_int("MONITOR_RETENTION_DAYS", 30), _int_clamper(1, 365, 30),
+    ),
+    "MONITOR_INTERVAL_SEC": SettingSpec(
+        "MONITOR_INTERVAL_SEC", "monitoring",
+        lambda: _env_int("MONITOR_INTERVAL_SEC", 60), _int_clamper(30, 3600, 60),
+    ),
+    "ALERT_CPU_THRESHOLD": SettingSpec(
+        "ALERT_CPU_THRESHOLD", "monitoring",
+        lambda: _env_int("ALERT_CPU_THRESHOLD", 90), _int_clamper(50, 100, 90),
+    ),
+    "ALERT_CPU_SUSTAIN_MIN": SettingSpec(
+        "ALERT_CPU_SUSTAIN_MIN", "monitoring",
+        lambda: _env_int("ALERT_CPU_SUSTAIN_MIN", 5), _int_clamper(1, 60, 5),
+    ),
+    "ALERT_MEM_THRESHOLD": SettingSpec(
+        "ALERT_MEM_THRESHOLD", "monitoring",
+        lambda: _env_int("ALERT_MEM_THRESHOLD", 90), _int_clamper(50, 100, 90),
+    ),
+    "ALERT_MEM_SUSTAIN_MIN": SettingSpec(
+        "ALERT_MEM_SUSTAIN_MIN", "monitoring",
+        lambda: _env_int("ALERT_MEM_SUSTAIN_MIN", 5), _int_clamper(1, 60, 5),
+    ),
+    "ALERT_SWAP_THRESHOLD": SettingSpec(
+        "ALERT_SWAP_THRESHOLD", "monitoring",
+        lambda: _env_int("ALERT_SWAP_THRESHOLD", 50), _int_clamper(10, 100, 50),
+    ),
+    "ALERT_DISK_WARNING": SettingSpec(
+        "ALERT_DISK_WARNING", "monitoring",
+        lambda: _env_int("ALERT_DISK_WARNING", 85), _int_clamper(50, 100, 85),
+    ),
+    "ALERT_DISK_CRITICAL": SettingSpec(
+        "ALERT_DISK_CRITICAL", "monitoring",
+        lambda: _env_int("ALERT_DISK_CRITICAL", 95), _int_clamper(50, 100, 95),
+    ),
+    "ALERT_LOAD_FACTOR": SettingSpec(
+        "ALERT_LOAD_FACTOR", "monitoring",
+        lambda: _env_float("ALERT_LOAD_FACTOR", 1.5), _float_clamper(0.5, 5.0, 1.5),
+    ),
+    "ALERT_LOAD_SUSTAIN_MIN": SettingSpec(
+        "ALERT_LOAD_SUSTAIN_MIN", "monitoring",
+        lambda: _env_int("ALERT_LOAD_SUSTAIN_MIN", 5), _int_clamper(1, 60, 5),
+    ),
+    "ALERT_COOLDOWN_MIN": SettingSpec(
+        "ALERT_COOLDOWN_MIN", "monitoring",
+        lambda: _env_int("ALERT_COOLDOWN_MIN", 30), _int_clamper(1, 1440, 30),
+    ),
+    # --- Notification channel ---
+    "ALERT_EMAIL_ENABLED": SettingSpec(
+        "ALERT_EMAIL_ENABLED", "monitoring",
+        lambda: _env_bool("ALERT_EMAIL_ENABLED", False), _normalize_bool,
+    ),
+    "ALERT_EMAIL_ADMIN_IDS": SettingSpec(
+        "ALERT_EMAIL_ADMIN_IDS", "monitoring",
+        lambda: _env_str("ALERT_EMAIL_ADMIN_IDS", ""), _normalize_id_list,
+    ),
+    "ALERT_NOTIFY_RESOLVE": SettingSpec(
+        "ALERT_NOTIFY_RESOLVE", "monitoring",
+        lambda: _env_bool("ALERT_NOTIFY_RESOLVE", False), _normalize_bool,
+    ),
+    "ALERT_MIN_SEVERITY": SettingSpec(
+        "ALERT_MIN_SEVERITY", "monitoring",
+        lambda: _env_str("ALERT_MIN_SEVERITY", "warning"),
+        _enum_normalizer(("warning", "critical"), "warning"),
+    ),
+    # --- Per-type toggles ---
+    "ALERT_TYPE_NODE_OFFLINE": SettingSpec(
+        "ALERT_TYPE_NODE_OFFLINE", "monitoring",
+        lambda: _env_bool("ALERT_TYPE_NODE_OFFLINE", True), _normalize_bool,
+    ),
+    "ALERT_TYPE_AGENT_ONLY_DOWN": SettingSpec(
+        "ALERT_TYPE_AGENT_ONLY_DOWN", "monitoring",
+        lambda: _env_bool("ALERT_TYPE_AGENT_ONLY_DOWN", True), _normalize_bool,
+    ),
+    "ALERT_TYPE_WINGS_ONLY_DOWN": SettingSpec(
+        "ALERT_TYPE_WINGS_ONLY_DOWN", "monitoring",
+        lambda: _env_bool("ALERT_TYPE_WINGS_ONLY_DOWN", True), _normalize_bool,
+    ),
+    "ALERT_TYPE_CPU_HIGH": SettingSpec(
+        "ALERT_TYPE_CPU_HIGH", "monitoring",
+        lambda: _env_bool("ALERT_TYPE_CPU_HIGH", True), _normalize_bool,
+    ),
+    "ALERT_TYPE_MEM_HIGH": SettingSpec(
+        "ALERT_TYPE_MEM_HIGH", "monitoring",
+        lambda: _env_bool("ALERT_TYPE_MEM_HIGH", True), _normalize_bool,
+    ),
+    "ALERT_TYPE_SWAP_HIGH": SettingSpec(
+        "ALERT_TYPE_SWAP_HIGH", "monitoring",
+        lambda: _env_bool("ALERT_TYPE_SWAP_HIGH", False), _normalize_bool,
+    ),
+    "ALERT_TYPE_DISK_HIGH": SettingSpec(
+        "ALERT_TYPE_DISK_HIGH", "monitoring",
+        lambda: _env_bool("ALERT_TYPE_DISK_HIGH", True), _normalize_bool,
+    ),
+    "ALERT_TYPE_DISK_CRITICAL": SettingSpec(
+        "ALERT_TYPE_DISK_CRITICAL", "monitoring",
+        lambda: _env_bool("ALERT_TYPE_DISK_CRITICAL", True), _normalize_bool,
+    ),
+    "ALERT_TYPE_LOAD_HIGH": SettingSpec(
+        "ALERT_TYPE_LOAD_HIGH", "monitoring",
+        lambda: _env_bool("ALERT_TYPE_LOAD_HIGH", False), _normalize_bool,
+    ),
+    "ALERT_TYPE_NETWORK_DOWN": SettingSpec(
+        "ALERT_TYPE_NETWORK_DOWN", "monitoring",
+        lambda: _env_bool("ALERT_TYPE_NETWORK_DOWN", True), _normalize_bool,
+    ),
+    "ALERT_TYPE_CLASH_DOWN": SettingSpec(
+        "ALERT_TYPE_CLASH_DOWN", "monitoring",
+        lambda: _env_bool("ALERT_TYPE_CLASH_DOWN", True), _normalize_bool,
+    ),
+})
+
+
+# ---------------------------------------------------------------------------
+# Sensitive-key registry
+#
+# Built from the explicit `sensitive=True` flag on each SettingSpec.
+# Used by both the storage layer (for at-rest encryption) and the API layer
+# (for response masking).  No substring matching — each sensitive key must
+# be opted in explicitly on its spec.
+# ---------------------------------------------------------------------------
+
+SENSITIVE_KEYS: frozenset[str] = frozenset(
+    spec.key
+    for specs in _ALL_SPEC_DICTS
+    for spec in specs.values()
+    if spec.sensitive
+)

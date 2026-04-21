@@ -20,5 +20,9 @@
   },
   "notConfigured": "Pterodactyl API 未配置",
   "notConfiguredMsg": "请先在系统设置中填写面板地址和 API Key",
-  "goToSettings": "前往设置"
+  "goToSettings": "前往设置",
+  "infrastructure": "基础设施状态",
+  "connectivity": "连通性",
+  "viewAlerts": "查看",
+  "alertBanner": "{count} 条活跃告警"
 }

@@ -2,6 +2,17 @@
   "title": "Email Templates",
   "save": "Save Template",
   "saved": "Template saved",
+  "savedAll": "All changes saved",
+  "saveSomeFailed": "{n} template(s) failed to save",
+  "saveCurrent": "Save Current",
+  "saveAll": "Save All ({n})",
+  "discardAll": "Discard",
+  "unsavedHint": "{n} template(s) have unsaved changes",
+  "unsavedTitle": "Unsaved Changes",
+  "unsavedMessage": "{n} template(s) have unsaved changes. Save them all?",
+  "unsavedSave": "Save & Leave",
+  "unsavedDiscard": "Discard & Leave",
+  "unsavedStay": "Keep Editing",
   "editor": "Template Editor",
   "preview": "Live Preview",
   "previewSubject": "Preview Subject",
@@ -33,6 +44,14 @@
     "title": "Email Change Confirmation",
     "desc": "Used to confirm an account email change request."
   },
+  "alertFired": {
+    "title": "Alert Fired",
+    "desc": "Sent to admins when a node monitoring alert is triggered."
+  },
+  "alertResolved": {
+    "title": "Alert Resolved",
+    "desc": "Sent to admins when a node monitoring alert clears."
+  },
   "var": {
     "brand_name": "Brand Name",
     "username": "Username",
@@ -46,6 +65,15 @@
     "password": "Initial Password",
     "new_email": "New Email Address",
     "reset_url": "Password Reset Link",
-    "confirm_url": "Email Confirmation Link"
+    "confirm_url": "Email Confirmation Link",
+    "node_name": "Node Name",
+    "node_id": "Node ID",
+    "alert_type": "Alert Type Key",
+    "alert_type_label": "Alert Type Label",
+    "severity": "Severity Key",
+    "severity_label": "Severity Label",
+    "message": "Alert Message",
+    "fired_at": "Fired At",
+    "resolved_at": "Resolved At"
   }
 }

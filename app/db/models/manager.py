@@ -31,6 +31,21 @@ class ServerMeta(Base):
     server: Mapped["PteroServer"] = relationship("PteroServer", back_populates="meta")
 
 
+class NodeMeta(Base):
+    __tablename__ = "manager_node_meta"
+
+    node_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    agent_endpoint: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    agent_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now, onupdate=_utc_now,
+    )
+
+
 class ManagerActivityLog(Base):
     __tablename__ = "manager_activity_logs"
     __table_args__ = (

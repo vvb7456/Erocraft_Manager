@@ -2,6 +2,17 @@
   "title": "邮件模板",
   "save": "保存模板",
   "saved": "模板已保存",
+  "savedAll": "已保存所有修改",
+  "saveSomeFailed": "有 {n} 个模板保存失败",
+  "saveCurrent": "保存当前",
+  "saveAll": "保存全部 ({n})",
+  "discardAll": "丢弃修改",
+  "unsavedHint": "{n} 个模板有未保存修改",
+  "unsavedTitle": "有未保存修改",
+  "unsavedMessage": "当前有 {n} 个模板修改尚未保存，是否全部保存？",
+  "unsavedSave": "保存并离开",
+  "unsavedDiscard": "丢弃并离开",
+  "unsavedStay": "继续编辑",
   "editor": "模板编辑",
   "preview": "实时预览",
   "previewSubject": "预览主题",
@@ -33,6 +44,14 @@
     "title": "邮箱变更确认",
     "desc": "用于确认账户邮箱变更请求。"
   },
+  "alertFired": {
+    "title": "告警触发",
+    "desc": "节点监控告警触发时发送给管理员。"
+  },
+  "alertResolved": {
+    "title": "告警恢复",
+    "desc": "节点监控告警恢复时发送给管理员。"
+  },
   "var": {
     "brand_name": "品牌名称",
     "username": "用户名",
@@ -46,6 +65,15 @@
     "password": "初始密码",
     "new_email": "新邮箱地址",
     "reset_url": "密码重置链接",
-    "confirm_url": "邮箱确认链接"
+    "confirm_url": "邮箱确认链接",
+    "node_name": "节点名称",
+    "node_id": "节点 ID",
+    "alert_type": "告警类型键",
+    "alert_type_label": "告警类型名称",
+    "severity": "严重程度键",
+    "severity_label": "严重程度名称",
+    "message": "告警消息",
+    "fired_at": "触发时间",
+    "resolved_at": "恢复时间"
   }
 }

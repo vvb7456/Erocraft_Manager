@@ -84,13 +84,13 @@ def _build_settings() -> Settings:
     load_dotenv()
     secret_key = os.getenv("SECRET_KEY", "a_default_secret_key_for_dev")
     return Settings(
-        app_name=os.getenv("APP_NAME", "Ptero Manager"),
+        app_name=os.getenv("APP_NAME", "Erocraft Manager"),
         app_version=os.getenv("APP_VERSION", "2.0.0"),
         secret_key=secret_key,
         settings_encryption_key=os.getenv("SETTINGS_ENCRYPTION_KEY", secret_key),
         default_timezone=os.getenv("TIMEZONE", "Asia/Shanghai"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
-        session_cookie_name=os.getenv("SESSION_COOKIE_NAME", "ptero_manager_session"),
+        session_cookie_name=os.getenv("SESSION_COOKIE_NAME", "erocraft_manager_session"),
         session_max_age=_as_int(os.getenv("SESSION_MAX_AGE"), 60 * 60 * 24 * 14),
         session_cookie_secure=_as_bool(os.getenv("SESSION_COOKIE_SECURE"), False),
         session_same_site=os.getenv("SESSION_SAME_SITE", "lax"),

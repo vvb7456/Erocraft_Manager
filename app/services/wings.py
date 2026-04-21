@@ -350,5 +350,72 @@ class WingsService:
         )
         return f"{node.base_url}/upload/file?token={token}"
 
+    # ------------------------------------------------------------------
+    # Node-level endpoints (monitoring)
+    # ------------------------------------------------------------------
+
+    async def _node_request(
+        self,
+        db: AsyncSession,
+        node_id: int,
+        method: str,
+        path: str,
+        *,
+        timeout: float = 10.0,
+    ) -> httpx.Response:
+        """Make a request to a Wings node-level API endpoint (no /servers/ prefix).
+
+        .. warning::
+           **ADMIN-ONLY.** Node-level Wings endpoints return data across ALL
+           servers on the node, including those owned by other users. Callers
+           MUST be gated by ``require_admin``; NEVER expose this (or any method
+           built on top of it such as :meth:`get_node_system` /
+           :meth:`get_node_servers`) from a user-facing router.
+        """
+        node = await self._node_info(db, node_id)
+        headers = {
+            "Authorization": f"Bearer {node.token}",
+            "Accept": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+                response = await client.request(
+                    method,
+                    f"{node.base_url}/api/{path.lstrip('/')}",
+                    headers=headers,
+                )
+        except httpx.HTTPError as exc:
+            raise WingsServiceError(f"Wings connection failed: {exc!r}") from exc
+
+        if response.status_code != 200:
+            raise WingsServiceError(f"Wings /api/{path} returned HTTP {response.status_code}")
+        return response
+
+    async def get_node_system(self, db: AsyncSession, node_id: int) -> dict:
+        """GET /api/system — returns architecture, cpu_count, kernel, os, version.
+
+        .. warning::
+           **ADMIN-ONLY.** See :meth:`_node_request`. Must only be called from
+           admin routers (``require_admin``).
+        """
+        response = await self._node_request(db, node_id, "GET", "system")
+        return response.json()
+
+    async def get_node_servers(self, db: AsyncSession, node_id: int) -> list[dict]:
+        """GET /api/servers — returns all containers with state + utilization.
+
+        .. warning::
+           **ADMIN-ONLY.** Returns every server on the node, including those
+           owned by other users. See :meth:`_node_request`. Must only be called
+           from admin routers (``require_admin``).
+        """
+        response = await self._node_request(db, node_id, "GET", "servers")
+        data = response.json()
+        # Scrub environment from each container to avoid leaking secrets
+        for srv in data:
+            cfg = srv.get("configuration", {})
+            cfg.pop("environment", None)
+        return data
+
 
 wings_service = WingsService()

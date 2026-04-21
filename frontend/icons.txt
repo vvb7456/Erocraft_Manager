@@ -8,6 +8,10 @@ delete_forever
 campaign
 notifications_active
 
+# BaseSelect — multi-select checkboxes
+check_box
+check_box_outline_blank
+
 # ConsolePage — dynamic/conditional icons
 cloud_off
 power_settings_new
@@ -27,6 +31,10 @@ gps_not_fixed
 
 # LoginPage.vue
 login
+
+# Monitoring — NodeCard, DashboardPage
+memory
+lan
 
 # AppSidebar nav icons
 dashboard

@@ -1,0 +1,40 @@
+# Erocraft Agent V2 — example configuration
+
+manager:
+  # Reserved for a future Push / registration mode. Phase-1 is Pull-only
+  # so Agent never actually calls this URL; may be omitted entirely.
+  # url: http://manager.example.com
+  node_id: 1
+
+agent:
+  bind: "0.0.0.0:48765"                     # high port, change per-node if shared IP
+  token: "REPLACE_WITH_SECURE_NODE_TOKEN"   # Bearer token; Manager stores encrypted copy
+  allow_ips: []                              # optional source-IP allowlist (empty = no restriction)
+
+wings:
+  config_path: /etc/pterodactyl/config.yml
+  service_name: wings
+
+collect:
+  cache_ttl_sec: 5
+
+probes:
+  # End-to-end reachability through a proxy (validates forwarding + measures
+  # full round-trip latency). gstatic's generate_204 returns HTTP 204 and is
+  # the canonical captive-portal / connectivity check target.
+  - name: clash_proxy
+    type: http
+    target: http://www.gstatic.com/generate_204
+    proxy: http://10.0.0.254:7890            # or socks5://host:port (needs httpx[socks])
+    timeout: 5
+  # - name: clash_port
+  #   type: tcp
+  #   target: 10.0.0.254:7890                 # just checks the port is listening
+  #   timeout: 5
+  # - name: upstream_db
+  #   type: tcp
+  #   target: 10.0.0.22:3306                  # generic TCP liveness; port-listening only
+  #   timeout: 5
+
+logging:
+  level: INFO

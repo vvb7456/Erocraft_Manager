@@ -12,27 +12,16 @@ from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
 from app.core.runtime_settings import (
     AUTOMATION_SPECS,
-    MASKED_SECRET_VALUE,
+    MONITORING_SPECS,
     SETTINGS_SPECS,
     defaults_for,
 )
-from app.core.security import is_sensitive_setting
 from app.core.settings_store import get_settings_store
 from app.db.models.pterodactyl import PteroUser
 from app.schemas.settings import SettingsMessageResponse
 from app.services.audit import log_manager_activity
 
 router = APIRouter(tags=["settings"])
-
-
-def _masked_settings_payload(values: dict[str, Any]) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-    for key, value in values.items():
-        if is_sensitive_setting(key) and value:
-            payload[key] = MASKED_SECRET_VALUE
-        else:
-            payload[key] = value
-    return payload
 
 
 async def _save_settings(
@@ -47,8 +36,6 @@ async def _save_settings(
         if key not in payload:
             continue
         incoming = payload[key]
-        if incoming == MASKED_SECRET_VALUE:
-            continue
         try:
             normalized = spec.normalize(incoming)
         except ValueError as exc:
@@ -69,8 +56,7 @@ async def settings_get(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     store = get_settings_store()
-    values = await store.get_many(db, defaults_for(SETTINGS_SPECS))
-    return _masked_settings_payload(values)
+    return await store.get_many(db, defaults_for(SETTINGS_SPECS))
 
 
 @router.post("/settings", response_model=SettingsMessageResponse)
@@ -118,3 +104,31 @@ async def automation_save(
         detail_params={"actor": current_user.username},
     )
     return SettingsMessageResponse(message="自动化设置已保存。")
+
+
+@router.get("/monitoring-settings")
+async def monitoring_settings_get(
+    _: PteroUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    store = get_settings_store()
+    return await store.get_many(db, defaults_for(MONITORING_SPECS))
+
+
+@router.post("/monitoring-settings", response_model=SettingsMessageResponse)
+async def monitoring_settings_save(
+    request: Request,
+    payload: dict[str, Any],
+    current_user: PteroUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> SettingsMessageResponse:
+    await _save_settings(db, MONITORING_SPECS, payload)
+    await log_manager_activity(
+        db,
+        actor=current_user.username,
+        action="settings",
+        status="success",
+        detail_key="monitoring_settings_change",
+        detail_params={"actor": current_user.username},
+    )
+    return SettingsMessageResponse(message="监控设置已保存。")

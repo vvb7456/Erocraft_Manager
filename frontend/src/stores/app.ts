@@ -7,7 +7,7 @@ export const useAppStore = defineStore('app', () => {
   const sidebarCollapsed = ref(localStorage.getItem('sidebar_collapsed') === '1')
   const mobileSidebarOpen = ref(false)
   const version = ref('')
-  const brandName = ref('Ptero Manager')
+  const brandName = ref('Erocraft Manager')
   const systemName = ref('')
   const bannerUrl = ref('')
   const icpRecord = ref('')
@@ -48,7 +48,7 @@ export const useAppStore = defineStore('app', () => {
       if (res.ok) {
         const data = await res.json()
         version.value = data.version || ''
-        brandName.value = data.brandName || 'Ptero Manager'
+        brandName.value = data.brandName || 'Erocraft Manager'
         systemName.value = data.systemName || ''
         bannerUrl.value = data.bannerUrl || ''
         icpRecord.value = data.icpRecord || ''

@@ -1,1 +1,1 @@
-export const APP_NAME = 'Ptero Manager'
+export const APP_NAME = 'Erocraft Manager'

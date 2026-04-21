@@ -16,7 +16,14 @@ from app.db.repositories.servers import server_repository
 from app.db.session import get_session_factory
 from app.jobs.tasks.common import get_job_today
 from app.services.audit import log_manager_activity
-from app.services.email import get_email_delay, get_site_url, load_template, render_template_body, send_email
+from app.services.email import (
+    EmailClient,
+    get_email_delay,
+    get_site_url,
+    get_smtp_config,
+    load_template,
+    render_template_body,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,27 +113,37 @@ async def run_reminder_task(reminder_type: str) -> None:
             action_text = "登录系统处理" if action_url else None
             delay = await get_email_delay(db)
 
-            if reminder_type == "expiry":
-                sent_count = await _send_expiry_reminders(
-                    db,
-                    servers,
-                    template=template,
-                    brand_name=str(brand_name),
-                    action_text=action_text,
-                    action_url=action_url,
-                    delay=delay,
-                    target_date=target_date,
-                )
-            else:
-                sent_count = await _send_pre_delete_reminders(
-                    db,
-                    servers,
-                    template=template,
-                    brand_name=str(brand_name),
-                    action_text=action_text,
-                    action_url=action_url,
-                    delay=delay,
-                )
+            # One SMTP connection for the whole batch — reused across
+            # every owner so we avoid the connect/login round-trip per
+            # message and stay well under most providers' rate limits.
+            cfg = await get_smtp_config(db)
+            site_url = await get_site_url(db)
+            async with EmailClient(
+                cfg, site_url, db=db, actor=f"job:{reminder_type}_reminder",
+                log_action="automation",
+            ) as client:
+                if reminder_type == "expiry":
+                    sent_count = await _send_expiry_reminders(
+                        client,
+                        servers,
+                        template=template,
+                        brand_name=str(brand_name),
+                        action_text=action_text,
+                        action_url=action_url,
+                        delay=delay,
+                        target_date=target_date,
+                    )
+                else:
+                    sent_count = await _send_pre_delete_reminders(
+                        client,
+                        db,
+                        servers,
+                        template=template,
+                        brand_name=str(brand_name),
+                        action_text=action_text,
+                        action_url=action_url,
+                        delay=delay,
+                    )
 
             await log_manager_activity(
                 db,
@@ -149,7 +166,7 @@ async def run_reminder_task(reminder_type: str) -> None:
 
 
 async def _send_expiry_reminders(
-    db,
+    client: EmailClient,
     servers: list[PteroServer],
     *,
     template,
@@ -181,8 +198,7 @@ async def _send_expiry_reminders(
                 "server_list": server_list,
             },
         )
-        sent, _ = await send_email(
-            db,
+        sent, _ = await client.send(
             recipient_email=owner.email,
             subject=subject,
             main_content_raw=body,
@@ -199,6 +215,7 @@ async def _send_expiry_reminders(
 
 
 async def _send_pre_delete_reminders(
+    client: EmailClient,
     db,
     servers: list[PteroServer],
     *,
@@ -227,8 +244,7 @@ async def _send_pre_delete_reminders(
                 "deletion_date": deletion_date,
             },
         )
-        sent, _ = await send_email(
-            db,
+        sent, _ = await client.send(
             recipient_email=owner.email,
             subject=subject,
             main_content_raw=body,

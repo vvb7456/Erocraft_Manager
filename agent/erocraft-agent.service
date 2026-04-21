@@ -1,0 +1,16 @@
+[Unit]
+Description=Erocraft Agent V2
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/erocraft-agent/venv/bin/python -m agent.agent /opt/erocraft-agent/agent.yaml
+WorkingDirectory=/opt/erocraft-agent
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=erocraft-agent
+
+[Install]
+WantedBy=multi-user.target

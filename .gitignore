@@ -12,9 +12,8 @@ __pycache__/
 
 # 运行时
 logs/
-ptero_manager.pid
-ptero_manager_web.pid
-ptero_manager_jobs.pid
+erocraft_manager_web.pid
+erocraft_manager_jobs.pid
 
 # 前端构建产物
 frontend/node_modules/

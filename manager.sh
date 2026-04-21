@@ -15,12 +15,12 @@ WEB_APP="${MANAGER_WEB_APP:-app.main:app}"
 WEB_HOST="${MANAGER_WEB_HOST:-0.0.0.0}"
 WEB_PORT="${MANAGER_WEB_PORT:-5001}"
 WEB_WORKERS="${MANAGER_WEB_WORKERS:-1}"
-WEB_PID_FILE="$APP_DIR/ptero_manager_web.pid"
+WEB_PID_FILE="$APP_DIR/erocraft_manager_web.pid"
 WEB_LOG_FILE="$LOG_DIR/manager-web.log"
 WEB_HEALTH_URL="${MANAGER_WEB_HEALTH_URL:-http://127.0.0.1:${WEB_PORT}/openapi.json}"
 
 JOBS_MODULE="${MANAGER_JOBS_MODULE:-app.jobs.main}"
-JOBS_PID_FILE="$APP_DIR/ptero_manager_jobs.pid"
+JOBS_PID_FILE="$APP_DIR/erocraft_manager_jobs.pid"
 JOBS_LOG_FILE="$LOG_DIR/manager-jobs.log"
 
 ensure_runtime() {

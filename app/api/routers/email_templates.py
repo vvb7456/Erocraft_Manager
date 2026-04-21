@@ -15,6 +15,8 @@ from app.schemas.email_templates import (
     EmailTemplatePreviewResponse,
     EmailTemplatesResponse,
     SaveEmailTemplateRequest,
+    TestEmailRequest,
+    TestEmailResponse,
 )
 from app.services.audit import log_manager_activity
 from app.services.email import (
@@ -22,6 +24,7 @@ from app.services.email import (
     build_template_preview,
     load_all_templates,
     save_template,
+    send_test_email,
 )
 
 router = APIRouter(tags=["email_templates"])
@@ -32,13 +35,20 @@ async def get_email_templates(
     db: AsyncSession = Depends(get_db),
 ) -> EmailTemplatesResponse:
     templates = await load_all_templates(db)
+
+    def _payload(internal_key: str) -> EmailTemplatePayload:
+        t = templates[internal_key]
+        return EmailTemplatePayload(subject=t.subject, body=t.body)
+
     return EmailTemplatesResponse(
-        bulk=EmailTemplatePayload(subject=templates["bulk"].subject, body=templates["bulk"].body),
-        reminder=EmailTemplatePayload(subject=templates["reminder"].subject, body=templates["reminder"].body),
-        preDelete=EmailTemplatePayload(subject=templates["pre_delete"].subject, body=templates["pre_delete"].body),
-        createUser=EmailTemplatePayload(subject=templates["create_user"].subject, body=templates["create_user"].body),
-        passwordReset=EmailTemplatePayload(subject=templates["password_reset"].subject, body=templates["password_reset"].body),
-        emailChange=EmailTemplatePayload(subject=templates["email_change"].subject, body=templates["email_change"].body),
+        bulk=_payload("bulk"),
+        reminder=_payload("reminder"),
+        preDelete=_payload("pre_delete"),
+        createUser=_payload("create_user"),
+        passwordReset=_payload("password_reset"),
+        emailChange=_payload("email_change"),
+        alertFired=_payload("alert_fired"),
+        alertResolved=_payload("alert_resolved"),
     )
 
 
@@ -83,3 +93,32 @@ async def preview_email_template(
         renderedSubject=rendered_subject,
         html=html,
     )
+
+
+@router.post("/test-email", response_model=TestEmailResponse)
+async def send_smtp_test_email(
+    payload: TestEmailRequest,
+    current_user: PteroUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> TestEmailResponse:
+    """Send a one-off test email using saved or in-memory SMTP settings.
+
+    Triggered from the SMTP settings tab. Uses the saved store as the base
+    config, then layers ``smtpOverride`` on top so the admin can verify
+    edits *before* persisting them via the global save bar.
+    """
+    ok, err = await send_test_email(
+        db,
+        recipient_email=str(payload.recipient),
+        override=payload.smtpOverride,
+        actor=current_user.username,
+    )
+    await log_manager_activity(
+        db,
+        actor=current_user.username,
+        action="settings",
+        status="success" if ok else "fail",
+        detail_key="test_email_sent",
+        detail_params={"recipient": str(payload.recipient), "error": err or ""},
+    )
+    return TestEmailResponse(ok=ok, error=err)

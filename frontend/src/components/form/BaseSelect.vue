@@ -12,8 +12,8 @@ export interface SelectOption {
 }
 
 const props = withDefaults(defineProps<{
-  /** Current value (v-model) */
-  modelValue: string | number | boolean
+  /** Current value (v-model). Array when multiple. */
+  modelValue: string | number | boolean | (string | number | boolean)[]
   /**
    * Options — accepts multiple shapes:
    * - SelectOption[]: canonical {value, label}
@@ -45,6 +45,8 @@ const props = withDefaults(defineProps<{
   teleport?: boolean
   /** Prefix text shown before the selected label (e.g. "Status: ") */
   prefix?: string
+  /** Enable multi-select mode. modelValue must be an array. */
+  multiple?: boolean
 }>(), {
   valueKey: 'value',
   labelKey: 'label',
@@ -58,13 +60,14 @@ const props = withDefaults(defineProps<{
   fit: false,
   teleport: false,
   prefix: '',
+  multiple: false,
 })
 
 const { t } = useI18n({ useScope: 'global' })
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string | number | boolean]
-  'change': [value: string | number | boolean]
+  'update:modelValue': [value: string | number | boolean | (string | number | boolean)[]]
+  'change': [value: string | number | boolean | (string | number | boolean)[]]
 }>()
 
 const rootRef = ref<HTMLElement | null>(null)
@@ -99,19 +102,38 @@ const filteredOptions = computed(() => {
 
 const selectedLabel = computed(() => {
   if (props.displayText) return props.displayText
+  if (props.multiple) {
+    const arr = Array.isArray(props.modelValue) ? props.modelValue : []
+    if (arr.length === 0) return props.placeholder
+    const labels = arr
+      .map(v => normalizedOptions.value.find(o => o.value === v)?.label)
+      .filter(Boolean) as string[]
+    return labels.join(', ')
+  }
   const opt = normalizedOptions.value.find(o => o.value === props.modelValue)
   return opt ? opt.label : props.placeholder
 })
 
 const isPlaceholder = computed(() => {
   if (props.displayText) return false
+  if (props.multiple) {
+    return !Array.isArray(props.modelValue) || props.modelValue.length === 0
+  }
   return !normalizedOptions.value.some(o => o.value === props.modelValue)
 })
 
 const isSelectedDisabled = computed(() => {
+  if (props.multiple) return false
   const opt = normalizedOptions.value.find(o => o.value === props.modelValue)
   return !!opt?.disabled
 })
+
+function isValueSelected(v: SelectOption['value']): boolean {
+  if (props.multiple) {
+    return Array.isArray(props.modelValue) && props.modelValue.includes(v)
+  }
+  return v === props.modelValue
+}
 
 // Reset highlight when filtered list changes
 watch(filteredOptions, () => { highlightIdx.value = -1 })
@@ -120,7 +142,7 @@ function openPanel() {
   if (props.teleport) updateTeleportPosition()
   open.value = true
   // Pre-highlight selected item
-  const idx = filteredOptions.value.findIndex(o => o.value === props.modelValue)
+  const idx = filteredOptions.value.findIndex(o => isValueSelected(o.value))
   highlightIdx.value = idx >= 0 ? idx : 0
   if (props.searchable) {
     search.value = ''
@@ -137,6 +159,15 @@ function toggle() {
 
 function select(opt: SelectOption) {
   if (opt.disabled) return
+  if (props.multiple) {
+    const cur = Array.isArray(props.modelValue) ? [...props.modelValue] : []
+    const idx = cur.indexOf(opt.value)
+    if (idx >= 0) cur.splice(idx, 1)
+    else cur.push(opt.value)
+    emit('update:modelValue', cur)
+    emit('change', cur)
+    return  // keep panel open for further selections
+  }
   emit('update:modelValue', opt.value)
   emit('change', opt.value)
   open.value = false
@@ -258,14 +289,21 @@ onBeforeUnmount(() => {
               :key="String(opt.value)"
               class="base-select__item text-truncate"
               :class="{
-                'base-select__item--sel': opt.value === modelValue,
+                'base-select__item--sel': isValueSelected(opt.value),
                 'base-select__item--hl': idx === highlightIdx,
                 'base-select__item--disabled': opt.disabled,
+                'base-select__item--multi': multiple,
               }"
               @click="select(opt)"
               @mouseenter="highlightIdx = idx"
             >
-              {{ opt.label }}
+              <MsIcon
+                v-if="multiple"
+                :name="isValueSelected(opt.value) ? 'check_box' : 'check_box_outline_blank'"
+                size="sm"
+                :color="isValueSelected(opt.value) ? 'var(--ac)' : 'var(--t3)'"
+              />
+              <span class="base-select__item-label text-truncate">{{ opt.label }}</span>
             </div>
           </div>
         </div>
@@ -376,6 +414,16 @@ onBeforeUnmount(() => {
 .base-select__item:hover,
 .base-select__item--hl { background: var(--bg3); }
 .base-select__item--sel { color: var(--ac); font-weight: 500; }
+.base-select__item--multi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.base-select__item--multi .base-select__item-label {
+  flex: 1;
+  min-width: 0;
+}
+.base-select__item--multi.base-select__item--sel { color: var(--t1); font-weight: 400; }
 .base-select__item--disabled {
   opacity: .45;
   cursor: default;

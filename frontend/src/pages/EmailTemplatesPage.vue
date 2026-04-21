@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
@@ -11,6 +13,8 @@ import Spinner from '@/components/ui/Spinner.vue'
 import FormField from '@/components/form/FormField.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import ChipSelect, { type ChipOption } from '@/components/ui/ChipSelect.vue'
+import MsIcon from '@/components/ui/MsIcon.vue'
+import Badge from '@/components/ui/Badge.vue'
 import { useTheme } from '@/composables/useTheme'
 
 defineOptions({ name: 'EmailTemplatesPage' })
@@ -18,6 +22,7 @@ defineOptions({ name: 'EmailTemplatesPage' })
 const { t } = useI18n({ useScope: 'global' })
 const { get, post } = useApiFetch()
 const { toast } = useToast()
+const { confirm } = useConfirm()
 const theme = useTheme()
 
 type TemplateKey =
@@ -27,6 +32,8 @@ type TemplateKey =
   | 'createUser'
   | 'passwordReset'
   | 'emailChange'
+  | 'alertFired'
+  | 'alertResolved'
 
 interface TemplateData {
   subject: string
@@ -45,6 +52,8 @@ const TEMPLATE_KEYS: TemplateKey[] = [
   'createUser',
   'passwordReset',
   'emailChange',
+  'alertFired',
+  'alertResolved',
 ]
 
 const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
@@ -54,6 +63,8 @@ const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
   createUser: ['brand_name', 'username', 'email', 'password', 'reset_url'],
   passwordReset: ['brand_name', 'username', 'email', 'reset_url'],
   emailChange: ['brand_name', 'username', 'new_email', 'confirm_url'],
+  alertFired: ['brand_name', 'node_name', 'node_id', 'alert_type', 'alert_type_label', 'severity', 'severity_label', 'message', 'fired_at'],
+  alertResolved: ['brand_name', 'node_name', 'node_id', 'alert_type', 'alert_type_label', 'message', 'fired_at', 'resolved_at'],
 }
 
 const templates = ref<Record<TemplateKey, TemplateData>>({
@@ -63,7 +74,32 @@ const templates = ref<Record<TemplateKey, TemplateData>>({
   createUser: { subject: '', body: '' },
   passwordReset: { subject: '', body: '' },
   emailChange: { subject: '', body: '' },
+  alertFired: { subject: '', body: '' },
+  alertResolved: { subject: '', body: '' },
 })
+
+// Snapshot of saved server-side values; updated after each successful
+// save() / saveAllDirty(). Used to compute per-template dirty flags.
+const orig = ref<Record<TemplateKey, TemplateData>>({
+  bulk: { subject: '', body: '' },
+  reminder: { subject: '', body: '' },
+  preDelete: { subject: '', body: '' },
+  createUser: { subject: '', body: '' },
+  passwordReset: { subject: '', body: '' },
+  emailChange: { subject: '', body: '' },
+  alertFired: { subject: '', body: '' },
+  alertResolved: { subject: '', body: '' },
+})
+
+function isTemplateDirty(key: TemplateKey): boolean {
+  const cur = templates.value[key]
+  const o = orig.value[key]
+  return cur.subject !== o.subject || cur.body !== o.body
+}
+const dirtyKeys = computed<TemplateKey[]>(() =>
+  TEMPLATE_KEYS.filter(isTemplateDirty),
+)
+const isDirty = computed(() => dirtyKeys.value.length > 0)
 
 const activeTemplate = ref<TemplateKey>('bulk')
 const initialLoading = ref(true)
@@ -155,10 +191,12 @@ async function loadData() {
   const templateData = await get<Record<string, TemplateData>>('/api/email-templates')
   if (templateData) {
     for (const key of TEMPLATE_KEYS) {
-      templates.value[key] = {
+      const data = {
         subject: templateData[key]?.subject ?? '',
         body: templateData[key]?.body ?? '',
       }
+      templates.value[key] = { ...data }
+      orig.value[key] = { ...data }
     }
   }
 
@@ -166,7 +204,7 @@ async function loadData() {
   schedulePreview()
 }
 
-async function save() {
+async function save(): Promise<boolean> {
   saveLoading.value = true
   const res = await post<{ message: string }>('/api/email-templates', {
     type: activeTemplate.value,
@@ -174,7 +212,80 @@ async function save() {
     body: currentTemplate.value.body,
   })
   saveLoading.value = false
-  if (res) toast(t('emailTemplates.saved'), 'success')
+  if (res) {
+    orig.value[activeTemplate.value] = { ...currentTemplate.value }
+    toast(t('emailTemplates.saved'), 'success')
+    return true
+  }
+  return false
+}
+
+async function saveAllDirty(): Promise<boolean> {
+  if (!isDirty.value) return true
+  saveLoading.value = true
+  let allOk = true
+  const failed: string[] = []
+  for (const key of dirtyKeys.value.slice()) {
+    const cur = templates.value[key]
+    const res = await post<{ message: string }>('/api/email-templates', {
+      type: key,
+      subject: cur.subject,
+      body: cur.body,
+    })
+    if (res) {
+      orig.value[key] = { ...cur }
+    } else {
+      allOk = false
+      failed.push(key)
+    }
+  }
+  saveLoading.value = false
+  if (allOk) {
+    toast(t('emailTemplates.savedAll', { n: TEMPLATE_KEYS.length }), 'success')
+  } else {
+    toast(t('emailTemplates.saveSomeFailed', { n: failed.length }), 'error')
+  }
+  return allOk
+}
+
+function discardAll() {
+  for (const key of TEMPLATE_KEYS) {
+    templates.value[key] = { ...orig.value[key] }
+  }
+}
+
+async function promptUnsaved(): Promise<'save' | 'discard' | 'stay'> {
+  const result = await confirm({
+    title: t('emailTemplates.unsavedTitle'),
+    message: t('emailTemplates.unsavedMessage', { n: dirtyKeys.value.length }),
+    confirmText: t('emailTemplates.unsavedSave'),
+    cancelText: t('emailTemplates.unsavedDiscard'),
+    altText: t('emailTemplates.unsavedStay'),
+  })
+  if (result === 'alt') return 'stay'
+  return result === true ? 'save' : 'discard'
+}
+
+onBeforeRouteLeave(async () => {
+  if (!isDirty.value) return true
+  const r = await promptUnsaved()
+  if (r === 'stay') return false
+  if (r === 'save') {
+    const ok = await saveAllDirty()
+    if (!ok) return false
+  }
+  return true
+})
+
+function onBeforeUnload(e: BeforeUnloadEvent) {
+  if (isDirty.value) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
+function tplLabel(key: TemplateKey): string {
+  return t(`emailTemplates.${key}.title`)
 }
 
 watch(
@@ -197,6 +308,7 @@ onMounted(() => {
   if (typeof window !== 'undefined') {
     prefersDarkQuery.value = window.matchMedia('(prefers-color-scheme: dark)')
     prefersDarkQuery.value.addEventListener('change', onSystemThemeChange)
+    window.addEventListener('beforeunload', onBeforeUnload)
   }
   void loadData()
 })
@@ -204,6 +316,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (previewTimer) clearTimeout(previewTimer)
   prefersDarkQuery.value?.removeEventListener('change', onSystemThemeChange)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('beforeunload', onBeforeUnload)
+  }
 })
 </script>
 
@@ -244,12 +359,6 @@ onBeforeUnmount(() => {
           <FormField :label="t('emailTemplates.body')">
             <BaseTextarea v-model="currentTemplate.body" :rows="16" mono />
           </FormField>
-
-          <div class="tpl-actions">
-            <BaseButton variant="primary" :loading="saveLoading" @click="save">
-              {{ t('emailTemplates.save') }}
-            </BaseButton>
-          </div>
         </section>
 
         <section class="tpl-column tpl-column--preview">
@@ -281,6 +390,49 @@ onBeforeUnmount(() => {
       </div>
     </template>
   </div>
+
+  <Teleport to="body">
+    <Transition name="slide-up">
+      <div v-if="isDirty" class="dirty-bar">
+        <span class="dirty-bar__text">
+          <MsIcon name="edit" />
+          {{ t('emailTemplates.unsavedHint', { n: dirtyKeys.length }) }}
+        </span>
+        <div class="dirty-bar__chips">
+          <Badge
+            v-for="k in dirtyKeys"
+            :key="k"
+            color="#f59e0b"
+            class="dirty-bar__chip"
+            @click="activeTemplate = k"
+          >
+            {{ tplLabel(k) }}
+          </Badge>
+        </div>
+        <div class="dirty-bar__actions">
+          <BaseButton size="sm" :disabled="saveLoading" @click="discardAll">
+            {{ t('emailTemplates.discardAll') }}
+          </BaseButton>
+          <BaseButton
+            v-if="isTemplateDirty(activeTemplate)"
+            size="sm"
+            :loading="saveLoading"
+            @click="save"
+          >
+            {{ t('emailTemplates.saveCurrent') }}
+          </BaseButton>
+          <BaseButton
+            variant="primary"
+            size="sm"
+            :loading="saveLoading"
+            @click="saveAllDirty"
+          >
+            {{ t('emailTemplates.saveAll', { n: dirtyKeys.length }) }}
+          </BaseButton>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -288,6 +440,56 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: center;
   padding: var(--sp-8);
+}
+
+/* Floating dirty bar (mirrors SettingsPage.vue) */
+.dirty-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--bg3);
+  border-top: 1px solid var(--bd);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.35);
+}
+.dirty-bar__text {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--amber);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.dirty-bar__text :deep(.ms-icon) { font-size: 1.1rem; }
+.dirty-bar__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.dirty-bar__chip { cursor: pointer; }
+.dirty-bar__actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform .24s ease, opacity .24s ease;
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%);
+  opacity: 0;
 }
 
 .tpl-workspace {

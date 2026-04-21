@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.runtime_settings import SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
 from app.db.models.manager import ManagerEmailTemplate
+from app.services.audit import log_manager_activity
 
 logger = logging.getLogger(__name__)
 
@@ -94,10 +95,14 @@ EMAIL_TEMPLATE_API_TO_INTERNAL = {
     "create_user": "create_user",
     "password_reset": "password_reset",
     "email_change": "email_change",
+    "alert_fired": "alert_fired",
+    "alert_resolved": "alert_resolved",
     "preDelete": "pre_delete",
     "createUser": "create_user",
     "passwordReset": "password_reset",
     "emailChange": "email_change",
+    "alertFired": "alert_fired",
+    "alertResolved": "alert_resolved",
 }
 
 EMAIL_TEMPLATE_INTERNAL_KEYS = (
@@ -107,6 +112,8 @@ EMAIL_TEMPLATE_INTERNAL_KEYS = (
     "create_user",
     "password_reset",
     "email_change",
+    "alert_fired",
+    "alert_resolved",
 )
 
 _TEMPLATE_FILES = {
@@ -116,6 +123,8 @@ _TEMPLATE_FILES = {
     "create_user": _PROJECT_ROOT / "templates" / "create_user_template.json",
     "password_reset": _PROJECT_ROOT / "templates" / "password_reset_template.json",
     "email_change": _PROJECT_ROOT / "templates" / "email_change_template.json",
+    "alert_fired": _PROJECT_ROOT / "templates" / "alert_fired_template.json",
+    "alert_resolved": _PROJECT_ROOT / "templates" / "alert_resolved_template.json",
 }
 
 _PREVIEW_DUMMY_VALUES: dict[str, str] = {
@@ -129,6 +138,15 @@ _PREVIEW_DUMMY_VALUES: dict[str, str] = {
     "deletion_date": "2026-04-20",
     "password": "TempPass#123",
     "new_email": "new-preview@example.com",
+    "node_name": "node1-prod",
+    "node_id": "1",
+    "alert_type": "cpu_high",
+    "alert_type_label": "CPU 使用率过高",
+    "severity": "warning",
+    "severity_label": "警告",
+    "message": "CPU 92.3% > 90% sustained",
+    "fired_at": "2026-04-21 14:32:11 UTC",
+    "resolved_at": "2026-04-21 14:48:55 UTC",
 }
 
 _PREVIEW_ACTIONS: dict[str, tuple[str, str]] = {
@@ -138,6 +156,8 @@ _PREVIEW_ACTIONS: dict[str, tuple[str, str]] = {
     "create_user": ("设置您的账户密码", "/#/reset-password?token=preview-token&email=preview@example.com"),
     "password_reset": ("重置密码", "/#/reset-password?token=preview-token&email=preview@example.com"),
     "email_change": ("确认更改", "/#/confirm-email?token=preview-token&uid=10001"),
+    "alert_fired": ("查看监控面板", "/#/admin/dashboard"),
+    "alert_resolved": ("查看监控面板", "/#/admin/dashboard"),
 }
 
 
@@ -208,16 +228,23 @@ def render_template_body(
 ) -> tuple[str, str]:
     """Apply {{key}} placeholder substitution on subject and body.
 
-    Values are HTML-escaped to prevent injection in email content.
-    Returns (rendered_subject, rendered_body).
+    Values are HTML-escaped to prevent injection. Newlines inside multi-line
+    variable values (e.g. ``server_list``) are converted to ``<br>`` so they
+    render as actual line breaks in the resulting HTML email body. Subject
+    lines must remain a single line by RFC, so newlines are stripped from
+    the subject substitution path.
     """
     subject = template.subject
     body = template.body
     for key, value in variables.items():
-        safe_value = html.escape(str(value))
+        raw = str(value)
+        # Subject: single-line, escape only.
+        subject_value = html.escape(raw.replace("\n", " ").replace("\r", " "))
+        # Body: escape, then convert real newlines into <br>.
+        body_value = html.escape(raw).replace("\n", "<br>")
         placeholder = "{{" + key + "}}"
-        subject = subject.replace(placeholder, safe_value)
-        body = body.replace(placeholder, safe_value)
+        subject = subject.replace(placeholder, subject_value)
+        body = body.replace(placeholder, body_value)
     return subject, body
 
 
@@ -249,8 +276,12 @@ def render_email_shell(
 
 # ── SMTP helpers ──
 
-async def _get_smtp_config(db: AsyncSession) -> dict[str, Any]:
-    """Read SMTP settings from runtime settings store."""
+async def get_smtp_config(db: AsyncSession) -> dict[str, Any]:
+    """Read SMTP-related settings from the runtime settings store.
+
+    Public so batch senders can resolve the config once and pass it into
+    ``EmailClient`` themselves, avoiding a per-message store lookup.
+    """
     store = get_settings_store()
     keys = {
         "SMTP_HOST": SETTINGS_SPECS["SMTP_HOST"].default_value(),
@@ -322,6 +353,198 @@ async def build_template_preview(
 
 # ── Send ──
 
+# Exceptions where a retry has any chance of helping. Auth and recipient
+# rejection failures are *not* retried because re-sending will only repeat
+# the same error and waste an SMTP round-trip.
+_RETRYABLE_SMTP_EXC = (
+    smtplib.SMTPServerDisconnected,
+    smtplib.SMTPConnectError,
+    smtplib.SMTPHeloError,
+    ConnectionError,
+    TimeoutError,
+    OSError,  # covers socket.gaierror, socket.timeout
+)
+
+
+def _build_smtp_server(
+    *, host: str, port: int, use_ssl: bool, sender: str, password: str
+) -> smtplib.SMTP:
+    """Open and authenticate an SMTP connection. Blocking; call inside to_thread."""
+    cls = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+    server = cls(host, port, timeout=20)
+    if not use_ssl:
+        server.starttls()
+    server.login(sender, password)
+    return server
+
+
+class EmailClient:
+    """Reusable SMTP connection + per-message renderer.
+
+    A single ``EmailClient`` opens one SMTP connection in ``__aenter__`` and
+    keeps it alive for the duration of the ``async with`` block, so batch
+    senders (reminders, bulk emails) avoid the connect/login round-trip on
+    every recipient. If the connection drops mid-batch, the next ``send()``
+    transparently reconnects.
+
+    Each successful or failed delivery attempt is recorded via
+    ``log_manager_activity`` when ``db`` is provided, giving operators a
+    per-recipient audit trail.
+    """
+
+    def __init__(
+        self,
+        cfg: dict[str, Any],
+        site_url: str,
+        *,
+        db: AsyncSession | None = None,
+        actor: str = "system",
+        log_action: str = "email",
+    ) -> None:
+        self._brand_name = str(cfg.get("BRAND_NAME", "Erocraft Manager"))
+        self._sender_email = str(cfg.get("SENDER_EMAIL", ""))
+        self._smtp_password = str(cfg.get("SMTP_PASSWORD", ""))
+        self._smtp_host = str(cfg.get("SMTP_HOST", ""))
+        self._smtp_port = int(cfg.get("SMTP_PORT", 587))
+        self._smtp_use_ssl = bool(cfg.get("SMTP_USE_SSL", True))
+        self._configured = all([
+            self._smtp_host, self._smtp_port,
+            self._smtp_password, self._sender_email,
+        ])
+        self._site_url = site_url
+        self._db = db
+        self._actor = actor
+        self._log_action = log_action
+        self._server: smtplib.SMTP | None = None
+
+    # ── Connection management ──
+    def _open(self) -> None:
+        self._server = _build_smtp_server(
+            host=self._smtp_host, port=self._smtp_port,
+            use_ssl=self._smtp_use_ssl,
+            sender=self._sender_email, password=self._smtp_password,
+        )
+
+    def _close(self) -> None:
+        if self._server is not None:
+            try:
+                self._server.quit()
+            except Exception:  # noqa: BLE001 - close is best-effort
+                pass
+            self._server = None
+
+    async def __aenter__(self) -> "EmailClient":
+        if self._configured:
+            try:
+                await asyncio.to_thread(self._open)
+            except Exception as exc:  # noqa: BLE001
+                # Don't fail the whole context — let individual send() calls
+                # surface the real per-message error / retry. This keeps a
+                # transient DNS hiccup from blowing up an entire batch job.
+                logger.warning("SMTP 连接初始化失败，将在每封邮件尝试重新连接: %s", exc)
+                self._server = None
+        return self
+
+    async def __aexit__(self, *exc_info: Any) -> None:
+        await asyncio.to_thread(self._close)
+
+    # ── Sending ──
+    async def send(
+        self,
+        *,
+        recipient_email: str,
+        subject: str,
+        main_content_raw: str,
+        greeting: str,
+        action_text: str | None = None,
+        action_url: str | None = None,
+    ) -> tuple[bool, str | None]:
+        if not self._configured:
+            err = "SMTP 配置不完整（主机、端口、密码、发件人地址），请检查系统设置。"
+            logger.error(err)
+            await self._audit(recipient_email, subject, ok=False, err=err)
+            return False, err
+
+        html_body = render_email_shell(
+            panel_name=self._brand_name,
+            panel_url=self._site_url,
+            greeting=greeting,
+            main_content_raw=main_content_raw,
+            action_text=action_text,
+            action_url=action_url,
+        )
+        mime = MIMEText(html_body, "html", "utf-8")
+        mime["From"] = formataddr((Header(self._brand_name, "utf-8").encode(), self._sender_email))
+        mime["To"] = recipient_email
+        mime["Subject"] = Header(subject, "utf-8")
+        raw_msg = mime.as_string()
+
+        # Up to 3 attempts: initial + 2 retries with exponential backoff.
+        # Retryable failures close the connection so the next attempt
+        # rebuilds it cleanly; this also recovers from a server that
+        # silently closed an idle connection between batch messages.
+        last_err: Exception | None = None
+        for attempt in range(3):
+            try:
+                if self._server is None:
+                    await asyncio.to_thread(self._open)
+                assert self._server is not None
+                await asyncio.to_thread(
+                    self._server.sendmail,
+                    self._sender_email, [recipient_email], raw_msg,
+                )
+                if attempt > 0:
+                    logger.info("邮件在第 %d 次尝试后发送成功 to %s", attempt + 1, recipient_email)
+                else:
+                    logger.info("邮件已成功发送至 %s", recipient_email)
+                await self._audit(recipient_email, subject, ok=True, err=None)
+                return True, None
+            except _RETRYABLE_SMTP_EXC as exc:
+                last_err = exc
+                # Connection might be broken — close so the next iteration
+                # rebuilds it. Best-effort close: ignore close errors.
+                await asyncio.to_thread(self._close)
+                if attempt < 2:
+                    backoff = 2 ** attempt  # 1s, 2s
+                    logger.warning(
+                        "邮件发送失败 (可重试) to %s, 第 %d 次将在 %ds 后重试: %s",
+                        recipient_email, attempt + 2, backoff, exc,
+                    )
+                    await asyncio.sleep(backoff)
+                    continue
+                logger.error("邮件发送失败 (重试已用尽) to %s: %s", recipient_email, exc, exc_info=True)
+                await self._audit(recipient_email, subject, ok=False, err=str(exc))
+                return False, str(exc)
+            except Exception as exc:  # noqa: BLE001 - non-retryable: auth, refused, etc
+                logger.error("邮件发送失败 to %s: %s", recipient_email, exc, exc_info=True)
+                await self._audit(recipient_email, subject, ok=False, err=str(exc))
+                return False, str(exc)
+
+        return False, str(last_err) if last_err else "unknown error"
+
+    async def _audit(self, recipient: str, subject: str, *, ok: bool, err: str | None) -> None:
+        """Persist a per-recipient send attempt to manager_activity_logs.
+
+        Note: SMTP "success" only confirms the message was accepted by the
+        relay — it cannot detect downstream bounces. The activity log
+        therefore records *delivery to SMTP server*, not final delivery.
+        """
+        if self._db is None:
+            return
+        await log_manager_activity(
+            self._db,
+            actor=self._actor,
+            action=self._log_action,
+            status="success" if ok else "fail",
+            detail_key="email_sent" if ok else "email_failed",
+            detail_params={
+                "recipient": recipient,
+                "subject": subject,
+                "error": err or "",
+            },
+        )
+
+
 async def send_email(
     db: AsyncSession,
     *,
@@ -331,53 +554,140 @@ async def send_email(
     greeting: str,
     action_text: str | None = None,
     action_url: str | None = None,
+    actor: str = "system",
 ) -> tuple[bool, str | None]:
-    """Send an HTML email via SMTP.
+    """Single-shot send. For batch sending, prefer ``EmailClient`` directly."""
+    cfg = await get_smtp_config(db)
+    site_url = await get_site_url(db)
+    async with EmailClient(cfg, site_url, db=db, actor=actor) as client:
+        return await client.send(
+            recipient_email=recipient_email,
+            subject=subject,
+            main_content_raw=main_content_raw,
+            greeting=greeting,
+            action_text=action_text,
+            action_url=action_url,
+        )
 
-    Returns (success, error_message_or_none).
+
+# Whitelist of SMTP override keys accepted by send_test_email so the API
+# cannot be coerced into setting unrelated values (e.g. BRAND_NAME) for a
+# single send.
+_TEST_EMAIL_OVERRIDE_KEYS = frozenset({
+    "SMTP_HOST", "SMTP_PORT", "SMTP_USE_SSL",
+    "SMTP_PASSWORD", "SENDER_EMAIL",
+})
+
+
+async def send_test_email(
+    db: AsyncSession,
+    *,
+    recipient_email: str,
+    override: dict[str, Any] | None = None,
+    actor: str = "system",
+) -> tuple[bool, str | None]:
+    """Send a one-off SMTP test email.
+
+    Loads the saved SMTP config and layers ``override`` on top — any keys
+    outside ``_TEST_EMAIL_OVERRIDE_KEYS`` are ignored. The body is a fixed
+    canned message; templates are not involved so a misconfigured template
+    cannot block SMTP verification.
     """
-    cfg = await _get_smtp_config(db)
-    sender_email = str(cfg.get("SENDER_EMAIL", ""))
-    smtp_host = str(cfg.get("SMTP_HOST", ""))
-    smtp_port = int(cfg.get("SMTP_PORT", 587))
-    smtp_password = str(cfg.get("SMTP_PASSWORD", ""))
-    smtp_use_ssl = bool(cfg.get("SMTP_USE_SSL", True))
-    brand_name = str(cfg.get("BRAND_NAME", "Ptero Manager"))
+    cfg = await get_smtp_config(db)
+    if override:
+        for k, v in override.items():
+            if k in _TEST_EMAIL_OVERRIDE_KEYS and v not in (None, ""):
+                cfg[k] = v
+    site_url = await get_site_url(db)
+    async with EmailClient(cfg, site_url, db=db, actor=actor, log_action="settings") as client:
+        return await client.send(
+            recipient_email=recipient_email,
+            subject="[Erocraft Manager] SMTP 配置测试邮件",
+            main_content_raw=(
+                "这是一封来自 Erocraft Manager 的 SMTP 配置测试邮件。\n"
+                "如果您收到了这封邮件，说明当前 SMTP 配置工作正常。"
+            ),
+            greeting="您好！",
+        )
 
-    if not all([smtp_host, smtp_port, smtp_password, sender_email]):
-        msg = "SMTP 配置不完整（主机、端口、密码、发件人地址），请检查系统设置。"
-        logger.error(msg)
-        return False, msg
+
+# ── Alert email ──
+
+ALERT_TYPE_LABELS: dict[str, str] = {
+    "node_offline": "节点离线",
+    "agent_only_down": "Agent 离线 (Wings 正常)",
+    "wings_only_down": "Wings 离线 (Agent 正常)",
+    "cpu_high": "CPU 使用率过高",
+    "mem_high": "内存使用率过高",
+    "swap_high": "Swap 使用率过高",
+    "disk_high": "磁盘使用率告警",
+    "disk_critical": "磁盘使用率严重",
+    "load_high": "系统负载过高",
+    "network_down": "公网探针失败",
+    "clash_down": "Clash 代理探针失败",
+}
+
+SEVERITY_LABELS: dict[str, str] = {
+    "warning": "警告",
+    "critical": "严重",
+    "info": "提示",
+}
+
+
+def alert_type_label(alert_type: str) -> str:
+    return ALERT_TYPE_LABELS.get(alert_type, alert_type)
+
+
+def severity_label(severity: str) -> str:
+    return SEVERITY_LABELS.get(severity, severity)
+
+
+async def send_alert_email(
+    db: AsyncSession,
+    *,
+    recipient_email: str,
+    node_name: str,
+    node_id: int | None,
+    alert_type: str,
+    severity: str,
+    message: str,
+    fired_at: datetime,
+    resolved_at: datetime | None = None,
+    kind: str = "fired",
+) -> tuple[bool, str | None]:
+    """Render and send an alert email to a single recipient.
+
+    ``kind`` is ``"fired"`` or ``"resolved"`` and selects the template.
+    """
+    template_key = "alert_resolved" if kind == "resolved" else "alert_fired"
+    template = await load_template(db, template_key)
+    if not template.subject and not template.body:
+        return False, f"missing template: {template_key}"
 
     site_url = await get_site_url(db)
-    html_body = render_email_shell(
-        panel_name=brand_name,
-        panel_url=site_url,
+    variables: dict[str, Any] = {
+        "node_name": node_name,
+        "node_id": "" if node_id is None else str(node_id),
+        "alert_type": alert_type,
+        "alert_type_label": alert_type_label(alert_type),
+        "severity": severity,
+        "severity_label": severity_label(severity),
+        "message": message or "",
+        "fired_at": fired_at.strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "resolved_at": resolved_at.strftime("%Y-%m-%d %H:%M:%S UTC") if resolved_at else "",
+    }
+    rendered_subject, rendered_body = render_template_body(template, variables)
+
+    greeting = "尊敬的管理员："
+    action_text = "查看监控面板"
+    action_url = f"{site_url}/#/admin/dashboard" if site_url else None
+
+    return await send_email(
+        db,
+        recipient_email=recipient_email,
+        subject=rendered_subject,
+        main_content_raw=rendered_body,
         greeting=greeting,
-        main_content_raw=main_content_raw,
         action_text=action_text,
         action_url=action_url,
     )
-
-    mime = MIMEText(html_body, "html", "utf-8")
-    mime["From"] = formataddr((Header(brand_name, "utf-8").encode(), sender_email))
-    mime["To"] = recipient_email
-    mime["Subject"] = Header(subject, "utf-8")
-
-    try:
-        server_class = smtplib.SMTP_SSL if smtp_use_ssl else smtplib.SMTP
-        raw_msg = mime.as_string()
-
-        def _do_send() -> None:
-            with server_class(smtp_host, smtp_port, timeout=20) as server:
-                if not smtp_use_ssl:
-                    server.starttls()
-                server.login(sender_email, smtp_password)
-                server.sendmail(sender_email, [recipient_email], raw_msg)
-
-        await asyncio.to_thread(_do_send)
-        logger.info("邮件已成功发送至 %s", recipient_email)
-        return True, None
-    except Exception as exc:
-        logger.error("邮件发送失败 to %s: %s", recipient_email, exc, exc_info=True)
-        return False, str(exc)

@@ -33,9 +33,11 @@ from app.schemas.users import (
 )
 from app.services.audit import log_manager_activity
 from app.services.email import (
+    EmailClient,
     generate_temporary_password,
     get_email_delay,
     get_site_url,
+    get_smtp_config,
     load_template,
     render_template_body,
     send_email,
@@ -333,39 +335,43 @@ async def batch_users(
         brand_name = await _brand_name(db)
         site_url = await get_site_url(db)
         delay = await get_email_delay(db)
+        cfg = await get_smtp_config(db)
         await db.commit()
 
-        for index, user in enumerate(users):
-            if not user.email:
-                errors += 1
-                continue
+        async with EmailClient(
+            cfg, site_url, db=db,
+            actor=current_user.username, log_action="user",
+        ) as client:
+            for index, user in enumerate(users):
+                if not user.email:
+                    errors += 1
+                    continue
 
-            subject, body = render_template_body(
-                template,
-                {
-                    "brand_name": brand_name,
-                    "username": user.username,
-                    "email": user.email,
-                    "server_name": "(不适用)",
-                    "server_id": "(不适用)",
-                    "expiration_date": "(不适用)",
-                },
-            )
-            sent, _ = await send_email(
-                db,
-                recipient_email=user.email,
-                subject=subject,
-                main_content_raw=body,
-                greeting=f"您好, {user.username}!",
-                action_text="登录系统查看",
-                action_url=site_url,
-            )
-            if sent:
-                success += 1
-            else:
-                errors += 1
-            if delay > 0 and index < len(users) - 1:
-                await asyncio.sleep(delay)
+                subject, body = render_template_body(
+                    template,
+                    {
+                        "brand_name": brand_name,
+                        "username": user.username,
+                        "email": user.email,
+                        "server_name": "(不适用)",
+                        "server_id": "(不适用)",
+                        "expiration_date": "(不适用)",
+                    },
+                )
+                sent, _ = await client.send(
+                    recipient_email=user.email,
+                    subject=subject,
+                    main_content_raw=body,
+                    greeting=f"您好, {user.username}!",
+                    action_text="登录系统查看",
+                    action_url=site_url,
+                )
+                if sent:
+                    success += 1
+                else:
+                    errors += 1
+                if delay > 0 and index < len(users) - 1:
+                    await asyncio.sleep(delay)
 
         await log_manager_activity(
             db,

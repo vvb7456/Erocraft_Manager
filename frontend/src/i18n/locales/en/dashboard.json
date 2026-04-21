@@ -20,5 +20,9 @@
   },
   "notConfigured": "Pterodactyl API Not Configured",
   "notConfiguredMsg": "Please set the panel URL and API key in system settings first",
-  "goToSettings": "Go to Settings"
+  "goToSettings": "Go to Settings",
+  "infrastructure": "Infrastructure Status",
+  "connectivity": "Connectivity",
+  "viewAlerts": "View",
+  "alertBanner": "{count} active alert(s)"
 }

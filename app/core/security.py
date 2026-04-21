@@ -9,12 +9,15 @@ from cryptography.fernet import Fernet, InvalidToken
 
 SESSION_USER_ID_KEY = "user_id"
 
-_SENSITIVE_MARKERS = ("KEY", "SECRET", "TOKEN", "PASSWORD")
-
 
 def is_sensitive_setting(key: str) -> bool:
-    upper_key = key.upper()
-    return any(marker in upper_key for marker in _SENSITIVE_MARKERS)
+    """Return True if a setting key is declared sensitive in its spec.
+
+    Looked up against the explicit registry built from SettingSpec.sensitive
+    flags. Imported lazily to avoid a circular import with runtime_settings.
+    """
+    from app.core.runtime_settings import SENSITIVE_KEYS
+    return key in SENSITIVE_KEYS
 
 
 def _build_fernet(secret: str) -> Fernet:
