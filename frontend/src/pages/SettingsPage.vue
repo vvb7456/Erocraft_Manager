@@ -270,7 +270,10 @@ function _store(key: string) {
 function getStr(key: string, def = ''): string { return _store(key).value[key] ?? def }
 function setStr(key: string, val: string) { _store(key).value[key] = val }
 function getNum(key: string, def = 0): number { return Number(_store(key).value[key]) || def }
-function setNum(key: string, val: string | number | boolean) { _store(key).value[key] = Number(val) }
+function setNum(key: string, val: string | number | boolean | (string | number | boolean)[]) {
+  const v = Array.isArray(val) ? val[0] : val
+  _store(key).value[key] = Number(v)
+}
 function getBool(key: string): boolean {
   const v = _store(key).value[key]
   return v === true || v === 'true' || v === '1'
@@ -738,7 +741,7 @@ async function onTabChange(next: string) {
                     <div class="agent-actions">
                       <BaseButton
                         size="sm"
-                        variant="secondary"
+                        variant="default"
                         :loading="row.pinging"
                         :disabled="!row.agentEndpoint || (!row.agentTokenSet && !row.agentTokenInput)"
                         @click="pingAgent(row)"
