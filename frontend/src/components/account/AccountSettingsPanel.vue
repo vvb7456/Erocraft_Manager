@@ -3,11 +3,14 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
+import { switchLanguage } from '@/i18n/vue-i18n'
+import { backendToFrontendLocale, type BackendLocale } from '@/i18n/locale-map'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
+import BaseSelect from '@/components/form/BaseSelect.vue'
 import FormField from '@/components/form/FormField.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
@@ -19,6 +22,7 @@ interface UserProfile {
   username: string
   email: string
   is_admin: boolean
+  language: string
 }
 
 interface MessageResponse {
@@ -34,6 +38,7 @@ const profile = ref<UserProfile | null>(null)
 
 const emailLoading = ref(false)
 const passwordLoading = ref(false)
+const languageLoading = ref(false)
 
 const newEmail = ref('')
 const emailBanner = ref('')
@@ -42,6 +47,14 @@ const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const passwordBanner = ref('')
+
+const selectedLanguage = ref<BackendLocale>('en')
+const languageBanner = ref('')
+
+const languageOptions = computed(() => [
+  { value: 'zh', label: t('account.language.options.zh') },
+  { value: 'en', label: t('account.language.options.en') },
+])
 
 const normalizedCurrentEmail = computed(() => profile.value?.email.trim().toLowerCase() ?? '')
 const normalizedNewEmail = computed(() => newEmail.value.trim().toLowerCase())
@@ -104,6 +117,7 @@ async function loadProfile() {
   const data = await get<UserProfile>('/api/user/me')
   if (data) {
     profile.value = data
+    selectedLanguage.value = data.language === 'zh' ? 'zh' : 'en'
   }
   initialLoading.value = false
 }
@@ -170,6 +184,38 @@ async function submitPasswordChange() {
     confirmPassword.value = ''
   } finally {
     passwordLoading.value = false
+  }
+}
+
+const canSubmitLanguage = computed(() =>
+  !!profile.value
+  && selectedLanguage.value !== (profile.value.language === 'zh' ? 'zh' : 'en')
+  && !languageLoading.value,
+)
+
+watch(selectedLanguage, () => {
+  languageBanner.value = ''
+})
+
+async function submitLanguage() {
+  if (!profile.value || !canSubmitLanguage.value) return
+  languageLoading.value = true
+  try {
+    const data = await raw('/api/user/account/language', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language: selectedLanguage.value }),
+    })
+    if (!data) return
+    let payload: UserProfile | null = null
+    try { payload = await data.json() as UserProfile } catch { payload = null }
+    if (payload) profile.value = payload
+    languageBanner.value = t('account.language.success')
+    toast(languageBanner.value, 'success')
+    // Apply immediately so the rest of the UI matches the new preference.
+    switchLanguage(backendToFrontendLocale(selectedLanguage.value))
+  } finally {
+    languageLoading.value = false
   }
 }
 
@@ -303,6 +349,38 @@ onMounted(loadProfile)
           >
             <MsIcon name="lock" size="sm" />
             {{ t('account.password.submit') }}
+          </BaseButton>
+        </div>
+      </form>
+    </section>
+
+    <section class="account-section">
+      <SectionHeader icon="language" flush>
+        {{ t('account.language.title') }}
+      </SectionHeader>
+      <p class="account-section__desc">{{ t('account.language.desc') }}</p>
+
+      <form class="account-form" @submit.prevent="submitLanguage">
+        <AlertBanner v-if="languageBanner" tone="success" icon="check_circle">
+          {{ languageBanner }}
+        </AlertBanner>
+
+        <FormField :label="t('account.language.label')" layout="horizontal" bordered>
+          <BaseSelect
+            v-model="selectedLanguage"
+            :options="languageOptions"
+          />
+        </FormField>
+
+        <div class="account-actions">
+          <BaseButton
+            type="submit"
+            variant="primary"
+            :loading="languageLoading"
+            :disabled="!canSubmitLanguage"
+          >
+            <MsIcon name="language" size="sm" />
+            {{ t('account.language.submit') }}
           </BaseButton>
         </div>
       </form>

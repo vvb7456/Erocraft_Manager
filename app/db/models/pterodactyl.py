@@ -53,14 +53,19 @@ class PteroUser(Base):
             stored = "$2b$" + stored[4:]
         return bcrypt.checkpw(plain_password.encode("utf-8"), stored.encode("utf-8"))
 
-    def set_password(self, plain_password: str) -> None:
+    @staticmethod
+    def hash_password_sync(plain_password: str) -> str:
+        """Compute a panel-compatible ``$2y$`` bcrypt hash (CPU-bound)."""
         hashed = bcrypt.hashpw(
             plain_password.encode("utf-8"),
             bcrypt.gensalt(rounds=10),
         ).decode("utf-8")
         if hashed.startswith("$2b$"):
             hashed = "$2y$" + hashed[4:]
-        self.password = hashed
+        return hashed
+
+    def set_password(self, plain_password: str) -> None:
+        self.password = self.hash_password_sync(plain_password)
 
     @property
     def name(self) -> str:
@@ -274,3 +279,55 @@ class ActivityLogSubject(Base):
     subject_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
     activity_log: Mapped[ActivityLog] = relationship("ActivityLog", back_populates="subjects")
+
+
+class PteroDatabaseHost(Base):
+    """``database_hosts`` row — a remote MySQL server used as a database backend."""
+
+    __tablename__ = "database_hosts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(191), nullable=False)
+    host: Mapped[str] = mapped_column(String(191), nullable=False)
+    port: Mapped[int] = mapped_column(Integer, nullable=False)
+    username: Mapped[str] = mapped_column(String(191), nullable=False)
+    password: Mapped[str] = mapped_column(Text, nullable=False)
+    max_databases: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    node_id: Mapped[int | None] = mapped_column(ForeignKey("nodes.id"), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class PteroDatabase(Base):
+    """``databases`` row — a per-server MySQL database hosted on a database_host."""
+
+    __tablename__ = "databases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id"), nullable=False)
+    database_host_id: Mapped[int] = mapped_column(
+        ForeignKey("database_hosts.id"), nullable=False
+    )
+    database: Mapped[str] = mapped_column(String(191), nullable=False)
+    username: Mapped[str] = mapped_column(String(191), nullable=False)
+    remote: Mapped[str] = mapped_column(String(191), nullable=False, default="%")
+    password: Mapped[str] = mapped_column(Text, nullable=False)
+    max_connections: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Backup(Base):
+    """``backups`` row — a per-server backup archive stored on the node."""
+
+    __tablename__ = "backups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id"), nullable=False)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(191), nullable=False)
+    is_successful: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

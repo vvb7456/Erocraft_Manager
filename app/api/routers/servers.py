@@ -35,7 +35,8 @@ from app.schemas.servers import (
 )
 from app.services.audit import log_manager_activity
 from app.services.email import get_email_delay, get_site_url, load_template, render_template_body, send_email
-from app.services.pterodactyl import PterodactylServiceError, pterodactyl_service
+from app.services import server_lifecycle
+from app.services.server_lifecycle import LifecycleError, LifecycleValidationError
 
 router = APIRouter(tags=["servers"])
 logger = logging.getLogger(__name__)
@@ -138,16 +139,19 @@ async def _persist_expiration_after_remote(
     if old_date is not None:
         cleanup_attempted = True
         try:
-            await pterodactyl_service.update_server_description(server_id, old_date)
-        except PterodactylServiceError:
+            await server_lifecycle.update_server_expiration_description(db, server_id, old_date)
+            await db.commit()
+        except LifecycleError:
+            await db.rollback()
             cleanup_failed.append("恢复面板到期描述失败")
             logger.exception("Failed to restore server %s description after local persistence failure", server_id)
 
     if resuspend_on_failure:
         cleanup_attempted = True
         try:
-            await pterodactyl_service.suspend_server(server_id)
-        except PterodactylServiceError:
+            await server_lifecycle.suspend_server(db, server_id)
+        except LifecycleError:
+            await db.rollback()
             cleanup_failed.append("恢复面板冻结状态失败")
             logger.exception("Failed to restore server %s suspension after local persistence failure", server_id)
 
@@ -214,52 +218,74 @@ async def create_server(
     defaults = await _server_defaults(db)
     today = await _get_today(db)
     expiration_date = today + timedelta(days=payload.expiration_days)
+
+    # Resolve nest_id from egg (panel API used to derive it server-side)
+    egg_row = await db.execute(select(Egg.nest_id).where(Egg.id == payload.egg_id))
+    nest_id = egg_row.scalar_one_or_none()
+    if nest_id is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Egg {payload.egg_id} 不存在")
+
+    description = f"到期时间：{expiration_date.strftime('%Y/%m/%d')}"
     await db.commit()
 
     try:
-        server_data = await pterodactyl_service.create_server(
-            user_id=payload.user_id,
-            server_name=payload.server_name.strip(),
-            egg_id=payload.egg_id,
+        created = await server_lifecycle.create_server(
+            db,
+            owner_id=payload.user_id,
             node_id=payload.node_id,
             allocation_id=payload.allocation_id,
-            docker_image=(payload.docker_image or str(defaults["DOCKER_IMAGE"])).strip(),
-            startup_command=payload.startup_command.strip(),
+            egg_id=payload.egg_id,
+            nest_id=int(nest_id),
+            name=payload.server_name.strip(),
+            description=description,
+            image=(payload.docker_image or str(defaults["DOCKER_IMAGE"])).strip(),
+            startup=payload.startup_command.strip(),
             environment=payload.environment,
             cpu=int(payload.cpu if payload.cpu is not None else defaults["DEFAULT_CPU"]),
             memory=int(payload.memory if payload.memory is not None else defaults["DEFAULT_MEMORY"]),
             disk=int(payload.disk if payload.disk is not None else defaults["DEFAULT_DISK"]),
-            databases=int(payload.databases if payload.databases is not None else defaults["DEFAULT_DATABASES"]),
-            backups=int(payload.backups if payload.backups is not None else defaults["DEFAULT_BACKUPS"]),
-            allocations=int(payload.allocations if payload.allocations is not None else defaults["DEFAULT_ALLOCATIONS"]),
-            expiration_date=expiration_date,
+            database_limit=int(payload.databases if payload.databases is not None else defaults["DEFAULT_DATABASES"]),
+            backup_limit=int(payload.backups if payload.backups is not None else defaults["DEFAULT_BACKUPS"]),
+            allocation_limit=int(payload.allocations if payload.allocations is not None else defaults["DEFAULT_ALLOCATIONS"]),
         )
-    except PterodactylServiceError as exc:
+    except LifecycleValidationError as exc:
+        # User-correctable input error → 422 so the frontend can show a field-level message.
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except LifecycleError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
-    server_id = server_data.get("id")
-    if not server_id:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Pterodactyl 创建服务器失败")
+    server_id = int(created.id)
 
     try:
-        await _set_meta_expiration(db, int(server_id), expiration_date)
+        await _set_meta_expiration(db, server_id, expiration_date)
         await db.commit()
     except Exception as exc:
         await db.rollback()
         cleanup_succeeded = False
         try:
-            await pterodactyl_service.delete_server(int(server_id))
+            await server_lifecycle.delete_server(db, server_id)
             cleanup_succeeded = True
-        except PterodactylServiceError:
-            logger.exception("Failed to clean up Pterodactyl server %s after local persistence failure", server_id)
+        except LifecycleError:
+            await db.rollback()
+            logger.exception("Failed to clean up server %s after local persistence failure", server_id)
 
-        logger.exception("Failed to persist manager metadata for Pterodactyl server %s", server_id)
-        detail = "服务器已在面板创建，但写入管理元数据失败"
+        logger.exception("Failed to persist manager metadata for server %s", server_id)
+        detail = "服务器已创建，但写入管理元数据失败"
         if cleanup_succeeded:
-            detail += "，已自动回滚远端服务器"
+            detail += "，已自动回滚"
         else:
-            detail += "，且自动回滚远端服务器失败，请检查面板状态"
+            detail += "，且自动回滚失败，请检查面板状态"
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail) from exc
+
+    server_data = {
+        "id": created.id,
+        "uuid": created.uuid,
+        "uuid_short": created.uuid_short,
+        "name": created.name,
+        "owner_id": created.owner_id,
+        "node_id": created.node_id,
+        "allocation_id": created.allocation_id,
+    }
 
     await log_manager_activity(
         db,
@@ -294,10 +320,11 @@ async def renew_server(
 
     await db.commit()
     try:
-        await pterodactyl_service.sync_server_expiration(server_id, new_date)
+        await server_lifecycle.update_server_expiration_description(db, server_id, new_date)
+        await db.commit()
         if was_suspended:
-            await pterodactyl_service.unsuspend_server(server_id)
-    except PterodactylServiceError as exc:
+            await server_lifecycle.unsuspend_server(db, server_id)
+    except LifecycleError as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -331,10 +358,10 @@ async def toggle_suspend(
 
     try:
         if was_suspended:
-            await pterodactyl_service.unsuspend_server(server_id)
+            await server_lifecycle.unsuspend_server(db, server_id)
         else:
-            await pterodactyl_service.suspend_server(server_id)
-    except PterodactylServiceError as exc:
+            await server_lifecycle.suspend_server(db, server_id)
+    except LifecycleError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     await log_manager_activity(
@@ -364,11 +391,12 @@ async def batch_servers(
         for server_id in server_ids:
             try:
                 if action == "suspend":
-                    await pterodactyl_service.suspend_server(server_id)
+                    await server_lifecycle.suspend_server(db, server_id)
                 else:
-                    await pterodactyl_service.unsuspend_server(server_id)
+                    await server_lifecycle.unsuspend_server(db, server_id)
                 success += 1
-            except PterodactylServiceError:
+            except LifecycleError:
+                await db.rollback()
                 errors += 1
 
         await log_manager_activity(
@@ -405,9 +433,10 @@ async def batch_servers(
             base_date = today if old_expiration_date and old_expiration_date < today else (old_expiration_date or today)
             new_date = base_date + timedelta(days=payload.days)
             try:
-                await pterodactyl_service.sync_server_expiration(server.id, new_date)
+                await server_lifecycle.update_server_expiration_description(db, server.id, new_date)
+                await db.commit()
                 if was_suspended:
-                    await pterodactyl_service.unsuspend_server(server.id)
+                    await server_lifecycle.unsuspend_server(db, server.id)
                 await _persist_expiration_after_remote(
                     db,
                     server_id=server.id,
@@ -416,7 +445,7 @@ async def batch_servers(
                     resuspend_on_failure=was_suspended,
                 )
                 success += 1
-            except (PterodactylServiceError, HTTPException):
+            except (LifecycleError, HTTPException):
                 await db.rollback()
                 errors += 1
 
@@ -437,9 +466,12 @@ async def batch_servers(
     if action == "delete":
         for server_id in server_ids:
             try:
-                await pterodactyl_service.delete_server(server_id)
+                await server_lifecycle.delete_server(db, server_id)
                 success += 1
-            except PterodactylServiceError:
+            except LifecycleError:
+                # Discard any half-applied state from the failed lifecycle call
+                # so the next iteration / audit log starts on a clean session.
+                await db.rollback()
                 errors += 1
 
         await log_manager_activity(
@@ -530,8 +562,8 @@ async def delete_server(
 ) -> MessageResponse:
     server = await _get_server_or_404(db, server_id)
     try:
-        await pterodactyl_service.delete_server(server_id)
-    except PterodactylServiceError as exc:
+        await server_lifecycle.delete_server(db, server_id)
+    except LifecycleError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     await log_manager_activity(
@@ -566,8 +598,9 @@ async def update_server(
 
     await db.commit()
     try:
-        await pterodactyl_service.update_server_description(server_id, new_date)
-    except PterodactylServiceError as exc:
+        await server_lifecycle.update_server_expiration_description(db, server_id, new_date)
+        await db.commit()
+    except LifecycleError as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

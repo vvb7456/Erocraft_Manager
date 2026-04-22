@@ -6,8 +6,8 @@ defineOptions({ name: 'AuthForm' })
 withDefaults(defineProps<{
   icon: string
   subtitle?: string
-  actionsAlign?: 'start' | 'center' | 'end'
-  footerAlign?: 'start' | 'center' | 'end'
+  actionsAlign?: 'start' | 'center' | 'end' | 'between'
+  footerAlign?: 'start' | 'center' | 'end' | 'between'
 }>(), {
   actionsAlign: 'end',
   footerAlign: 'center',
@@ -62,5 +62,11 @@ defineEmits<{
 .auth-form__actions--end,
 .auth-form__footer--end {
   justify-content: flex-end;
+}
+
+.auth-form__actions--between,
+.auth-form__footer--between {
+  justify-content: space-between;
+  align-items: center;
 }
 </style>

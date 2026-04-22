@@ -11,7 +11,7 @@ from pydantic import BaseModel, EmailStr
 # Literal stays in lock-step with EMAIL_TEMPLATE_API_TO_INTERNAL.
 TemplateTypeLiteral = Literal[
     "bulk", "reminder", "preDelete", "createUser",
-    "passwordReset", "emailChange",
+    "passwordReset", "emailChange", "registerVerify",
     "alertFired", "alertResolved",
 ]
 
@@ -40,6 +40,7 @@ class EmailTemplatesResponse(BaseModel):
     createUser: EmailTemplatePayload
     passwordReset: EmailTemplatePayload
     emailChange: EmailTemplatePayload
+    registerVerify: EmailTemplatePayload
     alertFired: EmailTemplatePayload
     alertResolved: EmailTemplatePayload
 

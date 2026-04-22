@@ -1,0 +1,24 @@
+{
+  "subtitle": "创建您的账户",
+  "username": "用户名",
+  "username_placeholder": "3-32 位字母/数字/下划线",
+  "email": "邮箱",
+  "email_placeholder": "name{'@'}example.com",
+  "password": "密码",
+  "password_placeholder": "至少 8 个字符",
+  "confirmPassword": "确认密码",
+  "confirmPassword_placeholder": "再输入一次密码",
+  "submit": "注册",
+  "back": "已有账户？返回登录",
+  "success": "验证邮件已发送，请前往邮箱点击链接完成注册。",
+  "redirecting": "页面将在几秒后自动跳转到登录页。",
+  "error": {
+    "empty": "请填写所有字段",
+    "username_format": "用户名只能包含字母、数字、下划线、点和连字符（3-32 位）",
+    "email_format": "邮箱格式不正确",
+    "length": "密码至少需要 8 个字符",
+    "mismatch": "两次输入的密码不一致",
+    "failed": "注册失败，请稍后再试",
+    "network": "网络连接失败"
+  }
+}

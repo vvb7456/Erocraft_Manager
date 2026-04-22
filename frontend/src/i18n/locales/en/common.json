@@ -92,6 +92,20 @@
       "confirm_link_expired": "The confirmation link has expired. Please request a new one",
       "user_missing": "The user no longer exists",
       "email_confirm_status_unknown": "Email change status is unknown. Refresh your account information later, and request a new change if needed"
+    },
+    "register": {
+      "disabled": "Public registration is currently disabled",
+      "invalid_email": "Invalid email format",
+      "invalid_username": "Username may only contain letters, digits, underscores, dots and hyphens (3-32 chars)",
+      "email_taken": "This email is already registered",
+      "username_taken": "This username is already taken",
+      "rate_limited": "Too many requests, please try again later",
+      "email_send_failed": "Failed to send the verification email, please try again later",
+      "invalid_token": "The verification link is invalid",
+      "token_used": "The verification link has already been used. Please log in.",
+      "token_expired": "The verification link has expired, please register again",
+      "site_url_not_configured": "The system has not configured a public site URL. Please contact an administrator.",
+      "create_failed": "Failed to create the account. Please register again or contact an administrator"
     }
   }
 }

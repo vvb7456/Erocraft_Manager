@@ -42,7 +42,8 @@ from app.services.pterodactyl_activity import (
     decode_activity_properties,
     pterodactyl_activity_logger,
 )
-from app.services.pterodactyl import PterodactylServiceError, pterodactyl_service
+from app.services import server_lifecycle
+from app.services.server_lifecycle import LifecycleError
 from app.services.wings import WingsServiceError, wings_service
 from app.api.utils.wings_errors import translate_wings_error
 
@@ -301,8 +302,8 @@ async def reinstall_user_server(
         await db.commit()
 
     try:
-        await pterodactyl_service.reinstall_server(server.id)
-    except PterodactylServiceError as exc:
+        await server_lifecycle.reinstall_server(db, server.id)
+    except LifecycleError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     if payload.force:

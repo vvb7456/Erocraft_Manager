@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserListItem(BaseModel):
@@ -26,7 +26,7 @@ class UsersListResponse(BaseModel):
 
 
 class CreateUserRequest(BaseModel):
-    email: str = Field(min_length=1)
+    email: EmailStr
     username: str = Field(min_length=1)
     firstName: str = ""
     lastName: str = ""
@@ -35,10 +35,11 @@ class CreateUserRequest(BaseModel):
 
 class UpdateUserRequest(BaseModel):
     username: str = Field(min_length=1)
-    email: str = Field(min_length=1)
+    email: EmailStr
     firstName: str = ""
     lastName: str = ""
     password: str | None = None
+    language: str | None = None
 
 
 class BatchUsersRequest(BaseModel):

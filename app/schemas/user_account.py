@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_validator
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class UserAccountProfileResponse(BaseModel):
@@ -10,6 +12,7 @@ class UserAccountProfileResponse(BaseModel):
     username: str
     email: str
     is_admin: bool
+    language: str = "en"
 
 
 class UpdateUserAccountRequest(BaseModel):
@@ -20,3 +23,7 @@ class UpdateUserAccountRequest(BaseModel):
 class UpdateUserAccountResponse(BaseModel):
     message: str
     user: UserAccountProfileResponse
+
+
+class UpdateLanguageRequest(BaseModel):
+    language: Literal["en", "zh"]

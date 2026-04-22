@@ -1,0 +1,24 @@
+{
+  "subtitle": "Create your account",
+  "username": "Username",
+  "username_placeholder": "3-32 letters/digits/underscores",
+  "email": "Email",
+  "email_placeholder": "name{'@'}example.com",
+  "password": "Password",
+  "password_placeholder": "At least 8 characters",
+  "confirmPassword": "Confirm password",
+  "confirmPassword_placeholder": "Enter password again",
+  "submit": "Sign up",
+  "back": "Already have an account? Sign in",
+  "success": "Verification email sent. Please check your inbox to finish registration.",
+  "redirecting": "Redirecting to the login page in a few seconds.",
+  "error": {
+    "empty": "Please fill in all fields",
+    "username_format": "Username may only contain letters, digits, underscores, dots and hyphens (3-32 chars)",
+    "email_format": "Invalid email format",
+    "length": "Password must be at least 8 characters",
+    "mismatch": "Passwords do not match",
+    "failed": "Registration failed, please try again later",
+    "network": "Network error"
+  }
+}

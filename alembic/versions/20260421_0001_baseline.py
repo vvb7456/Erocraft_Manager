@@ -131,6 +131,35 @@ def upgrade() -> None:
     )
     op.create_index("idx_email_change_user_id", "manager_email_changes", ["user_id"])
 
+    op.create_table(
+        "manager_pending_registrations",
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("email", sa.String(length=255), nullable=False),
+        sa.Column("username", sa.String(length=191), nullable=False),
+        sa.Column("first_name", sa.String(length=255), nullable=False, server_default=""),
+        sa.Column("last_name", sa.String(length=255), nullable=False, server_default=""),
+        sa.Column("password_hash", sa.String(length=255), nullable=False),
+        sa.Column("lookup_hash", sa.String(length=64), nullable=False),
+        sa.Column("token", sa.String(length=255), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
+        sa.Column("used_at", sa.DateTime(), nullable=True),
+        mysql_engine="InnoDB",
+        mysql_charset="utf8mb4",
+    )
+    op.create_index("idx_pr_email", "manager_pending_registrations", ["email"])
+    op.create_index("idx_pr_username", "manager_pending_registrations", ["username"])
+    op.create_index(
+        "uq_pr_lookup_hash",
+        "manager_pending_registrations",
+        ["lookup_hash"],
+        unique=True,
+    )
+
     # --- email templates -------------------------------------------------
     op.create_table(
         "manager_email_templates",
@@ -261,6 +290,10 @@ def downgrade() -> None:
     op.drop_index("idx_nm_node_ts", table_name="manager_node_metrics")
     op.drop_table("manager_node_metrics")
     op.drop_table("manager_email_templates")
+    op.drop_index("uq_pr_lookup_hash", table_name="manager_pending_registrations")
+    op.drop_index("idx_pr_username", table_name="manager_pending_registrations")
+    op.drop_index("idx_pr_email", table_name="manager_pending_registrations")
+    op.drop_table("manager_pending_registrations")
     op.drop_index("idx_email_change_user_id", table_name="manager_email_changes")
     op.drop_table("manager_email_changes")
     op.drop_index("idx_pw_reset_user_id", table_name="manager_password_resets")

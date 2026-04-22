@@ -586,6 +586,13 @@ async function onTabChange(next: string) {
             <FormField :label="t('settings.branding.icpRecord')" layout="horizontal" bordered>
               <BaseInput :modelValue="getStr('UI_ICP_RECORD')" @update:modelValue="setStr('UI_ICP_RECORD', $event)" />
             </FormField>
+            <FormField layout="horizontal" bordered>
+              <template #label>
+                {{ t('settings.branding.allowRegistration') }}
+                <HelpTip :text="t('settings.branding.allowRegistration_tip')" />
+              </template>
+              <ToggleSwitch :modelValue="getBool('ALLOW_PUBLIC_REGISTRATION')" @update:modelValue="setBool('ALLOW_PUBLIC_REGISTRATION', $event)" size="sm" />
+            </FormField>
           </template>
 
           <!-- Server Defaults -->

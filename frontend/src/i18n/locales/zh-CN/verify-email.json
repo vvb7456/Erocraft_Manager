@@ -1,0 +1,12 @@
+{
+  "subtitle": "正在验证您的邮箱",
+  "back": "返回登录",
+  "verifying": "正在验证邮箱…",
+  "success": "邮箱验证成功，账户已激活！",
+  "redirecting": "页面将在几秒后自动跳转到登录页。",
+  "error": {
+    "invalidLink": "验证链接无效",
+    "failed": "验证失败，请重新申请",
+    "network": "网络连接失败"
+  }
+}

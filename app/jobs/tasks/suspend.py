@@ -11,7 +11,8 @@ from app.db.repositories.servers import server_repository
 from app.db.session import get_session_factory
 from app.jobs.tasks.common import get_job_today
 from app.services.audit import log_manager_activity
-from app.services.pterodactyl import PterodactylServiceError, pterodactyl_service
+from app.services import server_lifecycle
+from app.services.server_lifecycle import LifecycleError
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +67,10 @@ async def run_suspend_task() -> None:
             failed_ids: list[int] = []
             for server in servers:
                 try:
-                    await pterodactyl_service.suspend_server(server.id)
+                    await server_lifecycle.suspend_server(db, server.id)
                     success_count += 1
-                except PterodactylServiceError:
+                except LifecycleError:
+                    await db.rollback()
                     failed_ids.append(server.id)
                     logger.exception("Failed to suspend server %s in automated task", server.id)
 

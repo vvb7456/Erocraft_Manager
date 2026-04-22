@@ -160,6 +160,12 @@ SETTINGS_SPECS: dict[str, SettingSpec] = _register({
         lambda: _env_str("BRAND_NAME", get_settings().app_name),
         _normalize_str,
     ),
+    "ALLOW_PUBLIC_REGISTRATION": SettingSpec(
+        "ALLOW_PUBLIC_REGISTRATION",
+        "account",
+        lambda: _env_bool("ALLOW_PUBLIC_REGISTRATION", True),
+        _normalize_bool,
+    ),
     "DEFAULT_NEST_ID": SettingSpec(
         "DEFAULT_NEST_ID",
         "server_defaults",

@@ -32,6 +32,7 @@ type TemplateKey =
   | 'createUser'
   | 'passwordReset'
   | 'emailChange'
+  | 'registerVerify'
   | 'alertFired'
   | 'alertResolved'
 
@@ -52,6 +53,7 @@ const TEMPLATE_KEYS: TemplateKey[] = [
   'createUser',
   'passwordReset',
   'emailChange',
+  'registerVerify',
   'alertFired',
   'alertResolved',
 ]
@@ -63,6 +65,7 @@ const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
   createUser: ['brand_name', 'username', 'email', 'password', 'reset_url'],
   passwordReset: ['brand_name', 'username', 'email', 'reset_url'],
   emailChange: ['brand_name', 'username', 'new_email', 'confirm_url'],
+  registerVerify: ['brand_name', 'username', 'email', 'verify_url'],
   alertFired: ['brand_name', 'node_name', 'node_id', 'alert_type', 'alert_type_label', 'severity', 'severity_label', 'message', 'fired_at'],
   alertResolved: ['brand_name', 'node_name', 'node_id', 'alert_type', 'alert_type_label', 'message', 'fired_at', 'resolved_at'],
 }
@@ -74,6 +77,7 @@ const templates = ref<Record<TemplateKey, TemplateData>>({
   createUser: { subject: '', body: '' },
   passwordReset: { subject: '', body: '' },
   emailChange: { subject: '', body: '' },
+  registerVerify: { subject: '', body: '' },
   alertFired: { subject: '', body: '' },
   alertResolved: { subject: '', body: '' },
 })
@@ -87,6 +91,7 @@ const orig = ref<Record<TemplateKey, TemplateData>>({
   createUser: { subject: '', body: '' },
   passwordReset: { subject: '', body: '' },
   emailChange: { subject: '', body: '' },
+  registerVerify: { subject: '', body: '' },
   alertFired: { subject: '', body: '' },
   alertResolved: { subject: '', body: '' },
 })

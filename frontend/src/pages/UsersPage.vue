@@ -40,6 +40,7 @@ interface UserItem {
   root_admin: boolean
   server_count: number
   created_at: string | null
+  language?: string | null
 }
 
 // ── Raw data ──
@@ -71,7 +72,7 @@ const createLoading = ref(false)
 // Edit modal
 const editModalOpen = ref(false)
 const editUser = ref<UserItem | null>(null)
-const editForm = ref({ username: '', email: '', firstName: '', lastName: '', password: '' })
+const editForm = ref({ username: '', email: '', firstName: '', lastName: '', password: '', language: 'en' })
 const editLoading = ref(false)
 
 // ── Options ──
@@ -268,6 +269,7 @@ function openEdit(u: UserItem) {
     firstName: u.first_name || '',
     lastName: u.last_name || '',
     password: '',
+    language: (u.language === 'zh' ? 'zh' : 'en'),
   }
   editModalOpen.value = true
 }
@@ -281,6 +283,7 @@ async function doEdit() {
     firstName: editForm.value.firstName,
     lastName: editForm.value.lastName,
     password: editForm.value.password || undefined,
+    language: editForm.value.language,
   })
   editLoading.value = false
   if (res) {
@@ -492,6 +495,15 @@ const mobileSortOpen = ref(false)
     </div>
     <FormField :label="t('users.edit.password')" density="compact">
       <SecretInput v-model="editForm.password" :placeholder="t('users.edit.password_hint')" />
+    </FormField>
+    <FormField :label="t('users.edit.language')" density="compact">
+      <BaseSelect
+        v-model="editForm.language"
+        :options="[
+          { value: 'zh', label: t('account.language.options.zh') },
+          { value: 'en', label: t('account.language.options.en') },
+        ]"
+      />
     </FormField>
     <template #footer>
       <BaseButton @click="editModalOpen = false">{{ t('common.btn.cancel') }}</BaseButton>

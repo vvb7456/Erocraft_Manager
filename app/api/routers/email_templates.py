@@ -47,6 +47,7 @@ async def get_email_templates(
         createUser=_payload("create_user"),
         passwordReset=_payload("password_reset"),
         emailChange=_payload("email_change"),
+        registerVerify=_payload("register_verify"),
         alertFired=_payload("alert_fired"),
         alertResolved=_payload("alert_resolved"),
     )

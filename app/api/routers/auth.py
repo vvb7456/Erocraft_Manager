@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
 from app.core.security import SESSION_USER_ID_KEY
+from app.core.rate_limit import limiter
 from app.db.models.pterodactyl import PteroUser
 from app.db.repositories.users import user_repository
 from app.schemas.auth import LoginRequest, LoginResponse, LogoutResponse, MeResponse
@@ -18,6 +19,7 @@ router = APIRouter(tags=["auth"])
 
 
 @router.post("/login", response_model=LoginResponse)
+@limiter.limit("10/minute")
 async def login(
     payload: LoginRequest,
     request: Request,
@@ -78,7 +80,12 @@ async def login(
         detail_key="login_success",
         detail_params={"username": user.username},
     )
-    return LoginResponse(ok=True, username=user.username, is_admin=bool(user.root_admin))
+    return LoginResponse(
+        ok=True,
+        username=user.username,
+        is_admin=bool(user.root_admin),
+        language=user.language or "en",
+    )
 
 
 @router.get("/me", response_model=MeResponse)
@@ -89,6 +96,7 @@ async def me(
         ok=True,
         username=current_user.username,
         is_admin=bool(current_user.root_admin),
+        language=current_user.language or "en",
     )
 
 

@@ -41,6 +41,7 @@
     "last_name": "姓",
     "password": "新密码",
     "password_hint": "留空则不修改密码",
+    "language": "默认语言",
     "success": "用户已更新"
   },
   "confirm": {

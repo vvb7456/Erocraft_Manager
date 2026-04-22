@@ -95,12 +95,14 @@ EMAIL_TEMPLATE_API_TO_INTERNAL = {
     "create_user": "create_user",
     "password_reset": "password_reset",
     "email_change": "email_change",
+    "register_verify": "register_verify",
     "alert_fired": "alert_fired",
     "alert_resolved": "alert_resolved",
     "preDelete": "pre_delete",
     "createUser": "create_user",
     "passwordReset": "password_reset",
     "emailChange": "email_change",
+    "registerVerify": "register_verify",
     "alertFired": "alert_fired",
     "alertResolved": "alert_resolved",
 }
@@ -112,6 +114,7 @@ EMAIL_TEMPLATE_INTERNAL_KEYS = (
     "create_user",
     "password_reset",
     "email_change",
+    "register_verify",
     "alert_fired",
     "alert_resolved",
 )
@@ -123,6 +126,7 @@ _TEMPLATE_FILES = {
     "create_user": _PROJECT_ROOT / "templates" / "create_user_template.json",
     "password_reset": _PROJECT_ROOT / "templates" / "password_reset_template.json",
     "email_change": _PROJECT_ROOT / "templates" / "email_change_template.json",
+    "register_verify": _PROJECT_ROOT / "templates" / "register_verify_template.json",
     "alert_fired": _PROJECT_ROOT / "templates" / "alert_fired_template.json",
     "alert_resolved": _PROJECT_ROOT / "templates" / "alert_resolved_template.json",
 }
@@ -156,6 +160,7 @@ _PREVIEW_ACTIONS: dict[str, tuple[str, str]] = {
     "create_user": ("设置您的账户密码", "/#/reset-password?token=preview-token&email=preview@example.com"),
     "password_reset": ("重置密码", "/#/reset-password?token=preview-token&email=preview@example.com"),
     "email_change": ("确认更改", "/#/confirm-email?token=preview-token&uid=10001"),
+    "register_verify": ("验证邮箱并完成注册", "/#/verify-email?token=preview-token"),
     "alert_fired": ("查看监控面板", "/#/admin/dashboard"),
     "alert_resolved": ("查看监控面板", "/#/admin/dashboard"),
 }
@@ -301,15 +306,26 @@ async def get_email_delay(db: AsyncSession) -> int:
     return int(val)
 
 
-async def get_site_url(db: AsyncSession) -> str:
-    """Return the public manager URL used in email links and branding."""
-    store = get_settings_store()
-    url = str(await store.get(db, "SITE_URL", "")).rstrip("/")
-    if url:
-        return url
+class SiteUrlNotConfiguredError(RuntimeError):
+    """Raised when an email-link flow is invoked but SITE_URL is not set."""
 
-    from app.core.config import get_settings
-    return (get_settings().ptero_panel_url or "").rstrip("/")
+
+async def get_site_url(db: AsyncSession) -> str:
+    """Return the public manager URL used in email links and branding.
+
+    Strict: SITE_URL must be configured (and start with http/https). Email
+    flows are unusable without a clickable absolute URL, so we fail loudly
+    rather than silently emitting broken relative links. The previous
+    fallback to ``ptero_panel_url`` was removed when the project decoupled
+    from the Pterodactyl Panel application API.
+    """
+    store = get_settings_store()
+    url = str(await store.get(db, "SITE_URL", "")).strip().rstrip("/")
+    if not url or not (url.startswith("http://") or url.startswith("https://")):
+        raise SiteUrlNotConfiguredError(
+            "SITE_URL is not configured. Set it in Settings → Branding."
+        )
+    return url
 
 
 async def build_template_preview(
@@ -324,13 +340,20 @@ async def build_template_preview(
     internal_key = EMAIL_TEMPLATE_API_TO_INTERNAL[template_type]
     store = get_settings_store()
     brand_name = str(await store.get(db, "BRAND_NAME", SETTINGS_SPECS["BRAND_NAME"].default_value()))
-    site_url = await get_site_url(db)
+    # Preview must work even if SITE_URL is not yet configured. Fall back to
+    # a clearly-fake placeholder so admins can still see the layout while
+    # filling out branding settings.
+    try:
+        site_url = await get_site_url(db)
+    except SiteUrlNotConfiguredError:
+        site_url = "https://example.invalid"
 
     variables = {
         "brand_name": brand_name,
         **_PREVIEW_DUMMY_VALUES,
         "reset_url": f"{site_url}/#/reset-password?token=preview-token&email=preview@example.com",
         "confirm_url": f"{site_url}/#/confirm-email?token=preview-token&uid=10001",
+        "verify_url": f"{site_url}/#/verify-email?token=preview-token",
     }
     rendered_subject, rendered_body = render_template_body(
         EmailTemplate(subject=subject, body=body),

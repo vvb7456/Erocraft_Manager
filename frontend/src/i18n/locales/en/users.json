@@ -40,8 +40,7 @@
     "first_name": "First Name",
     "last_name": "Last Name",
     "password": "New Password",
-    "password_hint": "Leave blank to keep current password",
-    "success": "User updated"
+    "password_hint": "Leave blank to keep current password",    "language": "Default language",    "success": "User updated"
   },
   "confirm": {
     "delete_title": "Delete User",

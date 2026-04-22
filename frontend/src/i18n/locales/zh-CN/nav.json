@@ -6,5 +6,7 @@
   "activityLogs": "操作日志",
   "emailTemplates": "邮件模板",
   "account": "账户设置",
-  "settings": "设置"
+  "settings": "设置",
+  "switchToAdmin": "管理后台",
+  "switchToUser": "用户视图"
 }

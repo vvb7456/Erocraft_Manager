@@ -4,6 +4,7 @@
   "password": "密码",
   "password_placeholder": "输入密码",
   "forgot": "忘记密码？",
+  "register": "还没有账号？立即注册",
   "submit": "登录",
   "error": {
     "empty": "请输入用户名和密码",

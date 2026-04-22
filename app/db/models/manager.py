@@ -103,6 +103,26 @@ class ManagerEmailChange(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class ManagerPendingRegistration(Base):
+    __tablename__ = "manager_pending_registrations"
+    __table_args__ = (
+        Index("idx_pr_email", "email"),
+        Index("idx_pr_username", "username"),
+        Index("uq_pr_lookup_hash", "lookup_hash", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    username: Mapped[str] = mapped_column(String(191), nullable=False)
+    first_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    last_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    lookup_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    token: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class ManagerEmailTemplate(Base):
     __tablename__ = "manager_email_templates"
 

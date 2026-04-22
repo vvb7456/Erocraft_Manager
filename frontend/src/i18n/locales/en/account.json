@@ -37,5 +37,16 @@
       "length": "The new password must be at least 8 characters",
       "mismatch": "The new passwords do not match"
     }
+  },
+  "language": {
+    "title": "Interface Language",
+    "desc": "Pick your default interface language. It will be applied on every sign-in.",
+    "label": "Default language",
+    "options": {
+      "zh": "简体中文",
+      "en": "English"
+    },
+    "submit": "Save Language",
+    "success": "Language preference saved"
   }
 }

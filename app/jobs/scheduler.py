@@ -9,6 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.runtime_settings import AUTOMATION_SPECS, MONITORING_SPECS, defaults_for
 from app.core.settings_store import get_settings_store
 from app.db.session import get_session_factory
+from app.jobs.tasks.cleanup import CLEANUP_JOB_ID, run_token_cleanup
 from app.jobs.tasks.delete import sync_delete_job
 from app.jobs.tasks.monitoring import MONITORING_JOB_ID, run_monitoring_collect
 from app.jobs.tasks.reminders import sync_reminder_jobs
@@ -101,5 +102,15 @@ def build_scheduler() -> AsyncIOScheduler:
         coalesce=True,
         max_instances=1,
         misfire_grace_time=30,
+    )
+    scheduler.add_job(
+        run_token_cleanup,
+        id=CLEANUP_JOB_ID,
+        trigger="interval",
+        hours=1,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=300,
     )
     return scheduler

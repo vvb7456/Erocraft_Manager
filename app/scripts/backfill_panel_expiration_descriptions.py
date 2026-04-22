@@ -10,13 +10,17 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import PteroServer, ServerMeta
 from app.db.session import dispose_engine, get_session_factory
-from app.services.pterodactyl import PterodactylServiceError, pterodactyl_service
+from app.services import server_lifecycle
+from app.services.server_lifecycle import LifecycleError
 
 logger = logging.getLogger(__name__)
 
 
 async def run_backfill() -> int:
     session_factory = get_session_factory()
+    synced = 0
+    failed = 0
+
     async with session_factory() as db:
         result = await db.execute(
             select(PteroServer)
@@ -26,26 +30,26 @@ async def run_backfill() -> int:
         )
         servers = list(result.scalars().all())
 
-    synced = 0
-    failed = 0
-    for server in servers:
-        try:
-            await pterodactyl_service.sync_server_expiration(server.id, server.expiration_date)
-            synced += 1
-        except PterodactylServiceError:
-            failed += 1
-            logger.exception("Failed to sync expiration description for server %s", server.id)
+        for server in servers:
+            try:
+                await server_lifecycle.update_server_expiration_description(
+                    db, server.id, server.expiration_date
+                )
+                await db.commit()
+                synced += 1
+            except LifecycleError:
+                await db.rollback()
+                failed += 1
+                logger.exception("Failed to sync expiration description for server %s", server.id)
 
     print(f"Synced {synced} servers; failed {failed} servers.")
     return 1 if failed else 0
 
 
 async def _main() -> int:
-    await pterodactyl_service.startup()
     try:
         return await run_backfill()
     finally:
-        await pterodactyl_service.shutdown()
         await dispose_engine()
 
 

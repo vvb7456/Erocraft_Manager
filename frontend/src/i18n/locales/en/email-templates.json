@@ -44,6 +44,10 @@
     "title": "Email Change Confirmation",
     "desc": "Used to confirm an account email change request."
   },
+  "registerVerify": {
+    "title": "Registration Verification",
+    "desc": "Sent after public sign-up to verify the email address and activate the account."
+  },
   "alertFired": {
     "title": "Alert Fired",
     "desc": "Sent to admins when a node monitoring alert is triggered."
@@ -66,6 +70,7 @@
     "new_email": "New Email Address",
     "reset_url": "Password Reset Link",
     "confirm_url": "Email Confirmation Link",
+    "verify_url": "Email Verification Link",
     "node_name": "Node Name",
     "node_id": "Node ID",
     "alert_type": "Alert Type Key",

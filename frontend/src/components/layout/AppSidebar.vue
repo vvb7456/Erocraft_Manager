@@ -92,6 +92,16 @@ function goOverview() {
   if (window.innerWidth <= 768) app.closeMobileSidebar()
 }
 
+function switchToAdmin() {
+  router.push({ name: 'dashboard' })
+  if (window.innerWidth <= 768) app.closeMobileSidebar()
+}
+
+function switchToUser() {
+  router.push({ name: 'user-servers' })
+  if (window.innerWidth <= 768) app.closeMobileSidebar()
+}
+
 function goToServer(id: number) {
   router.push({ name: 'server-console', params: { id } })
   if (window.innerWidth <= 768) app.closeMobileSidebar()
@@ -99,6 +109,7 @@ function goToServer(id: number) {
 
 async function doLogout() {
   await fetch('/api/logout', { method: 'POST' })
+  app.setIsAdmin(false)
   router.push({ name: 'login' })
 }
 
@@ -187,6 +198,26 @@ onBeforeUnmount(() => {
       </template>
 
       <div style="flex: 1" />
+
+      <!-- Admin <-> User view switcher (admin only) -->
+      <button
+        v-if="app.isAdmin && isUserLayout"
+        class="nav-item"
+        :title="t('nav.switchToAdmin')"
+        @click="switchToAdmin"
+      >
+        <span class="icon"><MsIcon name="admin_panel_settings" size="md" /></span>
+        <span class="nav-label">{{ t('nav.switchToAdmin') }}</span>
+      </button>
+      <button
+        v-if="app.isAdmin && !isUserLayout"
+        class="nav-item"
+        :title="t('nav.switchToUser')"
+        @click="switchToUser"
+      >
+        <span class="icon"><MsIcon name="swap_horiz" size="md" /></span>
+        <span class="nav-label">{{ t('nav.switchToUser') }}</span>
+      </button>
 
       <button
         v-if="isUserLayout"

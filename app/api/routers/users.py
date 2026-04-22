@@ -16,7 +16,7 @@ from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
 from app.core.runtime_settings import SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
-from app.core.tokens import hash_token
+from app.core.tokens import hash_token_async
 from app.db.models import PteroServer, PteroUser
 from app.db.models.manager import ManagerPasswordReset
 from app.db.repositories.users import user_repository
@@ -42,7 +42,8 @@ from app.services.email import (
     render_template_body,
     send_email,
 )
-from app.services.pterodactyl import PterodactylServiceError, pterodactyl_service
+from app.services import server_lifecycle
+from app.services.server_lifecycle import LifecycleError
 
 router = APIRouter(tags=["users"])
 logger = logging.getLogger(__name__)
@@ -74,7 +75,7 @@ async def _brand_name(db: AsyncSession) -> str:
 
 async def _create_password_reset_token(db: AsyncSession, user_id: int) -> str:
     raw_token = secrets.token_hex(32)
-    token_hash = hash_token(raw_token)
+    token_hash = await hash_token_async(raw_token)
     # Invalidate prior unused tokens
     await db.execute(
         update(ManagerPasswordReset)
@@ -99,8 +100,9 @@ async def _delete_user_remote(db: AsyncSession, user_id: int) -> int:
     await db.commit()
 
     for server_id in server_ids:
-        await pterodactyl_service.delete_server(server_id)
-    await pterodactyl_service.delete_user(user_id)
+        await server_lifecycle.delete_server(db, server_id)
+    await server_lifecycle.delete_user(db, user_id)
+    await db.commit()
     return len(server_ids)
 
 
@@ -153,19 +155,20 @@ async def create_user(
     await db.commit()
 
     try:
-        created = await pterodactyl_service.create_user(
+        created = await server_lifecycle.create_user(
+            db,
             email=email,
             username=username,
             first_name=first_name,
             last_name=last_name,
             password=temporary_password,
         )
-    except PterodactylServiceError as exc:
+        await db.commit()
+    except LifecycleError as exc:
+        await db.rollback()
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
-    user_id = created.get("id")
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Pterodactyl 创建用户失败")
+    user_id = created.id
 
     # Cache ORM field before potential flush/rollback boundary
     admin_username = current_user.username
@@ -181,17 +184,19 @@ async def create_user(
             await db.rollback()
             cleanup_succeeded = False
             try:
-                await pterodactyl_service.delete_user(int(user_id))
+                await server_lifecycle.delete_user(db, int(user_id))
+                await db.commit()
                 cleanup_succeeded = True
-            except PterodactylServiceError:
+            except LifecycleError:
+                await db.rollback()
                 logger.exception("Failed to delete user %s after password reset token creation failed", user_id)
 
             logger.exception("Failed to persist password reset token for user %s", user_id)
-            detail = "用户已在面板创建，但密码重置令牌写入失败"
+            detail = "用户已创建，但密码重置令牌写入失败"
             if cleanup_succeeded:
-                detail += "，已自动回滚远端用户"
+                detail += "，已自动回滚"
             else:
-                detail += "，且自动回滚远端用户失败，请检查面板状态"
+                detail += "，且自动回滚失败，请检查面板状态"
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail) from exc
 
         template = await load_template(db, "create_user")
@@ -233,7 +238,7 @@ async def create_user(
     return CreateUserResponse(
         message=f"用户 '{username}' 创建成功",
         emailSent=email_sent,
-        user=UserRef(id=int(user_id), username=str(created.get("username") or username)),
+        user=UserRef(id=int(user_id), username=created.username),
     )
 
 
@@ -263,15 +268,19 @@ async def update_user(
 
     await db.commit()
     try:
-        await pterodactyl_service.update_user(
+        await server_lifecycle.update_user(
+            db,
             user_id,
             email=email,
             username=username,
             first_name=payload.firstName.strip() or user.name_first or username,
             last_name=payload.lastName.strip() or user.name_last or "User",
             password=payload.password.strip() if payload.password else None,
+            language=(payload.language.strip() if payload.language else None) or None,
         )
-    except PterodactylServiceError as exc:
+        await db.commit()
+    except LifecycleError as exc:
+        await db.rollback()
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     if payload.password:
@@ -306,7 +315,7 @@ async def delete_user(
 
     try:
         deleted_server_count = await _delete_user_remote(db, user_id)
-    except PterodactylServiceError as exc:
+    except LifecycleError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     await log_manager_activity(
@@ -386,7 +395,8 @@ async def batch_users(
             try:
                 await _delete_user_remote(db, user_id)
                 success += 1
-            except PterodactylServiceError:
+            except LifecycleError:
+                await db.rollback()
                 errors += 1
 
         await log_manager_activity(

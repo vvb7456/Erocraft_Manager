@@ -2,6 +2,7 @@
 export const ICON_CODEPOINTS: Record<string, string> = {
   'add': '\ue145',
   'add_photo_alternate': '\ue43e',
+  'admin_panel_settings': '\uef3d',
   'arrow_back': '\ue5c4',
   'arrow_downward': '\ue5db',
   'arrow_upward': '\ue5d8',
@@ -107,6 +108,7 @@ export const ICON_CODEPOINTS: Record<string, string> = {
   'stop': '\ue047',
   'storage': '\ue1db',
   'subdirectory_arrow_left': '\ue5d9',
+  'swap_horiz': '\ue8d4',
   'sync': '\ue627',
   'terminal': '\ueb8e',
   'thumb_up': '\uf577',

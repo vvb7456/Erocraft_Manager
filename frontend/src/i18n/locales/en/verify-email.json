@@ -1,0 +1,12 @@
+{
+  "subtitle": "Verifying your email",
+  "back": "Back to login",
+  "verifying": "Verifying email…",
+  "success": "Email verified! Your account is now active.",
+  "redirecting": "Redirecting to the login page in a few seconds.",
+  "error": {
+    "invalidLink": "Invalid verification link",
+    "failed": "Verification failed, please request again",
+    "network": "Network error"
+  }
+}

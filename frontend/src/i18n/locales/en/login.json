@@ -3,8 +3,7 @@
   "username_placeholder": "Enter username",
   "password": "Password",
   "password_placeholder": "Enter password",
-  "forgot": "Forgot Password?",
-  "submit": "Sign In",
+  "forgot": "Forgot Password?",  "register": "Don't have an account? Sign up",  "submit": "Sign In",
   "error": {
     "empty": "Please enter username and password",
     "invalid": "Invalid username or password",

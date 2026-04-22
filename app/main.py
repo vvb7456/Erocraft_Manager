@@ -5,14 +5,17 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.routers import api_router
 from app.core.config import get_settings
+from app.core.csrf import OriginCheckMiddleware
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.rate_limit import limiter
 from app.db.session import dispose_engine
-from app.services.pterodactyl import pterodactyl_service
 
 
 def create_app() -> FastAPI:
@@ -21,9 +24,7 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        await pterodactyl_service.startup()
         yield
-        await pterodactyl_service.shutdown()
         await dispose_engine()
 
     app = FastAPI(
@@ -41,6 +42,9 @@ def create_app() -> FastAPI:
         same_site=settings.session_same_site,
         https_only=settings.session_cookie_secure,
     )
+    app.add_middleware(OriginCheckMiddleware)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     register_exception_handlers(app)
     app.include_router(api_router, prefix="/api")
     return app

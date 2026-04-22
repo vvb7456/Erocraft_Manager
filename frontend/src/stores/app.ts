@@ -6,6 +6,7 @@ const DEFAULT_BANNER_URL = '/banner.png'
 export const useAppStore = defineStore('app', () => {
   const sidebarCollapsed = ref(localStorage.getItem('sidebar_collapsed') === '1')
   const mobileSidebarOpen = ref(false)
+  const isAdmin = ref(false)
   const version = ref('')
   const brandName = ref('Erocraft Manager')
   const systemName = ref('')
@@ -42,6 +43,10 @@ export const useAppStore = defineStore('app', () => {
     mobileSidebarOpen.value = !mobileSidebarOpen.value
   }
 
+  function setIsAdmin(value: boolean) {
+    isAdmin.value = value
+  }
+
   async function loadVersion() {
     try {
       const res = await fetch('/api/version')
@@ -61,6 +66,7 @@ export const useAppStore = defineStore('app', () => {
   return {
     sidebarCollapsed,
     mobileSidebarOpen,
+    isAdmin,
     version,
     brandName,
     systemName,
@@ -76,6 +82,7 @@ export const useAppStore = defineStore('app', () => {
     openMobileSidebar,
     closeMobileSidebar,
     toggleMobileSidebar,
+    setIsAdmin,
     loadVersion,
   }
 })

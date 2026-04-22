@@ -92,6 +92,20 @@
       "confirm_link_expired": "确认链接已过期，请重新申请",
       "user_missing": "用户不存在",
       "email_confirm_status_unknown": "邮箱变更状态未知，请稍后刷新账户信息；如仍未生效，请重新发起变更"
+    },
+    "register": {
+      "disabled": "当前系统已关闭公开注册",
+      "invalid_email": "邮箱格式不正确",
+      "invalid_username": "用户名只能包含字母、数字、下划线、点和连字符（3-32 位）",
+      "email_taken": "该邮箱已被注册",
+      "username_taken": "该用户名已被使用",
+      "rate_limited": "请求过于频繁，请稍后再试",
+      "email_send_failed": "验证邮件发送失败，请稍后重试",
+      "invalid_token": "验证链接无效",
+      "token_used": "验证链接已使用，请直接登录",
+      "token_expired": "验证链接已过期，请重新注册",
+      "site_url_not_configured": "系统未配置外部访问地址，请联系管理员",
+      "create_failed": "账号创建失败，请重新注册或联系管理员"
     }
   }
 }

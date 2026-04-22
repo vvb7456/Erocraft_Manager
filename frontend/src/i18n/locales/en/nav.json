@@ -6,5 +6,7 @@
   "activityLogs": "Activity Logs",
   "emailTemplates": "Email Templates",
   "account": "Account",
-  "settings": "Settings"
+  "settings": "Settings",
+  "switchToAdmin": "Admin Panel",
+  "switchToUser": "User View"
 }

@@ -1,4 +1,12 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { switchLanguage } from '@/i18n/vue-i18n'
+import { backendToFrontendLocale } from '@/i18n/locale-map'
+import { useAppStore } from '@/stores/app'
+
+/** Sync the i18n locale with the user's saved server-side preference. */
+function applyServerLanguage(value: unknown) {
+  switchLanguage(backendToFrontendLocale(value))
+}
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -27,7 +35,19 @@ const router = createRouter({
       component: () => import('@/pages/ConfirmEmailPage.vue'),
       meta: { public: true, layout: 'blank' },
     },
-    { path: '/', redirect: '/servers' },
+    {
+      path: '/register',
+      name: 'register',
+      component: () => import('@/pages/RegisterPage.vue'),
+      meta: { public: true, layout: 'blank' },
+    },
+    {
+      path: '/verify-email',
+      name: 'verify-email',
+      component: () => import('@/pages/VerifyEmailPage.vue'),
+      meta: { public: true, layout: 'blank' },
+    },
+    { path: '/', name: 'home', meta: { layout: 'blank' }, component: () => import('@/pages/LoadingPage.vue') },
 
     // ── User routes ──
     {
@@ -102,12 +122,15 @@ const router = createRouter({
 
 /** Check auth status before each navigation */
 router.beforeEach(async (to) => {
+  const app = useAppStore()
   if (to.meta.public) {
     if (to.name === 'login' || to.name === 'forgot-password') {
       try {
         const res = await fetch('/api/me')
         if (res.ok) {
           const data = await res.json()
+          applyServerLanguage(data?.language)
+          app.setIsAdmin(!!data.is_admin)
           return data.is_admin ? { name: 'dashboard' } : { name: 'user-servers' }
         }
       } catch {
@@ -118,13 +141,23 @@ router.beforeEach(async (to) => {
   }
   try {
     const res = await fetch('/api/me')
-    if (!res.ok) return { name: 'login' }
+    if (!res.ok) {
+      app.setIsAdmin(false)
+      return { name: 'login' }
+    }
     const data = await res.json()
+    applyServerLanguage(data?.language)
+    app.setIsAdmin(!!data.is_admin)
+    // Root path: pick destination by role
+    if (to.name === 'home') {
+      return data.is_admin ? { name: 'dashboard' } : { name: 'user-servers' }
+    }
     // Admin routes require admin role
     if (to.meta.admin && !data.is_admin) {
       return { name: 'user-servers' }
     }
   } catch {
+    app.setIsAdmin(false)
     return { name: 'login' }
   }
   return true

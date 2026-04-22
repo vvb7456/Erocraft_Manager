@@ -44,6 +44,10 @@
     "title": "邮箱变更确认",
     "desc": "用于确认账户邮箱变更请求。"
   },
+  "registerVerify": {
+    "title": "注册验证",
+    "desc": "用户公开注册后用于验证邮箱并激活账户。"
+  },
   "alertFired": {
     "title": "告警触发",
     "desc": "节点监控告警触发时发送给管理员。"
@@ -66,6 +70,7 @@
     "new_email": "新邮箱地址",
     "reset_url": "密码重置链接",
     "confirm_url": "邮箱确认链接",
+    "verify_url": "邮箱验证链接",
     "node_name": "节点名称",
     "node_id": "节点 ID",
     "alert_type": "告警类型键",

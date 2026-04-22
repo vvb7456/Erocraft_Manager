@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { switchLanguage } from '@/i18n/vue-i18n'
+import { backendToFrontendLocale } from '@/i18n/locale-map'
 import AuthForm from '@/components/auth/AuthForm.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
@@ -20,6 +22,17 @@ const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
+const allowRegistration = ref(false)
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/public/branding')
+    if (res.ok) {
+      const data = await res.json() as { allow_registration?: boolean }
+      allowRegistration.value = data?.allow_registration === true
+    }
+  } catch { /* ignore */ }
+})
 
 function translateApiText(value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) return ''
@@ -50,6 +63,9 @@ async function handleLogin() {
     const data = await res.json()
 
     if (res.ok && data.ok) {
+      // Apply user-preferred language before redirecting so the
+      // destination view renders in the right locale.
+      switchLanguage(backendToFrontendLocale(data.language))
       if (data.is_admin) {
         router.replace({ name: 'dashboard' })
       } else {
@@ -67,7 +83,7 @@ async function handleLogin() {
 </script>
 
 <template>
-  <AuthForm icon="dns" actions-align="end" @submit="handleLogin">
+  <AuthForm icon="dns" footer-align="between" @submit="handleLogin">
     <AlertBanner v-if="error" tone="danger" icon="error" dense>
       {{ error }}
     </AlertBanner>
@@ -90,12 +106,6 @@ async function handleLogin() {
       />
     </FormField>
 
-    <template #actions>
-      <RouterLink class="login-link" :to="{ name: 'forgot-password' }">
-        {{ t('login.forgot') }}
-      </RouterLink>
-    </template>
-
     <template #submit>
       <BaseButton
         type="submit"
@@ -110,6 +120,16 @@ async function handleLogin() {
           {{ t('login.submit') }}
         </template>
       </BaseButton>
+    </template>
+
+    <template #footer>
+      <RouterLink class="login-link" :to="{ name: 'forgot-password' }">
+        {{ t('login.forgot') }}
+      </RouterLink>
+      <RouterLink v-if="allowRegistration" class="login-link" :to="{ name: 'register' }">
+        {{ t('login.register') }}
+      </RouterLink>
+      <span v-else />
     </template>
   </AuthForm>
 </template>

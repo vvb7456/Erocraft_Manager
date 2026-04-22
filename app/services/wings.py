@@ -146,6 +146,119 @@ class WingsService:
         response = await self._request(db, node_id, "GET", server_uuid)
         return response.json()
 
+    # ------------------------------------------------------------------
+    # Server lifecycle (Phase X — direct DB + Wings, no Application API)
+    # ------------------------------------------------------------------
+
+    async def create_server(
+        self,
+        db: AsyncSession,
+        node_id: int,
+        server_uuid: str,
+        *,
+        start_on_completion: bool = False,
+    ) -> None:
+        """Notify Wings that a new server row exists in the panel DB.
+
+        Wings will reverse-pull the full configuration via panel
+        ``/api/remote/servers/{uuid}``. The panel row MUST already be inserted
+        with ``status='installing'`` to trigger the install flow on the node.
+
+        ``start_on_completion`` mirrors Pterodactyl's
+        ``DaemonServerRepository::create($startOnCompletion)`` — when True,
+        Wings will start the server automatically once install finishes.
+        """
+        node = await self._node_info(db, node_id)
+        headers = {
+            "Authorization": f"Bearer {node.token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        body: dict[str, object] = {"uuid": server_uuid}
+        if start_on_completion:
+            body["start_on_completion"] = True
+        try:
+            async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
+                response = await client.post(
+                    f"{node.base_url}/api/servers",
+                    headers=headers,
+                    json=body,
+                )
+        except httpx.HTTPError as exc:
+            raise WingsServiceError(f"Wings connection failed: {exc!r}") from exc
+        if response.status_code not in (200, 202, 204):
+            detail = ""
+            try:
+                payload = response.json()
+                if isinstance(payload, dict) and "error" in payload:
+                    detail = payload["error"]
+            except Exception:
+                pass
+            raise WingsServiceError(detail or f"HTTP {response.status_code}")
+
+    async def sync_server(self, db: AsyncSession, node_id: int, server_uuid: str) -> None:
+        """Tell Wings to re-pull the configuration (suspend / unsuspend / build mod)."""
+        await self._request(
+            db,
+            node_id,
+            "POST",
+            f"{server_uuid}/sync",
+            expected_statuses=(200, 202, 204),
+        )
+
+    async def reinstall_server(self, db: AsyncSession, node_id: int, server_uuid: str) -> None:
+        """Trigger reinstall. The panel row MUST be set to status='installing',
+        installed_at=NULL beforehand."""
+        await self._request(
+            db,
+            node_id,
+            "POST",
+            f"{server_uuid}/reinstall",
+            expected_statuses=(200, 202, 204),
+        )
+
+    async def delete_server(self, db: AsyncSession, node_id: int, server_uuid: str) -> None:
+        """Destroy the container + volume on the node. Idempotent: 404 → success."""
+        try:
+            await self._request(
+                db,
+                node_id,
+                "DELETE",
+                server_uuid,
+                expected_statuses=(204,),
+            )
+        except WingsServiceError as exc:
+            # 404 means already gone — acceptable for idempotent delete
+            if "does not exist" in str(exc).lower() or "not found" in str(exc).lower():
+                return
+            raise
+
+    async def delete_backup(
+        self,
+        db: AsyncSession,
+        node_id: int,
+        server_uuid: str,
+        backup_uuid: str,
+    ) -> None:
+        """Remove the physical backup archive from the node. Idempotent.
+
+        Pterodactyl's ``DeleteBackupService`` calls this before nulling out
+        the backup row so leftover ``.tar.gz`` files don't accumulate on the
+        node when a server is destroyed.
+        """
+        try:
+            await self._request(
+                db,
+                node_id,
+                "DELETE",
+                f"{server_uuid}/backup/{backup_uuid}",
+                expected_statuses=(204,),
+            )
+        except WingsServiceError as exc:
+            if "does not exist" in str(exc).lower() or "not found" in str(exc).lower():
+                return
+            raise
+
     async def send_power_action(self, db: AsyncSession, node_id: int, server_uuid: str, action: str) -> None:
         await self._request(
             db,

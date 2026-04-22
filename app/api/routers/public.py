@@ -1,30 +1,49 @@
-"""Public (no-auth) routes: branding, forgot/reset password."""
+"""Public (no-auth) routes: branding, forgot/reset password, public registration."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+import bcrypt
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.db import get_db
+from app.core.rate_limit import limiter
 from app.core.runtime_settings import SETTINGS_SPECS
+from app.core.security import SESSION_USER_ID_KEY
 from app.core.settings_store import get_settings_store
-from app.core.tokens import hash_token, verify_token
-from app.db.models.manager import ManagerPasswordReset
+from app.core.tokens import (
+    compute_lookup_hash,
+    hash_token_async,
+    verify_token_async,
+)
+from app.db.models.manager import ManagerPasswordReset, ManagerPendingRegistration
 from app.db.models.pterodactyl import PteroUser
 from app.db.repositories.users import user_repository
+from app.services import panel_db
 from app.services.audit import log_manager_activity
-from app.services.email import get_site_url, load_template, render_template_body, send_email
+from app.services.email import (
+    SiteUrlNotConfiguredError,
+    get_site_url,
+    load_template,
+    render_template_body,
+    send_email,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["public"])
 
 TOKEN_EXPIRY_MINUTES = 30
+REGISTER_TOKEN_EXPIRY_MINUTES = 30
+REGISTER_RATE_LIMIT_SECONDS = 60
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{3,32}$")
 FORGOT_PASSWORD_GENERIC_MESSAGE = "如果该邮箱已注册，您将收到密码重置链接。"
 
 
@@ -32,10 +51,11 @@ FORGOT_PASSWORD_GENERIC_MESSAGE = "如果该邮箱已注册，您将收到密码
 
 class BrandingResponse(BaseModel):
     brand_name: str
+    allow_registration: bool
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: str
+    email: EmailStr
 
 
 class MessageResponse(BaseModel):
@@ -43,7 +63,7 @@ class MessageResponse(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    email: str
+    email: EmailStr
     token: str
     newPassword: str = Field(min_length=8, max_length=72)
 
@@ -59,16 +79,31 @@ async def _site_url(db: AsyncSession) -> str:
     return await get_site_url(db)
 
 
+async def _site_url_or_503(db: AsyncSession, *, detail_key: str) -> str:
+    """get_site_url with HTTPException 503 conversion for user-facing flows."""
+    try:
+        return await get_site_url(db)
+    except SiteUrlNotConfiguredError:
+        logger.error("SITE_URL not configured; aborting flow %s", detail_key)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail_key
+        ) from None
+
+
 # ── Routes ──
 
 @router.get("/public/branding", response_model=BrandingResponse)
 async def get_branding(db: AsyncSession = Depends(get_db)) -> BrandingResponse:
-    return BrandingResponse(brand_name=await _brand_name(db))
+    store = get_settings_store()
+    allow = bool(await store.get(db, "ALLOW_PUBLIC_REGISTRATION", SETTINGS_SPECS["ALLOW_PUBLIC_REGISTRATION"].default_value()))
+    return BrandingResponse(brand_name=await _brand_name(db), allow_registration=allow)
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
+@limiter.limit("5/minute")
 async def forgot_password(
     payload: ForgotPasswordRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
     email = payload.email.strip().lower()
@@ -98,7 +133,7 @@ async def forgot_password(
             return MessageResponse(message=FORGOT_PASSWORD_GENERIC_MESSAGE)
 
     raw_token = secrets.token_hex(32)
-    token_hash = hash_token(raw_token)
+    token_hash = await hash_token_async(raw_token)
 
     # Invalidate all prior unused tokens for this user
     await db.execute(
@@ -119,7 +154,7 @@ async def forgot_password(
 
     # Build reset URL
     brand_name = await _brand_name(db)
-    site_url = await _site_url(db)
+    site_url = await _site_url_or_503(db, detail_key="forgot_password.site_url_not_configured")
     reset_url = f"{site_url}/#/reset-password?token={raw_token}&email={email}"
 
     template = await load_template(db, "password_reset")
@@ -162,8 +197,10 @@ async def forgot_password(
 
 
 @router.post("/reset-password", response_model=MessageResponse)
+@limiter.limit("10/minute")
 async def reset_password(
     payload: ResetPasswordRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
     email = payload.email.strip().lower()
@@ -190,7 +227,7 @@ async def reset_password(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.reset_link_expired")
 
     # Verify token
-    if not verify_token(payload.token, reset_record.token):
+    if not await verify_token_async(payload.token, reset_record.token):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.invalid_reset_link")
 
     claim_time = datetime.now(UTC).replace(tzinfo=None)
@@ -205,10 +242,12 @@ async def reset_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.invalid_reset_link")
     await db.commit()
 
-    # Sync to Panel API — this updates the password in the DB directly
-    from app.services.pterodactyl import PterodactylServiceError, pterodactyl_service
+    # Sync to panel via direct DB write
+    from app.services import server_lifecycle
+    from app.services.server_lifecycle import LifecycleError
     try:
-        await pterodactyl_service.update_user(
+        await server_lifecycle.update_user(
+            db,
             int(user.id),
             email=user.email,
             username=user.username,
@@ -216,8 +255,9 @@ async def reset_password(
             last_name=user.name_last or "User",
             password=payload.newPassword,
         )
-    except PterodactylServiceError as exc:
-        logger.exception("Failed to sync password to Panel for user %s", user.username)
+        await db.commit()
+    except LifecycleError as exc:
+        logger.exception("Failed to sync password to panel for user %s", user.username)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="account.password_reset_status_unknown",
@@ -233,3 +273,278 @@ async def reset_password(
     )
 
     return MessageResponse(message="密码已重置，请使用新密码登录。")
+
+
+# ── Public registration ──
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=8, max_length=72)
+    first_name: str = Field(default="", max_length=255)
+    last_name: str = Field(default="", max_length=255)
+
+
+class VerifyRegisterRequest(BaseModel):
+    token: str
+
+
+class RegisterVerifyResponse(BaseModel):
+    message: str
+    auto_login: bool = False
+    username: str | None = None
+    is_admin: bool = False
+
+
+async def _allow_registration(db: AsyncSession) -> bool:
+    store = get_settings_store()
+    return bool(
+        await store.get(
+            db,
+            "ALLOW_PUBLIC_REGISTRATION",
+            SETTINGS_SPECS["ALLOW_PUBLIC_REGISTRATION"].default_value(),
+        )
+    )
+
+
+@router.post("/register", response_model=MessageResponse)
+@limiter.limit("5/minute")
+async def register(
+    payload: RegisterRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    if not await _allow_registration(db):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="register.disabled")
+
+    # SITE_URL must exist before we even build the verify_url. Bail out
+    # *before* hashing / sending so the user gets a fast, accurate error.
+    site_url = await _site_url_or_503(db, detail_key="register.site_url_not_configured")
+
+    email = str(payload.email).strip().lower()
+    username = payload.username.strip()
+
+    if not USERNAME_RE.match(username):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.invalid_username")
+
+    # Conflict checks against the panel users table
+    if await user_repository.get_by_email(db, email):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="register.email_taken")
+    if await user_repository.get_by_username(db, username):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="register.username_taken")
+
+    # Conflict checks against unfinished pending registrations
+    pending_user = await db.execute(
+        select(ManagerPendingRegistration)
+        .where(
+            ManagerPendingRegistration.username == username,
+            ManagerPendingRegistration.used_at.is_(None),
+        )
+        .limit(1)
+    )
+    if pending_user.scalar_one_or_none():
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="register.username_taken")
+
+    # Rate-limit per email (any state)
+    last_pending = (
+        await db.execute(
+            select(ManagerPendingRegistration)
+            .where(ManagerPendingRegistration.email == email)
+            .order_by(ManagerPendingRegistration.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if last_pending and last_pending.created_at:
+        elapsed = (datetime.now(UTC).replace(tzinfo=None) - last_pending.created_at).total_seconds()
+        if elapsed < REGISTER_RATE_LIMIT_SECONDS:
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="register.rate_limited")
+
+    # Bake a $2y$ bcrypt hash up-front so we don't have to keep the plaintext.
+    # Run off the event loop because bcrypt(rounds=10) takes ~70ms.
+    def _hash_password(pw: str) -> str:
+        h = bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt(rounds=10)).decode("utf-8")
+        return ("$2y$" + h[4:]) if h.startswith("$2b$") else h
+
+    raw_hash = await asyncio.to_thread(_hash_password, payload.password)
+
+    raw_token = secrets.token_hex(32)
+    token_hash = await hash_token_async(raw_token)
+    lookup_hash = compute_lookup_hash(raw_token)
+
+    # Invalidate any prior unused pending rows for this email so the link
+    # in the latest email is the only one that works.
+    await db.execute(
+        update(ManagerPendingRegistration)
+        .where(
+            ManagerPendingRegistration.email == email,
+            ManagerPendingRegistration.used_at.is_(None),
+        )
+        .values(used_at=datetime.now(UTC).replace(tzinfo=None))
+    )
+
+    pending = ManagerPendingRegistration(
+        email=email,
+        username=username,
+        first_name=(payload.first_name or username).strip(),
+        last_name=(payload.last_name or "User").strip(),
+        password_hash=raw_hash,
+        token=token_hash,
+        lookup_hash=lookup_hash,
+    )
+    db.add(pending)
+    await db.flush()
+    pending_id = int(pending.id)
+    await db.commit()
+
+    brand_name = await _brand_name(db)
+    verify_url = f"{site_url}/#/verify-email?token={raw_token}"
+
+    template = await load_template(db, "register_verify")
+    subject, body = render_template_body(
+        template,
+        {
+            "brand_name": brand_name,
+            "username": username,
+            "email": email,
+            "verify_url": verify_url,
+        },
+    )
+
+    success, err = await send_email(
+        db,
+        recipient_email=email,
+        subject=subject,
+        main_content_raw=body,
+        greeting=f"您好，{username}！",
+        action_text="验证邮箱并完成注册",
+        action_url=verify_url,
+    )
+    if not success:
+        await db.execute(
+            delete(ManagerPendingRegistration).where(
+                ManagerPendingRegistration.id == pending_id
+            )
+        )
+        await db.commit()
+        logger.error("Failed to send registration email to %s: %s", email, err)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, detail="register.email_send_failed"
+        )
+
+    await log_manager_activity(
+        db,
+        actor=username,
+        action="auth",
+        status="success",
+        detail_key="register_request",
+        detail_params={"username": username, "email": email},
+    )
+
+    return MessageResponse(message="验证邮件已发送，请查收并点击邮件中的链接完成注册。")
+
+
+@router.post("/register/verify", response_model=RegisterVerifyResponse)
+@limiter.limit("10/minute")
+async def verify_registration(
+    payload: VerifyRegisterRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> RegisterVerifyResponse:
+    raw_token = (payload.token or "").strip()
+    if not raw_token:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.invalid_token")
+
+    # O(1) lookup via SHA-256 lookup_hash; bcrypt verify still required to
+    # actually authorize (defends against DB read).
+    lookup = compute_lookup_hash(raw_token)
+    pending = (
+        await db.execute(
+            select(ManagerPendingRegistration)
+            .where(ManagerPendingRegistration.lookup_hash == lookup)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    if pending is None or not await verify_token_async(raw_token, pending.token):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.invalid_token")
+
+    # Distinguish already-used vs expired vs valid for clearer UX.
+    if pending.used_at is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.token_used")
+
+    if pending.created_at:
+        age = datetime.now(UTC).replace(tzinfo=None) - pending.created_at
+        if age > timedelta(minutes=REGISTER_TOKEN_EXPIRY_MINUTES):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.token_expired")
+
+    # Last-second conflict check (someone else might have grabbed the email
+    # / username between sign-up and verify).
+    if await user_repository.get_by_email(db, pending.email):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="register.email_taken")
+    if await user_repository.get_by_username(db, pending.username):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="register.username_taken")
+
+    # Atomically claim the pending row so a double-click can't create two users
+    claim_time = datetime.now(UTC).replace(tzinfo=None)
+    claim = await db.execute(
+        update(ManagerPendingRegistration)
+        .where(
+            ManagerPendingRegistration.id == pending.id,
+            ManagerPendingRegistration.used_at.is_(None),
+        )
+        .values(used_at=claim_time)
+    )
+    if not claim.rowcount:
+        await db.rollback()
+        # Lost the race: someone else already claimed (or the row was
+        # marked used between our check and update). Surface as token_used
+        # so the user can just go log in.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.token_used")
+    await db.commit()
+
+    try:
+        created = await panel_db.create_user_with_hashed_password(
+            db,
+            username=pending.username,
+            email=pending.email,
+            first_name=pending.first_name or pending.username,
+            last_name=pending.last_name or "User",
+            password_hash=pending.password_hash,
+        )
+        await db.commit()
+    except panel_db.PanelDBError as exc:
+        # Roll back the claim so the user can retry / re-register.
+        try:
+            await db.execute(
+                update(ManagerPendingRegistration)
+                .where(ManagerPendingRegistration.id == pending.id)
+                .values(used_at=None)
+            )
+            await db.commit()
+        except Exception:
+            logger.exception("Failed to revert pending claim for id=%s", pending.id)
+        logger.error("create_user (public register) failed for %s: %s", pending.email, exc)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, detail="register.create_failed"
+        ) from exc
+
+    await log_manager_activity(
+        db,
+        actor=created.username,
+        action="auth",
+        status="success",
+        detail_key="register_verified",
+        detail_params={"username": created.username, "email": created.email},
+    )
+
+    # Auto-login: set the session cookie so the user lands directly on the
+    # app instead of being asked to log in immediately after verifying.
+    request.session.clear()
+    request.session[SESSION_USER_ID_KEY] = int(created.id)
+
+    return RegisterVerifyResponse(
+        message="邮箱验证成功，账户已激活。",
+        auto_login=True,
+        username=created.username,
+        is_admin=False,
+    )
