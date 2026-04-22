@@ -66,6 +66,8 @@ def _serialize_server(server: PteroServer, today: date) -> UserServerItem:
     allocation_ip = server.allocation.ip_alias or server.allocation.ip if server.allocation else None
     allocation_port = server.allocation.port if server.allocation else None
     node_fqdn = server.node.fqdn if server.node else None
+    node_name = server.node.name if server.node else None
+    node_sftp_port = server.node.daemon_sftp if server.node else None
     address = f"{node_fqdn}:{allocation_port}" if node_fqdn and allocation_port is not None else None
 
     return UserServerItem(
@@ -92,6 +94,8 @@ def _serialize_server(server: PteroServer, today: date) -> UserServerItem:
         },
         node={
             "fqdn": node_fqdn,
+            "name": node_name,
+            "sftpPort": node_sftp_port,
         },
         expirationDate=expiration_date.isoformat() if expiration_date else None,
         daysLeft=days_left,

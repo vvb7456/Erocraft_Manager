@@ -44,6 +44,7 @@ history
 mail
 schedule
 settings
+more_horiz
 
 # ICON_COLORS keys used in the project
 play_arrow

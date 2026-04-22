@@ -88,6 +88,7 @@ const tabs = computed(() => [
   { key: 'server-files', label: t('userServers.files'), icon: 'folder', disabled: isInstalling.value || stale.value || isSuspended.value },
   { key: 'server-settings', label: (() => { const lbl = getEggMeta(server.value?.eggName ?? '').label; return lbl ? t('userServers.settings', { name: lbl }) : t('userServers.settingsGeneric') })(), icon: 'settings', disabled: isInstalling.value || stale.value || isSuspended.value },
   { key: 'server-activity', label: t('activity.title'), icon: 'history', disabled: isInstalling.value || stale.value || isSuspended.value },
+  { key: 'server-more', label: t('userServers.more'), icon: 'more_horiz', disabled: isInstalling.value || stale.value || isSuspended.value },
 ])
 
 const activeTab = computed(() => route.name as string)

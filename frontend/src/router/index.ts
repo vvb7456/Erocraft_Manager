@@ -72,6 +72,7 @@ const router = createRouter({
         { path: 'files', name: 'server-files', component: () => import('@/pages/user/ServerFilesPage.vue') },
         { path: 'settings', name: 'server-settings', component: () => import('@/pages/user/ServerSettingsPage.vue') },
         { path: 'activity', name: 'server-activity', component: () => import('@/pages/user/ServerActivityPage.vue') },
+        { path: 'more', name: 'server-more', component: () => import('@/pages/user/ServerMorePage.vue') },
       ],
     },
 

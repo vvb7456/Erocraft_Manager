@@ -76,6 +76,7 @@ export const ICON_CODEPOINTS: Record<string, string> = {
   'memory': '\ue322',
   'menu': '\ue5d2',
   'monitoring': '\uf190',
+  'more_horiz': '\ue5d3',
   'more_vert': '\ue5d4',
   'note_add': '\ue89c',
   'notifications_active': '\ue7f7',

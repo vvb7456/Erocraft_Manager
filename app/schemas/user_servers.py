@@ -21,6 +21,8 @@ class UserServerAllocation(BaseModel):
 
 class UserServerNode(BaseModel):
     fqdn: str | None
+    name: str | None = None
+    sftpPort: int | None = None
 
 
 class UserServerItem(BaseModel):
