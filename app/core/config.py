@@ -53,7 +53,6 @@ class Settings:
     async_database_url_override: str | None
     async_database_use_null_pool: bool
     ptero_panel_url: str
-    ptero_api_key: str
     panel_app_key: str
 
     @property
@@ -118,7 +117,6 @@ def _build_settings() -> Settings:
         async_database_url_override=os.getenv("ASYNC_DATABASE_URL"),
         async_database_use_null_pool=_as_bool(os.getenv("ASYNC_DATABASE_USE_NULL_POOL"), False),
         ptero_panel_url=os.getenv("PTERO_PANEL_URL", "").rstrip("/"),
-        ptero_api_key=os.getenv("PTERO_API_KEY", ""),
         panel_app_key=_env_first("PANEL_APP_KEY", "APP_KEY"),
     )
 
