@@ -15,7 +15,6 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
-from app.core.config import get_settings
 from app.core.runtime_settings import AUTOMATION_SPECS, SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.time import local_today
@@ -176,7 +175,6 @@ async def list_servers(
     db: AsyncSession = Depends(get_db),
 ) -> ServersListResponse:
     today = await _get_today(db)
-    panel_url = get_settings().ptero_panel_url
     servers = await server_repository.list_for_admin(db)
 
     egg_ids = sorted({server.egg_id for server in servers if server.egg_id})
@@ -201,11 +199,10 @@ async def list_servers(
                 daysLeft=days_left,
                 statusLabel=status_label,
                 isSuspended=server.is_suspended,
-                panelUrl=f"{panel_url}/server/{server.uuid}" if panel_url and server.uuid else None,
             )
         )
 
-    return ServersListResponse(servers=items, panelUrl=panel_url)
+    return ServersListResponse(servers=items)
 
 
 @router.post("/servers", response_model=CreateServerResponse, status_code=status.HTTP_201_CREATED)

@@ -18,12 +18,10 @@ class ServerListItem(BaseModel):
     daysLeft: int | None
     statusLabel: str
     isSuspended: bool
-    panelUrl: str | None
 
 
 class ServersListResponse(BaseModel):
     servers: list[ServerListItem]
-    panelUrl: str
 
 
 class CreateServerRequest(BaseModel):

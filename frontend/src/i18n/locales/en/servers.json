@@ -33,7 +33,7 @@
     "delete": "Delete",
     "create": "Create Server",
     "renew_days": "Renew Days",
-    "open_panel": "Panel",
+    "open_detail": "Detail",
     "quick_renew": "Quick Renew",
     "custom_date": "Custom Date"
   },

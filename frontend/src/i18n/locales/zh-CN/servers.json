@@ -33,7 +33,7 @@
     "delete": "删除",
     "create": "创建服务器",
     "renew_days": "续期天数",
-    "open_panel": "面板",
+    "open_detail": "详情",
     "quick_renew": "快速续期",
     "custom_date": "自定义日期"
   },

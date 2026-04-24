@@ -43,7 +43,6 @@ interface ServerItem {
   daysLeft: number | null
   statusLabel: 'normal' | 'expiring_soon' | 'expired' | 'permanent'
   isSuspended: boolean
-  panelUrl: string | null
 }
 
 interface BatchServersResult {
@@ -117,7 +116,7 @@ const tableLoading = ref(true)
 
 async function loadServers(silent = false) {
   if (!silent) tableLoading.value = true
-  const data = await get<{ servers: ServerItem[]; panelUrl: string }>('/api/servers')
+  const data = await get<{ servers: ServerItem[] }>('/api/servers')
   if (data) {
     rawServers.value = data.servers
   }
@@ -467,10 +466,9 @@ function openMobileRenew(s: ServerItem) {
         </td>
         <td class="col-id">{{ s.pteroId }}</td>
         <td class="col-name">
-          <a v-if="s.panelUrl" :href="s.panelUrl" target="_blank" rel="noopener" class="server-link">
+          <a href="#" class="server-link" @click.prevent="router.push(`/admin/servers/${s.pteroId}`)">
             {{ s.name }}
           </a>
-          <span v-else>{{ s.name }}</span>
         </td>
         <td class="col-egg">{{ s.eggName || '—' }}</td>
         <td class="col-owner">
@@ -536,9 +534,9 @@ function openMobileRenew(s: ServerItem) {
         {{ mobileActionServer.ownerUsername || '—' }} · <span :style="{ color: statusColor(mobileActionServer) }">{{ expirationText(mobileActionServer) }}</span>
       </template>
       <template v-if="mobileActionServer">
-        <a v-if="mobileActionServer.panelUrl" :href="mobileActionServer.panelUrl" target="_blank" rel="noopener">
-          <MsIcon name="link" size="sm" /> {{ t('servers.action.open_panel') }}
-        </a>
+        <button @click="mobileActionOpen = false; router.push(`/admin/servers/${mobileActionServer!.pteroId}`)">
+          <MsIcon name="open_in_new" size="sm" /> {{ t('servers.action.open_detail') }}
+        </button>
         <button @click="mobileActionOpen = false; openMobileRenew(mobileActionServer!)">
           <MsIcon name="update" size="sm" /> {{ t('servers.action.renew') }}
         </button>

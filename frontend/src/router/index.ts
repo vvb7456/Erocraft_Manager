@@ -91,6 +91,12 @@ const router = createRouter({
       meta: { admin: true },
     },
     {
+      path: '/admin/servers/:id',
+      name: 'admin-server-detail',
+      component: () => import('@/pages/AdminServerDetailPage.vue'),
+      meta: { admin: true },
+    },
+    {
       path: '/admin/users',
       name: 'users',
       component: () => import('@/pages/UsersPage.vue'),
