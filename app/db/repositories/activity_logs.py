@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ManagerActivityLog
@@ -18,6 +18,8 @@ class ActivityLogRepository:
         actor: str | None = None,
         action: str | None = None,
         status: str | None = None,
+        host_id: int | None = None,
+        node_id: int | None = None,
     ) -> tuple[list[ManagerActivityLog], int]:
         filters = []
         if actor:
@@ -26,6 +28,22 @@ class ActivityLogRepository:
             filters.append(ManagerActivityLog.action == action)
         if status:
             filters.append(ManagerActivityLog.status == status)
+        # detail_params is a JSON-encoded Text column; use substring
+        # matching anchored by the JSON value's trailing delimiter so
+        # ``host_id=1`` does not also match ``host_id=12``. json.dumps
+        # always emits ``"host_id": <N>`` with one space after the
+        # colon and the numeric value is always immediately followed
+        # by either ``,`` (another field) or ``}`` (end of object).
+        if host_id is not None:
+            filters.append(or_(
+                ManagerActivityLog.detail_params.like(f'%"host_id": {host_id},%'),
+                ManagerActivityLog.detail_params.like(f'%"host_id": {host_id}}}%'),
+            ))
+        if node_id is not None:
+            filters.append(or_(
+                ManagerActivityLog.detail_params.like(f'%"node_id": {node_id},%'),
+                ManagerActivityLog.detail_params.like(f'%"node_id": {node_id}}}%'),
+            ))
 
         query = select(ManagerActivityLog)
         count_query = select(func.count(ManagerActivityLog.id))

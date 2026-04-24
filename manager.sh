@@ -17,7 +17,7 @@ WEB_PORT="${MANAGER_WEB_PORT:-5001}"
 WEB_WORKERS="${MANAGER_WEB_WORKERS:-1}"
 WEB_PID_FILE="$APP_DIR/erocraft_manager_web.pid"
 WEB_LOG_FILE="$LOG_DIR/manager-web.log"
-WEB_HEALTH_URL="${MANAGER_WEB_HEALTH_URL:-http://127.0.0.1:${WEB_PORT}/openapi.json}"
+WEB_HEALTH_URL="${MANAGER_WEB_HEALTH_URL:-http://127.0.0.1:${WEB_PORT}/api/version}"
 
 JOBS_MODULE="${MANAGER_JOBS_MODULE:-app.jobs.main}"
 JOBS_PID_FILE="$APP_DIR/erocraft_manager_jobs.pid"

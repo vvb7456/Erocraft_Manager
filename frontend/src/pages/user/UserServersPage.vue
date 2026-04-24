@@ -25,7 +25,7 @@ import { getStatusDotKey, getStatusColor } from '@/utils/status'
 
 defineOptions({ name: 'UserServersPage' })
 
-const { t } = useI18n({ useScope: 'global' })
+const { t, te } = useI18n({ useScope: 'global' })
 const router = useRouter()
 const { get } = useApiFetch()
 const { confirm } = useConfirm()
@@ -140,6 +140,21 @@ const paginated = computed(() => {
   const start = (page.value - 1) * perPage.value
   return filteredServers.value.slice(start, start + perPage.value)
 })
+
+function pruneSelectionToCurrentPage() {
+  const pageIds = new Set(paginated.value.map((server) => server.id))
+  const next = new Set(
+    [...selectedIds.value].filter((id) => pageIds.has(id)),
+  )
+  if (next.size !== selectedIds.value.size) {
+    selectedIds.value = next
+  }
+  if (selectedIds.value.size === 0) {
+    batchActionType.value = ''
+  }
+}
+
+watch(paginated, pruneSelectionToCurrentPage, { immediate: true })
 
 // ── Load data ──
 async function loadServers() {
@@ -286,11 +301,16 @@ async function togglePower(s: Server) {
     if (!ok) return
   }
   const err = await pendingStore.sendPower(s.id, action, toast, [CREDENTIALS_ERROR])
-  if (err === CREDENTIALS_ERROR) {
-    const msgKey = getEggMeta(s.eggName).credentialMessageKey ?? 'credentialsRequiredMessage'
+  if (err && err.code === CREDENTIALS_ERROR) {
+    const fields = err.missing.length
+      ? err.missing.map((k) => {
+          const lk = `userServers.power.credField.${k}`
+          return te(lk) ? t(lk) : k
+        }).join(t('common.listSep'))
+      : ''
     const goSettings = await confirm({
       title: t('userServers.power.credentialsRequiredTitle'),
-      message: t(`userServers.power.${msgKey}`),
+      message: t('userServers.power.credentialsRequiredMessage', { fields }),
       confirmText: t('userServers.power.goToSettings'),
     })
     if (goSettings) {

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { onBeforeRouteLeave } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { provideDirtyForm, useDirtyFormSection } from '@/composables/useDirtyForm'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
@@ -15,6 +15,7 @@ import SectionHeader from '@/components/ui/SectionHeader.vue'
 import ChipSelect, { type ChipOption } from '@/components/ui/ChipSelect.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import Badge from '@/components/ui/Badge.vue'
+import DirtyBar from '@/components/ui/DirtyBar.vue'
 import { useTheme } from '@/composables/useTheme'
 
 defineOptions({ name: 'EmailTemplatesPage' })
@@ -259,35 +260,28 @@ function discardAll() {
   }
 }
 
-async function promptUnsaved(): Promise<'save' | 'discard' | 'stay'> {
-  const result = await confirm({
-    title: t('emailTemplates.unsavedTitle'),
-    message: t('emailTemplates.unsavedMessage', { n: dirtyKeys.value.length }),
-    confirmText: t('emailTemplates.unsavedSave'),
-    cancelText: t('emailTemplates.unsavedDiscard'),
-    altText: t('emailTemplates.unsavedStay'),
-  })
-  if (result === 'alt') return 'stay'
-  return result === true ? 'save' : 'discard'
-}
-
-onBeforeRouteLeave(async () => {
-  if (!isDirty.value) return true
-  const r = await promptUnsaved()
-  if (r === 'stay') return false
-  if (r === 'save') {
-    const ok = await saveAllDirty()
-    if (!ok) return false
-  }
-  return true
+// Page-wide dirty-form orchestration. The leave-guard reuses the email
+// templates' specialised "{n} unsaved" message via a custom prompt.
+const dirtyForm = provideDirtyForm({
+  prompt: async () => {
+    const result = await confirm({
+      title: t('emailTemplates.unsavedTitle'),
+      message: t('emailTemplates.unsavedMessage', { n: dirtyKeys.value.length }),
+      confirmText: t('emailTemplates.unsavedSave'),
+      cancelText: t('emailTemplates.unsavedDiscard'),
+      altText: t('emailTemplates.unsavedStay'),
+    })
+    if (result === 'alt') return 'stay'
+    return result === true ? 'save' : 'discard'
+  },
 })
-
-function onBeforeUnload(e: BeforeUnloadEvent) {
-  if (isDirty.value) {
-    e.preventDefault()
-    e.returnValue = ''
-  }
-}
+dirtyForm.attachLeaveGuard()
+useDirtyFormSection({
+  name: 'email-templates',
+  isDirty,
+  save: saveAllDirty,
+  discard: discardAll,
+}, dirtyForm)
 
 function tplLabel(key: TemplateKey): string {
   return t(`emailTemplates.${key}.title`)
@@ -313,7 +307,6 @@ onMounted(() => {
   if (typeof window !== 'undefined') {
     prefersDarkQuery.value = window.matchMedia('(prefers-color-scheme: dark)')
     prefersDarkQuery.value.addEventListener('change', onSystemThemeChange)
-    window.addEventListener('beforeunload', onBeforeUnload)
   }
   void loadData()
 })
@@ -321,9 +314,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (previewTimer) clearTimeout(previewTimer)
   prefersDarkQuery.value?.removeEventListener('change', onSystemThemeChange)
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('beforeunload', onBeforeUnload)
-  }
 })
 </script>
 
@@ -396,48 +386,54 @@ onBeforeUnmount(() => {
     </template>
   </div>
 
-  <Teleport to="body">
-    <Transition name="slide-up">
-      <div v-if="isDirty" class="dirty-bar">
-        <span class="dirty-bar__text">
-          <MsIcon name="edit" />
-          {{ t('emailTemplates.unsavedHint', { n: dirtyKeys.length }) }}
-        </span>
-        <div class="dirty-bar__chips">
-          <Badge
-            v-for="k in dirtyKeys"
-            :key="k"
-            color="#f59e0b"
-            class="dirty-bar__chip"
-            @click="activeTemplate = k"
-          >
-            {{ tplLabel(k) }}
-          </Badge>
-        </div>
-        <div class="dirty-bar__actions">
-          <BaseButton size="sm" :disabled="saveLoading" @click="discardAll">
-            {{ t('emailTemplates.discardAll') }}
-          </BaseButton>
-          <BaseButton
-            v-if="isTemplateDirty(activeTemplate)"
-            size="sm"
-            :loading="saveLoading"
-            @click="save"
-          >
-            {{ t('emailTemplates.saveCurrent') }}
-          </BaseButton>
-          <BaseButton
-            variant="primary"
-            size="sm"
-            :loading="saveLoading"
-            @click="saveAllDirty"
-          >
-            {{ t('emailTemplates.saveAll', { n: dirtyKeys.length }) }}
-          </BaseButton>
-        </div>
+  <DirtyBar
+    :dirty="dirtyForm.isDirty.value"
+    :saving="saveLoading"
+    confirm-before-unload
+  >
+    <template #hint>
+      <span class="db__text dirty-bar__text">
+        <MsIcon name="edit" />
+        {{ t('emailTemplates.unsavedHint', { n: dirtyKeys.length }) }}
+      </span>
+    </template>
+    <template #extra>
+      <div class="dirty-bar__chips">
+        <Badge
+          v-for="k in dirtyKeys"
+          :key="k"
+          color="#f59e0b"
+          class="dirty-bar__chip"
+          @click="activeTemplate = k"
+        >
+          {{ tplLabel(k) }}
+        </Badge>
       </div>
-    </Transition>
-  </Teleport>
+    </template>
+    <template #actions>
+      <div class="dirty-bar__actions">
+        <BaseButton size="sm" :disabled="saveLoading" @click="discardAll">
+          {{ t('emailTemplates.discardAll') }}
+        </BaseButton>
+        <BaseButton
+          v-if="isTemplateDirty(activeTemplate)"
+          size="sm"
+          :loading="saveLoading"
+          @click="save"
+        >
+          {{ t('emailTemplates.saveCurrent') }}
+        </BaseButton>
+        <BaseButton
+          variant="primary"
+          size="sm"
+          :loading="saveLoading"
+          @click="saveAllDirty"
+        >
+          {{ t('emailTemplates.saveAll', { n: dirtyKeys.length }) }}
+        </BaseButton>
+      </div>
+    </template>
+  </DirtyBar>
 </template>
 
 <style scoped>
@@ -447,37 +443,16 @@ onBeforeUnmount(() => {
   padding: var(--sp-8);
 }
 
-/* Floating dirty bar (mirrors SettingsPage.vue) */
-.dirty-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-5);
-  background: var(--bg3);
-  border-top: 1px solid var(--bd);
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.35);
-}
+/* DirtyBar slot overrides for the chip cluster + custom actions. The base
+   bar layout (positioning / shadow / transition) lives in DirtyBar.vue. */
 .dirty-bar__text {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--amber);
   white-space: nowrap;
   flex-shrink: 0;
 }
-.dirty-bar__text :deep(.ms-icon) { font-size: 1.1rem; }
 .dirty-bar__chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-1);
-  flex: 1 1 auto;
   min-width: 0;
 }
 .dirty-bar__chip { cursor: pointer; }
@@ -485,16 +460,6 @@ onBeforeUnmount(() => {
   display: flex;
   gap: var(--sp-2);
   flex-shrink: 0;
-}
-
-.slide-up-enter-active,
-.slide-up-leave-active {
-  transition: transform .24s ease, opacity .24s ease;
-}
-.slide-up-enter-from,
-.slide-up-leave-to {
-  transform: translateY(100%);
-  opacity: 0;
 }
 
 .tpl-workspace {

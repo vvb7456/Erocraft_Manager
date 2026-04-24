@@ -265,11 +265,6 @@ function getPropsText(log: ActivityLogItem): string {
   color: var(--t3);
 }
 
-/* Fix double border between last row and footer */
-:deep(.dt-table tbody tr:last-child td) {
-  border-bottom: none;
-}
-
 /* ── Event cell ── */
 .event-cell {
   display: inline-flex;

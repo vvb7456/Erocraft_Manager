@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from './useToast'
 import router from '@/router'
+import { useAppStore } from '@/stores/app'
 
 let _redirecting = false
 function redirectToLogin() {
@@ -22,6 +23,7 @@ export function useApiFetch() {
   const error = ref<string | null>(null)
   const { toast } = useToast()
   const { t, te } = useI18n({ useScope: 'global' })
+  const app = useAppStore()
 
   /** Translate a structured error code to i18n, fallback to raw message. */
   function translateError(msg: string): string {
@@ -47,6 +49,7 @@ export function useApiFetch() {
       if (!res.ok) {
         // 401: session expired — redirect to login
         if (res.status === 401) {
+          app.clearSessionUser()
           redirectToLogin()
           return null
         }
@@ -105,6 +108,7 @@ export function useApiFetch() {
       const res = await fetch(url, opts)
       if (!res.ok) {
         if (res.status === 401) {
+          app.clearSessionUser()
           redirectToLogin()
           return null
         }

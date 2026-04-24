@@ -2,6 +2,7 @@
   "title": "用户列表",
   "search_placeholder": "搜索用户名或邮箱…",
   "filter": {
+    "label": "服务器",
     "all": "全部",
     "has_servers": "有服务器",
     "no_servers": "无服务器"

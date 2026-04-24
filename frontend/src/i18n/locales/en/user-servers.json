@@ -90,8 +90,11 @@
     "confirmKill": "Are you sure you want to kill the server? This may cause data loss.",
     "confirmRestart": "Are you sure you want to restart the server?",
     "credentialsRequiredTitle": "Required Parameters Missing",
-    "credentialsRequiredMessage": "Please fill in all required startup variables in settings first.",
-    "credentialsRequiredMessageST": "Please set the required username and password in settings first.",
+    "credentialsRequiredMessage": "Please fill in the following in settings: {fields}",
+    "credField": {
+      "USERNAME": "Username",
+      "PASSWORD": "Password"
+    },
     "goToSettings": "Go to Settings"
   },
   "resources": {
@@ -137,6 +140,7 @@
     "dragHint": "Drop files here to upload",
     "singleFileOnly": "Only one file at a time",
     "folderUploadNotSupported": "Folder upload is not supported",
+    "uploadTooLarge": "Uploaded file must not exceed {limit} MiB",
     "validation": {
       "emptyName": "Name cannot be empty",
       "invalidChars": "Name contains invalid characters",

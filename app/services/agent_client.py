@@ -1,21 +1,27 @@
-"""HTTP client for talking to a node's Erocraft Agent V2."""
+"""Pure HTTP client for the Erocraft Agent V2.
+
+This module is **transport only**: it knows nothing about the manager
+database, the host registry, or how credentials are stored. Callers must
+resolve ``(endpoint, token)`` themselves — typically via
+:func:`app.services.host_registry.get_credentials` /
+:func:`app.services.host_registry.get_credentials_for_node`.
+
+This separation keeps the HTTP retry / SSE / timeout logic in one place
+without entangling it with SQLAlchemy sessions or Fernet decryption.
+
+Error model:
+  * :class:`AgentClientError` — transport failure or HTTP 4xx/5xx response.
+    The message is intentionally terse (no full URL, no body dump) so
+    log lines that print ``str(exc)`` cannot leak the agent's private
+    ingress. Full diagnostics go to ``logger.debug``.
+"""
 
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, AsyncIterator
 
 import httpx
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.config import get_settings
-from app.core.security import decrypt_value
-from app.db.models.manager import NodeMeta
-from app.services.agent_endpoint import (
-    AgentEndpointError,
-    validate_agent_endpoint,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -23,28 +29,12 @@ DEFAULT_TIMEOUT = 10.0
 
 
 class AgentClientError(Exception):
-    """Raised when an agent call fails."""
+    """Raised when an agent HTTP call fails (transport or non-2xx)."""
 
 
-class AgentNotConfigured(AgentClientError):
-    """Raised when no agent_endpoint/agent_token is configured for the node."""
-
-
-async def _load_meta(db: AsyncSession, node_id: int) -> tuple[str, str]:
-    """Load (endpoint, plaintext_token) for a node, raising AgentNotConfigured if missing."""
-    result = await db.execute(select(NodeMeta).where(NodeMeta.node_id == node_id))
-    meta = result.scalar_one_or_none()
-    if not meta or not meta.agent_endpoint or not meta.agent_token_encrypted:
-        raise AgentNotConfigured(f"agent not configured for node {node_id}")
-    try:
-        endpoint = validate_agent_endpoint(meta.agent_endpoint)
-    except AgentEndpointError as exc:
-        raise AgentClientError(f"invalid agent endpoint: {exc}") from exc
-    try:
-        token = decrypt_value(meta.agent_token_encrypted, get_settings().settings_encryption_key)
-    except ValueError as exc:
-        raise AgentClientError(f"agent token decrypt failed: {exc}") from exc
-    return endpoint, token
+# ---------------------------------------------------------------------------
+# Internals
+# ---------------------------------------------------------------------------
 
 
 async def _request(
@@ -59,21 +49,16 @@ async def _request(
     url = f"{endpoint}{path}"
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
     try:
-        async with httpx.AsyncClient(timeout=timeout, verify=True, trust_env=False) as client:
+        async with httpx.AsyncClient(
+            timeout=timeout, verify=True, trust_env=False,
+        ) as client:
             resp = await client.request(method, url, json=json, headers=headers)
     except httpx.HTTPError as exc:
-        # Keep the raised message minimal — no full endpoint URL, no stack of
-        # httpx internals — so callers that log ``str(e)`` won't leak the
-        # node's private ingress into application logs (CR §2.9). The full
-        # URL is still available on the ``debug`` channel for operators.
         logger.debug("agent %s %s transport error: %r", method, url, exc)
         raise AgentClientError(
             f"{method} {path} transport error: {type(exc).__name__}"
         ) from exc
     if resp.status_code >= 400:
-        # Same rationale: exception message carries only status + a short
-        # body hint; full URL + full body go to debug. Body truncated to 80
-        # chars (was 200) so stray data never dominates logs.
         body_hint = resp.text[:80].replace("\n", " ") if resp.text else ""
         logger.debug(
             "agent %s %s -> HTTP %d body=%r",
@@ -86,23 +71,42 @@ async def _request(
     return resp.json()
 
 
-async def fetch_metrics(db: AsyncSession, node_id: int, *, timeout: float = DEFAULT_TIMEOUT) -> dict:
-    endpoint, token = await _load_meta(db, node_id)
+# ---------------------------------------------------------------------------
+# Read endpoints
+# ---------------------------------------------------------------------------
+
+
+async def fetch_metrics(
+    endpoint: str, token: str, *, timeout: float = DEFAULT_TIMEOUT,
+) -> dict:
     return await _request("GET", endpoint, token, "/v1/metrics", timeout=timeout)
 
 
-async def fetch_wings_config(db: AsyncSession, node_id: int, *, timeout: float = DEFAULT_TIMEOUT) -> dict:
-    endpoint, token = await _load_meta(db, node_id)
+async def fetch_wings_config(
+    endpoint: str, token: str, *, timeout: float = DEFAULT_TIMEOUT,
+) -> dict:
     return await _request("GET", endpoint, token, "/v1/wings/config", timeout=timeout)
 
 
-async def fetch_status(db: AsyncSession, node_id: int, *, timeout: float = DEFAULT_TIMEOUT) -> dict:
-    endpoint, token = await _load_meta(db, node_id)
+async def fetch_status(
+    endpoint: str, token: str, *, timeout: float = DEFAULT_TIMEOUT,
+) -> dict:
     return await _request("GET", endpoint, token, "/v1/status", timeout=timeout)
 
 
-async def ping(db: AsyncSession, node_id: int, *, timeout: float = 5.0) -> dict:
-    endpoint, token = await _load_meta(db, node_id)
+async def get_wings_service(
+    endpoint: str, token: str, *, timeout: float = DEFAULT_TIMEOUT,
+) -> dict:
+    """Return systemd state of the wings unit on this node."""
+    return await _request("GET", endpoint, token, "/v1/wings/service", timeout=timeout)
+
+
+# ---------------------------------------------------------------------------
+# Command endpoints
+# ---------------------------------------------------------------------------
+
+
+async def ping(endpoint: str, token: str, *, timeout: float = 5.0) -> dict:
     return await _request(
         "POST", endpoint, token, "/v1/commands",
         json={"id": 0, "type": "ping", "params": {}},
@@ -110,12 +114,74 @@ async def ping(db: AsyncSession, node_id: int, *, timeout: float = 5.0) -> dict:
     )
 
 
+async def restart_wings(
+    endpoint: str, token: str, *, timeout: float = 60.0,
+) -> dict:
+    """Issue the ``wings.restart`` command (subprocess timeout 30s on the agent)."""
+    return await _request(
+        "POST", endpoint, token, "/v1/commands",
+        json={"id": 0, "type": "wings.restart", "params": {"timeout": 30.0}},
+        timeout=timeout,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Unauthenticated reachability
+# ---------------------------------------------------------------------------
+
+
 async def healthz(endpoint: str, *, timeout: float = 3.0) -> bool:
-    """Unauthenticated health check (used during initial config to verify reachability)."""
+    """Unauthenticated health check used during initial host registration."""
     url = f"{endpoint.rstrip('/')}/healthz"
     try:
-        async with httpx.AsyncClient(timeout=timeout, verify=True, trust_env=False) as client:
+        async with httpx.AsyncClient(
+            timeout=timeout, verify=True, trust_env=False,
+        ) as client:
             resp = await client.get(url)
         return resp.status_code == 200
     except httpx.HTTPError:
         return False
+
+
+# ---------------------------------------------------------------------------
+# Streaming
+# ---------------------------------------------------------------------------
+
+
+async def stream_wings_logs(
+    endpoint: str,
+    token: str,
+    *,
+    lines: int = 100,
+    connect_timeout: float = 10.0,
+) -> AsyncIterator[bytes]:
+    """Yield raw SSE bytes from ``/v1/wings/logs/stream``.
+
+    The httpx stream + AsyncClient stay open for the lifetime of this
+    generator. Caller iterates until EOF or calls ``aclose()`` to
+    terminate the upstream tail. There is no overall request timeout;
+    only the connect phase is bounded.
+    """
+    url = f"{endpoint}/v1/wings/logs/stream?lines={int(lines)}"
+    headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
+    timeout = httpx.Timeout(
+        connect_timeout, read=None, write=connect_timeout, pool=connect_timeout,
+    )
+    client = httpx.AsyncClient(timeout=timeout, verify=True, trust_env=False)
+    try:
+        async with client.stream("GET", url, headers=headers) as resp:
+            if resp.status_code >= 400:
+                body = (await resp.aread()).decode("utf-8", "replace")[:200]
+                logger.debug(
+                    "agent log stream %s -> HTTP %d body=%r",
+                    url, resp.status_code, body,
+                )
+                raise AgentClientError(
+                    f"GET /v1/wings/logs/stream -> HTTP {resp.status_code}"
+                    + (f": {body}" if body else "")
+                )
+            async for chunk in resp.aiter_raw():
+                if chunk:
+                    yield chunk
+    finally:
+        await client.aclose()

@@ -2,6 +2,7 @@
   "title": "服务器列表",
   "search_placeholder": "搜索服务器名称或所有者…",
   "filter": {
+    "label": "状态",
     "all": "全部",
     "normal": "正常",
     "expiring_soon": "即将到期",

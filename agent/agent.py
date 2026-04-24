@@ -12,7 +12,6 @@ import logging
 import sys
 from pathlib import Path
 
-import psutil
 import uvicorn
 
 from .collectors import wings_config as wings_config_collector
@@ -30,19 +29,10 @@ def _self_check(cfg, config_path: str) -> None:
     except wings_config_collector.WingsConfigError as e:
         log.error("wings config check failed: %s", e)
         sys.exit(2)
-    # 2. bind port not in use (best-effort)
-    bind_port = cfg.agent.port
-    try:
-        connections = psutil.net_connections(kind="inet")
-    except (psutil.AccessDenied, PermissionError, OSError) as e:
-        # Unprivileged containers / restricted sysfs may block this probe.
-        # Port-in-use is best-effort; uvicorn will still fail loudly on bind.
-        log.warning("skipping port-in-use check (psutil access denied): %s", e)
-    else:
-        for conn in connections:
-            if conn.laddr and conn.laddr.port == bind_port and conn.status == "LISTEN":
-                log.error("port %d already in use by pid=%s", bind_port, conn.pid)
-                sys.exit(2)
+    # Note: port-in-use pre-check removed (used to call psutil.net_connections,
+    # which requires either CAP_NET_ADMIN or full /proc enumeration and fails on
+    # restricted hosts). uvicorn.run() raises on bind failure, which is good
+    # enough as a check.
     log.info(
         "agent v2 starting: node_id=%d bind=%s wings_config=%s probes=%d",
         cfg.manager.node_id,

@@ -1,4 +1,5 @@
 {
+  "listSep": "、",
   "btn": {
     "save": "保存",
     "cancel": "取消",

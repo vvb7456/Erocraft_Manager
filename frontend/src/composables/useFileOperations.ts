@@ -383,12 +383,23 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
       return
     }
 
-    const tokenData = await get<{ token: string; baseUrl: string; serverUuid: string }>(
+    const tokenData = await get<{ token: string; baseUrl: string; serverUuid: string; uploadSize: number }>(
       `/api/user/servers/${serverId.value}/wings-token`,
     )
     if (!tokenData?.token) return
 
     const file = fileList[0]
+
+    // Client-side size pre-check. Wings enforces upload_size via
+    // http.MaxBytesReader which only errors AFTER receiving the full body,
+    // so without this check the user would watch the upload progress reach
+    // 100% before getting a failure. Reject early to save bandwidth.
+    const limitMib = tokenData.uploadSize
+    if (limitMib > 0 && file.size > limitMib * 1024 * 1024) {
+      toast(t('userServers.file.uploadTooLarge', { limit: limitMib }), 'error')
+      input.value = ''
+      return
+    }
     const taskEntry = { name: file.name, progress: 0, status: 'uploading' as const, startTime: Date.now(), type: 'upload' as const }
     tasks.value.push(taskEntry)
     uploadPanelOpen.value = true

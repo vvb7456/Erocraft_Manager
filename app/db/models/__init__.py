@@ -1,9 +1,12 @@
 """Typed ORM models for the FastAPI backend."""
 
 from app.db.models.manager import (
+    HostAlertRule,
+    HostAlertSettings,
     ManagerActivityLog,
     ManagerEmailChange,
     ManagerEmailTemplate,
+    ManagerHost,
     ManagerPasswordReset,
     ManagerPendingRegistration,
     ServerMeta,
@@ -33,9 +36,12 @@ __all__ = [
     "Backup",
     "Egg",
     "EggVariable",
+    "HostAlertRule",
+    "HostAlertSettings",
     "ManagerActivityLog",
     "ManagerEmailChange",
     "ManagerEmailTemplate",
+    "ManagerHost",
     "ManagerPasswordReset",
     "ManagerPendingRegistration",
     "Nest",

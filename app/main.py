@@ -30,8 +30,9 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        docs_url="/docs",
+        docs_url="/docs" if settings.enable_api_docs else None,
         redoc_url=None,
+        openapi_url="/openapi.json" if settings.enable_api_docs else None,
         lifespan=lifespan,
     )
     app.add_middleware(

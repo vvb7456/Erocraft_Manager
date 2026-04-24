@@ -5,7 +5,6 @@ import { useRouter } from 'vue-router'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { usePowerPendingStore, type PowerAction } from '@/stores/powerPending'
-import { getEggMeta } from '@/config/eggRegistry'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
@@ -24,7 +23,7 @@ const props = defineProps<{
   eggName?: string
 }>()
 
-const { t } = useI18n({ useScope: 'global' })
+const { t, te } = useI18n({ useScope: 'global' })
 const router = useRouter()
 const { confirm } = useConfirm()
 const { toast } = useToast()
@@ -58,11 +57,20 @@ async function sendPower(action: PowerAction) {
   }
 
   const err = await pendingStore.sendPower(props.serverId, action, toast, [CREDENTIALS_ERROR])
-  if (err === CREDENTIALS_ERROR) {
-    const msgKey = getEggMeta(props.eggName ?? '').credentialMessageKey ?? 'credentialsRequiredMessage'
+  if (err && err.code === CREDENTIALS_ERROR) {
+    // Translate each missing env-var key (e.g. PASSWORD) via the
+    // userServers.power.credField map; fall back to the raw key when
+    // we don't have a label for it. The dialog message lists the actual
+    // fields so the wording matches what the user must change.
+    const fields = err.missing.length
+      ? err.missing.map((k) => {
+          const lk = `userServers.power.credField.${k}`
+          return te(lk) ? t(lk) : k
+        }).join(t('common.listSep'))
+      : ''
     const goSettings = await confirm({
       title: t('userServers.power.credentialsRequiredTitle'),
-      message: t(`userServers.power.${msgKey}`),
+      message: t('userServers.power.credentialsRequiredMessage', { fields }),
       confirmText: t('userServers.power.goToSettings'),
     })
     if (goSettings) {

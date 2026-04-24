@@ -23,8 +23,6 @@ export interface EggMeta {
   secretVars?: string[]
   /** Label shown on the Settings tab and "Open" button (e.g. "SillyTavern"). Fallback: undefined → generic */
   label?: string
-  /** i18n key for credential-missing message (under userServers.power.*). Fallback: 'credentialsRequiredMessage' */
-  credentialMessageKey?: string
 }
 
 const EGG_META: Record<string, EggMeta> = {
@@ -33,7 +31,6 @@ const EGG_META: Record<string, EggMeta> = {
     hiddenVars: ['FORCE_REINSTALL'],
     secretVars: ['PASSWORD'],
     label: 'SillyTavern',
-    credentialMessageKey: 'credentialsRequiredMessageST',
   },
 }
 

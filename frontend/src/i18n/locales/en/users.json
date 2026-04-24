@@ -2,6 +2,7 @@
   "title": "User List",
   "search_placeholder": "Search username or email…",
   "filter": {
+    "label": "Servers",
     "all": "All",
     "has_servers": "Has Servers",
     "no_servers": "No Servers"

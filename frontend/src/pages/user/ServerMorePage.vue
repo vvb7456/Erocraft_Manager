@@ -2,6 +2,7 @@
 import { computed, inject, ref, onMounted, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '@/composables/useToast'
+import { useAppStore } from '@/stores/app'
 import HelpTip from '@/components/ui/HelpTip.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 
@@ -9,6 +10,7 @@ defineOptions({ name: 'ServerMorePage' })
 
 const { t } = useI18n({ useScope: 'global' })
 const { toast } = useToast()
+const app = useAppStore()
 
 interface ServerCtx {
   id: number
@@ -25,9 +27,8 @@ const panelUsername = ref('')
 
 onMounted(async () => {
   try {
-    const res = await fetch('/api/me')
-    if (res.ok) {
-      const data = await res.json()
+    const data = await app.fetchSessionUser()
+    if (data) {
       panelUsername.value = String(data?.username || '')
     }
   } catch { /* ignore */ }

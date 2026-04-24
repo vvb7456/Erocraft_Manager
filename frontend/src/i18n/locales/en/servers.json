@@ -2,6 +2,7 @@
   "title": "Server List",
   "search_placeholder": "Search server name or owner…",
   "filter": {
+    "label": "Status",
     "all": "All",
     "normal": "Normal",
     "expiring_soon": "Expiring Soon",

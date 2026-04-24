@@ -1,0 +1,389 @@
+{
+  "title": "主机",
+  "subtitle": "管理所有 Erocraft Agent 接入的服务器（Wings 节点 / nginx 代理 / NAS / 通用 Linux）。",
+  "nav": {
+    "list": "总览"
+  },
+  "summary": {
+    "total": "共 {n} 台",
+    "online": "在线 {n}",
+    "offline": "离线 {n}",
+    "disabled": "已停用 {n}",
+    "unconfigured": "未配置 {n}"
+  },
+  "list": {
+    "empty": "暂无主机，点击右上角「新建主机」添加第一台。",
+    "loading": "加载主机列表…",
+    "perPage": "条/页"
+  },
+  "columns": {
+    "name": "名称",
+    "kind": "类型",
+    "hostname": "主机名",
+    "agentUrl": "Agent 地址",
+    "status": "状态",
+    "lastSeen": "最后心跳",
+    "actions": "操作"
+  },
+  "kind": {
+    "wings_node": "Wings 节点",
+    "nginx_proxy": "nginx 代理",
+    "nas": "NAS",
+    "generic_linux": "Linux"
+  },
+  "status": {
+    "online": "在线",
+    "offline": "离线",
+    "disabled": "已停用",
+    "unconfigured": "未配置"
+  },
+  "toolbar": {
+    "globalDefaults": "全局默认",
+    "create": "新建主机",
+    "filterKind": "类型",
+    "filterStatus": "状态",
+    "all": "全部",
+    "search": "搜索名称 / 主机名 / 地址"
+  },
+  "actions": {
+    "probe": "探测",
+    "delete": "删除",
+    "open": "查看详情",
+    "more": "更多操作",
+    "probeOk": "主机 {name} 探测成功",
+    "probeFail": "主机 {name} 探测失败：{err}",
+    "deleted": "主机 {name} 已删除"
+  },
+  "confirm": {
+    "delete_title": "删除主机",
+    "delete_msg": "确定删除主机 \"{name}\"？此操作不可撤销。"
+  },
+  "tbd": "该功能将在下一步实现",
+  "create": {
+    "title": "新建主机",
+    "fields": {
+      "name": "名称",
+      "nameHint": "展示用名，可重复，建议与面板节点名保持一致。",
+      "kind": "类型",
+      "kindHint": "wings_node 用于 Pterodactyl 节点；其它为基础设施主机。",
+      "hostname": "主机名",
+      "hostnameHint": "DNS 或 IP，用于展示与告警上下文。",
+      "agentUrl": "Agent 地址",
+      "agentUrlHint": "形如 http://10.0.0.22:48765，Manager 将访问此地址 Pull 数据。",
+      "agentToken": "Agent Token",
+      "agentTokenHint": "Manager 已预生成一个 43 字符 URL-safe Bearer，点击创建后写入数据库。可点刷新重新生成。",
+      "agentTokenRefresh": "重新生成",
+      "pteroNode": "面板节点",
+      "pteroNodeHint": "wings_node 必填：Pterodactyl Panel 中对应的节点。",
+      "enabled": "启用",
+      "enabledHint": "停用后 Manager 不再轮询此主机。"
+    },
+    "create": "创建",
+    "cancel": "取消",
+    "creating": "创建中…",
+    "probeOk": "Probe 成功",
+    "created": "主机已创建",
+    "createFailed": "创建失败"
+  },
+  "tokenReveal": {
+    "title": "一次性 Token",
+    "subtitle": "请立即复制并粘贴到目标节点的 agent config.yaml；关闭此窗口后将无法再次查看。",
+    "label": "Agent Token",
+    "copied": "Token 已复制",
+    "done": "我已保存"
+  },
+  "globalDefaults": {
+    "title": "全局默认",
+    "fields": {
+      "interval": "采集间隔（秒）",
+      "intervalHint": "所有主机共享的 Pull 周期，30 – 3600。",
+      "retention": "监控保留（天）",
+      "retentionHint": "超过天数的监控样本将被清理，1 – 365。",
+      "recipients": "默认告警接收人",
+      "recipientsHint": "新建主机时继承该列表；已创建主机在其设置页单独调整。",
+      "recipientsEmpty": "暂无可选管理员"
+    },
+    "loading": "加载中…",
+    "save": "保存",
+    "saved": "已保存全局默认",
+    "saveFailed": "保存失败",
+    "cancel": "取消"
+  },
+  "time": {
+    "never": "—"
+  },
+  "detail": {
+    "title": "主机详情",
+    "tabs": {
+      "overview": "概览",
+      "setting": "Agent 设置",
+      "wings": "Wings 设置",
+      "allocations": "端口分配",
+      "activity": "活动"
+    },
+    "loading": "加载中…",
+    "notFound": "找不到该主机",
+    "overviewPlaceholder": "概览面板将在 C7 落地：状态 chip、ECharts 仪表盘、资源明细、近 1h hero 趋势、活跃告警。下方为当前 host 原始数据：",
+    "settingPlaceholder": "设置面板将在 C8 落地：Agent 连接、Token 重置、wings_config、告警配置、危险区域。"
+  },
+  "activity": {
+    "window": {
+      "1h": "近 1 小时",
+      "6h": "近 6 小时",
+      "24h": "近 24 小时",
+      "7d": "近 7 天"
+    },
+    "history": {
+      "title": "资源历史"
+    },
+    "metric": {
+      "cpu": "CPU",
+      "mem": "内存",
+      "disk": "磁盘",
+      "load": "负载",
+      "net": "网络吞吐",
+      "diskIo": "磁盘 IO"
+    },
+    "series": {
+      "netRx": "接收",
+      "netTx": "发送",
+      "diskRead": "读取",
+      "diskWrite": "写入"
+    },
+    "log": {
+      "title": "Wings 调试日志",
+      "connected": "已连接",
+      "connecting": "连接中…",
+      "disconnected": "连接断开，正在重连…",
+      "empty": "暂无日志",
+      "clear": "清屏",
+      "pause": "暂停",
+      "resume": "继续",
+      "follow": "跟随尾部"
+    },
+    "nonWings": {
+      "title": "无可用活动数据",
+      "message": "非 wings_node 主机目前不采集资源历史与 wings 进程日志。"
+    }
+  },
+  "overview": {
+    "basicInfo": "基础信息",
+    "activeAlerts": "活跃告警",
+    "noActiveAlerts": "暂无活跃告警",
+    "noMetrics": "还未采集到指标数据",
+    "noMetricsNonWings": "非 wings_node 主机暂不采集系统指标，仅展示心跳与 inbound 状态。",
+    "yes": "是",
+    "no": "否",
+    "fields": {
+      "name": "名称",
+      "kind": "类型",
+      "hostname": "主机名",
+      "agentUrl": "Agent 地址",
+      "panelNode": "面板节点 ID",
+      "enabled": "启用",
+      "createdAt": "创建时间",
+      "lastSeenAt": "最后心跳"
+    },
+    "chip": {
+      "heartbeat": "心跳 {age} 前"
+    },
+    "stats": {
+      "cores": "核",
+      "load": "负载",
+      "containers": "容器"
+    },
+    "hero": {
+      "cpu": "CPU 近 1h",
+      "mem": "内存 近 1h"
+    },
+    "chart": {
+      "empty": "暂无数据点"
+    }
+  },
+  "setting": {
+    "saved": "保存成功",
+    "probeOk": "探测成功 ({ms} ms)",
+    "probeFail": "探测失败：{err}",
+    "agent": {
+      "title": "Agent 连接",
+      "kindLocked": "创建后类型不可修改。",
+      "panelNodeLocked": "面板节点绑定不可修改。如需更换节点请重建主机。",
+      "enabledHint": "停用后 Manager 不再轮询此主机。",
+      "tokenLabel": "Agent Token",
+      "tokenHint": "点击「重置」生成一个新 token，保存后同步更新主机 config.yaml。",
+      "tokenPendingHint": "新 token 已生成，保存后生效。请立即复制并更新节点上的 agent config.yaml。",
+      "tokenReset": "重置",
+      "tokenCancelReset": "取消重置",
+      "tokenWarning": "警告：保存后旧 token 立即作废；agent config.yaml 未同步会导致采集中断。",
+      "probe": "探测连通",
+      "discard": "放弃修改",
+      "save": "保存"
+    },
+    "wings": {
+      "title": "Wings 服务",
+      "notWings": "该主机不是 Wings 节点",
+      "saved": "已保存（{n} 个字段变更）",
+      "cancel": "取消",
+      "serviceError": "Wings 服务状态不可达：{err}",
+      "serviceState": {
+        "unknown": "未知",
+        "running": "运行中",
+        "dead": "已停止",
+        "failed": "已崩溃",
+        "active": "运行中",
+        "inactive": "未运行",
+        "activating": "启动中",
+        "deactivating": "停止中",
+        "reloading": "重载中",
+        "exited": "已退出",
+        "start": "启动中",
+        "stop": "停止中"
+      },
+      "serviceUptime": "已运行 {dur}",
+      "restartRequired": "以下字段需 Wings 重启后生效：{fields}",
+      "restart": "重启 Wings",
+      "restartConfirmTitle": "重启 Wings？",
+      "restartConfirmMsg": "重启过程中该节点上的所有服务器将短暂离线。",
+      "restartOk": "Wings 已重启（{ms} ms）",
+      "restartFail": "重启失败：{err}",
+      "saveAndRestartTitle": "保存并重启 Wings？",
+      "saveAndRestartMsg": "以下字段需要 Wings 重启后才能生效：{fields}。保存配置后将立即重启 Wings。",
+      "saveAndRestartConfirm": "保存并重启 Wings",
+      "fields": {
+        "name": "节点名",
+        "description": "描述",
+        "fqdn": "FQDN",
+        "scheme": "协议",
+        "behindProxy": "位于反代后",
+        "maintenance": "维护模式",
+        "memory": "内存 (MiB)",
+        "memoryOver": "内存超配 (%)",
+        "disk": "磁盘 (MiB)",
+        "diskOver": "磁盘超配 (%)",
+        "uploadSize": "上传大小 (MiB)",
+        "daemonListen": "daemon 端口",
+        "daemonSftp": "SFTP 端口",
+        "daemonBase": "数据目录"
+      },
+      "tips": {
+        "behindProxy": "启用后 wings 会信任 X-Forwarded-* 头部，需 nginx/Traefik 等反代。",
+        "maintenance": "维护模式下产品不会调度新服务器。",
+        "overallocate": "-1 = 不限制；0 = 禁止超配；N = 超过 N% 后不再分配。",
+        "uploadSize": "单个上传文件上限，MiB。",
+        "daemonBase": "服务器文件存放路径。修改后需重启 Wings。"
+      }
+    },
+    "alerting": {
+      "title": "告警设置",
+      "intro": "此处的设置仅作用于本主机；未设置的项目使用全局默认。",
+      "saved": "告警设置已保存",
+      "recipientsEmpty": "使用全局默认收件人",
+      "resetDefaults": "全部重置为默认",
+      "channelSection": "通知通道",
+      "rulesSection": "告警类型与阈值",
+      "rulesTip": "未开启的类型表示该主机不生成该告警。未修改的阈值使用全局默认。",
+      "rulesTitle": "告警类型与阈值",
+      "threshold": "阈值",
+      "warningThreshold": "warning %",
+      "criticalThreshold": "critical %",
+      "sustainMin": "持续分钟",
+      "on": "开",
+      "off": "关",
+      "fields": {
+        "emailEnabled": "邮件通知",
+        "recipients": "收件人",
+        "minSeverity": "最低严重级别",
+        "notifyResolve": "恢复后发送通知",
+        "cooldown": "冷却时间（分钟）"
+      },
+      "tips": {
+        "inherit": "未设置时使用全局默认：{v}",
+        "recipients": "为空表示使用全局默认收件人列表。",
+        "cooldown": "同一主机同一告警类型在冷却期内不重复发送。"
+      },
+      "types": {
+        "node_offline": "节点离线",
+        "agent_only_down": "仅 Agent 不可达",
+        "wings_only_down": "仅 Wings 不可达",
+        "network_down": "公网不通",
+        "clash_down": "Clash 不可达",
+        "cpu_high": "CPU 过高",
+        "mem_high": "内存过高",
+        "swap_high": "Swap 过高",
+        "load_high": "负载过高",
+        "disk_high": "磁盘警告",
+        "disk_critical": "磁盘严重"
+      }
+    },
+    "danger": {
+      "title": "危险区域",
+      "deleteTitle": "删除主机",
+      "deleteMsg": "永久删除该主机记录。不会删除 Pterodactyl Panel 侧的节点。"
+    }
+  },
+  "allocations": {
+    "summary": "共 {total} 个（已分配 {assigned} · 未分配 {unassigned}）",
+    "summaryFiltered": "共 {n} 个",
+    "filter": {
+      "label": "状态",
+      "all": "全部",
+      "assigned": "已分配",
+      "unassigned": "未分配"
+    },
+    "search": { "placeholder": "搜索端口 / IP / 服务器" },
+    "columns": {
+      "select": "选择",
+      "ip": "IP",
+      "alias": "别名",
+      "port": "端口",
+      "server": "关联服务器",
+      "notes": "备注",
+      "actions": "操作"
+    },
+    "badge": {
+      "inUse": "占用中",
+      "free": "未分配"
+    },
+    "perPage": "条/页",
+    "empty": "该节点尚未分配任何端口",
+    "emptyFiltered": "无匹配端口",
+    "selection": {
+      "action": "选择操作",
+      "execute": "执行",
+      "selected": "已选 {n} 个",
+      "clear": "取消选择",
+      "bulkDelete": "删除"
+    },
+    "actions": {
+      "create": "新增端口",
+      "delete": "删除",
+      "openServer": "查看服务器"
+    },
+    "create": {
+      "title": "新增端口",
+      "ip": "IP 地址",
+      "ipHint": "默认 0.0.0.0，表示监听节点所有网卡。",
+      "alias": "别名（域名）",
+      "aliasHint": "默认填入节点 FQDN，可修改。",
+      "ports": "端口",
+      "portsHint": "支持 8000、8000-8010、8000,8005-8010,9000。",
+      "preview": "将创建 {n} 个端口",
+      "previewError": "端口表达式无效：{err}",
+      "submit": "创建",
+      "cancel": "取消",
+      "toastOk": "已创建 {created} 个端口",
+      "toastSkipped": "已创建 {created} 个端口，跳过 {skipped} 个重复",
+      "failed": "创建失败"
+    },
+    "delete": {
+      "singleTitle": "删除端口",
+      "singleMsg": "确定删除端口 :{port}？",
+      "bulkTitle": "批量删除端口",
+      "bulkMsg": "确定删除选中的 {n} 个端口？已被服务器占用的端口不会被选中。",
+      "toastOk": "已删除 {n} 个端口",
+      "failed": "删除失败",
+      "inUse": "端口 :{port} 已被服务器占用，无法删除"
+    },
+    "notWings": "仅 wings_node 主机可管理端口分配。"
+  }
+}

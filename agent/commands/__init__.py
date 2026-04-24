@@ -13,6 +13,8 @@ from . import handlers
 
 HANDLERS = {
     "ping": handlers.ping,
+    "wings.restart": handlers.wings_restart,
+    "wings.status": handlers.wings_status,
 }
 
 

@@ -61,6 +61,8 @@ def build_metrics_row(
         disk_pct=sys_data.get("disk_pct"),
         net_rx_bps=sys_data.get("net_rx_bytes_sec"),
         net_tx_bps=sys_data.get("net_tx_bytes_sec"),
+        disk_read_bps=sys_data.get("disk_read_bytes_sec"),
+        disk_write_bps=sys_data.get("disk_write_bytes_sec"),
         wings_version=wings.get("version"),
         container_total=containers.get("total"),
         container_running=containers.get("running"),

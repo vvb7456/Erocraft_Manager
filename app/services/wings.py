@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import re
+import secrets
 import time
 import uuid
 from dataclasses import dataclass
@@ -29,6 +32,7 @@ class _NodeInfo:
     scheme: str
     port: int
     token: str
+    upload_size: int   # MiB; per-file upload limit (panel.nodes.upload_size)
 
     @property
     def base_url(self) -> str:
@@ -69,6 +73,37 @@ class WingsService:
         match = re.match(rb's:\d+:"(.+)";', plaintext)
         return match.group(1).decode("utf-8") if match else plaintext.decode("utf-8")
 
+    def _encrypt_laravel(self, plaintext: str) -> str:
+        """Laravel ``Crypt::encrypt()`` compatible encrypt for fields that the
+        Pterodactyl panel later decrypts (e.g. ``daemon_token``).
+
+        Mirrors PHP serialise → AES-256-CBC → base64 → HMAC-SHA256 of the
+        base64-encoded ``iv || value`` → JSON envelope ``{iv, value, mac, tag}``
+        → final base64. ``tag`` is empty for CBC (only used by GCM in newer
+        Laravel versions).
+        """
+        key = self._app_key()
+        # PHP ``serialize($string)`` → ``s:LEN:"VALUE";``
+        serialised = f's:{len(plaintext)}:"{plaintext}";'.encode("utf-8")
+        padder = padding.PKCS7(128).padder()
+        padded = padder.update(serialised) + padder.finalize()
+        iv = secrets.token_bytes(16)
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(padded) + encryptor.finalize()
+        iv_b64 = base64.b64encode(iv).decode("ascii")
+        value_b64 = base64.b64encode(ciphertext).decode("ascii")
+        mac = hmac.new(
+            key,
+            (iv_b64 + value_b64).encode("ascii"),
+            hashlib.sha256,
+        ).hexdigest()
+        envelope = json.dumps(
+            {"iv": iv_b64, "value": value_b64, "mac": mac, "tag": ""},
+            separators=(",", ":"),
+        )
+        return base64.b64encode(envelope.encode("utf-8")).decode("ascii")
+
     async def _node_info(self, db: AsyncSession, node_id: int) -> _NodeInfo:
         now = time.monotonic()
         cached = self._node_cache.get(node_id)
@@ -84,6 +119,7 @@ class WingsService:
             scheme=node.scheme,
             port=node.daemon_listen,
             token=self._decrypt_laravel(node.daemon_token),
+            upload_size=node.upload_size,
         )
         self._node_cache[node_id] = _CachedNodeInfo(
             info=info,
@@ -145,6 +181,76 @@ class WingsService:
     async def get_server(self, db: AsyncSession, node_id: int, server_uuid: str) -> dict:
         response = await self._request(db, node_id, "GET", server_uuid)
         return response.json()
+
+    async def post_node_update(
+        self,
+        db: AsyncSession,
+        node_id: int,
+        payload: dict,
+        *,
+        explicit_token: str | None = None,
+        explicit_base_url: str | None = None,
+        timeout: float = 15.0,
+    ) -> dict:
+        """Push a partial Configuration patch to wings ``POST /api/update``.
+
+        Wings binds the JSON onto its in-memory ``config.Configuration`` via
+        Gin BindJSON, then writes to disk + hot-applies. Fields **omitted**
+        from ``payload`` keep their existing wings value; explicit zero values
+        (false / 0 / "") will overwrite. Returns ``{"applied": bool}`` —
+        ``applied=false`` means the node has ``ignore_panel_config_updates: true``.
+
+        ``explicit_token`` lets the caller authenticate with a token that may
+        differ from the value currently stored in ``panel.nodes`` — needed for
+        the daemon-token rotation flow (we must authenticate using the *old*
+        token while pushing the *new* one).
+
+        ``explicit_base_url`` lets the caller target a wings endpoint that
+        differs from the value computed from the (possibly mutated) panel
+        row — needed for ``put_wings_config`` so a change to ``fqdn`` /
+        ``scheme`` / ``daemon_listen`` is pushed to the **old** address that
+        wings is still listening on.
+        """
+        if explicit_base_url is not None:
+            base_url = explicit_base_url
+            if explicit_token is None:
+                # Caller must provide token explicitly when overriding URL,
+                # otherwise we'd race against the very mutation being pushed.
+                node = await self._node_info(db, node_id)
+                bearer = node.token
+            else:
+                bearer = explicit_token
+        else:
+            node = await self._node_info(db, node_id)
+            base_url = node.base_url
+            bearer = explicit_token if explicit_token is not None else node.token
+        headers = {
+            "Authorization": f"Bearer {bearer}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+                response = await client.post(
+                    f"{base_url}/api/update",
+                    headers=headers,
+                    json=payload,
+                )
+        except httpx.HTTPError as exc:
+            raise WingsServiceError(f"Wings connection failed: {exc!r}") from exc
+        if response.status_code != 200:
+            detail = ""
+            try:
+                body = response.json()
+                if isinstance(body, dict) and "error" in body:
+                    detail = body["error"]
+            except Exception:
+                pass
+            raise WingsServiceError(detail or f"HTTP {response.status_code}")
+        try:
+            return response.json()
+        except Exception:
+            return {"applied": True}
 
     # ------------------------------------------------------------------
     # Server lifecycle (Phase X — direct DB + Wings, no Application API)
@@ -428,6 +534,7 @@ class WingsService:
             "baseUrl": node.base_url,
             "serverUuid": server_uuid,
             "expiresAt": exp,
+            "uploadSize": node.upload_size,
         }
 
     async def get_download_url(self, db: AsyncSession, node_id: int, server_uuid: str, file_path: str) -> str:

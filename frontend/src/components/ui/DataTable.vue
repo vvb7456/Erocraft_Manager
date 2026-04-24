@@ -187,6 +187,12 @@ onUnmounted(() => { mql?.removeEventListener('change', onMediaChange) })
   background: color-mix(in srgb, var(--ac) 4%, transparent);
 }
 
+/* The last row already has the footer's top border just below it; dropping
+   its own bottom border avoids a 2px "double separator" look. */
+.dt-table :deep(tbody tr:last-child td) {
+  border-bottom: none;
+}
+
 /* Footer */
 .dt-footer {
   display: flex;

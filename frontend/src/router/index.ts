@@ -103,6 +103,54 @@ const router = createRouter({
       meta: { admin: true },
     },
     {
+      path: '/admin/hosts',
+      name: 'hosts',
+      component: () => import('@/pages/HostsPage.vue'),
+      meta: { admin: true },
+    },
+    {
+      path: '/admin/hosts/:id',
+      component: () => import('@/pages/HostDetailPage.vue'),
+      meta: { admin: true },
+      children: [
+        {
+          path: '',
+          name: 'host-detail',
+          redirect: (to) => ({ name: 'host-overview', params: to.params }),
+        },
+        {
+          path: 'overview',
+          name: 'host-overview',
+          component: () => import('@/pages/host/HostOverviewPane.vue'),
+          meta: { admin: true },
+        },
+        {
+          path: 'setting',
+          name: 'host-setting',
+          component: () => import('@/pages/host/HostSettingPane.vue'),
+          meta: { admin: true },
+        },
+        {
+          path: 'wings',
+          name: 'host-wings',
+          component: () => import('@/pages/host/HostWingsPane.vue'),
+          meta: { admin: true },
+        },
+        {
+          path: 'allocations',
+          name: 'host-allocations',
+          component: () => import('@/pages/host/HostAllocationsPane.vue'),
+          meta: { admin: true },
+        },
+        {
+          path: 'activity',
+          name: 'host-activity',
+          component: () => import('@/pages/host/HostActivityPane.vue'),
+          meta: { admin: true },
+        },
+      ],
+    },
+    {
       path: '/admin/email-templates',
       name: 'email-templates',
       component: () => import('@/pages/EmailTemplatesPage.vue'),
@@ -127,9 +175,8 @@ router.beforeEach(async (to) => {
   if (to.meta.public) {
     if (to.name === 'login' || to.name === 'forgot-password') {
       try {
-        const res = await fetch('/api/me')
-        if (res.ok) {
-          const data = await res.json()
+        const data = await app.fetchSessionUser()
+        if (data) {
           applyServerLanguage(data?.language)
           app.setIsAdmin(!!data.is_admin)
           return data.is_admin ? { name: 'dashboard' } : { name: 'user-servers' }
@@ -141,12 +188,11 @@ router.beforeEach(async (to) => {
     return true
   }
   try {
-    const res = await fetch('/api/me')
-    if (!res.ok) {
+    const data = await app.fetchSessionUser()
+    if (!data) {
       app.setIsAdmin(false)
       return { name: 'login' }
     }
-    const data = await res.json()
     applyServerLanguage(data?.language)
     app.setIsAdmin(!!data.is_admin)
     // Root path: pick destination by role

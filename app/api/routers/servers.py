@@ -403,7 +403,7 @@ async def batch_servers(
             db,
             actor=actor_username,
             action="server",
-            status="success",
+            status="failure" if errors else "success",
             detail_key=f"batch_{action}",
             detail_params={"success": success, "failed": errors},
         )
@@ -453,7 +453,7 @@ async def batch_servers(
             db,
             actor=actor_username,
             action="server",
-            status="success",
+            status="failure" if errors else "success",
             detail_key="batch_renew",
             detail_params={"success": success, "failed": errors},
         )
@@ -478,7 +478,7 @@ async def batch_servers(
             db,
             actor=actor_username,
             action="server",
-            status="success",
+            status="failure" if errors else "success",
             detail_key="batch_delete",
             detail_params={"success": success, "failed": errors},
         )
@@ -543,7 +543,7 @@ async def batch_servers(
         db,
         actor=actor_username,
         action="server",
-        status="success",
+        status="failure" if errors else "success",
         detail_key="batch_email",
         detail_params={"success": success, "failed": errors},
     )

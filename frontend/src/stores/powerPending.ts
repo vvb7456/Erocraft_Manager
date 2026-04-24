@@ -7,6 +7,17 @@ import router from '@/router'
 
 export type PowerAction = 'start' | 'stop' | 'restart' | 'kill'
 
+/**
+ * Structured error returned by `sendPower`. `code` is the dotted error key
+ * (e.g. "server.startup_credentials_required"); `missing` lists the env-
+ * variable keys the backend reported as missing for credential-style errors.
+ * Always present so callers don't need to feature-detect.
+ */
+export interface PowerError {
+  code: string
+  missing: string[]
+}
+
 interface PendingPower {
   action: PowerAction
   timestamp: number
@@ -198,18 +209,17 @@ export const usePowerPendingStore = defineStore('powerPending', () => {
   /**
    * Centralized power action sender.
    * Sets pending, calls API via raw fetch, clears on failure.
-   * Returns the raw error key (e.g. "server.startup_credentials_required")
-   * if the API returns an error, or null on success / network error.
-   * Callers can intercept known error keys before the toast fires.
+   * Returns a structured error on failure or null on success / network error.
+   * Callers can intercept known error codes before the toast fires.
    * @param toastFn - Toast function from useToast() for error display
-   * @param suppressErrors - Error keys to suppress from toast (caller will handle)
+   * @param suppressErrors - Error codes to suppress from toast (caller will handle)
    */
   async function sendPower(
     serverId: number,
     action: PowerAction,
     toastFn?: ToastAPI['toast'],
     suppressErrors?: string[],
-  ): Promise<string | null> {
+  ): Promise<PowerError | null> {
     if (!isActionAllowed(serverId, action)) return null
 
     setPending(serverId, action)
@@ -225,14 +235,26 @@ export const usePowerPendingStore = defineStore('powerPending', () => {
           redirectToLogin()
           return null
         }
-        let msg = `HTTP ${res.status}`
+        let code = `HTTP ${res.status}`
+        let missing: string[] = []
         try {
           const body = await res.json()
-          msg = body.error || body.message || msg
+          // FastAPI HTTPException(detail=...) is echoed as { error: detail }.
+          // detail is either a string code or a dict { code, missing }.
+          const e = body.error
+          if (e && typeof e === 'object') {
+            code = String(e.code ?? code)
+            if (Array.isArray(e.missing)) missing = e.missing.map(String)
+          } else if (typeof e === 'string') {
+            code = e
+          } else if (typeof body.message === 'string') {
+            code = body.message
+          }
         } catch { /* ignore parse error */ }
-        if (suppressErrors?.includes(msg)) return msg
-        if (toastFn) toastFn(translateError(msg), 'error')
-        return msg
+        const err: PowerError = { code, missing }
+        if (suppressErrors?.includes(code)) return err
+        if (toastFn) toastFn(translateError(code), 'error')
+        return err
       }
       return null
     } catch {

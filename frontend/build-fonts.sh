@@ -33,6 +33,12 @@ STATIC_ICONS=$(grep -rh --include='*.vue' 'MsIcon' "$SRC_DIR" 2>/dev/null | grep
 # 1b. MsIcon 动态绑定: :name="... 'icon_name' ..." 中的单引号字符串
 DYNAMIC_ICONS=$(grep -rh --include='*.vue' 'MsIcon' "$SRC_DIR" 2>/dev/null | grep -oP ":name=\"[^\"]*'" | grep -oP "'[a-z_]+'" | tr -d "'" || true)
 
+# 1b2. 组件 icon 属性 (PageHeader / CollapsibleGroup / TabSwitcher 等内部渲染 MsIcon)
+ICON_ATTR_STATIC=$(grep -rh --include='*.vue' -E '\bicon="[a-z_]+"' "$SRC_DIR" 2>/dev/null | grep -oP '\bicon="[a-z_]+"' | grep -oP '(?<=icon=")[a-z_]+' || true)
+ICON_ATTR_DYNAMIC=$(grep -rh --include='*.vue' ":icon=\"" "$SRC_DIR" 2>/dev/null | grep -oP ":icon=\"[^\"]*'" | grep -oP "'[a-z_]+'" | tr -d "'" || true)
+# tabs/items 等数组内 icon: 'xxx' 字面量
+ICON_OBJ_LITERAL=$(grep -rh --include='*.vue' --include='*.ts' -E "icon:\s*'[a-z_]+'" "$SRC_DIR" 2>/dev/null | grep -oP "icon:\s*'[a-z_]+'" | grep -oP "'[a-z_]+'" | tr -d "'" || true)
+
 # 1c. ICON_COLORS 映射表中的 key (匹配 'icon_name': 模式)
 COLORS_ICONS=$(grep -oP "'[a-z][a-z_0-9]+'\s*:" "$SRC_DIR/components/ui/MsIcon.vue" 2>/dev/null | grep -oP "'[a-z][a-z_0-9]+'" | tr -d "'" || true)
 
@@ -43,9 +49,9 @@ if [ -f "$ICONS_FILE" ]; then
 fi
 
 # 合并去重
-ALL_ICONS=$(echo -e "${STATIC_ICONS}\n${DYNAMIC_ICONS}\n${COLORS_ICONS}\n${MANUAL_ICONS}" | grep -v '^\s*$' | sort -u)
+ALL_ICONS=$(echo -e "${STATIC_ICONS}\n${DYNAMIC_ICONS}\n${ICON_ATTR_STATIC}\n${ICON_ATTR_DYNAMIC}\n${ICON_OBJ_LITERAL}\n${COLORS_ICONS}\n${MANUAL_ICONS}" | grep -v '^\s*$' | sort -u)
 
-AUTO_COUNT=$(echo -e "${STATIC_ICONS}\n${DYNAMIC_ICONS}\n${COLORS_ICONS}" | grep -v '^\s*$' | sort -u | wc -l)
+AUTO_COUNT=$(echo -e "${STATIC_ICONS}\n${DYNAMIC_ICONS}\n${ICON_ATTR_STATIC}\n${ICON_ATTR_DYNAMIC}\n${ICON_OBJ_LITERAL}\n${COLORS_ICONS}" | grep -v '^\s*$' | sort -u | wc -l)
 TOTAL_COUNT=$(echo "$ALL_ICONS" | wc -l)
 echo "  Auto-extracted: ${AUTO_COUNT}, Manual (icons.txt): +$(echo "$MANUAL_ICONS" | grep -v '^\s*$' | wc -l), Total unique: ${TOTAL_COUNT}"
 

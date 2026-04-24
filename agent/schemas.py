@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -23,6 +24,8 @@ class SystemMetrics(BaseModel):
     disk_pct: float
     net_rx_bytes_sec: int | None = None
     net_tx_bytes_sec: int | None = None
+    disk_read_bytes_sec: int | None = None
+    disk_write_bytes_sec: int | None = None
     uptime_sec: int
 
 
@@ -85,7 +88,10 @@ class CommandRequest(BaseModel):
 class CommandResponse(BaseModel):
     id: int
     ok: bool
-    output: str | None = None
+    # ``output`` is intentionally Any so handlers can return either a simple
+    # string (e.g. ``ping`` -> "pong") or a structured payload (e.g.
+    # ``wings.status`` -> systemd state dict). The wire format stays JSON.
+    output: Any | None = None
     error: str | None = None
     duration_ms: int
 
@@ -98,3 +104,16 @@ class AgentStatus(BaseModel):
     config_path: str
     wings_config_path: str
     bind: str
+
+
+# ---------- wings service control ----------
+
+class WingsServiceStatus(BaseModel):
+    """systemd unit state for the wings service."""
+
+    service_name: str
+    active_state: str | None = None       # systemd ActiveState: active/inactive/failed/...
+    sub_state: str | None = None          # SubState: running/dead/failed/...
+    main_pid: int | None = None
+    since: datetime | None = None         # when the unit entered current state
+    error: str | None = None              # populated when probe fails entirely

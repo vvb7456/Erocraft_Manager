@@ -386,7 +386,7 @@ async def batch_users(
             db,
             actor=current_user.username,
             action="user",
-            status="success",
+            status="failure" if errors else "success",
             detail_key="batch_email_users",
             detail_params={"success": success, "failed": errors},
         )
@@ -403,7 +403,7 @@ async def batch_users(
             db,
             actor=current_user.username,
             action="user",
-            status="success",
+            status="failure" if errors else "success",
             detail_key="batch_delete_users",
             detail_params={"success": success, "failed": errors},
         )

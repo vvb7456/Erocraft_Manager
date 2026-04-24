@@ -78,8 +78,62 @@ function toggleExpand() {
   serversExpanded.value = !serversExpanded.value
 }
 
+// ── Admin host list ──
+interface HostItem {
+  id: number
+  name: string
+  kind: string
+  enabled: boolean
+  inbound_reachable: boolean
+}
+
+const hosts = ref<HostItem[]>([])
+const hostsExpanded = ref(true)
+let hostsTimer: number | null = null
+
+const HOST_KIND_ICON: Record<string, string> = {
+  wings_node: 'dns',
+  nginx_proxy: 'lan',
+  nas: 'storage',
+  generic_linux: 'terminal',
+}
+
+function hostKindIcon(kind: string): string {
+  return HOST_KIND_ICON[kind] ?? 'dns'
+}
+
+function hostDotKey(h: HostItem): 'running' | 'loading' | 'error' | 'stopped' {
+  if (!h.enabled) return 'stopped'
+  return h.inbound_reachable ? 'running' : 'error'
+}
+
+async function loadHosts() {
+  const data = await get<HostItem[]>('/api/admin/hosts', { silent: true })
+  if (data) hosts.value = data
+}
+
+function toggleHosts() {
+  hostsExpanded.value = !hostsExpanded.value
+}
+
+function goHostsList() {
+  router.push({ name: 'hosts' })
+  if (window.innerWidth <= 768) app.closeMobileSidebar()
+}
+
+function goHostDetail(id: number) {
+  router.push({ name: 'host-detail', params: { id } })
+  if (window.innerWidth <= 768) app.closeMobileSidebar()
+}
+
 // ── Navigation ──
-const currentPage = computed(() => route.name as string)
+const currentPage = computed(() => {
+  const name = route.name as string
+  // Map detail routes to their parent list item so the sidebar stays
+  // highlighted while the user is drilled in.
+  if (name === 'host-detail') return 'hosts'
+  return name
+})
 const currentServerId = computed(() => route.params.id ? Number(route.params.id) : null)
 
 function navTo(item: NavItem) {
@@ -109,21 +163,29 @@ function goToServer(id: number) {
 
 async function doLogout() {
   await fetch('/api/logout', { method: 'POST' })
-  app.setIsAdmin(false)
+  app.clearSessionUser()
   router.push({ name: 'login' })
 }
 
 // ── Lifecycle ──
 watch(isUserLayout, (val) => {
-  if (val) loadServers()
-  else {
+  if (val) {
+    loadServers()
+    if (hostsTimer !== null) { clearInterval(hostsTimer); hostsTimer = null }
+    hosts.value = []
+  } else {
     servers.value = []
     resourceStore.unsubscribe('sidebar')
+    loadHosts()
+    if (hostsTimer === null) {
+      hostsTimer = window.setInterval(loadHosts, 15000)
+    }
   }
 }, { immediate: true })
 
 onBeforeUnmount(() => {
   resourceStore.unsubscribe('sidebar')
+  if (hostsTimer !== null) { clearInterval(hostsTimer); hostsTimer = null }
 })
 </script>
 
@@ -183,18 +245,54 @@ onBeforeUnmount(() => {
         </div>
       </template>
 
-      <!-- ═══ Admin layout: static nav ═══ -->
+      <!-- ═══ Admin layout: static nav + hosts group ═══ -->
       <template v-else>
-        <button
-          v-for="item in adminNavItems"
-          :key="item.page"
-          class="nav-item"
-          :class="{ active: currentPage === item.page }"
-          @click="navTo(item)"
-        >
-          <span class="icon"><MsIcon :name="item.icon" size="md" /></span>
-          <span class="nav-label">{{ t(item.labelKey) }}</span>
-        </button>
+        <template v-for="item in adminNavItems" :key="item.page">
+          <button
+            class="nav-item"
+            :class="{ active: currentPage === item.page }"
+            @click="navTo(item)"
+          >
+            <span class="icon"><MsIcon :name="item.icon" size="md" /></span>
+            <span class="nav-label">{{ t(item.labelKey) }}</span>
+          </button>
+
+          <!-- Inject the Hosts group right after "Servers" so infra sits
+               next to the things running on it. -->
+          <div v-if="item.page === 'servers'" class="nav-group">
+            <button class="nav-item nav-item--group" @click="toggleHosts">
+              <span class="icon"><MsIcon name="dvr" size="md" /></span>
+              <span class="nav-label">{{ t('nav.hosts') }}</span>
+              <span
+                v-if="!app.sidebarCollapsed"
+                class="expand-arrow"
+                :class="{ expanded: hostsExpanded }"
+              ><MsIcon name="expand_more" size="sm" /></span>
+            </button>
+
+            <div v-if="hostsExpanded && !app.sidebarCollapsed" class="nav-sub">
+              <button
+                class="nav-sub-item"
+                :class="{ active: currentPage === 'hosts' }"
+                @click="goHostsList"
+              >
+                <MsIcon name="list" size="sm" />
+                <span class="nav-sub-label">{{ t('hosts.nav.list') }}</span>
+              </button>
+              <button
+                v-for="h in hosts"
+                :key="h.id"
+                class="nav-sub-item"
+                :class="{ active: currentPage === 'hosts' && Number(route.params.id) === h.id }"
+                @click="goHostDetail(h.id)"
+              >
+                <StatusDot :status="hostDotKey(h)" size="sm" />
+                <span class="nav-sub-label">{{ h.name }}</span>
+                <MsIcon :name="hostKindIcon(h.kind)" size="xs" class="host-kind" />
+              </button>
+            </div>
+          </div>
+        </template>
       </template>
 
       <div style="flex: 1" />
@@ -539,6 +637,22 @@ onBeforeUnmount(() => {
 .nav-sub-label {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Trailing kind icon on host sub-items */
+.nav-sub-item > .nav-sub-label {
+  flex: 1;
+}
+
+.nav-sub-item .host-kind {
+  color: var(--t3);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.nav-sub-item:hover .host-kind,
+.nav-sub-item.active .host-kind {
+  color: inherit;
 }
 
 /* ── Footer ── */

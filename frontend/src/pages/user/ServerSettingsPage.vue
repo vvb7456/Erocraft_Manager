@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ref, inject, computed, onMounted, type Ref, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter, onBeforeRouteLeave } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { provideDirtyForm, useDirtyFormSection } from '@/composables/useDirtyForm'
 import { usePowerPendingStore } from '@/stores/powerPending'
 import { getEggSettingsComponent } from '@/config/eggRegistry'
 import type { StartupVar, EggSettingsExpose } from '@/components/egg-settings/types'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
-import BaseButton from '@/components/ui/BaseButton.vue'
-import MsIcon from '@/components/ui/MsIcon.vue'
+import DirtyBar from '@/components/ui/DirtyBar.vue'
 
 defineOptions({ name: 'ServerSettingsPage' })
 
@@ -52,25 +52,22 @@ function onDirtyChange(dirty: boolean) {
   isDirty.value = dirty
 }
 
-async function saveSettings() {
-  if (!server.value || saving.value || !childRef.value) return
-  const ok = await confirm({
-    title: t('serverSettings.saveConfirmTitle'),
-    message: t('serverSettings.saveConfirmMessage'),
-    confirmText: t('serverSettings.saveConfirmBtn'),
-  })
-  if (!ok) return
-
+// performSave never navigates: the leave-guard path must respect the
+// user's chosen destination. The DirtyBar Save click wraps this with
+// onBarSave() to navigate to the console on success, mirroring the
+// previous explicit-save flow.
+async function performSave(): Promise<boolean> {
+  if (!server.value || !childRef.value) return true
   saving.value = true
   try {
     const success = await childRef.value.save()
-    if (!success) return
-
+    if (!success) return false
     await pendingStore.sendPower(server.value.id, 'restart', toast)
     toast(t('serverSettings.saveSuccess'), 'success')
-    router.push({ name: 'server-console', params: { id: server.value.id } })
+    return true
   } catch {
     toast(t('serverSettings.saveFailed'), 'error')
+    return false
   } finally {
     saving.value = false
   }
@@ -80,32 +77,45 @@ function discardChanges() {
   childRef.value?.discard()
 }
 
-onBeforeRouteLeave(async () => {
-  if (!isDirty.value) return true
-  const result = await confirm({
-    title: t('serverSettings.unsavedTitle'),
-    message: t('serverSettings.unsavedMessage'),
-    confirmText: t('serverSettings.unsavedSave'),
-    cancelText: t('serverSettings.unsavedDiscard'),
-    altText: t('serverSettings.unsavedStay'),
-  })
-  if (result === 'alt') return false
-  if (result === true) {
-    saving.value = true
-    try {
-      const success = await childRef.value?.save()
-      if (!success) return false
-      await pendingStore.sendPower(server.value!.id, 'restart', toast)
-      toast(t('serverSettings.saveSuccess'), 'success')
-    } catch {
-      toast(t('serverSettings.saveFailed'), 'error')
-      return false
-    } finally {
-      saving.value = false
-    }
-  }
-  return true
+// Page-wide dirty-form orchestration. The leave-guard reuses serverSettings.*
+// strings (custom prompt) so message text matches the page domain.
+const dirtyForm = provideDirtyForm({
+  prompt: async () => {
+    const result = await confirm({
+      title: t('serverSettings.unsavedTitle'),
+      message: t('serverSettings.unsavedMessage'),
+      confirmText: t('serverSettings.unsavedSave'),
+      cancelText: t('serverSettings.unsavedDiscard'),
+      altText: t('serverSettings.unsavedStay'),
+    })
+    if (result === 'alt') return 'stay'
+    return result === true ? 'save' : 'discard'
+  },
 })
+dirtyForm.attachLeaveGuard()
+
+useDirtyFormSection({
+  name: 'server-startup',
+  isDirty,
+  save: performSave,
+  discard: discardChanges,
+}, dirtyForm)
+
+async function onBarSave() {
+  // Bar Save is an explicit user action that triggers a server restart;
+  // ask for confirmation here. The leave-guard "Save" choice skips this
+  // dialog because the user has already opted in via the leave prompt.
+  const ok = await confirm({
+    title: t('serverSettings.saveConfirmTitle'),
+    message: t('serverSettings.saveConfirmMessage'),
+    confirmText: t('serverSettings.saveConfirmBtn'),
+  })
+  if (!ok) return
+  const saved = await dirtyForm.save()
+  if (saved && server.value) {
+    router.push({ name: 'server-console', params: { id: server.value.id } })
+  }
+}
 </script>
 
 <template>
@@ -123,77 +133,17 @@ onBeforeRouteLeave(async () => {
     />
   </template>
 
-  <Teleport to="body">
-    <Transition name="slide-up">
-      <div v-if="isDirty" class="dirty-bar">
-        <span class="dirty-bar__text">
-          <MsIcon name="edit" />
-          {{ t('serverSettings.unsavedHint') }}
-        </span>
-        <div class="dirty-bar__actions">
-          <BaseButton size="sm" :disabled="saving" @click="discardChanges">
-            {{ t('serverSettings.discardBtn') }}
-          </BaseButton>
-          <BaseButton
-            variant="primary"
-            size="sm"
-            :loading="saving"
-            @click="saveSettings"
-          >
-            {{ t('serverSettings.saveBtn') }}
-          </BaseButton>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
+  <DirtyBar
+    :dirty="dirtyForm.isDirty.value"
+    :saving="dirtyForm.saving.value"
+    :hint="t('serverSettings.unsavedHint')"
+    :save-text="t('serverSettings.saveBtn')"
+    :discard-text="t('serverSettings.discardBtn')"
+    @save="onBarSave"
+    @discard="dirtyForm.discard"
+  />
 </template>
 
 <style scoped>
-/* Floating dirty bar */
-.dirty-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-5);
-  background: var(--bg3);
-  border-top: 1px solid var(--bd);
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.35);
-}
-
-.dirty-bar__text {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--amber);
-}
-
-.dirty-bar__text .ms-icon {
-  font-size: 1.1rem;
-}
-
-.dirty-bar__actions {
-  display: flex;
-  gap: var(--sp-2);
-  flex-shrink: 0;
-}
-
-/* slide-up transition */
-.slide-up-enter-active,
-.slide-up-leave-active {
-  transition: transform 0.25s ease, opacity 0.25s ease;
-}
-
-.slide-up-enter-from,
-.slide-up-leave-to {
-  transform: translateY(100%);
-  opacity: 0;
-}
+/* No page-local styles: floating bar is rendered by <DirtyBar/>. */
 </style>

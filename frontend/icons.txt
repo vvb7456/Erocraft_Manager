@@ -29,6 +29,17 @@ contrast
 gps_fixed
 gps_not_fixed
 
+# HostsPage / AppSidebar — host management (parent icon + per-kind icons)
+dvr
+lan
+storage
+terminal
+list
+network_ping
+vpn_key
+add_circle
+key
+
 # LoginPage.vue
 login
 

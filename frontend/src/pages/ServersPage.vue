@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -44,6 +44,12 @@ interface ServerItem {
   statusLabel: 'normal' | 'expiring_soon' | 'expired' | 'permanent'
   isSuspended: boolean
   panelUrl: string | null
+}
+
+interface BatchServersResult {
+  message: string
+  success: number
+  failed: number
 }
 
 // ── Raw data (from API, no sort/filter params) ──
@@ -191,6 +197,21 @@ const paginated = computed(() => {
   return sorted.value.slice(start, start + perPage.value)
 })
 
+function pruneSelectionToCurrentPage() {
+  const pageIds = new Set(paginated.value.map((server) => server.pteroId))
+  const next = new Set(
+    [...selectedIds.value].filter((id) => pageIds.has(id)),
+  )
+  if (next.size !== selectedIds.value.size) {
+    selectedIds.value = next
+  }
+  if (selectedIds.value.size === 0) {
+    batchActionType.value = ''
+  }
+}
+
+watch(paginated, pruneSelectionToCurrentPage, { immediate: true })
+
 // ── Selection ──
 const allSelected = computed({
   get: () => paginated.value.length > 0 && paginated.value.every(s => selectedIds.value.has(s.pteroId)),
@@ -311,9 +332,10 @@ async function executeBatchAction() {
     if (!ok) return
   }
 
-  const res = await post<{ message: string }>('/api/servers/batch', { action, serverIds: ids })
+  const res = await post<BatchServersResult>('/api/servers/batch', { action, serverIds: ids })
   if (res) {
-    toast(res.message, 'success')
+    const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
+    toast(res.message, tone)
     selectedIds.value = new Set()
     batchActionType.value = ''
     await loadServers(true)
@@ -323,13 +345,14 @@ async function executeBatchAction() {
 async function doBatchRenew() {
   const ids = [...selectedIds.value]
   if (!ids.length) return
-  const res = await post<{ message: string }>('/api/servers/batch', {
+  const res = await post<BatchServersResult>('/api/servers/batch', {
     action: 'renew',
     serverIds: ids,
     days: batchRenewDays.value,
   })
   if (res) {
-    toast(res.message, 'success')
+    const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
+    toast(res.message, tone)
     batchRenewModalOpen.value = false
     selectedIds.value = new Set()
     batchActionType.value = ''
@@ -395,7 +418,7 @@ function openMobileRenew(s: ServerItem) {
           <BaseButton size="sm" variant="primary" class="toolbar-half" @click="createModalOpen = true">
             <MsIcon name="add" size="xs" /> {{ t('servers.action.create') }}
           </BaseButton>
-          <BaseSelect v-model="filterStatus" :options="statusOptions" size="sm" fit class="toolbar-half" @update:modelValue="page = 1" />
+          <BaseSelect v-model="filterStatus" :options="statusOptions" :prefix="t('servers.filter.label') + ': '" size="sm" fit class="toolbar-half" @update:modelValue="page = 1" />
         </div>
       </template>
     </SectionToolbar>

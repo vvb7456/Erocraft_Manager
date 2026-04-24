@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -41,6 +41,12 @@ interface UserItem {
   server_count: number
   created_at: string | null
   language?: string | null
+}
+
+interface BatchUsersResult {
+  message: string
+  success: number
+  failed: number
 }
 
 // ── Raw data ──
@@ -152,6 +158,21 @@ const paginated = computed(() => {
   return sorted.value.slice(start, start + perPage.value)
 })
 
+function pruneSelectionToCurrentPage() {
+  const pageIds = new Set(paginated.value.map((user) => user.id))
+  const next = new Set(
+    [...selectedIds.value].filter((id) => pageIds.has(id)),
+  )
+  if (next.size !== selectedIds.value.size) {
+    selectedIds.value = next
+  }
+  if (selectedIds.value.size === 0) {
+    batchActionType.value = ''
+  }
+}
+
+watch(paginated, pruneSelectionToCurrentPage, { immediate: true })
+
 // ── Selection ──
 const allSelected = computed({
   get: () => paginated.value.length > 0 && paginated.value.every(u => selectedIds.value.has(u.id)),
@@ -199,9 +220,10 @@ async function executeBatchAction() {
     if (!ok) return
   }
 
-  const res = await post<{ message: string }>('/api/users/batch', { action, userIds: ids })
+  const res = await post<BatchUsersResult>('/api/users/batch', { action, userIds: ids })
   if (res) {
-    toast(res.message, 'success')
+    const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
+    toast(res.message, tone)
     selectedIds.value = new Set()
     batchActionType.value = ''
     await loadUsers()
@@ -346,7 +368,7 @@ const mobileSortOpen = ref(false)
           <BaseButton size="sm" variant="primary" class="toolbar-half" @click="openCreate">
             <MsIcon name="person_add" size="xs" /> {{ t('users.action.create') }}
           </BaseButton>
-          <BaseSelect v-model="filterServer" :options="serverFilterOptions" size="sm" fit class="toolbar-half" />
+          <BaseSelect v-model="filterServer" :options="serverFilterOptions" :prefix="t('users.filter.label') + ': '" size="sm" fit class="toolbar-half" />
         </div>
       </template>
     </SectionToolbar>

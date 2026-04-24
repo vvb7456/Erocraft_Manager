@@ -44,6 +44,8 @@ class NodeMetrics(Base):
     disk_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     net_rx_bps: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     net_tx_bps: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    disk_read_bps: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    disk_write_bps: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # wings container aggregates
     wings_version: Mapped[str | None] = mapped_column(String(20), nullable=True)

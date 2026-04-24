@@ -90,8 +90,11 @@
     "confirmKill": "确定要关闭电源吗？这可能导致数据丢失。",
     "confirmRestart": "确定要重启服务器吗？",
     "credentialsRequiredTitle": "需要填写参数",
-    "credentialsRequiredMessage": "请先在设置页填写所有必填的启动参数。",
-    "credentialsRequiredMessageST": "请先在设置页填写必要的用户名和密码。",
+    "credentialsRequiredMessage": "请先在设置页填写以下字段：{fields}",
+    "credField": {
+      "USERNAME": "用户名",
+      "PASSWORD": "密码"
+    },
     "goToSettings": "前往设置"
   },
   "resources": {
@@ -137,6 +140,7 @@
     "dragHint": "拖放文件到此处上传",
     "singleFileOnly": "每次只能上传一个文件",
     "folderUploadNotSupported": "不支持上传文件夹",
+    "uploadTooLarge": "上传的文件不能超过 {limit} MiB",
     "validation": {
       "emptyName": "名称不能为空",
       "invalidChars": "名称包含非法字符",

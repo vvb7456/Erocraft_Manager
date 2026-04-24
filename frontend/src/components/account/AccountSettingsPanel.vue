@@ -5,6 +5,7 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { switchLanguage } from '@/i18n/vue-i18n'
 import { backendToFrontendLocale, type BackendLocale } from '@/i18n/locale-map'
+import { useAppStore } from '@/stores/app'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
@@ -32,6 +33,7 @@ interface MessageResponse {
 const { t } = useI18n({ useScope: 'global' })
 const { get, post, raw } = useApiFetch()
 const { toast } = useToast()
+const app = useAppStore()
 
 const initialLoading = ref(true)
 const profile = ref<UserProfile | null>(null)
@@ -118,6 +120,12 @@ async function loadProfile() {
   if (data) {
     profile.value = data
     selectedLanguage.value = data.language === 'zh' ? 'zh' : 'en'
+    app.setSessionUser({
+      ok: true,
+      username: data.username,
+      is_admin: data.is_admin,
+      language: data.language,
+    })
   }
   initialLoading.value = false
 }
@@ -210,6 +218,12 @@ async function submitLanguage() {
     let payload: UserProfile | null = null
     try { payload = await data.json() as UserProfile } catch { payload = null }
     if (payload) profile.value = payload
+    app.setSessionUser({
+      ok: true,
+      username: profile.value?.username ?? '',
+      is_admin: profile.value?.is_admin ?? false,
+      language: selectedLanguage.value,
+    })
     languageBanner.value = t('account.language.success')
     toast(languageBanner.value, 'success')
     // Apply immediately so the rest of the UI matches the new preference.

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { switchLanguage } from '@/i18n/vue-i18n'
 import { backendToFrontendLocale } from '@/i18n/locale-map'
+import { useAppStore } from '@/stores/app'
 import AuthForm from '@/components/auth/AuthForm.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
@@ -17,6 +18,7 @@ defineOptions({ name: 'LoginPage' })
 
 const router = useRouter()
 const { t, te } = useI18n({ useScope: 'global' })
+const app = useAppStore()
 
 const username = ref('')
 const password = ref('')
@@ -65,6 +67,7 @@ async function handleLogin() {
     if (res.ok && data.ok) {
       // Apply user-preferred language before redirecting so the
       // destination view renders in the right locale.
+      app.setSessionUser(data)
       switchLanguage(backendToFrontendLocale(data.language))
       if (data.is_admin) {
         router.replace({ name: 'dashboard' })

@@ -306,14 +306,6 @@ def _normalize_id_list(value: Any) -> str:
 
 
 MONITORING_SPECS: dict[str, SettingSpec] = _register({
-    "MONITOR_ENABLED": SettingSpec(
-        "MONITOR_ENABLED", "monitoring",
-        lambda: _env_bool("MONITOR_ENABLED", True), _normalize_bool,
-    ),
-    "MONITOR_NODE_IDS": SettingSpec(
-        "MONITOR_NODE_IDS", "monitoring",
-        lambda: _env_str("MONITOR_NODE_IDS", ""), _normalize_id_list,
-    ),
     "MONITOR_RETENTION_DAYS": SettingSpec(
         "MONITOR_RETENTION_DAYS", "monitoring",
         lambda: _env_int("MONITOR_RETENTION_DAYS", 30), _int_clamper(1, 365, 30),
@@ -322,108 +314,9 @@ MONITORING_SPECS: dict[str, SettingSpec] = _register({
         "MONITOR_INTERVAL_SEC", "monitoring",
         lambda: _env_int("MONITOR_INTERVAL_SEC", 60), _int_clamper(30, 3600, 60),
     ),
-    "ALERT_CPU_THRESHOLD": SettingSpec(
-        "ALERT_CPU_THRESHOLD", "monitoring",
-        lambda: _env_int("ALERT_CPU_THRESHOLD", 90), _int_clamper(50, 100, 90),
-    ),
-    "ALERT_CPU_SUSTAIN_MIN": SettingSpec(
-        "ALERT_CPU_SUSTAIN_MIN", "monitoring",
-        lambda: _env_int("ALERT_CPU_SUSTAIN_MIN", 5), _int_clamper(1, 60, 5),
-    ),
-    "ALERT_MEM_THRESHOLD": SettingSpec(
-        "ALERT_MEM_THRESHOLD", "monitoring",
-        lambda: _env_int("ALERT_MEM_THRESHOLD", 90), _int_clamper(50, 100, 90),
-    ),
-    "ALERT_MEM_SUSTAIN_MIN": SettingSpec(
-        "ALERT_MEM_SUSTAIN_MIN", "monitoring",
-        lambda: _env_int("ALERT_MEM_SUSTAIN_MIN", 5), _int_clamper(1, 60, 5),
-    ),
-    "ALERT_SWAP_THRESHOLD": SettingSpec(
-        "ALERT_SWAP_THRESHOLD", "monitoring",
-        lambda: _env_int("ALERT_SWAP_THRESHOLD", 50), _int_clamper(10, 100, 50),
-    ),
-    "ALERT_DISK_WARNING": SettingSpec(
-        "ALERT_DISK_WARNING", "monitoring",
-        lambda: _env_int("ALERT_DISK_WARNING", 85), _int_clamper(50, 100, 85),
-    ),
-    "ALERT_DISK_CRITICAL": SettingSpec(
-        "ALERT_DISK_CRITICAL", "monitoring",
-        lambda: _env_int("ALERT_DISK_CRITICAL", 95), _int_clamper(50, 100, 95),
-    ),
-    "ALERT_LOAD_FACTOR": SettingSpec(
-        "ALERT_LOAD_FACTOR", "monitoring",
-        lambda: _env_float("ALERT_LOAD_FACTOR", 1.5), _float_clamper(0.5, 5.0, 1.5),
-    ),
-    "ALERT_LOAD_SUSTAIN_MIN": SettingSpec(
-        "ALERT_LOAD_SUSTAIN_MIN", "monitoring",
-        lambda: _env_int("ALERT_LOAD_SUSTAIN_MIN", 5), _int_clamper(1, 60, 5),
-    ),
-    "ALERT_COOLDOWN_MIN": SettingSpec(
-        "ALERT_COOLDOWN_MIN", "monitoring",
-        lambda: _env_int("ALERT_COOLDOWN_MIN", 30), _int_clamper(1, 1440, 30),
-    ),
-    # --- Notification channel ---
-    "ALERT_EMAIL_ENABLED": SettingSpec(
-        "ALERT_EMAIL_ENABLED", "monitoring",
-        lambda: _env_bool("ALERT_EMAIL_ENABLED", False), _normalize_bool,
-    ),
-    "ALERT_EMAIL_ADMIN_IDS": SettingSpec(
-        "ALERT_EMAIL_ADMIN_IDS", "monitoring",
-        lambda: _env_str("ALERT_EMAIL_ADMIN_IDS", ""), _normalize_id_list,
-    ),
-    "ALERT_NOTIFY_RESOLVE": SettingSpec(
-        "ALERT_NOTIFY_RESOLVE", "monitoring",
-        lambda: _env_bool("ALERT_NOTIFY_RESOLVE", False), _normalize_bool,
-    ),
-    "ALERT_MIN_SEVERITY": SettingSpec(
-        "ALERT_MIN_SEVERITY", "monitoring",
-        lambda: _env_str("ALERT_MIN_SEVERITY", "warning"),
-        _enum_normalizer(("warning", "critical"), "warning"),
-    ),
-    # --- Per-type toggles ---
-    "ALERT_TYPE_NODE_OFFLINE": SettingSpec(
-        "ALERT_TYPE_NODE_OFFLINE", "monitoring",
-        lambda: _env_bool("ALERT_TYPE_NODE_OFFLINE", True), _normalize_bool,
-    ),
-    "ALERT_TYPE_AGENT_ONLY_DOWN": SettingSpec(
-        "ALERT_TYPE_AGENT_ONLY_DOWN", "monitoring",
-        lambda: _env_bool("ALERT_TYPE_AGENT_ONLY_DOWN", True), _normalize_bool,
-    ),
-    "ALERT_TYPE_WINGS_ONLY_DOWN": SettingSpec(
-        "ALERT_TYPE_WINGS_ONLY_DOWN", "monitoring",
-        lambda: _env_bool("ALERT_TYPE_WINGS_ONLY_DOWN", True), _normalize_bool,
-    ),
-    "ALERT_TYPE_CPU_HIGH": SettingSpec(
-        "ALERT_TYPE_CPU_HIGH", "monitoring",
-        lambda: _env_bool("ALERT_TYPE_CPU_HIGH", True), _normalize_bool,
-    ),
-    "ALERT_TYPE_MEM_HIGH": SettingSpec(
-        "ALERT_TYPE_MEM_HIGH", "monitoring",
-        lambda: _env_bool("ALERT_TYPE_MEM_HIGH", True), _normalize_bool,
-    ),
-    "ALERT_TYPE_SWAP_HIGH": SettingSpec(
-        "ALERT_TYPE_SWAP_HIGH", "monitoring",
-        lambda: _env_bool("ALERT_TYPE_SWAP_HIGH", False), _normalize_bool,
-    ),
-    "ALERT_TYPE_DISK_HIGH": SettingSpec(
-        "ALERT_TYPE_DISK_HIGH", "monitoring",
-        lambda: _env_bool("ALERT_TYPE_DISK_HIGH", True), _normalize_bool,
-    ),
-    "ALERT_TYPE_DISK_CRITICAL": SettingSpec(
-        "ALERT_TYPE_DISK_CRITICAL", "monitoring",
-        lambda: _env_bool("ALERT_TYPE_DISK_CRITICAL", True), _normalize_bool,
-    ),
-    "ALERT_TYPE_LOAD_HIGH": SettingSpec(
-        "ALERT_TYPE_LOAD_HIGH", "monitoring",
-        lambda: _env_bool("ALERT_TYPE_LOAD_HIGH", False), _normalize_bool,
-    ),
-    "ALERT_TYPE_NETWORK_DOWN": SettingSpec(
-        "ALERT_TYPE_NETWORK_DOWN", "monitoring",
-        lambda: _env_bool("ALERT_TYPE_NETWORK_DOWN", True), _normalize_bool,
-    ),
-    "ALERT_TYPE_CLASH_DOWN": SettingSpec(
-        "ALERT_TYPE_CLASH_DOWN", "monitoring",
-        lambda: _env_bool("ALERT_TYPE_CLASH_DOWN", True), _normalize_bool,
+    "ALERT_DEFAULT_RECIPIENTS": SettingSpec(
+        "ALERT_DEFAULT_RECIPIENTS", "monitoring",
+        lambda: _env_str("ALERT_DEFAULT_RECIPIENTS", ""), _normalize_id_list,
     ),
 })
 

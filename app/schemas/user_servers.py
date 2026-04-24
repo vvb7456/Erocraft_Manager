@@ -71,6 +71,10 @@ class WingsTokenResponse(BaseModel):
     baseUrl: str
     serverUuid: str
     expiresAt: int
+    # Per-file upload limit in MiB, sourced from panel.nodes.upload_size.
+    # Frontend uses this to short-circuit oversize uploads client-side
+    # (wings would otherwise stream the whole file before rejecting).
+    uploadSize: int
 
 
 class StartupVariableItem(BaseModel):

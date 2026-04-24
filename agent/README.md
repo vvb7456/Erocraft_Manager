@@ -12,7 +12,7 @@
 sudo mkdir -p /opt/erocraft-agent
 cd /opt/erocraft-agent
 python3 -m venv venv
-venv/bin/pip install fastapi uvicorn[standard] httpx psutil pyyaml pydantic
+venv/bin/pip install -r /path/to/erocraft_manager/agent/requirements.txt
 # 拷贝 agent/ 目录到 /opt/erocraft-agent/agent/
 sudo cp /path/to/agent/config.example.yaml ./agent.yaml
 sudo $EDITOR ./agent.yaml          # 配置 token / wings.config_path
@@ -41,7 +41,7 @@ sudo systemctl enable --now erocraft-agent
 见 [config.example.yaml](config.example.yaml)。
 # Erocraft Monitoring Agent
 # 
-# Dependencies: psutil httpx pyyaml
+# Dependencies (agent/requirements.txt): fastapi uvicorn[standard] httpx[socks] pyyaml pydantic
 #
 # Deploy to /opt/erocraft-agent/ on each Wings node host.
 # See config.example.yaml for configuration.

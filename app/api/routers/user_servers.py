@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
 from app.api.deps.ownership import get_owned_server
+from app.config.egg_credentials import required_credential_vars
 from app.core.runtime_settings import AUTOMATION_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.time import local_today
@@ -169,21 +170,36 @@ async def send_user_server_power_action(
     if server.is_suspended:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Server is suspended")
 
-    # For 'start' or 'restart', ensure required startup variables are filled
+    # For 'start' / 'restart', enforce per-egg credential vars (e.g.
+    # SillyTavern PASSWORD, USERNAME). The frontend's confirm dialog talks
+    # about specific missing fields, so we collect every missing key and
+    # surface them as a structured detail: { code, missing: [...] }. The
+    # global exception handler echoes detail straight into the JSON body,
+    # so the client receives `{ error: { code, missing } }`.
     if payload.action in ("start", "restart"):
-        rows = await server_repository.list_startup_variables(
-            db, server_id=server.id, egg_id=server.egg_id,
-        )
-        for variable, value in rows:
-            rules = variable.rules or ""
-            is_required = "required" in rules and "nullable" not in rules
-            if is_required:
-                effective = value if value is not None else variable.default_value
-                if not effective or not effective.strip():
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="server.startup_credentials_required",
-                    )
+        cred_keys = required_credential_vars(server.egg.name if server.egg else None)
+        if cred_keys:
+            rows = await server_repository.list_startup_variables(
+                db, server_id=server.id, egg_id=server.egg_id,
+            )
+            wanted = set(cred_keys)
+            present: dict[str, str | None] = {}
+            for variable, value in rows:
+                if variable.env_variable in wanted:
+                    effective = value if value is not None else variable.default_value
+                    present[variable.env_variable] = effective
+            missing = [
+                key for key in cred_keys
+                if not (present.get(key) or "").strip()
+            ]
+            if missing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "code": "server.startup_credentials_required",
+                        "missing": missing,
+                    },
+                )
 
     try:
         await wings_service.send_power_action(db, server.node_id, server.uuid, payload.action)

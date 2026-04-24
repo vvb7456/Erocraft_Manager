@@ -26,6 +26,8 @@ async def activity_logs(
     actor: str | None = None,
     action: str | None = None,
     status: str | None = None,
+    host_id: int | None = Query(default=None),
+    node_id: int | None = Query(default=None),
 ) -> ActivityLogsResponse:
     logs, total = await activity_log_repository.list_manager_logs(
         db,
@@ -34,6 +36,8 @@ async def activity_logs(
         actor=actor,
         action=action,
         status=status,
+        host_id=host_id,
+        node_id=node_id,
     )
     actors = await activity_log_repository.distinct_actors(db)
     actions = await activity_log_repository.distinct_actions(db)

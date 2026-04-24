@@ -1,0 +1,389 @@
+{
+  "title": "Hosts",
+  "subtitle": "Manage every server connected via Erocraft Agent (wings nodes, nginx proxies, NAS, generic Linux boxes).",
+  "nav": {
+    "list": "Overview"
+  },
+  "summary": {
+    "total": "{n} total",
+    "online": "{n} online",
+    "offline": "{n} offline",
+    "disabled": "{n} disabled",
+    "unconfigured": "{n} unconfigured"
+  },
+  "list": {
+    "empty": "No hosts yet. Click “Add host” in the top right to register the first one.",
+    "loading": "Loading hosts…",
+    "perPage": "rows/page"
+  },
+  "columns": {
+    "name": "Name",
+    "kind": "Kind",
+    "hostname": "Hostname",
+    "agentUrl": "Agent URL",
+    "status": "Status",
+    "lastSeen": "Last seen",
+    "actions": "Actions"
+  },
+  "kind": {
+    "wings_node": "Wings node",
+    "nginx_proxy": "nginx proxy",
+    "nas": "NAS",
+    "generic_linux": "Linux"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "disabled": "Disabled",
+    "unconfigured": "Unconfigured"
+  },
+  "toolbar": {
+    "globalDefaults": "Global defaults",
+    "create": "Add host",
+    "filterKind": "Kind",
+    "filterStatus": "Status",
+    "all": "All",
+    "search": "Search name / hostname / URL"
+  },
+  "actions": {
+    "probe": "Probe",
+    "delete": "Delete",
+    "open": "Open",
+    "more": "More actions",
+    "probeOk": "Probe of {name} succeeded",
+    "probeFail": "Probe of {name} failed: {err}",
+    "deleted": "Host {name} deleted"
+  },
+  "confirm": {
+    "delete_title": "Delete host",
+    "delete_msg": "Delete host \"{name}\"? This cannot be undone."
+  },
+  "tbd": "This action will ship in the next step",
+  "create": {
+    "title": "Add host",
+    "fields": {
+      "name": "Name",
+      "nameHint": "Display name; duplicates are allowed.",
+      "kind": "Kind",
+      "kindHint": "Use wings_node for Pterodactyl nodes; other kinds describe infrastructure hosts.",
+      "hostname": "Hostname",
+      "hostnameHint": "DNS name or IP; shown in UI and alert context.",
+      "agentUrl": "Agent URL",
+      "agentUrlHint": "e.g. http://10.0.0.22:48765 — Manager pulls data from this URL.",
+      "agentToken": "Agent Token",
+      "agentTokenHint": "Manager has pre-generated a 43-char URL-safe Bearer; it will be written to the DB on create. Use refresh to regenerate.",
+      "agentTokenRefresh": "Regenerate",
+      "pteroNode": "Panel node",
+      "pteroNodeHint": "Required for wings_node: the matching Pterodactyl node.",
+      "enabled": "Enabled",
+      "enabledHint": "When disabled, Manager does not poll this host."
+    },
+    "create": "Create",
+    "cancel": "Cancel",
+    "creating": "Creating…",
+    "probeOk": "Probe OK",
+    "created": "Host created",
+    "createFailed": "Create failed"
+  },
+  "tokenReveal": {
+    "title": "One-time token",
+    "subtitle": "Copy this token now and paste it into the target agent's config.yaml. It cannot be viewed again after this dialog closes.",
+    "label": "Agent Token",
+    "copied": "Token copied",
+    "done": "I have saved it"
+  },
+  "globalDefaults": {
+    "title": "Global defaults",
+    "fields": {
+      "interval": "Poll interval (seconds)",
+      "intervalHint": "Pull cadence shared by every host, 30 – 3600.",
+      "retention": "Monitoring retention (days)",
+      "retentionHint": "Older samples are pruned, 1 – 365.",
+      "recipients": "Default alert recipients",
+      "recipientsHint": "New hosts inherit this list; existing hosts can override per-host.",
+      "recipientsEmpty": "No admin accounts available"
+    },
+    "loading": "Loading…",
+    "save": "Save",
+    "saved": "Global defaults saved",
+    "saveFailed": "Save failed",
+    "cancel": "Cancel"
+  },
+  "time": {
+    "never": "—"
+  },
+  "detail": {
+    "title": "Host detail",
+    "tabs": {
+      "overview": "Overview",
+      "setting": "Agent settings",
+      "wings": "Wings",
+      "allocations": "Allocations",
+      "activity": "Activity"
+    },
+    "loading": "Loading…",
+    "notFound": "Host not found",
+    "overviewPlaceholder": "The overview pane lands in C7: status chips, ECharts gauges, resource details, last-1h hero trends and active alerts. Raw host payload below:",
+    "settingPlaceholder": "The settings pane lands in C8: Agent connection, token reset, wings_config, alerting, danger zone."
+  },
+  "activity": {
+    "window": {
+      "1h": "Last 1 h",
+      "6h": "Last 6 h",
+      "24h": "Last 24 h",
+      "7d": "Last 7 d"
+    },
+    "history": {
+      "title": "Resource history"
+    },
+    "metric": {
+      "cpu": "CPU",
+      "mem": "Memory",
+      "disk": "Disk",
+      "load": "Load",
+      "net": "Network throughput",
+      "diskIo": "Disk IO"
+    },
+    "series": {
+      "netRx": "RX",
+      "netTx": "TX",
+      "diskRead": "Read",
+      "diskWrite": "Write"
+    },
+    "log": {
+      "title": "Wings debug log",
+      "connected": "connected",
+      "connecting": "connecting…",
+      "disconnected": "disconnected, retrying…",
+      "empty": "No log lines yet",
+      "clear": "Clear",
+      "pause": "Pause",
+      "resume": "Resume",
+      "follow": "Follow tail"
+    },
+    "nonWings": {
+      "title": "No activity data available",
+      "message": "Non wings_node hosts do not collect resource history or wings process logs."
+    }
+  },
+  "overview": {
+    "basicInfo": "Basic info",
+    "activeAlerts": "Active alerts",
+    "noActiveAlerts": "No active alerts",
+    "noMetrics": "No metrics collected yet",
+    "noMetricsNonWings": "Metrics collection for non wings_node hosts is not enabled; only heartbeat and inbound status are shown.",
+    "yes": "Yes",
+    "no": "No",
+    "fields": {
+      "name": "Name",
+      "kind": "Kind",
+      "hostname": "Hostname",
+      "agentUrl": "Agent URL",
+      "panelNode": "Panel node ID",
+      "enabled": "Enabled",
+      "createdAt": "Created",
+      "lastSeenAt": "Last seen"
+    },
+    "chip": {
+      "heartbeat": "heartbeat {age} ago"
+    },
+    "stats": {
+      "cores": "cores",
+      "load": "load",
+      "containers": "Containers"
+    },
+    "hero": {
+      "cpu": "CPU last 1h",
+      "mem": "Memory last 1h"
+    },
+    "chart": {
+      "empty": "No data points"
+    }
+  },
+  "setting": {
+    "saved": "Saved",
+    "probeOk": "Probe OK ({ms} ms)",
+    "probeFail": "Probe failed: {err}",
+    "agent": {
+      "title": "Agent connection",
+      "kindLocked": "Kind cannot be changed after creation.",
+      "panelNodeLocked": "Panel node binding is fixed; recreate the host to change it.",
+      "enabledHint": "When disabled, Manager stops polling this host.",
+      "tokenLabel": "Agent token",
+      "tokenHint": "Click reset to generate a new token; once saved, update the agent config.yaml to match.",
+      "tokenPendingHint": "New token generated. Save to apply, then copy and update the agent config.yaml on the node.",
+      "tokenReset": "Reset",
+      "tokenCancelReset": "Cancel reset",
+      "tokenWarning": "Warning: the old token stops working as soon as you save; failing to update the agent config.yaml will break collection.",
+      "probe": "Probe",
+      "discard": "Discard changes",
+      "save": "Save"
+    },
+    "wings": {
+      "title": "Wings service",
+      "notWings": "This host is not a Wings node",
+      "saved": "Saved ({n} field(s) changed)",
+      "cancel": "Cancel",
+      "serviceError": "Wings service status unavailable: {err}",
+      "serviceState": {
+        "unknown": "unknown",
+        "running": "running",
+        "dead": "dead",
+        "failed": "failed",
+        "active": "active",
+        "inactive": "inactive",
+        "activating": "activating",
+        "deactivating": "deactivating",
+        "reloading": "reloading",
+        "exited": "exited",
+        "start": "starting",
+        "stop": "stopping"
+      },
+      "serviceUptime": "up {dur}",
+      "restartRequired": "The following fields require a Wings restart to take effect: {fields}",
+      "restart": "Restart Wings",
+      "restartConfirmTitle": "Restart Wings?",
+      "restartConfirmMsg": "All servers on this node will briefly go offline while Wings restarts.",
+      "restartOk": "Wings restarted ({ms} ms)",
+      "restartFail": "Restart failed: {err}",
+      "saveAndRestartTitle": "Save and restart Wings?",
+      "saveAndRestartMsg": "The following fields require a Wings restart to take effect: {fields}. Wings will be restarted immediately after saving.",
+      "saveAndRestartConfirm": "Save and restart Wings",
+      "fields": {
+        "name": "Node name",
+        "description": "Description",
+        "fqdn": "FQDN",
+        "scheme": "Scheme",
+        "behindProxy": "Behind proxy",
+        "maintenance": "Maintenance mode",
+        "memory": "Memory (MiB)",
+        "memoryOver": "Memory overallocate (%)",
+        "disk": "Disk (MiB)",
+        "diskOver": "Disk overallocate (%)",
+        "uploadSize": "Upload limit (MiB)",
+        "daemonListen": "Daemon port",
+        "daemonSftp": "SFTP port",
+        "daemonBase": "Data directory"
+      },
+      "tips": {
+        "behindProxy": "When enabled, wings trusts X-Forwarded-* headers; required behind nginx/Traefik.",
+        "maintenance": "Servers will not be auto-deployed onto this node while in maintenance mode.",
+        "overallocate": "-1 = unlimited; 0 = no overallocation; N = stop allocating after N% over capacity.",
+        "uploadSize": "Per-file upload limit, in MiB.",
+        "daemonBase": "Server file storage path. Restart Wings after changing."
+      }
+    },
+    "alerting": {
+      "title": "Alerting",
+      "intro": "Settings here apply only to this host; unset items inherit the global default.",
+      "saved": "Alert settings saved",
+      "recipientsEmpty": "Use global default recipients",
+      "resetDefaults": "Reset all to defaults",
+      "channelSection": "Notification channel",
+      "rulesSection": "Alert types & thresholds",
+      "rulesTip": "Disabled types will not raise alerts on this host. Unmodified thresholds use global defaults.",
+      "rulesTitle": "Alert types & thresholds",
+      "threshold": "Threshold",
+      "warningThreshold": "warning %",
+      "criticalThreshold": "critical %",
+      "sustainMin": "Sustain min",
+      "on": "on",
+      "off": "off",
+      "fields": {
+        "emailEnabled": "Email notifications",
+        "recipients": "Recipients",
+        "minSeverity": "Minimum severity",
+        "notifyResolve": "Notify on resolve",
+        "cooldown": "Cooldown (minutes)"
+      },
+      "tips": {
+        "inherit": "Inherits the global default when unset: {v}",
+        "recipients": "Empty = use the global default recipient list.",
+        "cooldown": "Same alert type for the same host won't re-fire within the cooldown window."
+      },
+      "types": {
+        "node_offline": "Node offline",
+        "agent_only_down": "Only agent unreachable",
+        "wings_only_down": "Only wings unreachable",
+        "network_down": "Public network down",
+        "clash_down": "Clash unreachable",
+        "cpu_high": "CPU high",
+        "mem_high": "Memory high",
+        "swap_high": "Swap high",
+        "load_high": "Load high",
+        "disk_high": "Disk warning",
+        "disk_critical": "Disk critical"
+      }
+    },
+    "danger": {
+      "title": "Danger zone",
+      "deleteTitle": "Delete host",
+      "deleteMsg": "Permanently removes this host record. The Pterodactyl Panel node is not affected."
+    }
+  },
+  "allocations": {
+    "summary": "{total} total ({assigned} assigned · {unassigned} free)",
+    "summaryFiltered": "{n} total",
+    "filter": {
+      "label": "Status",
+      "all": "All",
+      "assigned": "Assigned",
+      "unassigned": "Unassigned"
+    },
+    "search": { "placeholder": "Search port / IP / server" },
+    "columns": {
+      "select": "Select",
+      "ip": "IP",
+      "alias": "Alias",
+      "port": "Port",
+      "server": "Server",
+      "notes": "Notes",
+      "actions": "Actions"
+    },
+    "badge": {
+      "inUse": "In use",
+      "free": "Free"
+    },
+    "perPage": "per page",
+    "empty": "No allocations on this node yet.",
+    "emptyFiltered": "No allocations match the current filter.",
+    "selection": {
+      "action": "Select action",
+      "execute": "Execute",
+      "selected": "{n} selected",
+      "clear": "Clear",
+      "bulkDelete": "Delete"
+    },
+    "actions": {
+      "create": "New allocations",
+      "delete": "Delete",
+      "openServer": "Open server"
+    },
+    "create": {
+      "title": "New allocations",
+      "ip": "IP",
+      "ipHint": "Default 0.0.0.0 listens on all node interfaces.",
+      "alias": "Alias (domain)",
+      "aliasHint": "Defaults to the node FQDN; editable.",
+      "ports": "Ports",
+      "portsHint": "Supports 8000, 8000-8010, 8000,8005-8010,9000.",
+      "preview": "Will create {n} ports",
+      "previewError": "Invalid port expression: {err}",
+      "submit": "Create",
+      "cancel": "Cancel",
+      "toastOk": "Created {created} allocation(s)",
+      "toastSkipped": "Created {created} allocation(s); skipped {skipped} duplicate(s)",
+      "failed": "Create failed"
+    },
+    "delete": {
+      "singleTitle": "Delete allocation",
+      "singleMsg": "Delete port :{port}?",
+      "bulkTitle": "Delete allocations",
+      "bulkMsg": "Delete the {n} selected port(s)? Allocations in use are not selectable.",
+      "toastOk": "Deleted {n} allocation(s)",
+      "failed": "Delete failed",
+      "inUse": "Port :{port} is in use and cannot be deleted"
+    },
+    "notWings": "Allocations are only available for wings_node hosts."
+  }
+}
