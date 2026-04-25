@@ -142,6 +142,82 @@ class HostAlertRule(Base):
     )
 
 
+class ManagerCertificate(Base):
+    """Certificate registry row owned by Manager.
+
+    Manager does not issue certificates in the current phase. ``source_path``
+    points at the local acme.sh install directory that contains
+    ``fullchain.pem`` and ``privkey.pem``.
+    """
+
+    __tablename__ = "manager_certificates"
+    __table_args__ = (
+        Index("idx_manager_cert_enabled", "enabled"),
+        Index("idx_manager_cert_source_path", "source_path"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    domains: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    source_fingerprint_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_not_before: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    source_not_after: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    source_last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    source_last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alert_threshold_days: Mapped[int] = mapped_column(Integer, nullable=False, default=14)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now, onupdate=_utc_now,
+    )
+
+
+class ManagerCertDeployment(Base):
+    """Binding between a certificate and an agent-managed host target."""
+
+    __tablename__ = "manager_cert_deployments"
+    __table_args__ = (
+        UniqueConstraint(
+            "certificate_id",
+            "host_id",
+            "target_name",
+            name="uk_manager_cert_deployment_target",
+        ),
+        Index("idx_manager_cert_deploy_cert", "certificate_id"),
+        Index("idx_manager_cert_deploy_host", "host_id"),
+        Index("idx_manager_cert_deploy_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    certificate_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("manager_certificates.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    host_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("manager_hosts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Empty string means "the host's default target". For wings_node hosts that
+    # is the api.ssl.cert/key pair in /etc/pterodactyl/config.yml.
+    target_name: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    deployed_fingerprint_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    deployed_not_after: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_check_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_check_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_deploy_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_deploy_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_deploy_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now, onupdate=_utc_now,
+    )
+
+
 class ManagerActivityLog(Base):
     __tablename__ = "manager_activity_logs"
     __table_args__ = (

@@ -15,6 +15,7 @@ HANDLERS = {
     "ping": handlers.ping,
     "wings.restart": handlers.wings_restart,
     "wings.status": handlers.wings_status,
+    "cert.install": handlers.cert_install,
 }
 
 

@@ -1,54 +1,262 @@
 <script setup lang="ts">
-// Placeholder admin server detail page.
-// Full design lives in docs/ADMIN_SERVER_DETAIL_DESIGN.md (TODO).
+// Admin server detail container.
+// Owns the runtime polling so the header badge can mirror the user-side
+// console badge (uses utils/status.ts), and provides runtime + buffers to
+// the Overview pane via inject so the pane stays a presentational layer.
+import { computed, onBeforeUnmount, provide, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { useApiFetch } from '@/composables/useApiFetch'
 import PageHeader from '@/components/layout/PageHeader.vue'
-import BaseCard from '@/components/ui/BaseCard.vue'
-import BaseButton from '@/components/ui/BaseButton.vue'
+import Badge from '@/components/ui/Badge.vue'
+import StatusDot from '@/components/ui/StatusDot.vue'
+import TabSwitcher from '@/components/ui/TabSwitcher.vue'
+import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
+import { getStatusDotKey, getStatusColor } from '@/utils/status'
+import type {
+  AdminServerDetailResponse,
+  ServerRuntimeResponse,
+} from '@/types/adminServer'
 
+defineOptions({ name: 'AdminServerDetailPage' })
+
+const { t } = useI18n({ useScope: 'global' })
 const route = useRoute()
 const router = useRouter()
-const serverId = String(route.params.id ?? '')
+const { get } = useApiFetch()
+
+const serverId = computed(() => Number(route.params.id))
+const detail = ref<AdminServerDetailResponse | null>(null)
+const loading = ref(false)
+
+provide('adminServerDetail', detail)
+provide('adminServerId', serverId)
+
+async function loadDetail(silent = false) {
+  if (!Number.isFinite(serverId.value)) return
+  if (!silent) loading.value = true
+  try {
+    const data = await get<AdminServerDetailResponse>(`/api/admin/servers/${serverId.value}`)
+    if (data) detail.value = data
+  } finally {
+    if (!silent) loading.value = false
+  }
+}
+provide('reloadAdminServer', () => loadDetail(true))
+
+// ── runtime polling shared with Overview pane ──────────────────────────
+const SAMPLE_INTERVAL_MS = 5_000
+const SAMPLE_LIMIT = 60   // 5min @ 5s
+
+const runtime = ref<ServerRuntimeResponse | null>(null)
+const runtimeStale = ref(false)
+const cpuBuffer = ref<number[]>([])
+const memBuffer = ref<number[]>([])
+
+provide('adminServerRuntime', runtime)
+provide('adminServerRuntimeStale', runtimeStale)
+provide('adminServerCpuBuffer', cpuBuffer)
+provide('adminServerMemBuffer', memBuffer)
+
+function pushBuffer(buf: typeof cpuBuffer, value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return
+  const next = [...buf.value, value]
+  if (next.length > SAMPLE_LIMIT) next.shift()
+  buf.value = next
+}
+
+async function fetchRuntime(withMetrics = false) {
+  if (!Number.isFinite(serverId.value)) return
+  const data = await get<ServerRuntimeResponse>(
+    `/api/admin/servers/${serverId.value}/runtime`,
+    { silent: true },
+  )
+  if (data) {
+    runtime.value = data
+    runtimeStale.value = false
+    if (withMetrics) {
+      const r = data.resources ?? {}
+      pushBuffer(cpuBuffer, (r as { cpu_absolute?: number }).cpu_absolute)
+      const memBytes = (r as { memory_bytes?: number }).memory_bytes
+      pushBuffer(memBuffer, memBytes != null ? memBytes / (1024 * 1024) : null)
+    }
+  } else {
+    runtimeStale.value = true
+  }
+}
+
+let runtimeTimer: number | null = null
+
+function stopRuntimePolling() {
+  if (runtimeTimer !== null) {
+    clearInterval(runtimeTimer)
+    runtimeTimer = null
+  }
+}
+
+function startRuntimePolling() {
+  stopRuntimePolling()
+  runtimeTimer = window.setInterval(() => {
+    void fetchRuntime(activeTab.value === 'admin-server-overview')
+  }, SAMPLE_INTERVAL_MS)
+}
+
+onBeforeUnmount(() => {
+  stopRuntimePolling()
+})
+
+// ── header status badge — mirrors user-side ServerDetailPage.statusBadge() ─
+const liveState = computed(() => runtime.value?.state ?? detail.value?.server.status ?? 'offline')
+const isSuspended = computed(() => detail.value?.server.isSuspended ?? false)
+const isInstalling = computed(() => detail.value?.server.isInstalling ?? false)
+
+const statusDot = computed(() =>
+  getStatusDotKey(liveState.value, isSuspended.value, isInstalling.value, runtimeStale.value),
+)
+
+const statusColor = computed(() => {
+  // user-side maps differently: stale->t3, suspended->red, installing->amber.
+  // We mirror that exactly via getStatusColor.
+  return getStatusColor(liveState.value, isSuspended.value, isInstalling.value, runtimeStale.value)
+})
+
+const statusLabel = computed(() => {
+  if (!detail.value) return t('adminServer.status.unknown')
+  if (runtimeStale.value) return t('adminServer.status.disconnected')
+  if (isSuspended.value) return t('adminServer.status.suspended')
+  if (isInstalling.value) return t('adminServer.status.installing')
+  if (detail.value.server.status === 'install_failed') return t('adminServer.status.install_failed')
+  const s = liveState.value
+  switch (s) {
+    case 'running': return t('adminServer.status.running')
+    case 'starting': return t('adminServer.status.starting')
+    case 'stopping': return t('adminServer.status.stopping')
+    case 'installing': return t('adminServer.status.installing')
+    default: return t('adminServer.status.offline')
+  }
+})
+
+const headerTitle = computed(() => {
+  if (detail.value) return `${detail.value.server.name}  #${detail.value.server.id}`
+  return Number.isFinite(serverId.value)
+    ? `${t('adminServer.title')}  #${serverId.value}`
+    : t('adminServer.title')
+})
+
+const tabs = computed(() => [
+  { key: 'admin-server-overview',  label: t('adminServer.tabs.overview'),  icon: 'dashboard' },
+  { key: 'admin-server-settings',  label: t('adminServer.tabs.settings'),  icon: 'settings' },
+  { key: 'admin-server-lifecycle', label: t('adminServer.tabs.lifecycle'), icon: 'warning' },
+])
+
+const activeTab = computed(() => {
+  const name = route.name as string | undefined
+  return name && tabs.value.some(tab => tab.key === name) ? name : 'admin-server-overview'
+})
+
+const activeTabLabel = computed(() =>
+  tabs.value.find(tab => tab.key === activeTab.value)?.label ?? t('adminServer.tabs.overview'),
+)
+
+const headerBreadcrumbs = computed(() => [
+  { label: t('servers.title'), to: { name: 'servers' } },
+  {
+    label: headerTitle.value,
+    to: { name: 'admin-server-overview', params: { id: serverId.value } },
+  },
+  { label: activeTabLabel.value },
+])
+
+watch(
+  [serverId, activeTab],
+  async ([id], prev) => {
+    if (!Number.isFinite(id)) return
+
+    const prevId = prev?.[0]
+    const changedServer = id !== prevId
+    if (changedServer) {
+      detail.value = null
+      runtime.value = null
+      runtimeStale.value = false
+      cpuBuffer.value = []
+      memBuffer.value = []
+    } else if (activeTab.value !== 'admin-server-overview') {
+      // Keep badge status live on non-overview tabs, but drop chart buffers
+      // so only overview participates in metrics history updates.
+      cpuBuffer.value = []
+      memBuffer.value = []
+    }
+
+    // Single detail fetch when opening / switching tabs. No background
+    // detail polling while staying on a tab.
+    await loadDetail(changedServer)
+
+    // Header badge keeps a minimal live status on every tab.
+    // Only overview tab appends metrics history buffers.
+    await fetchRuntime(activeTab.value === 'admin-server-overview')
+    startRuntimePolling()
+  },
+  { immediate: true },
+)
+
+function onTabChange(key: string) {
+  router.push({ name: key, params: { id: serverId.value } })
+}
+
+const consoleHref = computed(() => {
+  if (!Number.isFinite(serverId.value)) return ''
+  const resolved = router.resolve({ name: 'server-console', params: { id: serverId.value } })
+  return resolved.href
+})
 </script>
 
 <template>
-  <PageHeader icon="dns" :title="`服务器 #${serverId}`">
-    <template #controls>
-      <BaseButton variant="secondary" size="sm" @click="router.push({ name: 'servers' })">
-        <MsIcon name="arrow_back" size="xs" /> 返回列表
-      </BaseButton>
-    </template>
-  </PageHeader>
+  <LoadingCenter v-if="loading && !detail" />
 
-  <div class="page-body">
-    <BaseCard variant="bg2">
-      <h3 class="section-title">敬请期待</h3>
-      <p class="hint">
-        管理员服务器详情页正在设计中。完整方案见
-        <code>docs/ADMIN_SERVER_DETAIL_DESIGN.md</code>。
-      </p>
-    </BaseCard>
-  </div>
+  <template v-else>
+    <PageHeader icon="dns" :title="headerTitle" :breadcrumbs="headerBreadcrumbs">
+      <template v-if="detail" #badge>
+        <Badge :color="statusColor">
+          <StatusDot :status="statusDot" />
+          {{ statusLabel }}
+        </Badge>
+      </template>
+    </PageHeader>
+
+    <div class="page-body">
+      <TabSwitcher :tabs="tabs" :modelValue="activeTab" @update:modelValue="onTabChange">
+        <a
+          v-if="detail"
+          class="console-link"
+          :href="consoleHref"
+          target="_blank"
+          rel="noopener"
+        >
+          <MsIcon name="terminal" size="xs" />
+          {{ t('adminServer.controls.openConsole') }}
+        </a>
+      </TabSwitcher>
+      <RouterView :key="serverId" />
+    </div>
+  </template>
 </template>
 
 <style scoped>
-.section-title {
-  margin: 0 0 var(--sp-2);
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--t1);
-}
-.hint {
-  margin: 0;
-  color: var(--t2);
-  font-size: var(--text-sm);
-}
-code {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+.console-link {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
   background: var(--bg3);
-  padding: 2px 6px;
-  border-radius: var(--r-xs);
-  color: var(--ac2);
+  border: 1px solid var(--bd);
+  border-radius: var(--r-sm);
+  color: var(--t1);
+  font-size: var(--text-xs);
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
 }
+.console-link:hover { border-color: var(--bd-f); color: var(--ac2); }
 </style>

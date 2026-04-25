@@ -90,7 +90,7 @@ const serverFilterOptions = computed(() => [
 
 // ── Fetch (no server-side sort/filter) ──
 async function loadUsers() {
-  const data = await get<{ users: UserItem[] }>('/api/users')
+  const data = await get<{ users: UserItem[] }>('/api/admin/users')
   if (data) {
     rawUsers.value = data.users
   }
@@ -220,7 +220,7 @@ async function executeBatchAction() {
     if (!ok) return
   }
 
-  const res = await post<BatchUsersResult>('/api/users/batch', { action, userIds: ids })
+  const res = await post<BatchUsersResult>('/api/admin/users/batch', { action, userIds: ids })
   if (res) {
     const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
     toast(res.message, tone)
@@ -260,7 +260,7 @@ function onEmailInput(email: string) {
 
 async function doCreate(andCreateServer = false) {
   createLoading.value = true
-  const res = await post<{ message: string; emailSent?: boolean; user?: { id: number; username: string } }>('/api/users', {
+  const res = await post<{ message: string; emailSent?: boolean; user?: { id: number; username: string } }>('/api/admin/users', {
     email: createEmail.value,
     username: createUsername.value,
     sendWelcome: createSendWelcome.value,
@@ -299,7 +299,7 @@ function openEdit(u: UserItem) {
 async function doEdit() {
   if (!editUser.value) return
   editLoading.value = true
-  const res = await put<{ message: string }>(`/api/users/${editUser.value.id}`, {
+  const res = await put<{ message: string }>(`/api/admin/users/${editUser.value.id}`, {
     username: editForm.value.username,
     email: editForm.value.email,
     firstName: editForm.value.firstName,
@@ -324,7 +324,7 @@ async function deleteUser(u: UserItem) {
     confirmText: t('common.btn.delete'),
   })
   if (!ok) return
-  const res = await del<{ message: string }>(`/api/users/${u.id}`)
+  const res = await del<{ message: string }>(`/api/admin/users/${u.id}`)
   if (res) {
     toast(res.message, 'success')
     await loadUsers()

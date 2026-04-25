@@ -124,11 +124,15 @@ def _validate_activity_report(payload: UserActivityReportRequest) -> dict[str, s
 
 @router.get("/servers", response_model=list[UserServerItem])
 async def list_user_servers(
+    scope: str = Query("owner"),
     current_user: PteroUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[UserServerItem]:
     today = await _today(db)
-    servers = await server_repository.list_for_owner(db, current_user.id)
+    if scope == "all" and bool(current_user.root_admin):
+        servers = await server_repository.list_for_admin(db)
+    else:
+        servers = await server_repository.list_for_owner(db, current_user.id)
     return [_serialize_server(server, today) for server in servers]
 
 

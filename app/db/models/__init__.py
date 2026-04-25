@@ -3,6 +3,8 @@
 from app.db.models.manager import (
     HostAlertRule,
     HostAlertSettings,
+    ManagerCertDeployment,
+    ManagerCertificate,
     ManagerActivityLog,
     ManagerEmailChange,
     ManagerEmailTemplate,
@@ -38,6 +40,8 @@ __all__ = [
     "EggVariable",
     "HostAlertRule",
     "HostAlertSettings",
+    "ManagerCertDeployment",
+    "ManagerCertificate",
     "ManagerActivityLog",
     "ManagerEmailChange",
     "ManagerEmailTemplate",

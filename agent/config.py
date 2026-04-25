@@ -94,6 +94,21 @@ class ProbeConfig(BaseModel):
         return v
 
 
+class CertInstallTarget(BaseModel):
+    name: str
+    cert_path: str
+    key_path: str
+    reload_cmd: str | None = None
+
+    @field_validator("name", "cert_path", "key_path")
+    @classmethod
+    def _required_str(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("must not be empty")
+        return v
+
+
 class LoggingSection(BaseModel):
     level: str = "INFO"
 
@@ -104,6 +119,7 @@ class AgentConfig(BaseModel):
     wings: WingsSection = Field(default_factory=WingsSection)
     collect: CollectSection = Field(default_factory=CollectSection)
     probes: list[ProbeConfig] = Field(default_factory=list)
+    cert_install_targets: list[CertInstallTarget] = Field(default_factory=list)
     logging: LoggingSection = Field(default_factory=LoggingSection)
 
 

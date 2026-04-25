@@ -648,6 +648,10 @@ ALERT_TYPE_LABELS: dict[str, str] = {
     "load_high": "系统负载过高",
     "network_down": "公网探针失败",
     "clash_down": "Clash 代理探针失败",
+    "cert_source_unknown": "证书源状态未知",
+    "cert_source_expiring": "证书源即将过期",
+    "cert_deployment_outdated": "证书部署落后",
+    "cert_deployment_unreachable": "证书部署目标不可达",
 }
 
 SEVERITY_LABELS: dict[str, str] = {

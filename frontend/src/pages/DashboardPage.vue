@@ -160,7 +160,7 @@ const legendItems = computed(() => {
 let alive = true
 
 async function loadMonitoring() {
-  const res = await monitoringApi.get<MonitoringData>('/api/monitoring/overview')
+  const res = await monitoringApi.get<MonitoringData>('/api/admin/monitoring/overview')
   if (!alive) return
   if (res) monitoring.value = res
 }
@@ -175,7 +175,7 @@ onMounted(async () => {
     })
   }
 
-  const res = await get<DashboardData>('/api/dashboard')
+  const res = await get<DashboardData>('/api/admin/dashboard')
   if (!alive) return
   if (res) {
     data.value = res

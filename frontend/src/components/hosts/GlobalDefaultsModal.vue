@@ -65,7 +65,7 @@ async function loadAll() {
   try {
     const [d, u] = await Promise.all([
       get<Defaults>('/api/admin/global-defaults'),
-      get<{ users: AdminOption[] }>('/api/users?page=1&perPage=200'),
+      get<{ users: AdminOption[] }>('/api/admin/users?page=1&perPage=200'),
     ])
     if (d) {
       values.value = {

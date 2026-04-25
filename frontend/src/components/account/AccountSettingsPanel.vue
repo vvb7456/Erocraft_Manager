@@ -15,6 +15,7 @@ import BaseSelect from '@/components/form/BaseSelect.vue'
 import FormField from '@/components/form/FormField.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
 
 defineOptions({ name: 'AccountSettingsPanel' })
 
@@ -242,7 +243,7 @@ onMounted(loadProfile)
   </LoadingCenter>
 
   <div v-else class="account-panel">
-    <section class="account-section">
+    <BaseCard variant="bg2" class="account-section">
       <SectionHeader icon="person" flush>
         {{ t('account.profile.title') }}
       </SectionHeader>
@@ -257,9 +258,9 @@ onMounted(loadProfile)
       <FormField :label="t('account.profile.accountType')" layout="horizontal" bordered>
         <div class="account-value">{{ accountTypeLabel }}</div>
       </FormField>
-    </section>
+    </BaseCard>
 
-    <section class="account-section">
+    <BaseCard variant="bg2" class="account-section">
       <SectionHeader icon="mail" flush>
         {{ t('account.email.title') }}
       </SectionHeader>
@@ -296,9 +297,9 @@ onMounted(loadProfile)
           </BaseButton>
         </div>
       </form>
-    </section>
+    </BaseCard>
 
-    <section class="account-section">
+    <BaseCard variant="bg2" class="account-section">
       <SectionHeader icon="lock" flush>
         {{ t('account.password.title') }}
       </SectionHeader>
@@ -366,9 +367,9 @@ onMounted(loadProfile)
           </BaseButton>
         </div>
       </form>
-    </section>
+    </BaseCard>
 
-    <section class="account-section">
+    <BaseCard variant="bg2" class="account-section">
       <SectionHeader icon="language" flush>
         {{ t('account.language.title') }}
       </SectionHeader>
@@ -398,25 +399,23 @@ onMounted(loadProfile)
           </BaseButton>
         </div>
       </form>
-    </section>
+    </BaseCard>
   </div>
 </template>
 
 <style scoped>
 .account-panel {
-  max-width: 720px;
+  max-width: 760px;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
 }
 
 .account-section {
   display: grid;
   gap: 12px;
-}
-
-.account-section + .account-section {
-  margin-top: var(--sp-6);
-  padding-top: var(--sp-6);
-  border-top: 1px solid color-mix(in srgb, var(--bd) 50%, transparent);
+  padding: var(--sp-2);
 }
 
 .account-section__desc {
@@ -462,10 +461,6 @@ onMounted(loadProfile)
   white-space: nowrap;
 }
 
-.account-section :deep(.form-field--bordered:last-of-type) {
-  border-bottom: 0;
-}
-
 .account-actions {
   display: flex;
   justify-content: flex-end;
@@ -473,11 +468,6 @@ onMounted(loadProfile)
 }
 
 @media (max-width: 768px) {
-  .account-section + .account-section {
-    margin-top: var(--sp-5);
-    padding-top: var(--sp-5);
-  }
-
   .account-actions {
     justify-content: stretch;
   }

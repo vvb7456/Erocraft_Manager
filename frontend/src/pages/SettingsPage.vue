@@ -20,6 +20,8 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 import FormField from '@/components/form/FormField.vue'
 import Badge from '@/components/ui/Badge.vue'
 import DirtyBar from '@/components/ui/DirtyBar.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import SectionHeader from '@/components/ui/SectionHeader.vue'
 import AccountSettingsPanel from '@/components/account/AccountSettingsPanel.vue'
 import { TIMEZONE_OPTIONS } from '@/config/timezones'
 
@@ -74,7 +76,7 @@ async function sendTestEmail() {
     override.SMTP_USE_SSL = !!getBool('SMTP_USE_SSL')
     if (settings.value.SMTP_PASSWORD) override.SMTP_PASSWORD = settings.value.SMTP_PASSWORD
     if (settings.value.SENDER_EMAIL) override.SENDER_EMAIL = settings.value.SENDER_EMAIL
-    const r = await post<{ ok: boolean; error: string | null }>('/api/test-email', {
+    const r = await post<{ ok: boolean; error: string | null }>('/api/admin/test-email', {
       recipient: to,
       smtpOverride: override,
     })
@@ -111,17 +113,17 @@ const nodeOptions = computed(() => nodeList.value.map((n: any) => ({ value: n.id
 
 watch(() => getNum('DEFAULT_NEST_ID'), async (nestId) => {
   if (!nestId) { eggList.value = []; return }
-  const data = await get<{ eggs: any[] }>(`/api/nests/${nestId}/eggs`)
+  const data = await get<{ eggs: any[] }>(`/api/admin/resources/nests/${nestId}/eggs`)
   eggList.value = data?.eggs || []
 })
 
 // ── Fetch ──
 onMounted(async () => {
   const [settingsData, autoData, nestsRes, nodesRes] = await Promise.all([
-    get<Record<string, any>>('/api/settings'),
-    get<Record<string, any>>('/api/automation'),
-    get<{ nests: any[] }>('/api/nests'),
-    get<{ nodes: any[] }>('/api/nodes'),
+    get<Record<string, any>>('/api/admin/settings'),
+    get<Record<string, any>>('/api/admin/automation'),
+    get<{ nests: any[] }>('/api/admin/resources/nests'),
+    get<{ nodes: any[] }>('/api/admin/resources/nodes'),
   ])
   if (settingsData) settings.value = settingsData
   if (autoData) Object.assign(automation.value, autoData)
@@ -129,7 +131,7 @@ onMounted(async () => {
   if (nodesRes) nodeList.value = nodesRes.nodes
   const nestId = getNum('DEFAULT_NEST_ID')
   if (nestId) {
-    const data = await get<{ eggs: any[] }>(`/api/nests/${nestId}/eggs`)
+    const data = await get<{ eggs: any[] }>(`/api/admin/resources/nests/${nestId}/eggs`)
     eggList.value = data?.eggs || []
   }
   initialLoading.value = false
@@ -206,8 +208,8 @@ async function saveAll(): Promise<boolean> {
   if (hasErrors.value) return false
   saveLoading.value = true
   try {
-    const r1 = await post<{ message: string }>('/api/settings', settings.value)
-    const r2 = await post<{ message: string }>('/api/automation', automation.value)
+    const r1 = await post<{ message: string }>('/api/admin/settings', settings.value)
+    const r2 = await post<{ message: string }>('/api/admin/automation', automation.value)
     if (!r1 || !r2) return false
     await app.loadVersion()
     toast(t('settings.saved'), 'success')
@@ -289,147 +291,156 @@ async function onTabChange(next: string) {
 
       <template v-else>
         <div class="st-panel">
-          <!-- SMTP -->
           <template v-if="activeTab === 'smtp'">
-            <FormField :label="t('settings.smtp.host')" layout="horizontal" bordered>
-              <BaseInput :modelValue="getStr('SMTP_HOST')" @update:modelValue="setStr('SMTP_HOST', $event)" />
-            </FormField>
-            <FormField :label="t('settings.smtp.port')" layout="horizontal" bordered>
-              <NumberInput :modelValue="getNum('SMTP_PORT', 587)" @update:modelValue="setNum('SMTP_PORT', $event)" :min="1" :max="65535" />
-            </FormField>
-            <FormField :label="t('settings.smtp.sender')" layout="horizontal" bordered>
-              <BaseInput :modelValue="getStr('SENDER_EMAIL')" type="email" @update:modelValue="setStr('SENDER_EMAIL', $event)" />
-            </FormField>
-            <FormField :label="t('settings.smtp.password')" layout="horizontal" bordered>
-              <SecretInput :modelValue="getStr('SMTP_PASSWORD')" @update:modelValue="setStr('SMTP_PASSWORD', $event)" />
-            </FormField>
-            <FormField :label="t('settings.smtp.delay')" layout="horizontal" bordered>
-              <NumberInput :modelValue="getNum('EMAIL_SEND_DELAY', 2)" @update:modelValue="setNum('EMAIL_SEND_DELAY', $event)" :min="0" :max="60" />
-            </FormField>
-            <FormField :label="t('settings.smtp.ssl')" layout="horizontal" bordered>
-              <ToggleSwitch :modelValue="getBool('SMTP_USE_SSL')" @update:modelValue="setBool('SMTP_USE_SSL', $event)" />
-            </FormField>
-            <FormField :hint="undefined" layout="horizontal" bordered>
-              <template #label>
-                {{ t('settings.smtp.testRecipient') }}
-                <HelpTip :text="t('settings.smtp.testHint')" />
-              </template>
-              <div class="st-test-row">
-                <BaseInput v-model="testEmailRecipient" type="email" :placeholder="t('settings.smtp.testPlaceholder')" />
-                <BaseButton size="sm" :loading="testEmailSending" @click="sendTestEmail">
-                  {{ t('settings.smtp.sendTest') }}
-                </BaseButton>
-              </div>
-            </FormField>
+            <BaseCard variant="bg2" class="settings-card">
+              <p class="section-note">{{ t('settings.smtp.desc') }}</p>
+              <FormField :label="t('settings.smtp.host')" layout="horizontal">
+                <BaseInput :modelValue="getStr('SMTP_HOST')" @update:modelValue="setStr('SMTP_HOST', $event)" />
+              </FormField>
+              <FormField :label="t('settings.smtp.port')" layout="horizontal">
+                <NumberInput :modelValue="getNum('SMTP_PORT', 587)" @update:modelValue="setNum('SMTP_PORT', $event)" :min="1" :max="65535" />
+              </FormField>
+              <FormField :label="t('settings.smtp.sender')" layout="horizontal">
+                <BaseInput :modelValue="getStr('SENDER_EMAIL')" type="email" @update:modelValue="setStr('SENDER_EMAIL', $event)" />
+              </FormField>
+              <FormField :label="t('settings.smtp.password')" layout="horizontal">
+                <SecretInput :modelValue="getStr('SMTP_PASSWORD')" @update:modelValue="setStr('SMTP_PASSWORD', $event)" />
+              </FormField>
+              <FormField :label="t('settings.smtp.delay')" layout="horizontal">
+                <NumberInput :modelValue="getNum('EMAIL_SEND_DELAY', 2)" @update:modelValue="setNum('EMAIL_SEND_DELAY', $event)" :min="0" :max="60" />
+              </FormField>
+              <FormField :label="t('settings.smtp.ssl')" layout="horizontal">
+                <ToggleSwitch :modelValue="getBool('SMTP_USE_SSL')" @update:modelValue="setBool('SMTP_USE_SSL', $event)" />
+              </FormField>
+              <FormField :hint="undefined" layout="horizontal">
+                <template #label>
+                  {{ t('settings.smtp.testRecipient') }}
+                  <HelpTip :text="t('settings.smtp.testHint')" />
+                </template>
+                <div class="st-test-row">
+                  <BaseInput v-model="testEmailRecipient" type="email" :placeholder="t('settings.smtp.testPlaceholder')" />
+                  <BaseButton size="sm" :loading="testEmailSending" @click="sendTestEmail">
+                    {{ t('settings.smtp.sendTest') }}
+                  </BaseButton>
+                </div>
+              </FormField>
+            </BaseCard>
           </template>
 
-          <!-- Branding -->
-          <template v-if="activeTab === 'branding'">
-            <FormField :label="t('settings.branding.brandName')" layout="horizontal" bordered>
-              <BaseInput :modelValue="getStr('BRAND_NAME')" @update:modelValue="setStr('BRAND_NAME', $event)" />
-            </FormField>
-            <FormField :label="t('settings.branding.systemName')" layout="horizontal" bordered>
-              <BaseInput :modelValue="getStr('UI_SYSTEM_NAME')" @update:modelValue="setStr('UI_SYSTEM_NAME', $event)" />
-            </FormField>
-            <FormField :label="t('settings.branding.siteUrl')" layout="horizontal" bordered>
-              <BaseInput :modelValue="getStr('SITE_URL')" @update:modelValue="setStr('SITE_URL', $event)" />
-            </FormField>
-            <FormField :label="t('settings.branding.bannerUrl')" layout="horizontal" bordered>
-              <BaseInput :modelValue="getStr('UI_BANNER_URL')" @update:modelValue="setStr('UI_BANNER_URL', $event)" />
-            </FormField>
-            <FormField :label="t('settings.branding.icpRecord')" layout="horizontal" bordered>
-              <BaseInput :modelValue="getStr('UI_ICP_RECORD')" @update:modelValue="setStr('UI_ICP_RECORD', $event)" />
-            </FormField>
-            <FormField layout="horizontal" bordered>
-              <template #label>
-                {{ t('settings.branding.allowRegistration') }}
-                <HelpTip :text="t('settings.branding.allowRegistration_tip')" />
-              </template>
-              <ToggleSwitch :modelValue="getBool('ALLOW_PUBLIC_REGISTRATION')" @update:modelValue="setBool('ALLOW_PUBLIC_REGISTRATION', $event)" size="sm" />
-            </FormField>
+          <template v-else-if="activeTab === 'branding'">
+            <BaseCard variant="bg2" class="settings-card">
+              <p class="section-note">{{ t('settings.branding.desc') }}</p>
+              <FormField :label="t('settings.branding.brandName')" layout="horizontal">
+                <BaseInput :modelValue="getStr('BRAND_NAME')" @update:modelValue="setStr('BRAND_NAME', $event)" />
+              </FormField>
+              <FormField :label="t('settings.branding.systemName')" layout="horizontal">
+                <BaseInput :modelValue="getStr('UI_SYSTEM_NAME')" @update:modelValue="setStr('UI_SYSTEM_NAME', $event)" />
+              </FormField>
+              <FormField :label="t('settings.branding.siteUrl')" layout="horizontal">
+                <BaseInput :modelValue="getStr('SITE_URL')" @update:modelValue="setStr('SITE_URL', $event)" />
+              </FormField>
+              <FormField :label="t('settings.branding.bannerUrl')" layout="horizontal">
+                <BaseInput :modelValue="getStr('UI_BANNER_URL')" @update:modelValue="setStr('UI_BANNER_URL', $event)" />
+              </FormField>
+              <FormField :label="t('settings.branding.icpRecord')" layout="horizontal">
+                <BaseInput :modelValue="getStr('UI_ICP_RECORD')" @update:modelValue="setStr('UI_ICP_RECORD', $event)" />
+              </FormField>
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.branding.allowRegistration') }}
+                  <HelpTip :text="t('settings.branding.allowRegistration_tip')" />
+                </template>
+                <ToggleSwitch :modelValue="getBool('ALLOW_PUBLIC_REGISTRATION')" @update:modelValue="setBool('ALLOW_PUBLIC_REGISTRATION', $event)" size="sm" />
+              </FormField>
+            </BaseCard>
           </template>
 
-          <!-- Server Defaults -->
-          <template v-if="activeTab === 'defaults'">
-            <FormField :label="t('settings.defaults.nest')" layout="horizontal" bordered>
-              <BaseSelect :modelValue="getNum('DEFAULT_NEST_ID')" :options="nestOptions" :placeholder="t('settings.defaults.nest')" @update:modelValue="setNum('DEFAULT_NEST_ID', $event)" />
-            </FormField>
-            <FormField :label="t('settings.defaults.egg')" layout="horizontal" bordered>
-              <BaseSelect :modelValue="getNum('DEFAULT_EGG_ID')" :options="eggOptions" :placeholder="t('settings.defaults.egg')" :disabled="!getNum('DEFAULT_NEST_ID')" @update:modelValue="setNum('DEFAULT_EGG_ID', $event)" />
-            </FormField>
-            <FormField :label="t('settings.defaults.node')" layout="horizontal" bordered>
-              <BaseSelect :modelValue="getNum('DEFAULT_NODE_ID')" :options="nodeOptions" :placeholder="t('settings.defaults.node')" @update:modelValue="setNum('DEFAULT_NODE_ID', $event)" />
-            </FormField>
-            <FormField :label="t('settings.defaults.serverNamePrefix')" layout="horizontal" bordered>
-              <BaseInput :modelValue="getStr('SERVER_NAME_PREFIX')" :placeholder="t('settings.defaults.serverNamePrefix_placeholder')" @update:modelValue="setStr('SERVER_NAME_PREFIX', $event)" />
-            </FormField>
-            <FormField :label="t('settings.defaults.dockerImage')" layout="horizontal" bordered>
-              <BaseInput :modelValue="getStr('DOCKER_IMAGE')" @update:modelValue="setStr('DOCKER_IMAGE', $event)" />
-            </FormField>
-            <FormField :label="t('settings.defaults.cpu')" layout="horizontal" bordered>
-              <NumberInput :modelValue="getNum('DEFAULT_CPU', 100)" @update:modelValue="setNum('DEFAULT_CPU', $event)" :min="0" />
-            </FormField>
-            <FormField :label="t('settings.defaults.memory')" layout="horizontal" bordered>
-              <NumberInput :modelValue="getNum('DEFAULT_MEMORY', 1024)" @update:modelValue="setNum('DEFAULT_MEMORY', $event)" :min="0" />
-            </FormField>
-            <FormField :label="t('settings.defaults.disk')" layout="horizontal" bordered>
-              <NumberInput :modelValue="getNum('DEFAULT_DISK', 5120)" @update:modelValue="setNum('DEFAULT_DISK', $event)" :min="0" />
-            </FormField>
-            <FormField :label="t('settings.defaults.databases')" layout="horizontal" bordered>
-              <NumberInput :modelValue="getNum('DEFAULT_DATABASES')" @update:modelValue="setNum('DEFAULT_DATABASES', $event)" :min="0" />
-            </FormField>
-            <FormField :label="t('settings.defaults.backups')" layout="horizontal" bordered>
-              <NumberInput :modelValue="getNum('DEFAULT_BACKUPS')" @update:modelValue="setNum('DEFAULT_BACKUPS', $event)" :min="0" />
-            </FormField>
-            <FormField :label="t('settings.defaults.allocations')" layout="horizontal" bordered>
-              <NumberInput :modelValue="getNum('DEFAULT_ALLOCATIONS', 1)" @update:modelValue="setNum('DEFAULT_ALLOCATIONS', $event)" :min="0" />
-            </FormField>
+          <template v-else-if="activeTab === 'defaults'">
+            <BaseCard variant="bg2" class="settings-card">
+              <p class="section-note">{{ t('settings.defaults.desc') }}</p>
+              <FormField :label="t('settings.defaults.nest')" layout="horizontal">
+                <BaseSelect :modelValue="getNum('DEFAULT_NEST_ID')" :options="nestOptions" :placeholder="t('settings.defaults.nest')" @update:modelValue="setNum('DEFAULT_NEST_ID', $event)" />
+              </FormField>
+              <FormField :label="t('settings.defaults.egg')" layout="horizontal">
+                <BaseSelect :modelValue="getNum('DEFAULT_EGG_ID')" :options="eggOptions" :placeholder="t('settings.defaults.egg')" :disabled="!getNum('DEFAULT_NEST_ID')" @update:modelValue="setNum('DEFAULT_EGG_ID', $event)" />
+              </FormField>
+              <FormField :label="t('settings.defaults.node')" layout="horizontal">
+                <BaseSelect :modelValue="getNum('DEFAULT_NODE_ID')" :options="nodeOptions" :placeholder="t('settings.defaults.node')" @update:modelValue="setNum('DEFAULT_NODE_ID', $event)" />
+              </FormField>
+              <FormField :label="t('settings.defaults.serverNamePrefix')" layout="horizontal">
+                <BaseInput :modelValue="getStr('SERVER_NAME_PREFIX')" :placeholder="t('settings.defaults.serverNamePrefix_placeholder')" @update:modelValue="setStr('SERVER_NAME_PREFIX', $event)" />
+              </FormField>
+              <FormField :label="t('settings.defaults.dockerImage')" layout="horizontal">
+                <BaseInput :modelValue="getStr('DOCKER_IMAGE')" @update:modelValue="setStr('DOCKER_IMAGE', $event)" />
+              </FormField>
+              <FormField :label="t('settings.defaults.cpu')" layout="horizontal">
+                <NumberInput :modelValue="getNum('DEFAULT_CPU', 100)" @update:modelValue="setNum('DEFAULT_CPU', $event)" :min="0" />
+              </FormField>
+              <FormField :label="t('settings.defaults.memory')" layout="horizontal">
+                <NumberInput :modelValue="getNum('DEFAULT_MEMORY', 1024)" @update:modelValue="setNum('DEFAULT_MEMORY', $event)" :min="0" />
+              </FormField>
+              <FormField :label="t('settings.defaults.disk')" layout="horizontal">
+                <NumberInput :modelValue="getNum('DEFAULT_DISK', 5120)" @update:modelValue="setNum('DEFAULT_DISK', $event)" :min="0" />
+              </FormField>
+              <FormField :label="t('settings.defaults.databases')" layout="horizontal">
+                <NumberInput :modelValue="getNum('DEFAULT_DATABASES')" @update:modelValue="setNum('DEFAULT_DATABASES', $event)" :min="0" />
+              </FormField>
+              <FormField :label="t('settings.defaults.backups')" layout="horizontal">
+                <NumberInput :modelValue="getNum('DEFAULT_BACKUPS')" @update:modelValue="setNum('DEFAULT_BACKUPS', $event)" :min="0" />
+              </FormField>
+              <FormField :label="t('settings.defaults.allocations')" layout="horizontal">
+                <NumberInput :modelValue="getNum('DEFAULT_ALLOCATIONS', 1)" @update:modelValue="setNum('DEFAULT_ALLOCATIONS', $event)" :min="0" />
+              </FormField>
+            </BaseCard>
           </template>
 
-          <!-- Automation -->
-          <template v-if="activeTab === 'automation'">
-            <FormField :label="t('settings.automation.timezone')" layout="horizontal" bordered>
-              <BaseSelect :modelValue="automation.TIMEZONE" :options="TIMEZONE_OPTIONS as any" searchable @update:modelValue="automation.TIMEZONE = String($event)" />
-            </FormField>
+          <template v-else-if="activeTab === 'automation'">
+            <BaseCard variant="bg2" class="settings-card">
+              <SectionHeader icon="schedule" flush>{{ t('settings.automation.time.title') }}</SectionHeader>
+              <p class="section-note">{{ t('settings.automation.time.desc') }}</p>
+              <FormField :label="t('settings.automation.timezone')" layout="horizontal">
+                <BaseSelect :modelValue="automation.TIMEZONE" :options="TIMEZONE_OPTIONS as any" searchable @update:modelValue="automation.TIMEZONE = String($event)" />
+              </FormField>
+            </BaseCard>
 
-            <div class="st-sub">
-              {{ t('settings.automation.suspend.title') }}
-              <HelpTip :text="t('settings.automation.suspend.desc')" />
-            </div>
-            <FormField :label="t('settings.automation.suspend.enabled')" layout="horizontal" bordered>
-              <ToggleSwitch v-model="automation.AUTOMATION_SUSPEND_ENABLED" size="sm" />
-            </FormField>
-            <FormField :label="t('settings.automation.suspend.runHour')" layout="horizontal" bordered>
-              <NumberInput v-model="automation.AUTOMATION_RUN_HOUR" :min="0" :max="23" />
-            </FormField>
-            <FormField :label="t('settings.automation.suspend.runMinute')" layout="horizontal" bordered>
-              <NumberInput v-model="automation.AUTOMATION_RUN_MINUTE" :min="0" :max="59" />
-            </FormField>
+            <BaseCard variant="bg2" class="settings-card">
+              <SectionHeader icon="pause_circle" flush>{{ t('settings.automation.suspend.title') }}</SectionHeader>
+              <p class="section-note">{{ t('settings.automation.suspend.desc') }}</p>
+              <FormField :label="t('settings.automation.suspend.enabled')" layout="horizontal">
+                <ToggleSwitch v-model="automation.AUTOMATION_SUSPEND_ENABLED" size="sm" />
+              </FormField>
+              <FormField :label="t('settings.automation.suspend.runHour')" layout="horizontal">
+                <NumberInput v-model="automation.AUTOMATION_RUN_HOUR" :min="0" :max="23" />
+              </FormField>
+              <FormField :label="t('settings.automation.suspend.runMinute')" layout="horizontal">
+                <NumberInput v-model="automation.AUTOMATION_RUN_MINUTE" :min="0" :max="59" />
+              </FormField>
+            </BaseCard>
 
-            <div class="st-sub">
-              {{ t('settings.automation.delete.title') }}
-              <HelpTip :text="t('settings.automation.delete.desc')" />
-            </div>
-            <FormField :label="t('settings.automation.delete.enabled')" layout="horizontal" bordered>
-              <ToggleSwitch v-model="automation.AUTOMATION_DELETE_ENABLED" size="sm" />
-            </FormField>
-            <FormField :label="t('settings.automation.delete.days')" layout="horizontal" bordered>
-              <NumberInput v-model="automation.AUTOMATION_DELETE_DAYS" :min="0" :max="365" />
-            </FormField>
+            <BaseCard variant="bg2" class="settings-card">
+              <SectionHeader icon="delete" flush>{{ t('settings.automation.delete.title') }}</SectionHeader>
+              <p class="section-note">{{ t('settings.automation.delete.desc') }}</p>
+              <FormField :label="t('settings.automation.delete.enabled')" layout="horizontal">
+                <ToggleSwitch v-model="automation.AUTOMATION_DELETE_ENABLED" size="sm" />
+              </FormField>
+              <FormField :label="t('settings.automation.delete.days')" layout="horizontal">
+                <NumberInput v-model="automation.AUTOMATION_DELETE_DAYS" :min="0" :max="365" />
+              </FormField>
+            </BaseCard>
 
-            <div class="st-sub">
-              {{ t('settings.automation.email.title') }}
-              <HelpTip :text="t('settings.automation.email.desc')" />
-            </div>
-            <FormField :label="t('settings.automation.email.enabled')" layout="horizontal" bordered>
-              <ToggleSwitch v-model="automation.AUTOMATION_EMAIL_ENABLED" size="sm" />
-            </FormField>
-            <FormField :label="t('settings.automation.email.runHour')" layout="horizontal" bordered>
-              <NumberInput v-model="automation.AUTOMATION_EMAIL_RUN_HOUR" :min="0" :max="23" />
-            </FormField>
-            <FormField :label="t('settings.automation.email.runMinute')" layout="horizontal" bordered>
-              <NumberInput v-model="automation.AUTOMATION_EMAIL_RUN_MINUTE" :min="0" :max="59" />
-            </FormField>
+            <BaseCard variant="bg2" class="settings-card">
+              <SectionHeader icon="alternate_email" flush>{{ t('settings.automation.email.title') }}</SectionHeader>
+              <p class="section-note">{{ t('settings.automation.email.desc') }}</p>
+              <FormField :label="t('settings.automation.email.enabled')" layout="horizontal">
+                <ToggleSwitch v-model="automation.AUTOMATION_EMAIL_ENABLED" size="sm" />
+              </FormField>
+              <FormField :label="t('settings.automation.email.runHour')" layout="horizontal">
+                <NumberInput v-model="automation.AUTOMATION_EMAIL_RUN_HOUR" :min="0" :max="23" />
+              </FormField>
+              <FormField :label="t('settings.automation.email.runMinute')" layout="horizontal">
+                <NumberInput v-model="automation.AUTOMATION_EMAIL_RUN_MINUTE" :min="0" :max="59" />
+              </FormField>
+            </BaseCard>
           </template>
         </div>
       </template>
@@ -486,33 +497,24 @@ async function onTabChange(next: string) {
 
 .st-panel {
   margin-top: var(--sp-4);
-  max-width: 640px;
+  max-width: 760px;
   margin-left: auto;
   margin-right: auto;
-}
-
-/* Sub-heading / description */
-.st-sub {
   display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  font-size: .95rem;
-  font-weight: 600;
-  color: var(--t1);
-  padding: var(--sp-5) 0 var(--sp-2);
-  margin-top: var(--sp-2);
-}
-.st-sub:first-of-type {
-  margin-top: 0;
-  padding-top: var(--sp-2);
+  flex-direction: column;
+  gap: var(--sp-4);
 }
 
-.st-desc {
+.settings-card {
+  padding: var(--sp-2);
+}
+
+.section-note {
   font-size: .84rem;
   font-weight: 400;
   line-height: 1.55;
   color: var(--t2);
-  margin: 0 0 var(--sp-4);
+  margin: 0 0 var(--sp-3);
   max-width: 56ch;
 }
 

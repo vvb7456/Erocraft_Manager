@@ -27,7 +27,7 @@ from app.schemas.resources import (
     UsersResourceResponse,
 )
 
-router = APIRouter(tags=["resources"])
+router = APIRouter(prefix="/admin/resources", tags=["resources"])
 
 
 @router.get("/nests", response_model=NestsResponse)
@@ -48,7 +48,7 @@ async def list_nodes(
     return NodesResponse(nodes=[NodeResource(id=node.id, name=node.name) for node in nodes])
 
 
-@router.get("/resources/users", response_model=UsersResourceResponse)
+@router.get("/users", response_model=UsersResourceResponse)
 async def list_users_simple(
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -59,7 +59,7 @@ async def list_users_simple(
     )
 
 
-@router.get("/resources/server-defaults", response_model=ServerDefaultsResponse)
+@router.get("/server-defaults", response_model=ServerDefaultsResponse)
 async def server_defaults(
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),

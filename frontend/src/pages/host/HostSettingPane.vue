@@ -21,6 +21,7 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { provideDirtyForm, useDirtyFormSection } from '@/composables/useDirtyForm'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import CollapsibleGroup from '@/components/ui/CollapsibleGroup.vue'
 import FormField from '@/components/form/FormField.vue'
@@ -72,12 +73,14 @@ interface FormState {
 const initial = ref<FormState>({ name: '', hostname: '', agent_url: '', enabled: true })
 const form = ref<FormState>({ name: '', hostname: '', agent_url: '', enabled: true })
 const newToken = ref<string | null>(null)  // null = not rotated; string = pending save
+const syncing = ref(false)
 const submitting = ref(false)
 const probing = ref(false)
 const deleting = ref(false)
 
 function syncFromHost() {
   if (!host.value) return
+  syncing.value = true
   const f: FormState = {
     name: host.value.name,
     hostname: host.value.hostname,
@@ -87,11 +90,11 @@ function syncFromHost() {
   form.value = { ...f }
   initial.value = { ...f }
   newToken.value = null
+  syncing.value = false
 }
 
-watch(host, syncFromHost, { immediate: true })
-
 const isDirty = computed(() => {
+  if (syncing.value) return false
   const a = form.value, b = initial.value
   return (
     a.name !== b.name
@@ -101,6 +104,12 @@ const isDirty = computed(() => {
     || newToken.value !== null
   )
 })
+
+// Host detail is refreshed on tab-enter and after explicit operations.
+// Guard against stomping pending edits when upstream host data changes.
+watch(host, () => {
+  if (!isDirty.value) syncFromHost()
+}, { immediate: true })
 
 const canSubmit = computed(() => {
   if (!isDirty.value) return false
@@ -195,104 +204,108 @@ const isWings = computed(() => host.value?.kind === 'wings_node')
 
   <div v-else class="setting-panel">
     <!-- ── Agent connection ── -->
-    <CollapsibleGroup :title="t('hosts.setting.agent.title')" icon="cable" :defaultOpen="true">
-      <div class="form">
-        <FormField layout="horizontal" bordered>
-          <template #label>
-            {{ t('hosts.overview.fields.enabled') }}
-            <HelpTip :text="t('hosts.setting.agent.enabledHint')" />
-          </template>
-          <ToggleSwitch v-model="form.enabled" size="sm" />
-        </FormField>
+    <BaseCard variant="bg2" class="settings-card">
+      <CollapsibleGroup :title="t('hosts.setting.agent.title')" icon="cable" :defaultOpen="true">
+        <div class="form">
+          <FormField layout="horizontal" bordered>
+            <template #label>
+              {{ t('hosts.overview.fields.enabled') }}
+              <HelpTip :text="t('hosts.setting.agent.enabledHint')" />
+            </template>
+            <ToggleSwitch v-model="form.enabled" size="sm" />
+          </FormField>
 
-        <FormField layout="horizontal" bordered>
-          <template #label>{{ t('hosts.overview.fields.name') }}</template>
-          <BaseInput v-model="form.name" />
-        </FormField>
+          <FormField layout="horizontal" bordered>
+            <template #label>{{ t('hosts.overview.fields.name') }}</template>
+            <BaseInput v-model="form.name" />
+          </FormField>
 
-        <FormField layout="horizontal" bordered>
-          <template #label>
-            {{ t('hosts.overview.fields.kind') }}
-            <HelpTip :text="t('hosts.setting.agent.kindLocked')" />
-          </template>
-          <BaseInput :modelValue="t(`hosts.kind.${host.kind}`)" disabled />
-        </FormField>
+          <FormField layout="horizontal" bordered>
+            <template #label>
+              {{ t('hosts.overview.fields.kind') }}
+              <HelpTip :text="t('hosts.setting.agent.kindLocked')" />
+            </template>
+            <BaseInput :modelValue="t(`hosts.kind.${host.kind}`)" disabled />
+          </FormField>
 
-        <FormField layout="horizontal" bordered>
-          <template #label>{{ t('hosts.overview.fields.hostname') }}</template>
-          <BaseInput v-model="form.hostname" />
-        </FormField>
+          <FormField layout="horizontal" bordered>
+            <template #label>{{ t('hosts.overview.fields.hostname') }}</template>
+            <BaseInput v-model="form.hostname" />
+          </FormField>
 
-        <FormField layout="horizontal" bordered>
-          <template #label>{{ t('hosts.overview.fields.agentUrl') }}</template>
-          <BaseInput v-model="form.agent_url" placeholder="http://10.0.0.22:48765" />
-        </FormField>
+          <FormField layout="horizontal" bordered>
+            <template #label>{{ t('hosts.overview.fields.agentUrl') }}</template>
+            <BaseInput v-model="form.agent_url" placeholder="http://10.0.0.22:48765" />
+          </FormField>
 
-        <FormField v-if="isWings" layout="horizontal" bordered>
-          <template #label>
-            {{ t('hosts.overview.fields.panelNode') }}
-            <HelpTip :text="t('hosts.setting.agent.panelNodeLocked')" />
-          </template>
-          <BaseInput :modelValue="String(host.pterodactyl_node_id ?? '')" disabled />
-        </FormField>
+          <FormField v-if="isWings" layout="horizontal" bordered>
+            <template #label>
+              {{ t('hosts.overview.fields.panelNode') }}
+              <HelpTip :text="t('hosts.setting.agent.panelNodeLocked')" />
+            </template>
+            <BaseInput :modelValue="String(host.pterodactyl_node_id ?? '')" disabled />
+          </FormField>
 
-        <FormField layout="horizontal" bordered>
-          <template #label>
-            {{ t('hosts.setting.agent.tokenLabel') }}
-            <HelpTip :text="newToken ? t('hosts.setting.agent.tokenPendingHint') : t('hosts.setting.agent.tokenHint')" />
-          </template>
-          <div class="token-row">
-            <SecretInput
-              v-if="newToken"
-              :modelValue="newToken"
-              readonly
-              class="token-input"
-            />
-            <BaseInput
-              v-else
-              :modelValue="'••••••••••••••••••••••••••••••••••••••••••'"
-              disabled
-              class="token-input"
-            />
-            <BaseButton v-if="!newToken" size="sm" variant="default" @click="resetToken">
-              <MsIcon name="autorenew" size="xs" />
-              {{ t('hosts.setting.agent.tokenReset') }}
-            </BaseButton>
-            <BaseButton v-else size="sm" variant="ghost" @click="clearTokenReset">
-              {{ t('hosts.setting.agent.tokenCancelReset') }}
+          <FormField layout="horizontal" bordered>
+            <template #label>
+              {{ t('hosts.setting.agent.tokenLabel') }}
+              <HelpTip :text="newToken ? t('hosts.setting.agent.tokenPendingHint') : t('hosts.setting.agent.tokenHint')" />
+            </template>
+            <div class="token-row">
+              <SecretInput
+                v-if="newToken"
+                :modelValue="newToken"
+                readonly
+                class="token-input"
+              />
+              <BaseInput
+                v-else
+                :modelValue="'••••••••••••••••••••••••••••••••••••••••••'"
+                disabled
+                class="token-input"
+              />
+              <BaseButton v-if="!newToken" size="sm" variant="default" @click="resetToken">
+                <MsIcon name="autorenew" size="xs" />
+                {{ t('hosts.setting.agent.tokenReset') }}
+              </BaseButton>
+              <BaseButton v-else size="sm" variant="ghost" @click="clearTokenReset">
+                {{ t('hosts.setting.agent.tokenCancelReset') }}
+              </BaseButton>
+            </div>
+          </FormField>
+
+          <AlertBanner v-if="newToken" tone="warning" dense>
+            {{ t('hosts.setting.agent.tokenWarning') }}
+          </AlertBanner>
+
+          <div class="actions">
+            <BaseButton size="sm" variant="default" :loading="probing" @click="probe">
+              <MsIcon name="network_check" size="xs" />
+              {{ t('hosts.setting.agent.probe') }}
             </BaseButton>
           </div>
-        </FormField>
-
-        <AlertBanner v-if="newToken" tone="warning" dense>
-          {{ t('hosts.setting.agent.tokenWarning') }}
-        </AlertBanner>
-
-        <div class="actions">
-          <BaseButton size="sm" variant="default" :loading="probing" @click="probe">
-            <MsIcon name="network_check" size="xs" />
-            {{ t('hosts.setting.agent.probe') }}
-          </BaseButton>
         </div>
-      </div>
-    </CollapsibleGroup>
+      </CollapsibleGroup>
+    </BaseCard>
 
     <!-- ── Alerting ── -->
     <HostAlertingSection :hostId="host.id" />
 
     <!-- ── Danger zone ── -->
-    <CollapsibleGroup :title="t('hosts.setting.danger.title')" icon="warning" :defaultOpen="false">
-      <div class="danger-row">
-        <div class="danger-title">
-          {{ t('hosts.setting.danger.deleteTitle') }}
-          <HelpTip :text="t('hosts.setting.danger.deleteMsg')" />
+    <BaseCard variant="bg2" class="settings-card">
+      <CollapsibleGroup :title="t('hosts.setting.danger.title')" icon="warning" :defaultOpen="false">
+        <div class="danger-row">
+          <div class="danger-title">
+            {{ t('hosts.setting.danger.deleteTitle') }}
+            <HelpTip :text="t('hosts.setting.danger.deleteMsg')" />
+          </div>
+          <BaseButton size="sm" variant="danger" :loading="deleting" @click="destroy">
+            <MsIcon name="delete" size="xs" />
+            {{ t('hosts.actions.delete') }}
+          </BaseButton>
         </div>
-        <BaseButton size="sm" variant="danger" :loading="deleting" @click="destroy">
-          <MsIcon name="delete" size="xs" />
-          {{ t('hosts.actions.delete') }}
-        </BaseButton>
-      </div>
-    </CollapsibleGroup>
+      </CollapsibleGroup>
+    </BaseCard>
 
     <DirtyBar :dirty="dirtyForm.isDirty.value" :saving="dirtyForm.saving.value" @save="dirtyForm.save" @discard="dirtyForm.discard" />
   </div>

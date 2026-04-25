@@ -23,7 +23,7 @@ class ActivityLogRepository:
     ) -> tuple[list[ManagerActivityLog], int]:
         filters = []
         if actor:
-            filters.append(ManagerActivityLog.actor == actor)
+            filters.append(ManagerActivityLog.actor.ilike(f"%{actor}%"))
         if action:
             filters.append(ManagerActivityLog.action == action)
         if status:

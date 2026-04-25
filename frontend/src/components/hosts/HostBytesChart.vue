@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // HostBytesChart — dual-series ECharts line chart for byte-rate metrics.
 //
-// Pulls two /api/monitoring/history legs (e.g. net_rx + net_tx) and
+// Pulls two /api/admin/monitoring/history legs (e.g. net_rx + net_tx) and
 // renders them as two overlaid lines with a byte/s y-axis formatter
 // (auto-scaling B/KB/MB/GB). Used in HostActivityPane for the network
 // throughput and disk IO panels.
@@ -57,7 +57,7 @@ async function fetchAll() {
     const results = await Promise.all(
       props.series.map(s =>
         get<{ series: Point[] }>(
-          `/api/monitoring/history/${props.nodeId}?metric=${s.metric}&window=${props.window}`,
+          `/api/admin/monitoring/history/${props.nodeId}?metric=${s.metric}&window=${props.window}`,
         ).then(d => d?.series || []),
       ),
     )

@@ -1,15 +1,21 @@
 {
   "title": "主机",
   "subtitle": "管理所有 Erocraft Agent 接入的服务器（Wings 节点 / nginx 代理 / NAS / 通用 Linux）。",
-  "nav": {
-    "list": "总览"
-  },
   "summary": {
     "total": "共 {n} 台",
     "online": "在线 {n}",
     "offline": "离线 {n}",
     "disabled": "已停用 {n}",
     "unconfigured": "未配置 {n}"
+  },
+  "stats": {
+    "total": "主机数量",
+    "online": "在线主机",
+    "wings": "Wings 主机",
+    "other": "其他主机",
+    "filtered": "当前筛选 {n} 台",
+    "agentReachable": "Agent 可达",
+    "otherSub": "非 Wings 节点"
   },
   "list": {
     "empty": "暂无主机，点击右上角「新建主机」添加第一台。",
@@ -221,6 +227,7 @@
     },
     "wings": {
       "title": "Wings 服务",
+      "desc": "维护该节点的 Wings 与 Panel 节点参数，并按需执行重启。",
       "notWings": "该主机不是 Wings 节点",
       "saved": "已保存（{n} 个字段变更）",
       "cancel": "取消",

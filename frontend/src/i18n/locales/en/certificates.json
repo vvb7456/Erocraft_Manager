@@ -1,0 +1,113 @@
+{
+  "title": "Certificate Management",
+  "addCard": "Add from acme.sh",
+  "common": {
+    "none": "—",
+    "unknown": "Unknown"
+  },
+  "days": {
+    "left": "{n} days left",
+    "today": "Expires today",
+    "expired": "Expired {n} days ago"
+  },
+  "stats": {
+    "count": "Certificates",
+    "enabled": "{n} enabled",
+    "certStatus": "Certificate Status",
+    "ok": "OK",
+    "expiring": "Needs attention",
+    "noExpiring": "No upcoming expiry",
+    "acme": "acme.sh Status",
+    "ready": "Ready",
+    "error": "Error",
+    "acmeFound": "{n} found",
+    "deployments": "Deployment Status",
+    "deployProblems": "{n} targets need attention",
+    "deployOk": "All synced"
+  },
+  "certificates": {
+    "title": "Certificate Details",
+    "summary": "{n} certificates"
+  },
+  "status": {
+    "ok": "OK",
+    "warning": "Expiring",
+    "error": "Error",
+    "disabled": "Disabled",
+    "unknown": "Unscanned"
+  },
+  "card": {
+    "lastUpdated": "Last updated",
+    "expires": "Expires",
+    "remaining": "Remaining",
+    "nextRenew": "Next renew",
+    "fingerprint": "Fingerprint",
+    "sourcePath": "Source path"
+  },
+  "actions": {
+    "manageNodes": "Manage nodes",
+    "forceRenew": "Force renew",
+    "forceSync": "Force sync",
+    "bind": "Manage",
+    "unbind": "Unmanage"
+  },
+  "deployment": {
+    "synced": "Synced",
+    "outdated": "Outdated",
+    "deploy_failed": "Deploy failed",
+    "unreachable": "Unreachable",
+    "unknown": "Unknown"
+  },
+  "agent": {
+    "online": "Online",
+    "offline": "Offline",
+    "disabled": "Disabled"
+  },
+  "nodes": {
+    "title": "Managed Nodes",
+    "summary": "{n} deployment targets",
+    "empty": "No certificate deployment targets",
+    "perPage": "Rows/page",
+    "host": "Node",
+    "agent": "Agent",
+    "sync": "Sync",
+    "domains": "Domains",
+    "days": "Days left",
+    "nextRenew": "Next renew",
+    "path": "Path",
+    "actions": "Actions"
+  },
+  "bindings": {
+    "title": "Manage Nodes for {name}",
+    "titleFallback": "Manage Nodes",
+    "subtitle": "This decides which default certificate targets are managed by this certificate.",
+    "current": "Managed targets",
+    "currentSummary": "{n} targets",
+    "available": "Available nodes",
+    "availableSummary": "{n} nodes",
+    "noBindings": "This certificate does not manage any nodes yet.",
+    "noAvailable": "No default-target nodes are available.",
+    "defaultTarget": "Default target",
+    "defaultTargetHint": "Writes to the default certificate target exposed by this host's agent"
+  },
+  "selector": {
+    "title": "Select acme.sh Certificate",
+    "empty": "No local acme.sh certificates can be added",
+    "add": "Add"
+  },
+  "confirm": {
+    "renewTitle": "Force Renew Certificate",
+    "renewMessage": "This will run acme.sh --renew --force for {name}. If the fingerprint changes, Manager will dispatch it to deployment targets and restart target services.",
+    "syncTitle": "Force Sync Certificate",
+    "syncMessage": "This will install the certificate on {host} and restart the target service.",
+    "unbindTitle": "Unmanage Certificate",
+    "unbindMessage": "This will remove this certificate's management binding from {host}. It will not delete existing certificate files on the node."
+  },
+  "toast": {
+    "renewed": "Certificate renewed",
+    "synced": "Certificate synced",
+    "registered": "Certificate added",
+    "bound": "Node is now managed",
+    "unbound": "Node is no longer managed"
+  }
+}

@@ -67,7 +67,7 @@ function quickRenew(days: number) {
 
 async function doRenew() {
   if (!props.server) return
-  const res = await post<{ message: string }>(`/api/servers/${props.server.pteroId}/renew`, { date: renewDate.value })
+  const res = await post<{ message: string }>(`/api/admin/servers/${props.server.pteroId}/renew`, { date: renewDate.value })
   if (res) {
     toast(res.message, 'success')
     emit('update:modelValue', false)

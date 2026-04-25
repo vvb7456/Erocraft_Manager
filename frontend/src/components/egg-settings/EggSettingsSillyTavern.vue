@@ -14,6 +14,8 @@ import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import HelpTip from '@/components/ui/HelpTip.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import SectionHeader from '@/components/ui/SectionHeader.vue'
 
 const props = defineProps<EggSettingsProps>()
 const emit = defineEmits<{
@@ -225,132 +227,124 @@ defineExpose<EggSettingsExpose>({ save, discard })
 
 <template>
   <div class="st-panel">
-    <p class="st-desc">{{ t('serverSettings.pageDesc') }}</p>
+    <BaseCard variant="bg2" class="st-card">
+      <SectionHeader icon="lock" flush>{{ t('serverSettings.authSection') }}</SectionHeader>
+      <p class="section-note">{{ t('serverSettings.pageDesc') }}</p>
 
-    <!-- Auth -->
-    <div class="st-sub">{{ t('serverSettings.authSection') }}</div>
+      <FormField layout="horizontal">
+        <template #label>
+          {{ t('serverSettings.authMode') }}
+          <HelpTip :text="t('serverSettings.authModeTip')" />
+        </template>
+        <div class="auth-mode-switch">
+          <button
+            class="mode-btn"
+            :class="{ active: authMode === 'basic' }"
+            @click="authMode = 'basic'"
+          >
+            <MsIcon name="lock" />
+            {{ t('serverSettings.basicAuthLabel') }}
+          </button>
+          <button
+            class="mode-btn"
+            :class="{ active: authMode === 'multi' }"
+            @click="authMode = 'multi'"
+          >
+            <MsIcon name="group" />
+            {{ t('serverSettings.multiUserMode') }}
+          </button>
+        </div>
+        <template #hint>
+          {{ isMultiUser ? t('serverSettings.multiUserHint') : t('serverSettings.basicAuthHint') }}
+        </template>
+      </FormField>
 
-    <FormField layout="horizontal">
-      <template #label>
-        {{ t('serverSettings.authMode') }}
-        <HelpTip :text="t('serverSettings.authModeTip')" />
-      </template>
-      <div class="auth-mode-switch">
-        <button
-          class="mode-btn"
-          :class="{ active: authMode === 'basic' }"
-          @click="authMode = 'basic'"
-        >
-          <MsIcon name="lock" />
-          {{ t('serverSettings.basicAuthLabel') }}
-        </button>
-        <button
-          class="mode-btn"
-          :class="{ active: authMode === 'multi' }"
-          @click="authMode = 'multi'"
-        >
-          <MsIcon name="group" />
-          {{ t('serverSettings.multiUserMode') }}
-        </button>
-      </div>
-      <template #hint>
-        {{ isMultiUser ? t('serverSettings.multiUserHint') : t('serverSettings.basicAuthHint') }}
-      </template>
-    </FormField>
+      <FormField :label="t('serverSettings.username')" layout="horizontal">
+        <BaseInput
+          v-if="!isMultiUser"
+          v-model="username"
+        />
+        <BaseInput
+          v-else
+          model-value="default-user"
+          disabled
+        />
+        <template v-if="isMultiUser" #hint>
+          {{ t('serverSettings.defaultUserHint') }}
+        </template>
+      </FormField>
 
-    <FormField :label="t('serverSettings.username')" layout="horizontal">
-      <BaseInput
-        v-if="!isMultiUser"
-        v-model="username"
-      />
-      <BaseInput
-        v-else
-        model-value="default-user"
-        disabled
-      />
-      <template v-if="isMultiUser" #hint>
-        {{ t('serverSettings.defaultUserHint') }}
-      </template>
-    </FormField>
+      <FormField layout="horizontal" :error="password ? passwordError : ''">
+        <template #label>
+          {{ t('serverSettings.password') }}
+          <HelpTip :text="isMultiUser ? t('serverSettings.passwordHintMulti') : t('serverSettings.passwordHintBasic')" />
+        </template>
+        <SecretInput
+          v-model="password"
+          :placeholder="t('serverSettings.passwordPlaceholder')"
+          toggleable
+        />
+      </FormField>
+    </BaseCard>
 
-    <FormField layout="horizontal" :error="password ? passwordError : ''">
-      <template #label>
-        {{ t('serverSettings.password') }}
-        <HelpTip :text="isMultiUser ? t('serverSettings.passwordHintMulti') : t('serverSettings.passwordHintBasic')" />
-      </template>
-      <SecretInput
-        v-model="password"
-        :placeholder="t('serverSettings.passwordPlaceholder')"
-        toggleable
-      />
-    </FormField>
+    <BaseCard variant="bg2" class="st-card">
+      <SectionHeader icon="lan" flush>{{ t('serverSettings.networkSection') }}</SectionHeader>
+      <FormField layout="horizontal" keep-horizontal>
+        <template #label>
+          {{ t('serverSettings.apiProxy') }}
+          <HelpTip :text="t('serverSettings.apiProxyTip')" />
+        </template>
+        <ToggleSwitch v-model="proxyEnabled" />
+      </FormField>
+    </BaseCard>
 
-    <!-- Network -->
-    <div class="st-sub">{{ t('serverSettings.networkSection') }}</div>
+    <BaseCard variant="bg2" class="st-card">
+      <SectionHeader icon="update" flush>{{ t('serverSettings.versionSection') }}</SectionHeader>
+      <FormField layout="horizontal">
+        <template #label>
+          {{ t('serverSettings.gitBranch') }}
+          <HelpTip :text="t('serverSettings.gitBranchTip')" />
+        </template>
+        <BaseSelect v-model="gitBranch" :options="branches" />
+      </FormField>
 
-    <FormField layout="horizontal" keep-horizontal>
-      <template #label>
-        {{ t('serverSettings.apiProxy') }}
-        <HelpTip :text="t('serverSettings.apiProxyTip')" />
-      </template>
-      <ToggleSwitch v-model="proxyEnabled" />
-    </FormField>
-
-    <!-- Version & Updates -->
-    <div class="st-sub">{{ t('serverSettings.versionSection') }}</div>
-
-    <FormField layout="horizontal">
-      <template #label>
-        {{ t('serverSettings.gitBranch') }}
-        <HelpTip :text="t('serverSettings.gitBranchTip')" />
-      </template>
-      <BaseSelect v-model="gitBranch" :options="branches" />
-    </FormField>
-
-    <FormField layout="horizontal">
-      <template #label>&nbsp;</template>
-      <div class="action-row">
-        <BaseButton :loading="updating" :disabled="reinstalling" @click="doUpdate">
-          <MsIcon name="update" />
-          {{ t('serverSettings.updateBtn') }}
-        </BaseButton>
-        <BaseButton variant="danger" :loading="reinstalling" :disabled="updating" @click="doReinstall">
-          <MsIcon name="delete_forever" />
-          {{ t('serverSettings.reinstallBtn') }}
-        </BaseButton>
-      </div>
-    </FormField>
+      <FormField layout="horizontal">
+        <template #label>&nbsp;</template>
+        <div class="action-row">
+          <BaseButton :loading="updating" :disabled="reinstalling" @click="doUpdate">
+            <MsIcon name="update" />
+            {{ t('serverSettings.updateBtn') }}
+          </BaseButton>
+          <BaseButton variant="danger" :loading="reinstalling" :disabled="updating" @click="doReinstall">
+            <MsIcon name="delete_forever" />
+            {{ t('serverSettings.reinstallBtn') }}
+          </BaseButton>
+        </div>
+      </FormField>
+    </BaseCard>
   </div>
 </template>
 
 <style scoped>
 .st-panel {
   margin-top: var(--sp-4);
-  max-width: 640px;
+  max-width: 760px;
   margin-left: auto;
   margin-right: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
 }
 
-.st-desc {
-  font-size: var(--text-lg);
-  font-weight: 600;
-  color: var(--t1);
-  margin: 0 0 var(--sp-4);
+.st-card {
+  padding: var(--sp-2);
 }
 
-.st-sub {
-  font-size: .92rem;
-  font-weight: 600;
-  color: var(--t1);
-  padding: var(--sp-5) 0 var(--sp-2);
-  margin-top: var(--sp-2);
-  border-top: 1px solid color-mix(in srgb, var(--bd) 50%, transparent);
-}
-
-.st-sub:first-of-type {
-  border-top: none;
-  margin-top: 0;
-  padding-top: var(--sp-2);
+.section-note {
+  margin: 0 0 var(--sp-3);
+  font-size: .84rem;
+  line-height: 1.5;
+  color: var(--t2);
 }
 
 .auth-mode-switch {

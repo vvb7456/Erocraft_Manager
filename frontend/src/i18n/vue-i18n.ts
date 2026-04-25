@@ -22,6 +22,8 @@ import zhAccount from './locales/zh-CN/account.json'
 import zhActivity from './locales/zh-CN/activity.json'
 import zhMonitoring from './locales/zh-CN/monitoring.json'
 import zhHosts from './locales/zh-CN/hosts.json'
+import zhAdminServer from './locales/zh-CN/admin-server.json'
+import zhCertificates from './locales/zh-CN/certificates.json'
 
 import enCommon from './locales/en/common.json'
 import enNav from './locales/en/nav.json'
@@ -44,6 +46,8 @@ import enAccount from './locales/en/account.json'
 import enActivity from './locales/en/activity.json'
 import enMonitoring from './locales/en/monitoring.json'
 import enHosts from './locales/en/hosts.json'
+import enAdminServer from './locales/en/admin-server.json'
+import enCertificates from './locales/en/certificates.json'
 
 function detectLanguage(): string {
   const stored = localStorage.getItem('lang')
@@ -73,6 +77,8 @@ const i18n = createI18n({
       activity: zhActivity,
       monitoring: zhMonitoring,
       hosts: zhHosts,
+      adminServer: zhAdminServer,
+      certificates: zhCertificates,
     },
     en: {
       common: enCommon, nav: enNav, dashboard: enDashboard,
@@ -90,6 +96,8 @@ const i18n = createI18n({
       activity: enActivity,
       monitoring: enMonitoring,
       hosts: enHosts,
+      adminServer: enAdminServer,
+      certificates: enCertificates,
     },
   },
 })

@@ -5,6 +5,7 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useAppStore } from '@/stores/app'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
+import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import Badge from '@/components/ui/Badge.vue'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -47,7 +48,6 @@ const totalCount = ref(0)
 const filterActor = ref('')
 const filterAction = ref('')
 const filterStatus = ref('')
-const actorOptions = ref<string[]>([])
 const actionOptions = ref<string[]>([])
 
 // ── Fetch ──
@@ -58,12 +58,11 @@ async function loadLogs() {
   if (filterActor.value) params.set('actor', filterActor.value)
   if (filterAction.value) params.set('action', filterAction.value)
   if (filterStatus.value) params.set('status', filterStatus.value)
-  const data = await get<LogResponse>(`/api/activity-logs?${params}`)
+  const data = await get<LogResponse>(`/api/admin/activity-logs?${params}`)
   if (data) {
     logs.value = data.logs
     totalPages.value = data.totalPages
     totalCount.value = data.total
-    actorOptions.value = data.filters.actors
     actionOptions.value = data.filters.actions
   }
 }
@@ -121,16 +120,16 @@ const statusOptions = ['success', 'failure', 'info']
     <!-- Filters -->
     <SectionToolbar>
       <template #start>
-        <span class="toolbar-status">{{ t('logs.total', { n: totalCount }) }}</span>
+        <div class="toolbar-start-row">
+          <FilterInput
+            v-model="filterActor"
+            :placeholder="t('logs.filter.actorPlaceholder')"
+            class="logs-filter-input"
+          />
+          <span class="toolbar-status">{{ t('logs.total', { n: totalCount }) }}</span>
+        </div>
       </template>
       <template #end>
-        <BaseSelect
-          v-model="filterActor"
-          :options="[{ value: '', label: t('logs.filter.all') }, ...actorOptions.map(a => ({ value: a, label: actorLabel(a) }))]"
-          :prefix="t('logs.filter.actor') + ': '"
-          size="sm"
-          fit
-        />
         <BaseSelect
           v-model="filterAction"
           :options="[{ value: '', label: t('logs.filter.all') }, ...actionOptions.map(a => ({ value: a, label: actionLabel(a) }))]"
@@ -204,6 +203,23 @@ const statusOptions = ['success', 'failure', 'info']
 .col-action { width: 13%; white-space: nowrap; }
 .col-status { width: 7%; white-space: nowrap; }
 .col-details { width: 56%; }
+
+.toolbar-start-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.logs-filter-input {
+  width: min(320px, 72vw);
+}
+
+.toolbar-status {
+  color: var(--t3);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
 
 .action-code {
   font-family: var(--font-mono);

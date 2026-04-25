@@ -6,7 +6,7 @@
 //   POST   /api/admin/nodes/{node_id}/allocations            { ip, alias?, ports }
 //   DELETE /api/admin/nodes/{node_id}/allocations/{id}
 //   DELETE /api/admin/nodes/{node_id}/allocations            { ids: number[] }
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import { computed, inject, onMounted, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -151,8 +151,6 @@ watch([filterAssigned, searchTerm], () => {
 watch([page, perPage], () => load())
 watch(nodeId, (id) => { if (id) load() })
 
-// 30s silent auto-refresh.
-let pollTimer: number | null = null
 onMounted(() => {
   // Allocations are wings-only; redirect away when host is not a wings node.
   // Host detail may still be loading; the watcher below handles late arrival.
@@ -161,9 +159,7 @@ onMounted(() => {
     return
   }
   if (nodeId.value) load()
-  pollTimer = window.setInterval(() => load(true), 30_000)
 })
-onBeforeUnmount(() => { if (pollTimer !== null) clearInterval(pollTimer) })
 
 // React when the host detail finishes loading after this pane mounts.
 watch(host, (h) => {

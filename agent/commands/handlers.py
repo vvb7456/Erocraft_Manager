@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..collectors import wings_service
+from ..collectors import certificates, wings_service
 
 
 # Module-level config holder. ``set_config`` is called from
@@ -54,3 +54,19 @@ async def wings_status(params: dict) -> dict:
     """Return the current systemd state of the wings unit."""
     s = await wings_service.status(_service_name())
     return s.model_dump(mode="json")
+
+
+async def cert_install(params: dict) -> dict:
+    """Install a certificate/key pair into the paths configured by wings."""
+    if _cfg is None:
+        raise RuntimeError("agent config not initialized")
+    return await certificates.install(
+        config_path=_cfg.wings.config_path,
+        service_name=_cfg.wings.service_name,
+        targets=_cfg.cert_install_targets,
+        target_name=str(params.get("target_name") or ""),
+        cert_id=params.get("cert_id"),
+        fullchain_pem=str(params.get("fullchain_pem") or ""),
+        privkey_pem=str(params.get("privkey_pem") or ""),
+        timeout=float(params.get("timeout", 30.0)),
+    )

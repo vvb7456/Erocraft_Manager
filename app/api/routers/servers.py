@@ -6,7 +6,7 @@ import asyncio
 import logging
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.mysql import insert as mysql_insert
@@ -37,7 +37,7 @@ from app.services.email import get_email_delay, get_site_url, load_template, ren
 from app.services import server_lifecycle
 from app.services.server_lifecycle import LifecycleError, LifecycleValidationError
 
-router = APIRouter(tags=["servers"])
+router = APIRouter(prefix="/admin", tags=["servers"])
 logger = logging.getLogger(__name__)
 
 
@@ -554,12 +554,13 @@ async def batch_servers(
 @router.delete("/servers/{server_id}", response_model=MessageResponse)
 async def delete_server(
     server_id: int,
+    force: bool = Query(default=False),
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
     server = await _get_server_or_404(db, server_id)
     try:
-        await server_lifecycle.delete_server(db, server_id)
+        await server_lifecycle.delete_server(db, server_id, force=force)
     except LifecycleError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -571,6 +572,8 @@ async def delete_server(
         detail_key="delete_server",
         detail_params={"actor": current_user.username, "server_name": server.name, "server_id": server_id},
     )
+    if force:
+        return MessageResponse(message=f"服务器 '{server.name}' 已强制删除")
     return MessageResponse(message=f"服务器 '{server.name}' 已删除")
 
 

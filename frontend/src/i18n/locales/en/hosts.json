@@ -1,15 +1,21 @@
 {
   "title": "Hosts",
   "subtitle": "Manage every server connected via Erocraft Agent (wings nodes, nginx proxies, NAS, generic Linux boxes).",
-  "nav": {
-    "list": "Overview"
-  },
   "summary": {
     "total": "{n} total",
     "online": "{n} online",
     "offline": "{n} offline",
     "disabled": "{n} disabled",
     "unconfigured": "{n} unconfigured"
+  },
+  "stats": {
+    "total": "Hosts",
+    "online": "Online Hosts",
+    "wings": "Wings Hosts",
+    "other": "Other Hosts",
+    "filtered": "{n} in current filter",
+    "agentReachable": "Agent reachable",
+    "otherSub": "Non-Wings nodes"
   },
   "list": {
     "empty": "No hosts yet. Click “Add host” in the top right to register the first one.",
@@ -221,6 +227,7 @@
     },
     "wings": {
       "title": "Wings service",
+      "desc": "Maintain this node's Wings and Panel node parameters, and restart Wings when needed.",
       "notWings": "This host is not a Wings node",
       "saved": "Saved ({n} field(s) changed)",
       "cancel": "Cancel",

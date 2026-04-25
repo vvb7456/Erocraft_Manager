@@ -323,6 +323,48 @@ class WingsService:
             expected_statuses=(200, 202, 204),
         )
 
+    async def deauthorize_user(
+        self,
+        db: AsyncSession,
+        node_id: int,
+        user_uuid: str,
+        *,
+        server_uuids: list[str] | None = None,
+    ) -> None:
+        """Revoke a user's active Wings websocket/SFTP JWT access.
+
+        Wings exposes this as a node-level endpoint, not under
+        ``/api/servers``. Omitting ``servers`` revokes access across the node.
+        """
+        node = await self._node_info(db, node_id)
+        headers = {
+            "Authorization": f"Bearer {node.token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        body: dict[str, object] = {"user": user_uuid}
+        if server_uuids is not None:
+            body["servers"] = server_uuids
+        try:
+            async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
+                response = await client.post(
+                    f"{node.base_url}/api/deauthorize-user",
+                    headers=headers,
+                    json=body,
+                )
+        except httpx.HTTPError as exc:
+            raise WingsServiceError(f"Wings connection failed: {exc!r}") from exc
+
+        if response.status_code not in (200, 202, 204):
+            detail = ""
+            try:
+                payload = response.json()
+                if isinstance(payload, dict) and "error" in payload:
+                    detail = payload["error"]
+            except Exception:
+                pass
+            raise WingsServiceError(detail or f"HTTP {response.status_code}")
+
     async def delete_server(self, db: AsyncSession, node_id: int, server_uuid: str) -> None:
         """Destroy the container + volume on the node. Idempotent: 404 → success."""
         try:

@@ -70,7 +70,7 @@ watch(() => createForm.value.nest_id, async (nestId) => {
   createForm.value.egg_id = ''
   createForm.value.startup_command = ''
   if (!nestId) return
-  const data = await get<{ eggs: any[] }>(`/api/nests/${nestId}/eggs`)
+  const data = await get<{ eggs: any[] }>(`/api/admin/resources/nests/${nestId}/eggs`)
   if (data) eggList.value = data.eggs
 })
 
@@ -83,7 +83,7 @@ watch(() => createForm.value.egg_id, async (eggId) => {
     if (egg.docker_image) createForm.value.docker_image = egg.docker_image
     if (egg.startup) createForm.value.startup_command = egg.startup
   }
-  const data = await get<{ variables: any[] }>(`/api/nests/${createForm.value.nest_id}/eggs/${eggId}/variables`)
+  const data = await get<{ variables: any[] }>(`/api/admin/resources/nests/${createForm.value.nest_id}/eggs/${eggId}/variables`)
   if (data) {
     eggVariables.value = data.variables
     const env: Record<string, string> = {}
@@ -99,7 +99,7 @@ watch(() => createForm.value.node_id, async (nodeId) => {
   allocationList.value = []
   createForm.value.allocation_id = ''
   if (!nodeId) return
-  const data = await get<{ allocations: any[] }>(`/api/nodes/${nodeId}/allocations`)
+  const data = await get<{ allocations: any[] }>(`/api/admin/resources/nodes/${nodeId}/allocations`)
   if (data) {
     allocationList.value = data.allocations
     if (data.allocations.length > 0) {
@@ -147,10 +147,10 @@ watch(() => props.modelValue, async (open) => {
 
   // Load dropdown data in parallel
   const [usersData, nestsData, nodesData, defaultsData] = await Promise.all([
-    get<{ users: any[] }>('/api/resources/users'),
-    get<{ nests: any[] }>('/api/nests'),
-    get<{ nodes: any[] }>('/api/nodes'),
-    get<Record<string, any>>('/api/resources/server-defaults'),
+    get<{ users: any[] }>('/api/admin/resources/users'),
+    get<{ nests: any[] }>('/api/admin/resources/nests'),
+    get<{ nodes: any[] }>('/api/admin/resources/nodes'),
+    get<Record<string, any>>('/api/admin/resources/server-defaults'),
   ])
   if (usersData) userList.value = usersData.users
   if (nestsData) nestList.value = nestsData.nests
@@ -192,7 +192,7 @@ async function doCreateServer() {
     return
   }
   createLoading.value = true
-  const res = await post<{ message: string }>('/api/servers', {
+  const res = await post<{ message: string }>('/api/admin/servers', {
     user_id: Number(f.user_id),
     server_name: f.server_name,
     egg_id: Number(f.egg_id),

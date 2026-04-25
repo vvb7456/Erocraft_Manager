@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, provide, computed, watch } from 'vue'
+import { ref, provide, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -19,6 +19,7 @@ const route = useRoute()
 const router = useRouter()
 const { get, loading } = useApiFetch()
 const resourceStore = useServerResourceStore()
+const RESOURCE_SUB_KEY = 'serverDetail'
 
 interface ServerDetail {
   id: number
@@ -41,23 +42,6 @@ interface ServerDetail {
   address: string | null
 }
 
-interface ServerResourcesPayload {
-  state: string
-  isSuspended: boolean
-  resources: {
-    cpu_absolute?: number
-    memory_bytes?: number
-    disk_bytes?: number
-    network?: {
-      rx_bytes?: number
-      tx_bytes?: number
-    }
-    network_rx_bytes?: number
-    network_tx_bytes?: number
-    uptime?: number
-  }
-}
-
 const server = ref<ServerDetail | null>(null)
 const serverId = computed(() => Number(route.params.id))
 
@@ -65,14 +49,6 @@ async function loadServer() {
   const data = await get<ServerDetail>(`/api/user/servers/${serverId.value}`)
   if (data) server.value = data
 }
-
-onMounted(loadServer)
-watch(serverId, () => {
-  // Clear stale server data immediately so child components (especially console WS)
-  // don't mount with the previous server's identity
-  server.value = null
-  loadServer()
-})
 
 // Provide server data to child pages
 provide('server', server)
@@ -92,6 +68,43 @@ const tabs = computed(() => [
 ])
 
 const activeTab = computed(() => route.name as string)
+
+watch([serverId, activeTab], ([id, tab]) => {
+  if (!Number.isFinite(id)) {
+    resourceStore.unsubscribe(RESOURCE_SUB_KEY)
+    return
+  }
+  // Console tab already receives realtime stats/state from WebSocket.
+  // Other tabs only need minimal polling for header/status consistency.
+  if (tab === 'server-console') {
+    resourceStore.unsubscribe(RESOURCE_SUB_KEY)
+  } else {
+    resourceStore.subscribe(RESOURCE_SUB_KEY, [id], 5000)
+  }
+}, { immediate: true })
+
+onBeforeUnmount(() => {
+  resourceStore.unsubscribe(RESOURCE_SUB_KEY)
+})
+
+// Non-monitor tabs follow "enter-refresh" semantics: fetch server detail
+// when opening/switching tabs (or changing server id), no background
+// polling in the container.
+watch(
+  [serverId, activeTab],
+  async ([id], prev) => {
+    if (!Number.isFinite(id)) return
+    const prevId = prev?.[0]
+    const changedServer = id !== prevId
+    if (changedServer) {
+      // Clear stale server data immediately so child components (especially
+      // console WS) don't mount with the previous server identity.
+      server.value = null
+    }
+    await loadServer()
+  },
+  { immediate: true },
+)
 
 function onTabChange(key: string) {
   router.push({ name: key, params: { id: serverId.value } })
@@ -144,59 +157,6 @@ watch([stale, isSuspended], ([isStale, isSusp]) => {
   }
 })
 
-// Poll server data while installing (in case Wings never reports 'installing' state)
-let installPollTimer: ReturnType<typeof setInterval> | null = null
-watch(isInstalling, (val) => {
-  if (val && !installPollTimer) {
-    installPollTimer = setInterval(loadServer, 10000)
-  } else if (!val && installPollTimer) {
-    clearInterval(installPollTimer)
-    installPollTimer = null
-  }
-}, { immediate: true })
-
-// Independent resource polling for non-console tabs (console has WS push)
-let resourcePollTimer: ReturnType<typeof setInterval> | null = null
-
-function startResourcePoll() {
-  if (resourcePollTimer) return
-  resourcePollTimer = setInterval(async () => {
-    if (activeTab.value === 'server-console') return
-    if (!server.value) return
-    try {
-      const data = await get<ServerResourcesPayload>(
-        `/api/user/servers/${server.value.id}/resources`,
-      )
-      if (data) {
-        const r = data.resources || {}
-        resourceStore.updateOne(server.value.id, {
-          state: data.state,
-          isSuspended: data.isSuspended,
-          cpu: r.cpu_absolute ?? 0,
-          memoryBytes: r.memory_bytes ?? 0,
-          diskBytes: r.disk_bytes ?? 0,
-          networkRx: r.network?.rx_bytes ?? r.network_rx_bytes ?? 0,
-          networkTx: r.network?.tx_bytes ?? r.network_tx_bytes ?? 0,
-          uptime: r.uptime ?? 0,
-        })
-      } else {
-        // Request failed — mark stale
-        const existing = resourceStore.resources[server.value.id]
-        if (existing) existing.stale = true
-      }
-    } catch {
-      const existing = resourceStore.resources[server.value!.id]
-      if (existing) existing.stale = true
-    }
-  }, 10_000)
-}
-
-onMounted(startResourcePoll)
-
-onUnmounted(() => {
-  if (installPollTimer) clearInterval(installPollTimer)
-  if (resourcePollTimer) { clearInterval(resourcePollTimer); resourcePollTimer = null }
-})
 </script>
 
 <template>

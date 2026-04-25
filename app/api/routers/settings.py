@@ -21,7 +21,7 @@ from app.db.models.pterodactyl import PteroUser
 from app.schemas.settings import SettingsMessageResponse
 from app.services.audit import log_manager_activity
 
-router = APIRouter(tags=["settings"])
+router = APIRouter(prefix="/admin", tags=["settings"])
 
 
 async def _save_settings(

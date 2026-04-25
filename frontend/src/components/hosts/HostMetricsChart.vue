@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // HostMetricsChart — single-metric ECharts line chart for one node.
 //
-// Pulls /api/monitoring/history/{nodeId}?metric=&window= and renders a
+// Pulls /api/admin/monitoring/history/{nodeId}?metric=&window= and renders a
 // time-series area chart. Used both inline in HostStatusPanel (small
 // 1h hero charts) and full-size in HostActivityPane (C9, with dataZoom).
 //
@@ -59,7 +59,7 @@ async function fetchHistory() {
   loading.value = true
   try {
     const data = await get<{ series: HistoryPoint[] }>(
-      `/api/monitoring/history/${props.nodeId}?metric=${props.metric}&window=${props.window}`,
+      `/api/admin/monitoring/history/${props.nodeId}?metric=${props.metric}&window=${props.window}`,
     )
     series.value = data?.series || []
   } finally {

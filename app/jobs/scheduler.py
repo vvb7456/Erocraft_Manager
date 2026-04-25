@@ -9,6 +9,16 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.runtime_settings import AUTOMATION_SPECS, MONITORING_SPECS, defaults_for
 from app.core.settings_store import get_settings_store
 from app.db.session import get_session_factory
+from app.jobs.tasks.certificates import (
+    CERT_AUTO_DISPATCH_JOB_ID,
+    CERT_DEPLOYMENT_SCAN_JOB_ID,
+    CERT_EXPIRY_ALERT_JOB_ID,
+    CERT_SOURCE_SCAN_JOB_ID,
+    run_cert_auto_dispatch,
+    run_cert_deployment_scan,
+    run_cert_expiry_alert,
+    run_cert_source_scan,
+)
 from app.jobs.tasks.cleanup import CLEANUP_JOB_ID, run_token_cleanup
 from app.jobs.tasks.delete import sync_delete_job
 from app.jobs.tasks.monitoring import MONITORING_JOB_ID, run_monitoring_collect
@@ -112,5 +122,46 @@ def build_scheduler() -> AsyncIOScheduler:
         coalesce=True,
         max_instances=1,
         misfire_grace_time=300,
+    )
+    scheduler.add_job(
+        run_cert_source_scan,
+        id=CERT_SOURCE_SCAN_JOB_ID,
+        trigger="interval",
+        minutes=10,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=300,
+    )
+    scheduler.add_job(
+        run_cert_deployment_scan,
+        id=CERT_DEPLOYMENT_SCAN_JOB_ID,
+        trigger="interval",
+        minutes=10,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=300,
+    )
+    scheduler.add_job(
+        run_cert_auto_dispatch,
+        id=CERT_AUTO_DISPATCH_JOB_ID,
+        trigger="interval",
+        minutes=10,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=300,
+    )
+    scheduler.add_job(
+        run_cert_expiry_alert,
+        id=CERT_EXPIRY_ALERT_JOB_ID,
+        trigger="cron",
+        hour=9,
+        minute=0,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=3600,
     )
     return scheduler

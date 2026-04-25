@@ -4,6 +4,7 @@ export const ICON_CODEPOINTS: Record<string, string> = {
   'add_circle': '\ue3ba',
   'add_photo_alternate': '\ue43e',
   'admin_panel_settings': '\uef3d',
+  'alternate_email': '\ue0e6',
   'arrow_back': '\ue5c4',
   'arrow_downward': '\ue5db',
   'arrow_upward': '\ue5d8',
@@ -75,6 +76,7 @@ export const ICON_CODEPOINTS: Record<string, string> = {
   'language': '\ue894',
   'light_mode': '\ue518',
   'link': '\ue250',
+  'link_off': '\ue16f',
   'list': '\ue896',
   'lock': '\ue899',
   'login': '\uea77',
@@ -142,5 +144,6 @@ export const ICON_CODEPOINTS: Record<string, string> = {
   'warning': '\uf083',
   'widgets': '\ue1bd',
   'wifi_tethering': '\ue1e2',
+  'workspace_premium': '\ue7af',
   'zoom_in': '\ue8ff',
 }

@@ -161,7 +161,7 @@ async function fetchPreview() {
   previewLoading.value = true
 
   try {
-    const res = await fetch('/api/email-templates/preview', {
+    const res = await fetch('/api/admin/email-templates/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -194,7 +194,7 @@ function schedulePreview() {
 }
 
 async function loadData() {
-  const templateData = await get<Record<string, TemplateData>>('/api/email-templates')
+  const templateData = await get<Record<string, TemplateData>>('/api/admin/email-templates')
   if (templateData) {
     for (const key of TEMPLATE_KEYS) {
       const data = {
@@ -212,7 +212,7 @@ async function loadData() {
 
 async function save(): Promise<boolean> {
   saveLoading.value = true
-  const res = await post<{ message: string }>('/api/email-templates', {
+  const res = await post<{ message: string }>('/api/admin/email-templates', {
     type: activeTemplate.value,
     subject: currentTemplate.value.subject,
     body: currentTemplate.value.body,
@@ -233,7 +233,7 @@ async function saveAllDirty(): Promise<boolean> {
   const failed: string[] = []
   for (const key of dirtyKeys.value.slice()) {
     const cur = templates.value[key]
-    const res = await post<{ message: string }>('/api/email-templates', {
+    const res = await post<{ message: string }>('/api/admin/email-templates', {
       type: key,
       subject: cur.subject,
       body: cur.body,

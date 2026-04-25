@@ -6,6 +6,7 @@ Endpoints:
   GET  /v1/wings/config             — Bearer
   GET  /v1/wings/service            — Bearer (PR-A)
   GET  /v1/wings/logs/stream        — Bearer (PR-A, SSE)
+  GET  /v1/cert/status              — Bearer (PR-B)
   POST /v1/commands                 — Bearer (incl. wings.restart / wings.status)
   GET  /v1/status                   — Bearer
 """
@@ -22,6 +23,7 @@ from fastapi.responses import StreamingResponse
 from . import __version__
 from .auth import make_auth_dependency
 from .collectors.snapshot import SnapshotProvider
+from .collectors import certificates as cert_collector
 from .collectors import wings_config as wings_config_collector
 from .collectors import wings_service as wings_service_collector
 from .commands import HANDLERS, execute as execute_command, handlers as command_handlers
@@ -86,6 +88,16 @@ def create_app(cfg: AgentConfig, config_path: str) -> FastAPI:
     @app.get("/v1/wings/service", response_model=WingsServiceStatus, dependencies=[Depends(auth)])
     async def get_wings_service() -> WingsServiceStatus:
         return await wings_service_collector.status(cfg.wings.service_name)
+
+    @app.get("/v1/cert/status", dependencies=[Depends(auth)])
+    async def get_cert_status() -> dict:
+        try:
+            return cert_collector.status_with_targets(
+                cfg.wings.config_path,
+                cfg.cert_install_targets,
+            )
+        except wings_config_collector.WingsConfigError as e:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
     @app.get("/v1/wings/logs/stream", dependencies=[Depends(auth)])
     async def stream_wings_logs(

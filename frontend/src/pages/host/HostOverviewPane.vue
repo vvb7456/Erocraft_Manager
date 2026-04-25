@@ -5,7 +5,7 @@
 //   1. Basic info <dl> grid (kind, hostname, agent_url, panel node, enabled,
 //      created/updated, last seen)
 //   2. <HostStatusPanel /> — composite ECharts panel (gauges + stats + 1h hero trends)
-//   3. Active alerts list — pulled from /api/monitoring/alerts?active_only=true,
+//   3. Active alerts list — pulled from /api/admin/monitoring/alerts?active_only=true,
 //      filtered to this host's panel node id
 import { computed, inject, onBeforeUnmount, onMounted, type Ref, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -36,7 +36,7 @@ const alerts = ref<AlertItem[]>([])
 let alertTimer: number | null = null
 
 async function fetchAlerts() {
-  const data = await get<{ items: AlertItem[] }>('/api/monitoring/alerts?active_only=true&limit=50')
+  const data = await get<{ items: AlertItem[] }>('/api/admin/monitoring/alerts?active_only=true&limit=50')
   alerts.value = data?.items || []
 }
 

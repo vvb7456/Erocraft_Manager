@@ -108,6 +108,7 @@ interface State {
 const loading = ref(true)
 const submitting = ref(false)
 const restarting = ref(false)
+const syncing = ref(false)
 const initial = ref<FormState>({ ...EMPTY_FORM })
 const form = ref<FormState>({ ...EMPTY_FORM })
 const wingsService = ref<WingsServiceState | null>(null)
@@ -117,6 +118,7 @@ const lastResult = ref<{ changed: string[]; restart_required?: string[] } | null
 
 async function load() {
   loading.value = true
+  syncing.value = true
   try {
     const data = await get<State>(`/api/admin/nodes/${props.nodeId}/wings-config`)
     if (!data) return
@@ -143,6 +145,7 @@ async function load() {
     wingsServiceError.value = data.wings_service_error
     restartRequiredFields.value = data.runtime_restart_required_fields || []
   } finally {
+    syncing.value = false
     loading.value = false
   }
 }
@@ -158,7 +161,7 @@ const FIELDS = [
 const dirtyFields = computed(() => {
   return FIELDS.filter(f => form.value[f] !== initial.value[f])
 })
-const isDirty = computed(() => dirtyFields.value.length > 0)
+const isDirty = computed(() => !syncing.value && dirtyFields.value.length > 0)
 
 // Predict whether saving will require a wings restart by intersecting the
 // dirty set against the runtime-restart-required field list reported by

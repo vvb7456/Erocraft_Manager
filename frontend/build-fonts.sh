@@ -49,7 +49,10 @@ if [ -f "$ICONS_FILE" ]; then
 fi
 
 # 合并去重
-ALL_ICONS=$(echo -e "${STATIC_ICONS}\n${DYNAMIC_ICONS}\n${ICON_ATTR_STATIC}\n${ICON_ATTR_DYNAMIC}\n${ICON_OBJ_LITERAL}\n${COLORS_ICONS}\n${MANUAL_ICONS}" | grep -v '^\s*$' | sort -u)
+ALL_ICONS=$(echo -e "${STATIC_ICONS}\n${DYNAMIC_ICONS}\n${ICON_ATTR_STATIC}\n${ICON_ATTR_DYNAMIC}\n${ICON_OBJ_LITERAL}\n${COLORS_ICONS}\n${MANUAL_ICONS}" \
+    | grep -v '^\s*$' \
+    | grep -Ev '^(asc|desc|icon)$' \
+    | sort -u)
 
 AUTO_COUNT=$(echo -e "${STATIC_ICONS}\n${DYNAMIC_ICONS}\n${ICON_ATTR_STATIC}\n${ICON_ATTR_DYNAMIC}\n${ICON_OBJ_LITERAL}\n${COLORS_ICONS}" | grep -v '^\s*$' | sort -u | wc -l)
 TOTAL_COUNT=$(echo "$ALL_ICONS" | wc -l)

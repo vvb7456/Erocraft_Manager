@@ -43,7 +43,7 @@ async def version(
     )
 
 
-@router.get("/dashboard", response_model=DashboardResponse)
+@router.get("/admin/dashboard", response_model=DashboardResponse)
 async def dashboard(
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),

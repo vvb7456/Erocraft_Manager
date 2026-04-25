@@ -3,7 +3,7 @@
 // Loads the host once and provides it to child panes via inject.
 // TabSwitcher mirrors the active route name (host-overview / host-setting /
 // host-activity); navigating away clicks router.push so deep-links work.
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, provide, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -24,11 +24,12 @@ const { get } = useApiFetch()
 const hostId = computed(() => Number(route.params.id))
 const host = ref<HostDetail | null>(null)
 const loading = ref(false)
+const statusLive = ref<Pick<HostDetail, 'enabled' | 'inbound_reachable' | 'last_seen_at'> | null>(null)
 
 provide('hostDetail', host)
 provide('hostId', hostId)
 
-function classifyStatus(h: HostDetail | null): HostStatusKey {
+function classifyStatus(h: Pick<HostDetail, 'enabled' | 'inbound_reachable' | 'last_seen_at'> | null): HostStatusKey {
   if (!h) return 'offline'
   if (!h.enabled) return 'disabled'
   if (!h.inbound_reachable && !h.last_seen_at) return 'unconfigured'
@@ -42,7 +43,7 @@ function statusDotKey(s: HostStatusKey): 'running' | 'error' | 'stopped' {
   return 'stopped'
 }
 
-const statusKey = computed(() => classifyStatus(host.value))
+const statusKey = computed(() => classifyStatus(statusLive.value ?? host.value))
 const statusBadgeColor = computed(() => {
   if (statusKey.value === 'online') return 'var(--green)'
   if (statusKey.value === 'offline') return 'var(--red)'
@@ -54,31 +55,46 @@ async function loadHost(silent = false) {
   if (!silent) loading.value = true
   try {
     const data = await get<HostDetail>(`/api/admin/hosts/${hostId.value}`)
-    if (data) host.value = data
+    if (data) {
+      host.value = data
+      statusLive.value = {
+        enabled: data.enabled,
+        inbound_reachable: data.inbound_reachable,
+        last_seen_at: data.last_seen_at,
+      }
+    }
   } finally {
     if (!silent) loading.value = false
   }
 }
 
+async function refreshHostStatus() {
+  if (!Number.isFinite(hostId.value)) return
+  const data = await get<HostDetail>(`/api/admin/hosts/${hostId.value}`, { silent: true })
+  if (!data) return
+  statusLive.value = {
+    enabled: data.enabled,
+    inbound_reachable: data.inbound_reachable,
+    last_seen_at: data.last_seen_at,
+  }
+}
+
+let statusTimer: number | null = null
+function stopStatusPolling() {
+  if (statusTimer !== null) {
+    clearInterval(statusTimer)
+    statusTimer = null
+  }
+}
+
+function startStatusPolling() {
+  stopStatusPolling()
+  statusTimer = window.setInterval(() => {
+    void refreshHostStatus()
+  }, 5000)
+}
+
 provide('reloadHost', () => loadHost(true))
-
-let pollTimer: number | null = null
-onMounted(() => {
-  loadHost()
-  // 30s passive refresh while operator is on this page; child panes own
-  // their own faster polling for live charts.
-  pollTimer = window.setInterval(() => loadHost(true), 30_000)
-})
-onBeforeUnmount(() => {
-  if (pollTimer !== null) clearInterval(pollTimer)
-})
-
-// Reload when navigating between hosts (e.g. from list directly to another
-// host id without unmounting this page).
-watch(hostId, () => {
-  host.value = null
-  loadHost()
-})
 
 const tabs = computed(() => {
   const items: Array<{ key: string; label: string; icon: string }> = [
@@ -98,6 +114,43 @@ const activeTab = computed(() => {
   return name && tabs.value.some(tab => tab.key === name) ? name : 'host-overview'
 })
 
+const activeTabLabel = computed(() =>
+  tabs.value.find(tab => tab.key === activeTab.value)?.label ?? t('hosts.detail.tabs.overview'),
+)
+
+const headerBreadcrumbs = computed(() => [
+  { label: t('hosts.title'), to: { name: 'hosts' } },
+  {
+    label: host.value?.name || t('hosts.detail.title'),
+    to: { name: 'host-overview', params: { id: hostId.value } },
+  },
+  { label: activeTabLabel.value },
+])
+
+// Non-monitor host tabs follow "enter-refresh" semantics: load once when
+// entering a tab (or switching host id), then stay idle unless an explicit
+// action triggers reloadHost().
+watch(
+  [hostId, activeTab],
+  async ([id], prev) => {
+    if (!Number.isFinite(id)) return
+    const prevId = prev?.[0]
+    const changedHost = id !== prevId
+    if (changedHost) {
+      host.value = null
+      statusLive.value = null
+    }
+    await loadHost(changedHost)
+    await refreshHostStatus()
+    startStatusPolling()
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  stopStatusPolling()
+})
+
 function onTabChange(key: string) {
   router.push({ name: key, params: { id: hostId.value } })
 }
@@ -110,6 +163,7 @@ function onTabChange(key: string) {
     <PageHeader
       icon="dvr"
       :title="host?.name || t('hosts.detail.title')"
+      :breadcrumbs="headerBreadcrumbs"
     >
       <template v-if="host" #badge>
         <Badge :color="statusBadgeColor" size="sm">

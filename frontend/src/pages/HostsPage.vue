@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
+import StatCard from '@/components/ui/StatCard.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -156,6 +157,16 @@ const paginated = computed(() => {
 
 const summary = computed(() => ({ total: filtered.value.length }))
 
+const hostStats = computed(() => {
+  const list = rawHosts.value
+  return {
+    total: list.length,
+    online: list.filter(h => classifyStatus(h) === 'online').length,
+    wings: list.filter(h => h.kind === 'wings_node').length,
+    other: list.filter(h => h.kind !== 'wings_node').length,
+  }
+})
+
 // ── Navigation ──
 function openHost(h: HostItem) {
   router.push({ name: 'host-detail', params: { id: h.id } })
@@ -199,6 +210,25 @@ function handleMobile(action: 'open') {
   <PageHeader icon="dvr" :title="t('hosts.title')" />
 
   <div class="page-body">
+    <section class="stat-grid" aria-label="host summary">
+      <StatCard :label="t('hosts.stats.total')" status="info" variant="kpi">
+        <template #value>{{ hostStats.total }}</template>
+        <template #sub>{{ t('hosts.stats.filtered', { n: filtered.length }) }}</template>
+      </StatCard>
+      <StatCard :label="t('hosts.stats.online')" status="running" variant="kpi">
+        <template #value>{{ hostStats.online }}</template>
+        <template #sub>{{ t('hosts.stats.agentReachable') }}</template>
+      </StatCard>
+      <StatCard :label="t('hosts.stats.wings')" status="info" variant="kpi">
+        <template #value>{{ hostStats.wings }}</template>
+        <template #sub>{{ t('hosts.kind.wings_node') }}</template>
+      </StatCard>
+      <StatCard :label="t('hosts.stats.other')" status="loading" variant="kpi">
+        <template #value>{{ hostStats.other }}</template>
+        <template #sub>{{ t('hosts.stats.otherSub') }}</template>
+      </StatCard>
+    </section>
+
     <SectionToolbar>
       <template #start>
         <FilterInput

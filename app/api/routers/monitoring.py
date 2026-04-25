@@ -48,7 +48,7 @@ async def _get_monitored_node_ids(db: AsyncSession) -> list[int]:
     return [int(nid) for (nid,) in result.all() if nid is not None]
 
 
-@router.get("/monitoring/overview", response_model=MonitoringOverviewResponse)
+@router.get("/admin/monitoring/overview", response_model=MonitoringOverviewResponse)
 async def monitoring_overview(
     _admin: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -175,7 +175,7 @@ async def monitoring_overview(
     )
 
 
-@router.get("/monitoring/nodes/{node_id}/history", response_model=NodeHistoryResponse)
+@router.get("/admin/monitoring/nodes/{node_id}/history", response_model=NodeHistoryResponse)
 async def node_history(
     node_id: int,
     # Cap at 720 hours (30 days) to match MONITOR_RETENTION_DAYS default and
@@ -247,7 +247,7 @@ _WINDOW_TO_SECONDS: dict[str, int] = {
 }
 
 
-@router.get("/monitoring/history/{node_id}")
+@router.get("/admin/monitoring/history/{node_id}")
 async def monitoring_history(
     node_id: int,
     metric: str = Query(...),
@@ -433,7 +433,7 @@ async def admin_host_snapshot(
     }
 
 
-@router.get("/monitoring/alerts", response_model=AlertListResponse)
+@router.get("/admin/monitoring/alerts", response_model=AlertListResponse)
 async def list_alerts(
     active_only: bool = False,
     limit: int = 50,
@@ -470,7 +470,7 @@ async def list_alerts(
     )
 
 
-@router.post("/monitoring/alerts/{alert_id}/resolve")
+@router.post("/admin/monitoring/alerts/{alert_id}/resolve")
 async def resolve_alert(
     alert_id: int,
     _admin: PteroUser = Depends(require_admin),

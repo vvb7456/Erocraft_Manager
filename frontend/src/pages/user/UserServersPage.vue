@@ -7,6 +7,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { useServerResourceStore } from '@/stores/serverResources'
 import { usePowerPendingStore, type PowerAction } from '@/stores/powerPending'
+import { useAppStore } from '@/stores/app'
 import { getEggMeta, hasWebUi } from '@/config/eggRegistry'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
@@ -21,6 +22,7 @@ import ActionSheet from '@/components/ui/ActionSheet.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import UsageBar from '@/components/ui/UsageBar.vue'
+import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { getStatusDotKey, getStatusColor } from '@/utils/status'
 
 defineOptions({ name: 'UserServersPage' })
@@ -30,6 +32,7 @@ const router = useRouter()
 const { get } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
+const app = useAppStore()
 const resourceStore = useServerResourceStore()
 const pendingStore = usePowerPendingStore()
 
@@ -57,6 +60,8 @@ const initialLoading = ref(true)
 const searchTerm = ref('')
 const page = ref(1)
 const perPage = ref(20)
+const showAllServers = ref(false)
+const canShowAllServers = computed(() => app.isAdmin)
 
 // ── Selection & batch ──
 const selectedIds = ref<Set<number>>(new Set())
@@ -158,7 +163,8 @@ watch(paginated, pruneSelectionToCurrentPage, { immediate: true })
 
 // ── Load data ──
 async function loadServers() {
-  const data = await get<Server[]>('/api/user/servers')
+  const scope = canShowAllServers.value && showAllServers.value ? 'all' : 'owner'
+  const data = await get<Server[]>(`/api/user/servers?scope=${scope}`)
   if (data) {
     servers.value = data
     // Subscribe to store with 5s interval (faster than sidebar's 10s)
@@ -190,6 +196,13 @@ watch(hasInstalling, (val) => {
     installPollTimer = null
   }
 }, { immediate: true })
+
+watch(showAllServers, () => {
+  page.value = 1
+  selectedIds.value = new Set()
+  batchActionType.value = ''
+  loadServers()
+})
 
 // ── Helpers ──
 function liveState(s: Server): string {
@@ -378,6 +391,12 @@ function openMobileAction(s: Server) {
             <MsIcon name="play_arrow" size="xs" /> {{ t('userServers.batch.execute') }}
           </BaseButton>
           <span v-if="selectedIds.size > 0" class="toolbar-status">{{ t('userServers.batch.selected', { n: selectedIds.size }) }}</span>
+        </div>
+      </template>
+      <template #end>
+        <div v-if="canShowAllServers" class="scope-switch">
+          <span class="scope-switch__label">{{ t('userServers.scope.all') }}</span>
+          <ToggleSwitch v-model="showAllServers" size="sm" />
         </div>
       </template>
     </SectionToolbar>
@@ -574,6 +593,18 @@ function openMobileAction(s: Server) {
 .toolbar-status {
   font-size: .82rem;
   color: var(--t3);
+  white-space: nowrap;
+}
+
+.scope-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.scope-switch__label {
+  font-size: .8rem;
+  color: var(--t2);
   white-space: nowrap;
 }
 

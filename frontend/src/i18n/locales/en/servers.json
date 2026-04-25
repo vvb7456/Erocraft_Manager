@@ -26,6 +26,16 @@
     "days_left": "{n} days",
     "today": "Today"
   },
+  "stats": {
+    "total": "Servers",
+    "normal": "Healthy Servers",
+    "expiring": "Expiring Soon",
+    "suspended": "Suspended",
+    "filtered": "{n} in current filter",
+    "available": "Active and valid",
+    "expiringSub": "Needs renewal attention",
+    "suspendedSub": "Panel suspension state"
+  },
   "action": {
     "renew": "Renew",
     "suspend": "Suspend",

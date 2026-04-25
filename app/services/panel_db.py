@@ -427,6 +427,9 @@ async def update_server_limits(
     allocation_limit: int | None = None,
     database_limit: int | None = None,
     backup_limit: int | None = None,
+    threads: str | None = None,
+    update_threads: bool = False,
+    oom_disabled: bool | None = None,
 ) -> None:
     """Update build limits. Pair with ``WingsService.sync_server`` afterward."""
     fields: dict[str, object] = {"updated_at": _now()}
@@ -446,6 +449,10 @@ async def update_server_limits(
         fields["database_limit"] = int(database_limit)
     if backup_limit is not None:
         fields["backup_limit"] = int(backup_limit)
+    if update_threads:
+        fields["threads"] = threads if threads else None
+    if oom_disabled is not None:
+        fields["oom_disabled"] = bool(oom_disabled)
 
     result = await db.execute(
         update(PteroServer).where(PteroServer.id == server_id).values(**fields)

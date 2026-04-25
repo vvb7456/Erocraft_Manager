@@ -2,6 +2,7 @@
   "title": "操作日志",
   "filter": {
     "actor": "执行者",
+    "actorPlaceholder": "筛选执行者",
     "action": "操作类型",
     "status": "状态",
     "all": "全部"
@@ -28,7 +29,22 @@
     "user": "用户",
     "account": "账户",
     "settings": "设置",
-    "automation": "自动化"
+    "automation": "自动化",
+    "email": "邮件",
+    "allocation": {
+      "create": "分配创建",
+      "delete": "分配删除",
+      "delete_bulk": "分配批量删除"
+    },
+    "create_host": "创建主机",
+    "delete_host": "删除主机",
+    "probe_host": "探测主机",
+    "rotate_agent_token": "轮换 Agent Token",
+    "restart_wings": "重启 Wings",
+    "reset_node_daemon_token": "重置节点 Daemon Token",
+    "update_node_wings_config": "更新节点 Wings 配置",
+    "host_alerts_update": "更新主机告警",
+    "global_defaults_update": "更新全局默认值"
   },
   "reminderType": {
     "expiry": "到期提醒",

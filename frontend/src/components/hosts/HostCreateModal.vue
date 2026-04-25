@@ -86,7 +86,7 @@ const revealToken = ref('')
 interface NodeOption { id: number; name: string }
 const nodes = ref<NodeOption[]>([])
 async function loadNodes() {
-  const r = await get<{ nodes: NodeOption[] }>('/api/nodes')
+  const r = await get<{ nodes: NodeOption[] }>('/api/admin/resources/nodes')
   if (r) nodes.value = r.nodes || []
 }
 

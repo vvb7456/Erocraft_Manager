@@ -61,3 +61,23 @@ def read_local_wings_url(path: str | Path) -> str:
     ssl = api.get("ssl") or {}
     scheme = "https" if ssl.get("enabled") else "http"
     return f"{scheme}://127.0.0.1:{port}"
+
+
+def read_ssl_paths(path: str | Path) -> dict[str, str | None]:
+    """Return the cert/key paths currently configured in wings yaml.
+
+    Certificate deployment deliberately writes to the paths Wings already
+    uses. Manager must not send filesystem paths over the wire; the local
+    agent is the authority for these host-specific values.
+    """
+    data = _load_yaml(Path(path))
+    api = data.get("api") or {}
+    ssl = api.get("ssl") or {}
+    if not isinstance(ssl, dict):
+        raise WingsConfigError("wings config api.ssl is not a mapping")
+    cert_path = ssl.get("cert") or ssl.get("certificate")
+    key_path = ssl.get("key")
+    return {
+        "cert": str(cert_path) if cert_path else None,
+        "key": str(key_path) if key_path else None,
+    }

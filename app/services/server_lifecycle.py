@@ -316,6 +316,9 @@ async def update_server_build(
     allocation_limit: int | None = None,
     database_limit: int | None = None,
     backup_limit: int | None = None,
+    threads: str | None = None,
+    update_threads: bool = False,
+    oom_disabled: bool | None = None,
 ) -> None:
     """Modify a server's resource limits (memory/swap/disk/io/cpu, plus the
     feature limits) and tell Wings to re-pull its config.
@@ -330,7 +333,8 @@ async def update_server_build(
     prev_row = await db.execute(
         text(
             "SELECT memory, swap, disk, io, cpu, allocation_limit, "
-            "database_limit, backup_limit FROM servers WHERE id=:sid"
+            "database_limit, backup_limit, threads, oom_disabled "
+            "FROM servers WHERE id=:sid"
         ).bindparams(sid=server_id)
     )
     prev = prev_row.first()
@@ -345,6 +349,9 @@ async def update_server_build(
         "allocation_limit": prev[5],
         "database_limit": prev[6],
         "backup_limit": prev[7],
+        "threads": prev[8],
+        "update_threads": True,
+        "oom_disabled": prev[9],
     }
 
     try:
@@ -359,6 +366,9 @@ async def update_server_build(
             allocation_limit=allocation_limit,
             database_limit=database_limit,
             backup_limit=backup_limit,
+            threads=threads,
+            update_threads=update_threads,
+            oom_disabled=oom_disabled,
         )
     except PanelDBError as exc:
         raise _wrap_panel_db(exc) from exc
@@ -379,7 +389,7 @@ async def update_server_build(
         raise LifecycleError(f"Wings sync 失败: {exc}") from exc
 
 
-async def delete_server(db: AsyncSession, server_id: int) -> None:
+async def delete_server(db: AsyncSession, server_id: int, *, force: bool = False) -> None:
     """Destroy a server completely, mirroring Pterodactyl's ``ServerDeletionService``.
 
     Order of operations is chosen so that an early failure leaves the server
@@ -391,7 +401,7 @@ async def delete_server(db: AsyncSession, server_id: int) -> None:
        /api/servers/{uuid}/backup/{backup_uuid}``). Failures are logged but
        do not block — leftover archives are recoverable manually.
     2. Destroy the Wings container/volume. 404 → success; any other error is
-       fatal so the operator can retry.
+       fatal so the operator can retry unless ``force=True``.
     3. DROP every per-server MySQL database + user on its remote host, then
        remove the corresponding ``databases`` rows. By this point Wings is
        already gone, so a remote-DB failure cannot leave the server in a
@@ -429,7 +439,14 @@ async def delete_server(db: AsyncSession, server_id: int) -> None:
     try:
         await wings_service.delete_server(db, node_id, uuid)
     except WingsServiceError as exc:
-        raise LifecycleError(f"Wings 删除失败: {exc}") from exc
+        if force:
+            logger.warning(
+                "Forced delete continues after Wings delete failed for server %s: %s",
+                server_id,
+                exc,
+            )
+        else:
+            raise LifecycleError(f"Wings 删除失败: {exc}") from exc
 
     # 3. DROP remote MySQL databases. Wings is already gone, so we MUST go
     #    on to delete the panel ``servers`` row regardless — leaving the

@@ -1,0 +1,113 @@
+{
+  "title": "证书管理",
+  "addCard": "从 acme.sh 添加证书",
+  "common": {
+    "none": "—",
+    "unknown": "未知"
+  },
+  "days": {
+    "left": "剩余 {n} 天",
+    "today": "今天到期",
+    "expired": "已过期 {n} 天"
+  },
+  "stats": {
+    "count": "证书数量",
+    "enabled": "{n} 张启用",
+    "certStatus": "证书状态",
+    "ok": "正常",
+    "expiring": "需要关注",
+    "noExpiring": "无即将到期",
+    "acme": "acme.sh 状态",
+    "ready": "可用",
+    "error": "异常",
+    "acmeFound": "发现 {n} 张",
+    "deployments": "部署状态",
+    "deployProblems": "{n} 个异常目标",
+    "deployOk": "全部同步"
+  },
+  "certificates": {
+    "title": "证书详情",
+    "summary": "{n} 张证书"
+  },
+  "status": {
+    "ok": "正常",
+    "warning": "即将到期",
+    "error": "异常",
+    "disabled": "已禁用",
+    "unknown": "未扫描"
+  },
+  "card": {
+    "lastUpdated": "上次更新",
+    "expires": "到期时间",
+    "remaining": "剩余时间",
+    "nextRenew": "计划下次更新",
+    "fingerprint": "指纹",
+    "sourcePath": "源路径"
+  },
+  "actions": {
+    "manageNodes": "管理节点",
+    "forceRenew": "强制更新",
+    "forceSync": "强制同步",
+    "bind": "接管",
+    "unbind": "取消接管"
+  },
+  "deployment": {
+    "synced": "已同步",
+    "outdated": "待同步",
+    "deploy_failed": "部署失败",
+    "unreachable": "不可达",
+    "unknown": "未知"
+  },
+  "agent": {
+    "online": "在线",
+    "offline": "离线",
+    "disabled": "禁用"
+  },
+  "nodes": {
+    "title": "受管节点",
+    "summary": "{n} 个部署目标",
+    "empty": "还没有证书部署目标",
+    "perPage": "行/页",
+    "host": "节点",
+    "agent": "Agent",
+    "sync": "同步状态",
+    "domains": "证书域名",
+    "days": "剩余天数",
+    "nextRenew": "计划下次更新",
+    "path": "路径",
+    "actions": "操作"
+  },
+  "bindings": {
+    "title": "管理 {name} 的受管节点",
+    "titleFallback": "管理受管节点",
+    "subtitle": "这里决定哪些节点的默认证书目标由这张证书接管。",
+    "current": "当前接管",
+    "currentSummary": "{n} 个目标",
+    "available": "可接管节点",
+    "availableSummary": "{n} 个节点",
+    "noBindings": "这张证书还没有接管任何节点。",
+    "noAvailable": "没有可添加的默认目标节点。",
+    "defaultTarget": "默认目标",
+    "defaultTargetHint": "将写入该主机 agent 暴露的默认证书目标"
+  },
+  "selector": {
+    "title": "选择 acme.sh 证书",
+    "empty": "没有可添加的本机 acme.sh 证书",
+    "add": "添加"
+  },
+  "confirm": {
+    "renewTitle": "强制更新证书",
+    "renewMessage": "将对 {name} 执行 acme.sh --renew --force。若指纹变化，会自动分发到部署目标并重启对应服务。",
+    "syncTitle": "强制同步证书",
+    "syncMessage": "将向 {host} 下发证书并重启目标服务。",
+    "unbindTitle": "取消证书接管",
+    "unbindMessage": "将从 {host} 移除这张证书的接管关系。不会删除节点上的现有证书文件。"
+  },
+  "toast": {
+    "renewed": "证书已强制更新",
+    "synced": "证书已同步",
+    "registered": "证书已添加",
+    "bound": "节点已加入接管",
+    "unbound": "节点已取消接管"
+  }
+}

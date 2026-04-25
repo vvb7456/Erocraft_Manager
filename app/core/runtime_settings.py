@@ -321,6 +321,29 @@ MONITORING_SPECS: dict[str, SettingSpec] = _register({
 })
 
 
+CERTIFICATE_SPECS: dict[str, SettingSpec] = _register({
+    "CERT_WEBHOOK_TOKEN": SettingSpec(
+        "CERT_WEBHOOK_TOKEN",
+        "certificates",
+        lambda: _env_str("CERT_WEBHOOK_TOKEN", ""),
+        _normalize_str,
+        sensitive=True,
+    ),
+    "CERT_ALERT_EMAIL_ENABLED": SettingSpec(
+        "CERT_ALERT_EMAIL_ENABLED",
+        "certificates",
+        lambda: _env_bool("CERT_ALERT_EMAIL_ENABLED", True),
+        _normalize_bool,
+    ),
+    "CERT_ALERT_EMAIL_ADMIN_IDS": SettingSpec(
+        "CERT_ALERT_EMAIL_ADMIN_IDS",
+        "certificates",
+        lambda: _env_str("CERT_ALERT_EMAIL_ADMIN_IDS", ""),
+        _normalize_id_list,
+    ),
+})
+
+
 # ---------------------------------------------------------------------------
 # Sensitive-key registry
 #

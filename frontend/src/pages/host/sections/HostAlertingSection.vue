@@ -14,6 +14,7 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useDirtyFormSection } from '@/composables/useDirtyForm'
 import CollapsibleGroup from '@/components/ui/CollapsibleGroup.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
 import FormField from '@/components/form/FormField.vue'
 import NumberInput from '@/components/form/NumberInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
@@ -66,6 +67,7 @@ interface AdminOpt { value: string; label: string }
 
 const loading = ref(true)
 const submitting = ref(false)
+const syncing = ref(true)
 const settings = ref<ChannelSettings>({
   email_enabled: null,
   email_recipients: null,
@@ -88,7 +90,7 @@ function emptyRule(alert_type: string): AlertRule {
 }
 
 async function loadAdmins() {
-  const r = await get<{ users: any[] }>('/api/users?page=1&perPage=200')
+  const r = await get<{ users: any[] }>('/api/admin/users?page=1&perPage=200')
   if (!r) return
   adminOptions.value = (r.users || [])
     .filter((u: any) => u.root_admin || u.rootAdmin)
@@ -97,6 +99,10 @@ async function loadAdmins() {
 
 async function load() {
   loading.value = true
+  syncing.value = true
+  // Keep a stable baseline even if request fails, so initial mount
+  // and error paths never emit a transient dirty state.
+  initialJson.value = serialize()
   try {
     const data = await get<AlertsResponse>(`/api/admin/hosts/${props.hostId}/alerts`)
     if (!data) return
@@ -109,6 +115,7 @@ async function load() {
     }
     initialJson.value = serialize()
   } finally {
+    syncing.value = false
     loading.value = false
   }
 }
@@ -121,7 +128,7 @@ onMounted(async () => {
 function serialize(): string {
   return JSON.stringify({ settings: settings.value, rules: rulesByType.value })
 }
-const isDirty = computed(() => serialize() !== initialJson.value)
+const isDirty = computed(() => !syncing.value && serialize() !== initialJson.value)
 
 const recipientIds = computed<string[]>({
   get: () => (settings.value.email_recipients ?? []).map(String),
@@ -214,11 +221,12 @@ const loadFmt = (v: number) => v.toFixed(1)
 </script>
 
 <template>
-  <CollapsibleGroup :title="t('hosts.setting.alerting.title')" icon="notifications" :defaultOpen="false">
-    <div v-if="loading" class="loading-row"><Spinner size="md" /></div>
+  <BaseCard variant="bg2" class="settings-card">
+    <CollapsibleGroup :title="t('hosts.setting.alerting.title')" icon="notifications" :defaultOpen="false">
+      <div v-if="loading" class="loading-row"><Spinner size="md" /></div>
 
-    <template v-else>
-      <p class="section-hint">{{ t('hosts.setting.alerting.intro') }}</p>
+      <template v-else>
+        <p class="section-hint">{{ t('hosts.setting.alerting.intro') }}</p>
 
       <!-- ── Channel ── -->
       <div class="st-sub">{{ t('hosts.setting.alerting.channelSection') }}</div>
@@ -352,13 +360,14 @@ const loadFmt = (v: number) => v.toFixed(1)
         </div>
       </FormField>
 
-      <div class="actions">
-        <BaseButton size="sm" variant="ghost" @click="resetToDefaults">
-          {{ t('hosts.setting.alerting.resetDefaults') }}
-        </BaseButton>
-      </div>
-    </template>
-  </CollapsibleGroup>
+        <div class="actions">
+          <BaseButton size="sm" variant="ghost" @click="resetToDefaults">
+            {{ t('hosts.setting.alerting.resetDefaults') }}
+          </BaseButton>
+        </div>
+      </template>
+    </CollapsibleGroup>
+  </BaseCard>
 </template>
 
 <style scoped>

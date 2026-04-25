@@ -101,6 +101,13 @@ async def get_wings_service(
     return await _request("GET", endpoint, token, "/v1/wings/service", timeout=timeout)
 
 
+async def get_cert_status(
+    endpoint: str, token: str, *, timeout: float = DEFAULT_TIMEOUT,
+) -> dict:
+    """Return the certificate status reported by the agent."""
+    return await _request("GET", endpoint, token, "/v1/cert/status", timeout=timeout)
+
+
 # ---------------------------------------------------------------------------
 # Command endpoints
 # ---------------------------------------------------------------------------
@@ -121,6 +128,40 @@ async def restart_wings(
     return await _request(
         "POST", endpoint, token, "/v1/commands",
         json={"id": 0, "type": "wings.restart", "params": {"timeout": 30.0}},
+        timeout=timeout,
+    )
+
+
+async def install_cert(
+    endpoint: str,
+    token: str,
+    *,
+    cert_id: int,
+    fullchain_pem: str,
+    privkey_pem: str,
+    target_name: str = "",
+    command_timeout: float = 30.0,
+    timeout: float = 90.0,
+) -> dict:
+    """Issue the ``cert.install`` command to the agent.
+
+    ``command_timeout`` is forwarded to the agent for the local
+    ``systemctl restart`` budget. ``timeout`` is the HTTP request budget for
+    the full command, including PEM writes, restart, and agent self-check.
+    """
+    return await _request(
+        "POST", endpoint, token, "/v1/commands",
+        json={
+            "id": 0,
+            "type": "cert.install",
+            "params": {
+                "cert_id": cert_id,
+                "target_name": target_name,
+                "fullchain_pem": fullchain_pem,
+                "privkey_pem": privkey_pem,
+                "timeout": command_timeout,
+            },
+        },
         timeout=timeout,
     )
 

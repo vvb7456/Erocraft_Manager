@@ -14,7 +14,7 @@ from app.db.models.pterodactyl import PteroUser
 from app.db.repositories.activity_logs import activity_log_repository
 from app.schemas.logs import ActivityLogFilters, ActivityLogItem, ActivityLogsResponse
 
-router = APIRouter(tags=["logs"])
+router = APIRouter(prefix="/admin", tags=["logs"])
 
 
 @router.get("/activity-logs", response_model=ActivityLogsResponse)

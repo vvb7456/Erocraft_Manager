@@ -2,6 +2,7 @@
   "title": "Activity Logs",
   "filter": {
     "actor": "Actor",
+    "actorPlaceholder": "Filter actor",
     "action": "Action",
     "status": "Status",
     "all": "All"
@@ -28,7 +29,22 @@
     "user": "Users",
     "account": "Account",
     "settings": "Settings",
-    "automation": "Automation"
+    "automation": "Automation",
+    "email": "Email",
+    "allocation": {
+      "create": "Allocation Create",
+      "delete": "Allocation Delete",
+      "delete_bulk": "Allocation Bulk Delete"
+    },
+    "create_host": "Create Host",
+    "delete_host": "Delete Host",
+    "probe_host": "Probe Host",
+    "rotate_agent_token": "Rotate Agent Token",
+    "restart_wings": "Restart Wings",
+    "reset_node_daemon_token": "Reset Node Daemon Token",
+    "update_node_wings_config": "Update Node Wings Config",
+    "host_alerts_update": "Update Host Alerts",
+    "global_defaults_update": "Update Global Defaults"
   },
   "reminderType": {
     "expiry": "expiry reminder",

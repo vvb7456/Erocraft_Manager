@@ -53,6 +53,8 @@ class Settings:
     async_database_url_override: str | None
     async_database_use_null_pool: bool
     panel_app_key: str
+    cert_acme_sh_home: str
+    cert_acme_sh_bin: str
 
     @property
     def sync_database_url(self) -> str:
@@ -91,6 +93,13 @@ def _required_secret(name: str, *, min_length: int = 32) -> str:
     return cleaned
 
 
+def _required_env(name: str) -> str:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        raise RuntimeError(f"{name} must be set")
+    return value.strip()
+
+
 def _build_settings() -> Settings:
     load_dotenv()
     secret_key = _required_secret("SECRET_KEY")
@@ -116,6 +125,8 @@ def _build_settings() -> Settings:
         async_database_url_override=os.getenv("ASYNC_DATABASE_URL"),
         async_database_use_null_pool=_as_bool(os.getenv("ASYNC_DATABASE_USE_NULL_POOL"), False),
         panel_app_key=_env_first("PANEL_APP_KEY", "APP_KEY"),
+        cert_acme_sh_home=_required_env("CERT_ACME_SH_HOME"),
+        cert_acme_sh_bin=_required_env("CERT_ACME_SH_BIN"),
     )
 
 

@@ -1,0 +1,228 @@
+{
+  "title": "服务器详情",
+  "loading": "正在加载服务器详情…",
+  "notFound": "未找到该服务器",
+  "controls": {
+    "openConsole": "控制台"
+  },
+  "status": {
+    "running": "运行中",
+    "starting": "启动中",
+    "stopping": "停止中",
+    "offline": "已停止",
+    "installing": "安装中",
+    "install_failed": "安装失败",
+    "suspended": "已冻结",
+    "disconnected": "失联",
+    "unknown": "未知"
+  },
+  "tabs": {
+    "overview": "概览",
+    "settings": "设置",
+    "lifecycle": "生命周期"
+  },
+  "overview": {
+    "sections": {
+      "runtime": "实时资源",
+      "config": "运行配置",
+      "network": "网络与连接",
+      "meta": "元数据"
+    },
+    "fields": {
+      "serverName": "服务器名称",
+      "description": "描述",
+      "owner": "所有者",
+      "node": "节点",
+      "egg": "预设",
+      "image": "镜像",
+      "quota": "配额",
+      "address": "地址",
+      "extraAllocations": "附加端口",
+      "sftp": "SFTP",
+      "expirationDate": "到期",
+      "createdAt": "创建于",
+      "installedAt": "安装于",
+      "updatedAt": "更新于",
+      "externalId": "外部 ID",
+      "cpuUsage": "CPU",
+      "memoryUsage": "内存",
+      "diskUsage": "磁盘",
+      "network": "网络"
+    },
+    "spark": {
+      "cpu": "CPU 5min",
+      "mem": "MEM 5min"
+    },
+    "values": {
+      "permanent": "永久",
+      "unlimited": "不限",
+      "noExtra": "—",
+      "stale": "数据过期"
+    },
+    "expired": "已过期",
+    "today": "今天到期",
+    "daysLeft": "剩 {n} 天",
+    "copy": "复制",
+    "copied": "已复制",
+    "copyFailed": "复制失败"
+  },
+  "settings": {
+    "loading": "正在加载设置…",
+    "saved": "已保存",
+    "saveFailed": "保存失败",
+    "unsavedHint": "有未保存的更改",
+    "unsavedTitle": "尚未保存",
+    "unsavedMessage": "当前页面有未保存的更改，是否保存？",
+    "unsavedSave": "保存",
+    "unsavedDiscard": "丢弃",
+    "unsavedStay": "留下",
+    "saveBtn": "保存",
+    "discardBtn": "重置",
+    "invalidHint": "{n} 个字段需要修正",
+    "details": {
+      "title": "基础信息",
+      "name": "服务器名称",
+      "description": "描述",
+      "externalId": "外部 ID",
+      "externalIdHint": "外部系统对接用，可留空"
+    },
+    "owner": {
+      "title": "所有者",
+      "current": "当前所有者",
+      "select": "新所有者",
+      "placeholder": "搜索用户名 / 邮箱…",
+      "warning": "Wings 旧 token 撤销失败：{msg}",
+      "noUsers": "未找到匹配的用户",
+      "confirm": {
+        "title": "切换所有者",
+        "message": "切换所有者会撤销原所有者在 Wings 上的访问 token，并强制其下线。是否继续？",
+        "confirmText": "切换"
+      }
+    },
+    "build": {
+      "title": "资源配置",
+      "cpu": "CPU 限制 (%)",
+      "cpuHint": "0 表示不限",
+      "memory": "内存 (MiB)",
+      "swap": "Swap (MiB)",
+      "swapHint": "-1 表示不限，0 禁用",
+      "disk": "磁盘 (MiB)",
+      "io": "Block IO 权重",
+      "ioHint": "10–1000",
+      "threads": "CPU 亲和性",
+      "threadsHint": "如 0-3,8 表示绑定到指定核心，留空不限制",
+      "oomDisabled": "禁用 OOM Killer",
+      "allocationLimit": "端口分配上限",
+      "databaseLimit": "数据库上限",
+      "backupLimit": "备份上限"
+    },
+    "allocations": {
+      "title": "端口分配",
+      "current": "当前分配",
+      "hint": "首个标记为「主」的端口为主端口；删除全部并重新添加即可切换主端口。至少保留一个端口。",
+      "primary": "主",
+      "remove": "移除",
+      "add": "搜索并添加端口…",
+      "picker": {
+        "noAvailable": "该节点暂无可用端口"
+      },
+      "errors": {
+        "empty": "至少保留一个端口"
+      },
+      "confirm": {
+        "title": "更新端口分配",
+        "message": "本次操作将移除 {rm} 个端口，并切换主端口 {swap} 次。这会立即断开正在使用这些端口的连接，确定继续吗？",
+        "confirmText": "保存"
+      }
+    },
+    "startup": {
+      "title": "启动配置",
+      "nest": "Nest",
+      "egg": "Egg",
+      "image": "Docker 镜像",
+      "imageCustom": "自定义镜像",
+      "imageCustomLabel": "自定义",
+      "startup": "启动命令",
+      "skipScripts": "跳过安装脚本",
+      "variables": "Egg 变量",
+      "noVariables": "该 Egg 无可配置变量",
+      "envVar": "环境变量",
+      "errors": {
+        "invalid": "{n} 个变量未通过校验",
+        "imageRequired": "Docker 镜像不能为空",
+        "eggRequired": "请选择一个 Egg"
+      },
+      "varErrors": {
+        "required": "此项必填",
+        "integer": "必须是整数",
+        "numeric": "必须是数字",
+        "boolean": "必须是布尔值（true/false/0/1）",
+        "alpha_num": "只能包含字母和数字",
+        "alpha_dash": "只能包含字母、数字、下划线和短横线",
+        "url": "必须是合法的 URL",
+        "in": "必须是以下之一：{allowed}",
+        "not_in": "不允许的值",
+        "min": "至少 {n} 个字符",
+        "max": "最多 {n} 个字符",
+        "size": "长度必须为 {n}",
+        "between": "长度必须在 {lo}–{hi} 之间",
+        "regex": "格式不正确"
+      }
+    },
+    "egg": {
+      "confirm": {
+        "title": "切换 Egg",
+        "message": "切换 Egg 会重建该服务器的环境变量并触发重装，可能影响游戏数据。确定继续吗？",
+        "confirmText": "切换并重装"
+      }
+    }
+  },
+  "lifecycle": {
+    "suspend": {
+      "sectionTitle": "冻结",
+      "desc": "冻结服务器会阻止用户继续使用相关能力；恢复后将重新允许访问。",
+      "currentActive": "当前状态：可用",
+      "currentSuspended": "当前状态：已冻结",
+      "suspendTitle": "冻结服务器",
+      "unsuspendTitle": "恢复服务器",
+      "suspendMessage": "确定冻结服务器 {name} 吗？该操作会立即影响用户访问。",
+      "unsuspendMessage": "确定恢复服务器 {name} 吗？",
+      "suspendAction": "冻结服务器",
+      "unsuspendAction": "恢复服务器"
+    },
+    "renew": {
+      "sectionTitle": "续期",
+      "desc": "为服务器设置新的到期日期；若服务器已过期，将从今天开始顺延。",
+      "currentExpiration": "到期时间：",
+      "targetDate": "目标日期",
+       "quickDays": "+{n}天",
+      "action": "续期服务器"
+    },
+    "expiration": {
+      "expired": "{date}（已过期）",
+      "today": "{date}（今天到期）",
+      "daysLeft": "{date}（剩 {n} 天）"
+    },
+    "reinstall": {
+      "sectionTitle": "重装",
+      "desc": "重装会重新执行安装流程，并将服务器切换为安装中状态。仅在确认需要重建运行环境时使用。",
+      "installingHint": "服务器当前已处于安装流程中，暂不允许再次触发重装。",
+      "title": "开始重装",
+      "confirmMessage": "确定开始重装服务器 {name} 吗？该操作会重新执行安装流程。",
+      "action": "重装服务器"
+    },
+    "delete": {
+      "sectionTitle": "删除",
+      "desc": "删除会移除面板记录、释放资源并尝试删除 Wings 侧实例；强制删除会在 Wings 删除失败时继续移除面板记录。",
+      "warning": "删除后不保留该服务器数据。强制删除仅用于远端异常、常规删除无法完成的场景。",
+      "action": "删除服务器",
+      "forceAction": "强制删除服务器",
+      "modalTitle": "删除服务器",
+      "forceModalTitle": "强制删除服务器",
+      "confirmMessage": "输入服务器名称以确认删除：{name}",
+      "forceConfirmMessage": "你正在执行强制删除。输入服务器名称并确认风险后继续：{name}",
+      "inputLabel": "请输入服务器名称 {name}",
+      "forceAcknowledge": "我确认当 Wings 删除失败时仍继续移除面板记录"
+    }
+  }
+}

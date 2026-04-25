@@ -27,7 +27,7 @@ from app.services.email import (
     send_test_email,
 )
 
-router = APIRouter(tags=["email_templates"])
+router = APIRouter(prefix="/admin", tags=["email_templates"])
 
 @router.get("/email-templates", response_model=EmailTemplatesResponse)
 async def get_email_templates(

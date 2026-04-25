@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useServerResourceStore } from '@/stores/serverResources'
 import { useApiFetch } from '@/composables/useApiFetch'
-import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, ref, onBeforeUnmount, watch } from 'vue'
 import MsIcon from '../ui/MsIcon.vue'
 import StatusDot from '../ui/StatusDot.vue'
 import { getStatusDotKey } from '@/utils/status'
@@ -33,6 +33,7 @@ interface NavItem {
 const adminNavItems: NavItem[] = [
   { page: 'dashboard',       icon: 'dashboard',  labelKey: 'nav.dashboard' },
   { page: 'servers',         icon: 'dns',        labelKey: 'nav.servers' },
+  { page: 'certificates',    icon: 'workspace_premium', labelKey: 'nav.certificates' },
   { page: 'users',           icon: 'group',      labelKey: 'nav.users' },
   { page: 'activity-logs',   icon: 'history',    labelKey: 'nav.activityLogs' },
   { page: 'email-templates', icon: 'mail',       labelKey: 'nav.emailTemplates' },
@@ -78,60 +79,13 @@ function toggleExpand() {
   serversExpanded.value = !serversExpanded.value
 }
 
-// ── Admin host list ──
-interface HostItem {
-  id: number
-  name: string
-  kind: string
-  enabled: boolean
-  inbound_reachable: boolean
-}
-
-const hosts = ref<HostItem[]>([])
-const hostsExpanded = ref(true)
-let hostsTimer: number | null = null
-
-const HOST_KIND_ICON: Record<string, string> = {
-  wings_node: 'dns',
-  nginx_proxy: 'lan',
-  nas: 'storage',
-  generic_linux: 'terminal',
-}
-
-function hostKindIcon(kind: string): string {
-  return HOST_KIND_ICON[kind] ?? 'dns'
-}
-
-function hostDotKey(h: HostItem): 'running' | 'loading' | 'error' | 'stopped' {
-  if (!h.enabled) return 'stopped'
-  return h.inbound_reachable ? 'running' : 'error'
-}
-
-async function loadHosts() {
-  const data = await get<HostItem[]>('/api/admin/hosts', { silent: true })
-  if (data) hosts.value = data
-}
-
-function toggleHosts() {
-  hostsExpanded.value = !hostsExpanded.value
-}
-
-function goHostsList() {
-  router.push({ name: 'hosts' })
-  if (window.innerWidth <= 768) app.closeMobileSidebar()
-}
-
-function goHostDetail(id: number) {
-  router.push({ name: 'host-detail', params: { id } })
-  if (window.innerWidth <= 768) app.closeMobileSidebar()
-}
-
 // ── Navigation ──
 const currentPage = computed(() => {
-  const name = route.name as string
+  const name = typeof route.name === 'string' ? route.name : ''
   // Map detail routes to their parent list item so the sidebar stays
   // highlighted while the user is drilled in.
-  if (name === 'host-detail') return 'hosts'
+  if (name.startsWith('host-')) return 'hosts'
+  if (name.startsWith('admin-server-')) return 'servers'
   return name
 })
 const currentServerId = computed(() => route.params.id ? Number(route.params.id) : null)
@@ -142,16 +96,6 @@ function navTo(item: NavItem) {
 }
 
 function goOverview() {
-  router.push({ name: 'user-servers' })
-  if (window.innerWidth <= 768) app.closeMobileSidebar()
-}
-
-function switchToAdmin() {
-  router.push({ name: 'dashboard' })
-  if (window.innerWidth <= 768) app.closeMobileSidebar()
-}
-
-function switchToUser() {
   router.push({ name: 'user-servers' })
   if (window.innerWidth <= 768) app.closeMobileSidebar()
 }
@@ -171,21 +115,14 @@ async function doLogout() {
 watch(isUserLayout, (val) => {
   if (val) {
     loadServers()
-    if (hostsTimer !== null) { clearInterval(hostsTimer); hostsTimer = null }
-    hosts.value = []
   } else {
     servers.value = []
     resourceStore.unsubscribe('sidebar')
-    loadHosts()
-    if (hostsTimer === null) {
-      hostsTimer = window.setInterval(loadHosts, 15000)
-    }
   }
 }, { immediate: true })
 
 onBeforeUnmount(() => {
   resourceStore.unsubscribe('sidebar')
-  if (hostsTimer !== null) { clearInterval(hostsTimer); hostsTimer = null }
 })
 </script>
 
@@ -257,65 +194,21 @@ onBeforeUnmount(() => {
             <span class="nav-label">{{ t(item.labelKey) }}</span>
           </button>
 
-          <!-- Inject the Hosts group right after "Servers" so infra sits
-               next to the things running on it. -->
-          <div v-if="item.page === 'servers'" class="nav-group">
-            <button class="nav-item nav-item--group" @click="toggleHosts">
+          <!-- Inject Hosts right after Servers so infra sits next to the things running on it. -->
+          <template v-if="item.page === 'servers'">
+            <button
+              class="nav-item"
+              :class="{ active: currentPage === 'hosts' }"
+              @click="navTo({ page: 'hosts', icon: 'dvr', labelKey: 'nav.hosts' })"
+            >
               <span class="icon"><MsIcon name="dvr" size="md" /></span>
               <span class="nav-label">{{ t('nav.hosts') }}</span>
-              <span
-                v-if="!app.sidebarCollapsed"
-                class="expand-arrow"
-                :class="{ expanded: hostsExpanded }"
-              ><MsIcon name="expand_more" size="sm" /></span>
             </button>
-
-            <div v-if="hostsExpanded && !app.sidebarCollapsed" class="nav-sub">
-              <button
-                class="nav-sub-item"
-                :class="{ active: currentPage === 'hosts' }"
-                @click="goHostsList"
-              >
-                <MsIcon name="list" size="sm" />
-                <span class="nav-sub-label">{{ t('hosts.nav.list') }}</span>
-              </button>
-              <button
-                v-for="h in hosts"
-                :key="h.id"
-                class="nav-sub-item"
-                :class="{ active: currentPage === 'hosts' && Number(route.params.id) === h.id }"
-                @click="goHostDetail(h.id)"
-              >
-                <StatusDot :status="hostDotKey(h)" size="sm" />
-                <span class="nav-sub-label">{{ h.name }}</span>
-                <MsIcon :name="hostKindIcon(h.kind)" size="xs" class="host-kind" />
-              </button>
-            </div>
-          </div>
+          </template>
         </template>
       </template>
 
       <div style="flex: 1" />
-
-      <!-- Admin <-> User view switcher (admin only) -->
-      <button
-        v-if="app.isAdmin && isUserLayout"
-        class="nav-item"
-        :title="t('nav.switchToAdmin')"
-        @click="switchToAdmin"
-      >
-        <span class="icon"><MsIcon name="admin_panel_settings" size="md" /></span>
-        <span class="nav-label">{{ t('nav.switchToAdmin') }}</span>
-      </button>
-      <button
-        v-if="app.isAdmin && !isUserLayout"
-        class="nav-item"
-        :title="t('nav.switchToUser')"
-        @click="switchToUser"
-      >
-        <span class="icon"><MsIcon name="swap_horiz" size="md" /></span>
-        <span class="nav-label">{{ t('nav.switchToUser') }}</span>
-      </button>
 
       <button
         v-if="isUserLayout"

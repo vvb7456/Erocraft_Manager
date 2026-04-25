@@ -1,0 +1,228 @@
+{
+  "title": "Server detail",
+  "loading": "Loading server detail…",
+  "notFound": "Server not found",
+  "controls": {
+    "openConsole": "Console"
+  },
+  "status": {
+    "running": "Running",
+    "starting": "Starting",
+    "stopping": "Stopping",
+    "offline": "Stopped",
+    "installing": "Installing",
+    "install_failed": "Install failed",
+    "suspended": "Suspended",
+    "disconnected": "Disconnected",
+    "unknown": "Unknown"
+  },
+  "tabs": {
+    "overview": "Overview",
+    "settings": "Settings",
+    "lifecycle": "Lifecycle"
+  },
+  "overview": {
+    "sections": {
+      "runtime": "Realtime",
+      "config": "Configuration",
+      "network": "Network & Connection",
+      "meta": "Metadata"
+    },
+    "fields": {
+      "serverName": "Server name",
+      "description": "Description",
+      "owner": "Owner",
+      "node": "Node",
+      "egg": "Egg",
+      "image": "Image",
+      "quota": "Quota",
+      "address": "Address",
+      "extraAllocations": "Extras",
+      "sftp": "SFTP",
+      "expirationDate": "Expires",
+      "createdAt": "Created",
+      "installedAt": "Installed",
+      "updatedAt": "Updated",
+      "externalId": "External ID",
+      "cpuUsage": "CPU",
+      "memoryUsage": "MEM",
+      "diskUsage": "DISK",
+      "network": "NET"
+    },
+    "spark": {
+      "cpu": "CPU 5min",
+      "mem": "MEM 5min"
+    },
+    "values": {
+      "permanent": "Permanent",
+      "unlimited": "Unlimited",
+      "noExtra": "—",
+      "stale": "Stale"
+    },
+    "expired": "expired",
+    "today": "today",
+    "daysLeft": "{n}d left",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Copy failed"
+  },
+  "settings": {
+    "loading": "Loading settings…",
+    "saved": "Saved",
+    "saveFailed": "Save failed",
+    "unsavedHint": "Unsaved changes",
+    "unsavedTitle": "Unsaved changes",
+    "unsavedMessage": "You have unsaved changes. Save them?",
+    "unsavedSave": "Save",
+    "unsavedDiscard": "Discard",
+    "unsavedStay": "Stay",
+    "saveBtn": "Save",
+    "discardBtn": "Reset",
+    "invalidHint": "{n} field(s) need fixing",
+    "details": {
+      "title": "Basic info",
+      "name": "Server name",
+      "description": "Description",
+      "externalId": "External ID",
+      "externalIdHint": "External system reference, optional"
+    },
+    "owner": {
+      "title": "Owner",
+      "current": "Current owner",
+      "select": "New owner",
+      "placeholder": "Search username / email…",
+      "warning": "Failed to revoke previous Wings token: {msg}",
+      "noUsers": "No users matched",
+      "confirm": {
+        "title": "Switch owner",
+        "message": "Switching the owner revokes the previous owner's Wings tokens and disconnects them. Continue?",
+        "confirmText": "Switch"
+      }
+    },
+    "build": {
+      "title": "Build limits",
+      "cpu": "CPU limit (%)",
+      "cpuHint": "0 = unlimited",
+      "memory": "Memory (MiB)",
+      "swap": "Swap (MiB)",
+      "swapHint": "-1 unlimited, 0 disabled",
+      "disk": "Disk (MiB)",
+      "io": "Block IO weight",
+      "ioHint": "10–1000",
+      "threads": "CPU pinning",
+      "threadsHint": "e.g. 0-3,8 to pin to specific cores; empty = no pinning",
+      "oomDisabled": "Disable OOM killer",
+      "allocationLimit": "Allocation limit",
+      "databaseLimit": "Database limit",
+      "backupLimit": "Backup limit"
+    },
+    "allocations": {
+      "title": "Port allocations",
+      "current": "Current allocations",
+      "hint": "The first chip marked as Primary is the primary port; remove all and re-add to swap. At least one port is required.",
+      "primary": "Primary",
+      "remove": "Remove",
+      "add": "Search and add a port…",
+      "picker": {
+        "noAvailable": "No available ports on this node"
+      },
+      "errors": {
+        "empty": "Keep at least one port"
+      },
+      "confirm": {
+        "title": "Update allocations",
+        "message": "This will remove {rm} port(s) and swap the primary {swap} time(s), disconnecting any sessions using them. Continue?",
+        "confirmText": "Save"
+      }
+    },
+    "startup": {
+      "title": "Startup",
+      "nest": "Nest",
+      "egg": "Egg",
+      "image": "Docker image",
+      "imageCustom": "Custom image",
+      "imageCustomLabel": "Custom",
+      "startup": "Startup command",
+      "skipScripts": "Skip install scripts",
+      "variables": "Egg variables",
+      "noVariables": "No configurable variables",
+      "envVar": "Env",
+      "errors": {
+        "invalid": "{n} variable(s) failed validation",
+        "imageRequired": "Docker image is required",
+        "eggRequired": "Pick an egg"
+      },
+      "varErrors": {
+        "required": "This field is required",
+        "integer": "Must be an integer",
+        "numeric": "Must be a number",
+        "boolean": "Must be boolean (true/false/0/1)",
+        "alpha_num": "Letters and digits only",
+        "alpha_dash": "Letters, digits, underscore and dash only",
+        "url": "Must be a valid URL",
+        "in": "Must be one of: {allowed}",
+        "not_in": "Disallowed value",
+        "min": "At least {n} characters",
+        "max": "At most {n} characters",
+        "size": "Length must be {n}",
+        "between": "Length must be between {lo} and {hi}",
+        "regex": "Invalid format"
+      }
+    },
+    "egg": {
+      "confirm": {
+        "title": "Switch egg",
+        "message": "Switching the egg rebuilds environment variables and triggers a re-install, which may affect game data. Continue?",
+        "confirmText": "Switch & reinstall"
+      }
+    }
+  },
+  "lifecycle": {
+    "suspend": {
+      "sectionTitle": "Suspend",
+      "desc": "Suspending the server immediately blocks user access. Restoring it re-enables normal access.",
+      "currentActive": "Current state: active",
+      "currentSuspended": "Current state: suspended",
+      "suspendTitle": "Suspend server",
+      "unsuspendTitle": "Restore server",
+      "suspendMessage": "Suspend server {name}? This immediately affects user access.",
+      "unsuspendMessage": "Restore server {name}?",
+      "suspendAction": "Suspend server",
+      "unsuspendAction": "Restore server"
+    },
+    "renew": {
+      "sectionTitle": "Renew",
+      "desc": "Set a new expiration date. If the server is already expired, the renewal starts from today.",
+      "currentExpiration": "Expiration:",
+      "targetDate": "Target date",
+      "quickDays": "+{n} days",
+      "action": "Renew server"
+    },
+    "expiration": {
+      "expired": "{date} (expired)",
+      "today": "{date} (expires today)",
+      "daysLeft": "{date} ({n} day(s) left)"
+    },
+    "reinstall": {
+      "sectionTitle": "Reinstall",
+      "desc": "Reinstall restarts the install flow and marks the server as installing. Use it only when you intend to rebuild the runtime environment.",
+      "installingHint": "The server is already in an install flow. Reinstall is temporarily unavailable.",
+      "title": "Start reinstall",
+      "confirmMessage": "Start reinstall for server {name}? This will rerun the install flow.",
+      "action": "Reinstall server"
+    },
+    "delete": {
+      "sectionTitle": "Delete",
+      "desc": "Delete removes the panel record, releases resources, and attempts to destroy the Wings instance. Force delete continues removing the panel record even if Wings deletion fails.",
+      "warning": "Server data is not retained after deletion. Force delete is only for broken remote states where a normal delete cannot complete.",
+      "action": "Delete server",
+      "forceAction": "Force delete server",
+      "modalTitle": "Delete server",
+      "forceModalTitle": "Force delete server",
+      "confirmMessage": "Type the server name to confirm deletion: {name}",
+      "forceConfirmMessage": "You are about to force delete. Type the server name and acknowledge the risk to continue: {name}",
+      "inputLabel": "Enter server name {name}",
+      "forceAcknowledge": "I understand panel records will still be removed if Wings deletion fails"
+    }
+  }
+}

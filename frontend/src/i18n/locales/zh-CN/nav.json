@@ -2,6 +2,7 @@
   "dashboard": "仪表盘",
   "servers": "服务器",
   "hosts": "主机",
+  "certificates": "证书",
   "overview": "总览",
   "users": "用户",
   "activityLogs": "操作日志",

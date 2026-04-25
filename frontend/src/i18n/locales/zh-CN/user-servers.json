@@ -5,6 +5,9 @@
   "openAppGeneric": "打开应用",
   "renew": "续费",
   "searchPlaceholder": "搜索服务器...",
+  "scope": {
+    "all": "显示全部服务器"
+  },
   "batch": {
     "selectAction": "选择操作",
     "execute": "执行",

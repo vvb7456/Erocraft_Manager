@@ -26,6 +26,16 @@
     "days_left": "{n} 天",
     "today": "今天"
   },
+  "stats": {
+    "total": "服务器数量",
+    "normal": "正常服务器",
+    "expiring": "即将到期",
+    "suspended": "已冻结",
+    "filtered": "当前筛选 {n} 台",
+    "available": "未冻结且有效",
+    "expiringSub": "需要关注续期",
+    "suspendedSub": "面板冻结状态"
+  },
   "action": {
     "renew": "续期",
     "suspend": "冻结",

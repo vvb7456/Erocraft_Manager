@@ -10,6 +10,7 @@ import BaseInput from '@/components/form/BaseInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
 
 const props = defineProps<EggSettingsProps>()
 const emit = defineEmits<{
@@ -102,56 +103,62 @@ defineExpose<EggSettingsExpose>({ save, discard })
 
 <template>
   <div class="generic-settings">
-    <p class="generic-desc">{{ t('serverSettings.genericDesc') }}</p>
+    <BaseCard variant="bg2" class="generic-card">
+      <p class="generic-desc">{{ t('serverSettings.genericDesc') }}</p>
 
-    <FormField
-      v-for="f in fields"
-      :key="f.envVariable"
-      :label="f.name"
-      layout="horizontal"
-    >
-      <template v-if="f.description" #hint>{{ f.description }}</template>
+      <FormField
+        v-for="f in fields"
+        :key="f.envVariable"
+        :label="f.name"
+        layout="horizontal"
+      >
+        <template v-if="f.description" #hint>{{ f.description }}</template>
 
-      <!-- Toggle -->
-      <ToggleSwitch
-        v-if="f.parsed.type === 'toggle'"
-        :model-value="form[f.envVariable] === 'true'"
-        :disabled="!f.isEditable"
-        @update:model-value="v => form[f.envVariable] = v ? 'true' : 'false'"
-      />
+        <!-- Toggle -->
+        <ToggleSwitch
+          v-if="f.parsed.type === 'toggle'"
+          :model-value="form[f.envVariable] === 'true'"
+          :disabled="!f.isEditable"
+          @update:model-value="v => form[f.envVariable] = v ? 'true' : 'false'"
+        />
 
-      <!-- Select -->
-      <BaseSelect
-        v-else-if="f.parsed.type === 'select'"
-        v-model="form[f.envVariable]"
-        :options="f.parsed.options!.map(o => ({ value: o.value, label: o.label }))"
-        :disabled="!f.isEditable"
-      />
+        <!-- Select -->
+        <BaseSelect
+          v-else-if="f.parsed.type === 'select'"
+          v-model="form[f.envVariable]"
+          :options="f.parsed.options!.map(o => ({ value: o.value, label: o.label }))"
+          :disabled="!f.isEditable"
+        />
 
-      <!-- Password -->
-      <SecretInput
-        v-else-if="f.parsed.type === 'password'"
-        v-model="form[f.envVariable]"
-        :disabled="!f.isEditable"
-        toggleable
-      />
+        <!-- Password -->
+        <SecretInput
+          v-else-if="f.parsed.type === 'password'"
+          v-model="form[f.envVariable]"
+          :disabled="!f.isEditable"
+          toggleable
+        />
 
-      <!-- Text -->
-      <BaseInput
-        v-else
-        v-model="form[f.envVariable]"
-        :disabled="!f.isEditable"
-      />
-    </FormField>
+        <!-- Text -->
+        <BaseInput
+          v-else
+          v-model="form[f.envVariable]"
+          :disabled="!f.isEditable"
+        />
+      </FormField>
+    </BaseCard>
   </div>
 </template>
 
 <style scoped>
 .generic-settings {
   margin-top: var(--sp-4);
-  max-width: 640px;
+  max-width: 760px;
   margin-left: auto;
   margin-right: auto;
+}
+
+.generic-card {
+  padding: var(--sp-2);
 }
 
 .generic-desc {

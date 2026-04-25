@@ -2,6 +2,7 @@
   "dashboard": "Dashboard",
   "servers": "Servers",
   "hosts": "Hosts",
+  "certificates": "Certificates",
   "overview": "Overview",
   "users": "Users",
   "activityLogs": "Activity Logs",

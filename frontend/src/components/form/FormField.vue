@@ -132,7 +132,6 @@ export default { components: { FieldLabel } }
 /* Bordered variant — settings rows */
 .form-field--bordered {
   padding: var(--sp-2) 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--bd) 50%, transparent);
   margin-bottom: 0;
 }
 

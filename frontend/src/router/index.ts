@@ -92,9 +92,33 @@ const router = createRouter({
     },
     {
       path: '/admin/servers/:id',
-      name: 'admin-server-detail',
       component: () => import('@/pages/AdminServerDetailPage.vue'),
       meta: { admin: true },
+      children: [
+        {
+          path: '',
+          name: 'admin-server-detail',
+          redirect: (to) => ({ name: 'admin-server-overview', params: to.params }),
+        },
+        {
+          path: 'overview',
+          name: 'admin-server-overview',
+          component: () => import('@/pages/admin-server/AdminServerOverviewPane.vue'),
+          meta: { admin: true },
+        },
+        {
+          path: 'settings',
+          name: 'admin-server-settings',
+          component: () => import('@/pages/admin-server/AdminServerSettingsPane.vue'),
+          meta: { admin: true },
+        },
+        {
+          path: 'lifecycle',
+          name: 'admin-server-lifecycle',
+          component: () => import('@/pages/admin-server/AdminServerLifecyclePane.vue'),
+          meta: { admin: true },
+        },
+      ],
     },
     {
       path: '/admin/users',
@@ -112,6 +136,12 @@ const router = createRouter({
       path: '/admin/hosts',
       name: 'hosts',
       component: () => import('@/pages/HostsPage.vue'),
+      meta: { admin: true },
+    },
+    {
+      path: '/admin/certificates',
+      name: 'certificates',
+      component: () => import('@/pages/CertificatesPage.vue'),
       meta: { admin: true },
     },
     {

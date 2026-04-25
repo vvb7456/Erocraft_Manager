@@ -36,5 +36,14 @@ probes:
   #   target: 10.0.0.22:3306                  # generic TCP liveness; port-listening only
   #   timeout: 5
 
+# Optional named certificate targets for generic Linux / nginx / NAS hosts.
+# Wings nodes normally leave this empty; cert.install with no target_name
+# writes to the api.ssl.cert/key paths from wings.config_path.
+cert_install_targets:
+  # - name: nginx
+  #   cert_path: /etc/nginx/ssl/erocraft.com/fullchain.pem
+  #   key_path: /etc/nginx/ssl/erocraft.com/privkey.pem
+  #   reload_cmd: systemctl reload nginx
+
 logging:
   level: INFO

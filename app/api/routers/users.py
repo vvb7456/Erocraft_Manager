@@ -45,7 +45,7 @@ from app.services.email import (
 from app.services import server_lifecycle
 from app.services.server_lifecycle import LifecycleError
 
-router = APIRouter(tags=["users"])
+router = APIRouter(prefix="/admin", tags=["users"])
 logger = logging.getLogger(__name__)
 
 _USERNAME_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")

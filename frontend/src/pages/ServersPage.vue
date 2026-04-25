@@ -7,6 +7,7 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
+import StatCard from '@/components/ui/StatCard.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -116,7 +117,7 @@ const tableLoading = ref(true)
 
 async function loadServers(silent = false) {
   if (!silent) tableLoading.value = true
-  const data = await get<{ servers: ServerItem[] }>('/api/servers')
+  const data = await get<{ servers: ServerItem[] }>('/api/admin/servers')
   if (data) {
     rawServers.value = data.servers
   }
@@ -151,6 +152,16 @@ const filtered = computed(() => {
   }
 
   return list
+})
+
+const serverStats = computed(() => {
+  const list = rawServers.value
+  return {
+    total: list.length,
+    normal: list.filter(s => !s.isSuspended && (s.statusLabel === 'normal' || s.statusLabel === 'permanent')).length,
+    expiring: list.filter(s => s.statusLabel === 'expiring_soon').length,
+    suspended: list.filter(s => s.isSuspended).length,
+  }
 })
 
 const sorted = computed(() => {
@@ -259,7 +270,7 @@ function panelStatusText(s: ServerItem): string {
 // ── Actions ──
 async function doRenew(s: ServerItem) {
   const targetDate = getRenewDate(s)
-  const res = await post<{ message: string }>(`/api/servers/${s.pteroId}/renew`, { date: targetDate })
+  const res = await post<{ message: string }>(`/api/admin/servers/${s.pteroId}/renew`, { date: targetDate })
   if (res) {
     toast(res.message, 'success')
     await loadServers(true)
@@ -276,7 +287,7 @@ async function toggleSuspend(s: ServerItem) {
     confirmText: s.isSuspended ? t('servers.action.unsuspend') : t('servers.action.suspend'),
   })
   if (!ok) return
-  const res = await post<{ message: string }>(`/api/servers/${s.pteroId}/suspend`)
+  const res = await post<{ message: string }>(`/api/admin/servers/${s.pteroId}/suspend`)
   if (res) {
     toast(res.message, 'success')
     await loadServers(true)
@@ -291,7 +302,7 @@ async function deleteServer(s: ServerItem) {
     confirmText: t('common.btn.delete'),
   })
   if (!ok) return
-  const res = await del<{ message: string }>(`/api/servers/${s.pteroId}`)
+  const res = await del<{ message: string }>(`/api/admin/servers/${s.pteroId}`)
   if (res) {
     toast(res.message, 'success')
     selectedIds.value.delete(s.pteroId)
@@ -331,7 +342,7 @@ async function executeBatchAction() {
     if (!ok) return
   }
 
-  const res = await post<BatchServersResult>('/api/servers/batch', { action, serverIds: ids })
+  const res = await post<BatchServersResult>('/api/admin/servers/batch', { action, serverIds: ids })
   if (res) {
     const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
     toast(res.message, tone)
@@ -344,7 +355,7 @@ async function executeBatchAction() {
 async function doBatchRenew() {
   const ids = [...selectedIds.value]
   if (!ids.length) return
-  const res = await post<BatchServersResult>('/api/servers/batch', {
+  const res = await post<BatchServersResult>('/api/admin/servers/batch', {
     action: 'renew',
     serverIds: ids,
     days: batchRenewDays.value,
@@ -395,6 +406,35 @@ function openMobileRenew(s: ServerItem) {
   <PageHeader icon="dns" :title="t('servers.title')" />
 
   <div class="page-body">
+    <section class="stat-grid" aria-label="server summary">
+      <StatCard :label="t('servers.stats.total')" status="info" variant="kpi">
+        <template #value>{{ serverStats.total }}</template>
+        <template #sub>{{ t('servers.stats.filtered', { n: filtered.length }) }}</template>
+      </StatCard>
+      <StatCard :label="t('servers.stats.normal')" status="running" variant="kpi">
+        <template #value>{{ serverStats.normal }}</template>
+        <template #sub>{{ t('servers.stats.available') }}</template>
+      </StatCard>
+      <StatCard
+        :label="t('servers.stats.expiring')"
+        :status="serverStats.expiring > 0 ? 'loading' : 'running'"
+        variant="kpi"
+        :tone="serverStats.expiring > 0 ? 'warn' : 'default'"
+      >
+        <template #value>{{ serverStats.expiring }}</template>
+        <template #sub>{{ t('servers.stats.expiringSub') }}</template>
+      </StatCard>
+      <StatCard
+        :label="t('servers.stats.suspended')"
+        :status="serverStats.suspended > 0 ? 'error' : 'running'"
+        variant="kpi"
+        :tone="serverStats.suspended > 0 ? 'warn' : 'default'"
+      >
+        <template #value>{{ serverStats.suspended }}</template>
+        <template #sub>{{ t('servers.stats.suspendedSub') }}</template>
+      </StatCard>
+    </section>
+
     <!-- Toolbar -->
     <SectionToolbar>
       <template #start>
