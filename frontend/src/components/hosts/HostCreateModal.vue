@@ -17,9 +17,8 @@ import BaseSelect from '@/components/form/BaseSelect.vue'
 import FormField from '@/components/form/FormField.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import HelpTip from '@/components/ui/HelpTip.vue'
-import MsIcon from '@/components/ui/MsIcon.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
-import HostTokenRevealModal from './HostTokenRevealModal.vue'
+import HostTokenRevealModal from '@/components/hosts/HostTokenRevealModal.vue'
 
 defineOptions({ name: 'HostCreateModal' })
 
@@ -48,27 +47,13 @@ interface FormState {
   enabled: boolean
 }
 
-/**
- * Generate a URL-safe Bearer token matching the backend format
- * (`secrets.token_urlsafe(32)` → 43 characters, base64url, no padding).
- * Done on the frontend so the operator sees/copies the value before
- * the row is even written; submit sends it verbatim.
- */
-function generateToken(): string {
-  const buf = new Uint8Array(32)
-  crypto.getRandomValues(buf)
-  let bin = ''
-  for (const b of buf) bin += String.fromCharCode(b)
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
 function blankForm(): FormState {
   return {
     name: '',
     kind: 'wings_node',
     hostname: '',
     agent_url: '',
-    agent_token: generateToken(),
+    agent_token: '',
     pterodactyl_node_id: null,
     enabled: true,
   }
@@ -76,11 +61,9 @@ function blankForm(): FormState {
 
 const form = ref<FormState>(blankForm())
 const submitting = ref(false)
-const createdHostName = ref('')
-
-// ── Reveal modal state ──
 const revealOpen = ref(false)
 const revealToken = ref('')
+const createdHostName = ref('')
 
 // ── Panel nodes (only needed for wings_node kind) ──
 interface NodeOption { id: number; name: string }
@@ -93,9 +76,8 @@ async function loadNodes() {
 // ── Kind options ──
 const kindOptions = computed(() => [
   { value: 'wings_node', label: t('hosts.kind.wings_node') },
-  { value: 'nginx_proxy', label: t('hosts.kind.nginx_proxy') },
-  { value: 'nas', label: t('hosts.kind.nas') },
   { value: 'generic_linux', label: t('hosts.kind.generic_linux') },
+  { value: 'synology_dsm', label: t('hosts.kind.synology_dsm') },
 ])
 
 const nodeOptions = computed(() => {
@@ -144,33 +126,27 @@ async function submit() {
       kind: form.value.kind,
       hostname: form.value.hostname.trim(),
       agent_url: form.value.agent_url.trim(),
-      agent_token: form.value.agent_token,
       enabled: form.value.enabled,
     }
+    if (form.value.agent_token) body.agent_token = form.value.agent_token
     if (isWings.value) body.pterodactyl_node_id = form.value.pterodactyl_node_id
 
     const res = await post<{
-      host: { id: number; name: string }
+      host: { id: number }
       generated_agent_token: string | null
     }>('/api/admin/hosts', body)
 
-    if (!res) return  // useApiFetch already surfaced the error
+    if (!res) return
 
     toast(t('hosts.create.created'), 'success')
-    const submittedToken = form.value.agent_token
-    const createdName = res.host.name
-    emit('created', res.host.id)
-    emit('update:modelValue', false)
-
-    // Surface the token in the reveal modal as a final "save this now"
-    // reminder. We always know the token client-side because we generated
-    // it; backend echo is preferred when present.
-    const finalToken = res.generated_agent_token || submittedToken
-    if (finalToken) {
-      revealToken.value = finalToken
-      createdHostName.value = createdName
+    // Show auto-generated token if backend created one.
+    if (res.generated_agent_token) {
+      revealToken.value = res.generated_agent_token
+      createdHostName.value = form.value.name
       revealOpen.value = true
     }
+    emit('created', res.host.id)
+    emit('update:modelValue', false)
   } catch (err: any) {
     toast(err?.message || t('hosts.create.createFailed'), 'error')
   } finally {
@@ -182,20 +158,8 @@ function cancel() {
   emit('update:modelValue', false)
 }
 
-function regenerateToken() {
-  form.value.agent_token = generateToken()
-}
-
 function onTokenCopied() {
   toast(t('hosts.tokenReveal.copied'), 'success')
-}
-
-function onRevealClosed(open: boolean) {
-  revealOpen.value = open
-  if (!open) {
-    revealToken.value = ''
-    createdHostName.value = ''
-  }
 }
 </script>
 
@@ -274,20 +238,12 @@ function onRevealClosed(open: boolean) {
         <div class="token-row">
           <SecretInput
             :modelValue="form.agent_token"
-            readonly
             copyable
             :toggleable="false"
             :revealed="true"
             @copied="onTokenCopied"
+            @update:modelValue="form.agent_token = $event"
           />
-          <BaseButton
-            size="sm"
-            variant="default"
-            :title="t('hosts.create.fields.agentTokenRefresh')"
-            @click="regenerateToken"
-          >
-            <MsIcon name="refresh" size="xs" />
-          </BaseButton>
         </div>
       </FormField>
     </div>
@@ -308,10 +264,9 @@ function onRevealClosed(open: boolean) {
   </BaseModal>
 
   <HostTokenRevealModal
-    :modelValue="revealOpen"
+    v-model="revealOpen"
     :token="revealToken"
     :info="createdHostName"
-    @update:modelValue="onRevealClosed"
   />
 </template>
 

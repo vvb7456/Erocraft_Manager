@@ -673,8 +673,8 @@ async def send_alert_email(
     db: AsyncSession,
     *,
     recipient_email: str,
-    node_name: str,
-    node_id: int | None,
+    host_name: str,
+    host_id: int | None,
     alert_type: str,
     severity: str,
     message: str,
@@ -693,8 +693,8 @@ async def send_alert_email(
 
     site_url = await get_site_url(db)
     variables: dict[str, Any] = {
-        "node_name": node_name,
-        "node_id": "" if node_id is None else str(node_id),
+        "node_name": host_name,
+        "node_id": "" if host_id is None else str(host_id),
         "alert_type": alert_type,
         "alert_type_label": alert_type_label(alert_type),
         "severity": severity,

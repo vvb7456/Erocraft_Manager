@@ -26,7 +26,7 @@ from app.api.deps.db import get_db
 from app.core import alert_defaults
 from app.db.models.manager import HostAlertRule, HostAlertSettings
 from app.db.models.pterodactyl import PteroUser
-from app.services import host_registry
+from app.services import agent_client, host_registry
 from app.services.audit import log_manager_activity
 
 logger = logging.getLogger(__name__)
@@ -84,11 +84,9 @@ class HostCreateIn(BaseModel):
     ``kind == 'wings_node'`` — host_registry enforces this; we just relay
     the validation error as 400.
 
-    ``agent_token`` is optional: if omitted, manager generates a fresh
-    Bearer (URL-safe, 43 chars) and returns it once in the response so
-    the operator can paste it into the agent's ``config.yaml``. If
-    supplied, it is used verbatim — the typical flow for an agent that
-    is already running with an existing token.
+    ``agent_token`` must be provided by the operator from the host-side
+    agent bootstrap output (systemd/journal). Manager does not generate
+    a token in this flow.
 
     Per design doc §5.3 the endpoint **must probe successfully** before
     the host row is committed; a probe failure returns HTTP 400 and no
@@ -99,7 +97,7 @@ class HostCreateIn(BaseModel):
     kind: str
     hostname: str = Field(min_length=1, max_length=255)
     agent_url: str = Field(min_length=1, max_length=255)
-    agent_token: str | None = Field(default=None, min_length=1)
+    agent_token: str = Field(min_length=1)
     pterodactyl_node_id: int | None = None
     extra_metadata: dict | None = None
     enabled: bool = True
@@ -130,11 +128,6 @@ class HostPatchIn(BaseModel):
 
 class HostCreateOut(BaseModel):
     host: HostOut
-    # When the operator omits ``agent_token`` from the create body, manager
-    # generates one and echoes the plaintext here exactly once (the operator
-    # then pastes it into the target box's agent config). When the operator
-    # supplies their own token this is ``None``.
-    generated_agent_token: str | None = None
 
 
 class ProbeOut(BaseModel):
@@ -171,20 +164,7 @@ async def create_host(
     admin: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> HostCreateOut:
-    # 1. Decide which token will be used. If the operator supplied one,
-    #    use it verbatim. Otherwise generate a fresh URL-safe Bearer and
-    #    echo the plaintext in the response (one-time disclosure).
-    if body.agent_token:
-        token = body.agent_token
-        generated: str | None = None
-    else:
-        token = host_registry._generate_agent_token()
-        generated = token
-
-    # 2. Probe-on-create (design doc §5.3): refuse to insert a row that
-    #    points at an unreachable / wrong-token agent. This catches the
-    #    common operator mistake of typoing the URL or pasting a stale
-    #    token before the row pollutes the registry.
+    token = body.agent_token
     probe = await host_registry.probe_credentials(body.agent_url, token)
     if not probe.get("ok"):
         await log_manager_activity(
@@ -223,10 +203,10 @@ async def create_host(
         detail_key="host.create.ok",
         detail_params={
             "host_id": host.id, "name": host.name, "kind": host.kind,
-            "hostname": host.hostname, "token_generated": generated is not None,
+            "hostname": host.hostname, "token_generated": False,
         },
     )
-    return HostCreateOut(host=_serialize(host), generated_agent_token=generated)
+    return HostCreateOut(host=_serialize(host))
 
 
 @router.get("/{host_id}", response_model=HostOut)
@@ -341,6 +321,75 @@ async def probe_host(
         response=result.get("response"),
         error=result.get("error"),
         latency_ms=result.get("latency_ms"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Certificate targets
+# ---------------------------------------------------------------------------
+
+
+class CertTargetOut(BaseModel):
+    name: str
+    type: str
+    exists: bool | None = None
+    paths: dict[str, str] | None = None
+    certificate_desc: str | None = None
+    dsm_cert_id: str | None = None
+    is_default: bool | None = None
+    domains: list[str] | None = None
+    services: list[dict] | None = None
+    current_cert: dict | None = None
+    error: str | None = None
+
+
+class CertTargetsOut(BaseModel):
+    targets: list[CertTargetOut]
+    wings_yaml_paths: dict[str, str | None] | None = None
+
+
+@router.get("/{host_id}/cert-targets", response_model=CertTargetsOut)
+async def get_host_cert_targets(
+    host_id: int,
+    _admin: PteroUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CertTargetsOut:
+    try:
+        endpoint, token = await host_registry.get_credentials(db, host_id)
+    except host_registry.HostNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except host_registry.AgentNotConfigured as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    try:
+        payload = await agent_client.get_cert_status(endpoint, token, timeout=15.0)
+    except agent_client.AgentClientError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"agent unreachable: {exc}",
+        ) from exc
+
+    targets_raw = payload.get("targets") or []
+    targets_out: list[CertTargetOut] = []
+    for item in targets_raw:
+        targets_out.append(CertTargetOut(
+            name=item.get("name", ""),
+            type=item.get("type", "file"),
+            exists=item.get("exists") if isinstance(item.get("exists"), bool) else None,
+            paths=item.get("paths") if isinstance(item.get("paths"), dict) else None,
+            certificate_desc=item.get("certificate_desc"),
+            dsm_cert_id=str(item.get("dsm_cert_id")) if item.get("dsm_cert_id") else None,
+            is_default=item.get("is_default") if isinstance(item.get("is_default"), bool) else None,
+            domains=item.get("domains") if isinstance(item.get("domains"), list) else None,
+            services=item.get("services") if isinstance(item.get("services"), list) else None,
+            current_cert=item.get("current_cert") if isinstance(item.get("current_cert"), dict) else None,
+            error=item.get("error"),
+        ))
+
+    wings_paths = payload.get("wings_yaml_paths")
+    return CertTargetsOut(
+        targets=targets_out,
+        wings_yaml_paths=wings_paths if isinstance(wings_paths, dict) else None,
     )
 
 

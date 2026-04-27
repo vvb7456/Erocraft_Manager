@@ -5,7 +5,7 @@
 //   1. Resource history (wings_node only) — window selector + 4 ECharts time
 //      series (CPU / MEM / DISK / LOAD) via <HostMetricsChart>.
 //   2. Wings debug log (wings_node only) — SSE stream from
-//      /api/admin/nodes/{nodeId}/wings/logs/stream consumed via EventSource.
+//      /api/admin/hosts/{hostId}/wings/logs/stream consumed via EventSource.
 //
 // Per scope decision (2026-04): host-scoped audit log section is OUT.
 import {
@@ -27,7 +27,7 @@ const { t } = useI18n({ useScope: 'global' })
 const host = inject<Ref<HostDetail | null>>('hostDetail')!
 
 const isWings = computed(() => host.value?.kind === 'wings_node')
-const nodeId = computed(() => host.value?.pterodactyl_node_id ?? null)
+const hostId = computed(() => host.value?.id ?? 0)
 
 // ── 1. History window selector ────────────────────────────────────────────
 type Window = '1h' | '6h' | '24h' | '7d'
@@ -84,9 +84,9 @@ function appendLine(text: string) {
 
 function openStream() {
   closeStream()
-  if (!isWings.value || nodeId.value == null) return
+  if (!isWings.value || !hostId.value) return
   logError.value = null
-  const url = `/api/admin/nodes/${nodeId.value}/wings/logs/stream?lines=200`
+  const url = `/api/admin/hosts/${hostId.value}/wings/logs/stream?lines=200`
   try {
     es = new EventSource(url, { withCredentials: true })
   } catch (e) {
@@ -124,9 +124,9 @@ function togglePause() { logPaused.value = !logPaused.value }
 function toggleFollow() { logFollow.value = !logFollow.value }
 
 watch(
-  () => [isWings.value, nodeId.value],
+  () => [isWings.value, hostId.value],
   () => {
-    if (isWings.value && nodeId.value != null) openStream()
+    if (isWings.value && hostId.value) openStream()
     else closeStream()
   },
   { immediate: true },
@@ -139,7 +139,7 @@ onBeforeUnmount(closeStream)
   <div v-if="!host" class="muted">{{ t('hosts.detail.loading') }}</div>
   <div v-else class="pane-stack">
     <!-- ─────────── Resource history (wings_node only) ─────────── -->
-    <BaseCard v-if="isWings && nodeId != null" variant="bg2" class="hist-card">
+    <BaseCard v-if="isWings && hostId" variant="bg2" class="hist-card">
       <header class="card-head">
         <h3 class="section-title">{{ t('hosts.activity.history.title') }}</h3>
         <ChipSelect
@@ -151,7 +151,7 @@ onBeforeUnmount(closeStream)
         <div class="chart-cell">
           <div class="chart-label">{{ t('hosts.activity.metric.cpu') }}</div>
           <HostMetricsChart
-            :node-id="nodeId"
+            :host-id="hostId"
             metric="cpu"
             :window="windowValue"
             :height="220"
@@ -161,7 +161,7 @@ onBeforeUnmount(closeStream)
         <div class="chart-cell">
           <div class="chart-label">{{ t('hosts.activity.metric.mem') }}</div>
           <HostMetricsChart
-            :node-id="nodeId"
+            :host-id="hostId"
             metric="mem"
             :window="windowValue"
             :height="220"
@@ -171,7 +171,7 @@ onBeforeUnmount(closeStream)
         <div class="chart-cell">
           <div class="chart-label">{{ t('hosts.activity.metric.disk') }}</div>
           <HostMetricsChart
-            :node-id="nodeId"
+            :host-id="hostId"
             metric="disk"
             :window="windowValue"
             :height="220"
@@ -181,7 +181,7 @@ onBeforeUnmount(closeStream)
         <div class="chart-cell">
           <div class="chart-label">{{ t('hosts.activity.metric.load') }}</div>
           <HostMetricsChart
-            :node-id="nodeId"
+            :host-id="hostId"
             metric="load"
             :window="windowValue"
             :height="220"
@@ -189,11 +189,11 @@ onBeforeUnmount(closeStream)
           />
         </div>
       </div>
-      <div class="chart-grid chart-grid--wide">
+      <div class="chart-grid">
         <div class="chart-cell">
           <div class="chart-label">{{ t('hosts.activity.metric.net') }}</div>
           <HostBytesChart
-            :node-id="nodeId"
+            :host-id="hostId"
             :series="netSeries"
             :window="windowValue"
             :height="220"
@@ -203,7 +203,7 @@ onBeforeUnmount(closeStream)
         <div class="chart-cell">
           <div class="chart-label">{{ t('hosts.activity.metric.diskIo') }}</div>
           <HostBytesChart
-            :node-id="nodeId"
+            :host-id="hostId"
             :series="diskIoSeries"
             :window="windowValue"
             :height="220"
@@ -214,7 +214,7 @@ onBeforeUnmount(closeStream)
     </BaseCard>
 
     <!-- ─────────── Wings debug log (wings_node only) ─────────── -->
-    <BaseCard v-if="isWings && nodeId != null" variant="bg2" class="log-card">
+    <BaseCard v-if="isWings && hostId" variant="bg2" class="log-card">
       <header class="card-head">
         <h3 class="section-title">
           {{ t('hosts.activity.log.title') }}

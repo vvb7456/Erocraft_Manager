@@ -33,9 +33,8 @@
   },
   "kind": {
     "wings_node": "Wings 节点",
-    "nginx_proxy": "nginx 代理",
-    "nas": "NAS",
-    "generic_linux": "Linux"
+    "generic_linux": "Linux",
+    "synology_dsm": "Synology DSM"
   },
   "status": {
     "online": "在线",
@@ -77,8 +76,7 @@
       "agentUrl": "Agent 地址",
       "agentUrlHint": "形如 http://10.0.0.22:48765，Manager 将访问此地址 Pull 数据。",
       "agentToken": "Agent Token",
-      "agentTokenHint": "Manager 已预生成一个 43 字符 URL-safe Bearer，点击创建后写入数据库。可点刷新重新生成。",
-      "agentTokenRefresh": "重新生成",
+      "agentTokenHint": "先在主机上启动 agent；若配置中 token 为空，agent 会自动生成并写回配置，并在 systemctl/journal 日志里打印 AGENT_BOOTSTRAP_TOKEN。将该值粘贴到这里。",
       "pteroNode": "面板节点",
       "pteroNodeHint": "wings_node 必填：Pterodactyl Panel 中对应的节点。",
       "enabled": "启用",
@@ -314,6 +312,7 @@
         "wings_only_down": "仅 Wings 不可达",
         "network_down": "公网不通",
         "clash_down": "Clash 不可达",
+        "cert_source_expiring": "证书即将过期",
         "cpu_high": "CPU 过高",
         "mem_high": "内存过高",
         "swap_high": "Swap 过高",
@@ -392,5 +391,28 @@
       "inUse": "端口 :{port} 已被服务器占用，无法删除"
     },
     "notWings": "仅 wings_node 主机可管理端口分配。"
+  },
+  "certs": {
+    "title": "证书部署",
+    "labelDomains": "域名：",
+    "labelTarget": "目标：",
+    "wingsDefault": "Wings 默认",
+    "wingsDefaultOption": "Wings 默认路径",
+    "wingsPathNote": "将写入 Wings config.yml 中配置的 api.ssl 路径并重启 Wings。",
+    "targetWillInstall": "将写入 agent 配置中声明的 target「{name}」路径。",
+    "empty": "该主机尚未部署任何证书。",
+    "addDeployment": "部署证书",
+    "selectCert": "选择证书",
+    "selectTarget": "选择目标",
+    "confirmAdd": "确认部署",
+    "sync": "同步",
+    "remove": "移除",
+    "confirmSyncTitle": "强制同步证书",
+    "confirmSyncMessage": "将向该主机重新下发证书「{name}」并重启目标服务。",
+    "confirmRemoveTitle": "取消证书部署",
+    "confirmRemoveMessage": "将从该主机移除证书「{name}」的部署关系。不会删除主机上的现有证书文件。",
+    "toastBound": "证书已部署",
+    "toastSynced": "证书已同步",
+    "toastRemoved": "部署已移除"
   }
 }

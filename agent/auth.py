@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+from typing import Optional
 
 from fastapi import Header, HTTPException, Request, status
 
@@ -16,7 +17,7 @@ def make_auth_dependency(cfg: AgentConfig):
 
     async def _auth(
         request: Request,
-        authorization: str | None = Header(default=None),
+        authorization: Optional[str] = Header(default=None),
     ) -> None:
         if allow_ips:
             client_ip = request.client.host if request.client else None

@@ -26,8 +26,7 @@
     "deployOk": "全部同步"
   },
   "certificates": {
-    "title": "证书详情",
-    "summary": "{n} 张证书"
+    "title": "证书详情"
   },
   "status": {
     "ok": "正常",
@@ -65,7 +64,6 @@
   },
   "nodes": {
     "title": "受管节点",
-    "summary": "{n} 个部署目标",
     "empty": "还没有证书部署目标",
     "perPage": "行/页",
     "host": "节点",
@@ -88,7 +86,9 @@
     "noBindings": "这张证书还没有接管任何节点。",
     "noAvailable": "没有可添加的默认目标节点。",
     "defaultTarget": "默认目标",
-    "defaultTargetHint": "将写入该主机 agent 暴露的默认证书目标"
+    "defaultTargetHint": "将写入该主机 agent 暴露的默认证书目标",
+    "loadingTargets": "正在加载可用目标...",
+    "targetCount": "{n} 个可用目标"
   },
   "selector": {
     "title": "选择 acme.sh 证书",

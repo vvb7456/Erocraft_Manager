@@ -58,6 +58,9 @@ DEFAULT_ALERT_RULES: dict[str, dict[str, Any]] = {
     # Disk — dual-threshold
     "disk_high":     {"enabled": True, "warning_threshold": 85.0, "critical_threshold": 95.0},
     "disk_critical": {"enabled": True, "warning_threshold": 85.0, "critical_threshold": 95.0},
+
+    # Certificate source lifecycle
+    "cert_source_expiring": {"enabled": True},
 }
 
 

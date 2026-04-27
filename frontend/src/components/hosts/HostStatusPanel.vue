@@ -74,7 +74,6 @@ interface SnapshotResponse {
   inboundReachable: boolean
   lastSeenAt: string | null
   lastStatusAt: string | null
-  nodeId?: number
   metrics: SnapshotMetrics | null
   probes: Array<{ name: string; ok: boolean; ts: string }>
 }
@@ -140,7 +139,7 @@ const DEFAULT_THRESHOLDS = {
 
 const metrics = computed(() => snap.value?.metrics)
 const isWings = computed(() => props.kind === 'wings_node')
-const nodeId = computed(() => snap.value?.nodeId)
+const chartHostId = computed(() => props.hostId)
 
 const heartbeatAge = computed(() => {
   const ts = snap.value?.lastSeenAt
@@ -347,14 +346,14 @@ const loadOption = computed(() => {
       </div>
 
       <!-- hero trends -->
-      <div v-if="nodeId" class="hero">
+      <div v-if="chartHostId" class="hero">
         <div class="hero-cell">
           <div class="hero-title">{{ t('hosts.overview.hero.cpu') }}</div>
-          <HostMetricsChart :nodeId="nodeId" metric="cpu" window="1h" :height="140" autoRefresh />
+          <HostMetricsChart :hostId="chartHostId" metric="cpu" window="1h" :height="140" autoRefresh />
         </div>
         <div class="hero-cell">
           <div class="hero-title">{{ t('hosts.overview.hero.mem') }}</div>
-          <HostMetricsChart :nodeId="nodeId" metric="mem" window="1h" :height="140" autoRefresh />
+          <HostMetricsChart :hostId="chartHostId" metric="mem" window="1h" :height="140" autoRefresh />
         </div>
       </div>
     </template>

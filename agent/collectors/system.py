@@ -27,6 +27,75 @@ _DISK_WHOLE_DEV_RE = re.compile(
 # physical sector size (see Documentation/admin-guide/iostats.rst).
 _DISK_SECTOR_BYTES = 512
 
+_PSEUDO_FS_TYPES = {
+    "proc",
+    "sysfs",
+    "devtmpfs",
+    "devpts",
+    "tmpfs",
+    "securityfs",
+    "cgroup",
+    "cgroup2",
+    "pstore",
+    "tracefs",
+    "configfs",
+    "fusectl",
+    "debugfs",
+    "mqueue",
+    "hugetlbfs",
+    "overlay",
+    "squashfs",
+    "ramfs",
+    "autofs",
+}
+
+
+def _is_synology_dsm() -> bool:
+    # DSM hosts expose both of these paths; regular Linux boxes typically don't.
+    return os.path.exists("/etc.defaults/VERSION") and os.path.isdir("/usr/syno")
+
+
+def _disk_usage_mountpoint() -> str:
+    """Return mount path used for disk usage percentage.
+
+    On DSM we should not use ``/`` (tiny system partition, often >90% by design).
+    Prefer the largest ``/volume*`` mount so reported disk_pct matches operator
+    expectations and actual data-capacity usage.
+    """
+    if not _is_synology_dsm():
+        return "/"
+
+    best_path: str | None = None
+    best_total = -1
+    try:
+        with open("/proc/mounts", "r", encoding="ascii") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                mount_path = parts[1]
+                fs_type = parts[2]
+                if fs_type in _PSEUDO_FS_TYPES:
+                    continue
+                if not mount_path.startswith("/volume"):
+                    continue
+                try:
+                    st = os.statvfs(mount_path)
+                except OSError:
+                    continue
+                total = st.f_blocks * st.f_frsize
+                if total > best_total:
+                    best_total = total
+                    best_path = mount_path
+    except OSError:
+        pass
+
+    if best_path:
+        return best_path
+    if os.path.exists("/volume1"):
+        return "/volume1"
+    return "/"
+
 
 # ---- /proc/stat CPU% running state ----
 
@@ -238,7 +307,8 @@ def collect_system() -> SystemMetrics:
     ) = _mem_swap_kib()
 
     try:
-        st = os.statvfs("/")
+        disk_path = _disk_usage_mountpoint()
+        st = os.statvfs(disk_path)
         # Match psutil.disk_usage("/") semantics:
         #   total = f_blocks * f_frsize  (full size, includes reserved)
         #   used  = (f_blocks - f_bfree) * f_frsize  (NOT free for ANY user)

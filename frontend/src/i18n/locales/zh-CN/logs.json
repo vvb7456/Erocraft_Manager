@@ -3,6 +3,7 @@
   "filter": {
     "actor": "执行者",
     "actorPlaceholder": "筛选执行者",
+    "category": "分类",
     "action": "操作类型",
     "status": "状态",
     "all": "全部"
@@ -11,6 +12,7 @@
     "time": "时间",
     "actor": "执行者",
     "action": "操作类型",
+    "category": "分类",
     "status": "状态",
     "details": "详细信息"
   },
@@ -20,8 +22,20 @@
   },
   "status_label": {
     "success": "成功",
-    "failure": "失败",
+    "failed": "失败",
+    "partial": "部分成功",
     "info": "信息"
+  },
+  "category": {
+    "auth": "认证",
+    "server": "服务器",
+    "user": "用户",
+    "host_node": "主机与节点",
+    "automation": "自动化",
+    "settings": "设置",
+    "certificate": "证书",
+    "email": "邮件",
+    "other": "其他"
   },
   "action": {
     "auth": "认证",
@@ -36,19 +50,18 @@
       "delete": "分配删除",
       "delete_bulk": "分配批量删除"
     },
-    "create_host": "创建主机",
-    "delete_host": "删除主机",
-    "probe_host": "探测主机",
-    "rotate_agent_token": "轮换 Agent Token",
-    "restart_wings": "重启 Wings",
-    "reset_node_daemon_token": "重置节点 Daemon Token",
-    "update_node_wings_config": "更新节点 Wings 配置",
-    "host_alerts_update": "更新主机告警",
-    "global_defaults_update": "更新全局默认值"
+    "host": "主机操作",
+    "node": "节点操作",
+    "certificate": "证书操作",
+    "other": "其他"
   },
   "reminderType": {
     "expiry": "到期提醒",
     "pre_delete": "删除前提醒"
+  },
+  "language": {
+    "zh": "中文",
+    "en": "英文"
   },
   "detail": {
     "login_failed": "尝试使用 {username} 登录失败。",
@@ -89,7 +102,61 @@
     "automated_reminder_started": "开始执行{type}任务。",
     "automated_reminder_noop": "任务完成，没有需要发送{type}的服务器。",
     "automated_reminder_finished": "任务完成，成功发送了 {sent} 封{type}邮件。",
-    "automated_reminder_failed": "执行{type}任务时发生意外错误: {error}"
+    "automated_reminder_failed": "执行{type}任务时发生意外错误: {error}",
+    "host.create.probe_failed": "创建主机时探测失败: {error}",
+    "host.create.ok": "主机已创建: {name} ({kind})",
+    "host.probe.ok": "主机探测成功。",
+    "host.probe.failed": "主机探测失败: {error}",
+    "host.probe.unconfigured": "主机探测未配置: {error}",
+    "host.create.invalid": "创建主机请求无效: {error}",
+    "host.patch.ok": "主机已更新: #{host_id} (字段: {changed})",
+    "host.delete.ok": "主机已删除: {name}",
+    "host.alerts.update": "主机 #{host_id} 告警设置已更新。",
+    "host.token.rotate": "主机 #{host_id} token 已轮换。",
+    "node.wings_config.update": "主机 #{host_id} 的 Wings 配置已更新。",
+    "node.daemon_token.reset": "节点 #{node_id} daemon token 已重置。",
+    "node.wings.restart": "主机 #{host_id} 的 Wings 已重启。",
+    "global_defaults.update": "全局默认值已更新。",
+    "monitoring_settings_change": "监控设置已更新。",
+    "user_language_changed": "用户语言已切换为 {language}。",
+    "register_request": "收到注册请求: {username} ({email})。",
+    "register_verified": "注册验证成功: {username}。",
+    "email_sent": "邮件已发送到 {recipient}。",
+    "email_failed": "发送邮件到 {recipient} 失败: {error}",
+    "test_email_sent": "测试邮件已发送到 {recipient}。",
+    "cert.deploy.success": "证书已下发到主机 #{host_id}。",
+    "cert.deploy.failed": "主机 #{host_id} 证书下发失败: {error}",
+    "cert.deployment.create": "主机 #{host_id} 的证书部署绑定已创建。",
+    "cert.deployment.delete": "主机 #{host_id} 的证书部署绑定已移除。",
+    "cert.acme.register": "acme.sh 证书已注册: {domain}。",
+    "allocation.create.ok": "节点 #{node_id} 已创建分配: {ip}:{port}。",
+    "allocation.create.bad_expression": "分配表达式无效: {ports}",
+    "allocation.delete.ok": "分配已删除: {ip}:{port}。",
+    "allocation.delete.in_use": "分配正在使用，无法删除: {ip}:{port}。",
+    "allocation.delete.bulk_ok": "批量删除分配完成。已删数量: {deleted_count}，端口: {ports}。",
+    "allocation.delete.bulk_blocked": "节点 #{node_id} 批量删除分配被阻止。冲突端口: {conflicting_ports}",
+    "admin_server.details.update": "服务器详情已更新: {server_name} (#{server_id})。",
+    "admin_server.owner.update": "服务器所有者已更新: {server_name} (#{server_id})。",
+    "admin_server.build.update": "服务器资源限制已更新: {server_name} (#{server_id})。",
+    "admin_server.startup.update": "服务器启动参数已更新: {server_name} (#{server_id})。",
+    "admin_server.variables.update": "服务器变量已更新: {server_name} (#{server_id})。",
+    "admin_server.egg.switch": "服务器 Egg 已切换: {server_name} (#{server_id})。",
+    "admin_server.reinstall": "服务器已发起重装: {server_name} (#{server_id})。",
+    "admin_server.allocations.primary": "服务器主分配已变更: {server_name} (#{server_id})。",
+    "admin_server.allocations.add": "服务器已添加分配: {server_name} (#{server_id})。",
+    "admin_server.allocations.remove": "服务器已移除分配: {server_name} (#{server_id})。",
+    "cert.create": "证书已创建: {name} (#{certificate_id})。",
+    "cert.patch": "证书已更新: #{certificate_id}。变更字段: {changed}",
+    "cert.delete": "证书已删除: {name} (#{certificate_id})。",
+    "cert.settings.update": "证书设置已更新。变更项: {changed}",
+    "cert.renew_force": "证书强制续期完成: #{certificate_id}，changed={changed}，dispatch={dispatch_count}。",
+    "cert.renew_force.failed": "证书强制续期失败: #{certificate_id}，{error}",
+    "cert.source_changed": "证书源变更 webhook 已处理: {source_path}，证书数={certificate_count}，下发数={dispatch_count}。",
+    "cert.alert.sent": "证书告警邮件已发送: 证书 #{certificate_id}，类型={alert_type}，级别={severity}，发送数={sent}。",
+    "forgot_password.site_url_not_configured": "无法发送重置邮件: SITE_URL 未配置。",
+    "register.site_url_not_configured": "无法发送注册验证邮件: SITE_URL 未配置。",
+    "server.delete.remote_db_leftover": "服务器已删除，但远端数据库清理存在残留问题: {errors}",
+    "unknown": "未知日志详情: {key}"
   },
   "pagination": {
     "per_page": "条/页"

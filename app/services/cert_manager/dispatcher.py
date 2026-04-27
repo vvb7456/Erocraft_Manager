@@ -9,13 +9,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utc_naive_now
-from app.db.models.manager import ManagerCertDeployment, ManagerCertificate
+from app.db.models.manager import ManagerCertDeployment, ManagerCertificate, ManagerHost
 from app.services import agent_client, host_registry
 from app.services.audit import log_manager_activity
 
 from .pem import CertPemError, load_source_material
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_CERT_COMMAND_TIMEOUT = 30.0
+_DSM_CERT_COMMAND_TIMEOUT = 300.0
 
 
 async def redeploy_deployment(
@@ -39,8 +42,37 @@ async def redeploy_deployment(
     deployment.last_deploy_attempt_at = now
 
     try:
+        host = await db.get(ManagerHost, deployment.host_id)
+        command_timeout = (
+            _DSM_CERT_COMMAND_TIMEOUT
+            if host is not None and host.kind == host_registry.KIND_SYNOLOGY_DSM
+            else _DEFAULT_CERT_COMMAND_TIMEOUT
+        )
+        request_timeout = max(90.0, command_timeout + 30.0)
+
         material = load_source_material(cert.source_path)
         endpoint, token = await host_registry.get_credentials(db, deployment.host_id)
+    except (CertPemError, host_registry.HostRegistryError) as exc:
+        deployment.status = "deploy_failed"
+        deployment.last_deploy_error = str(exc)
+        if commit:
+            await db.commit()
+        await log_manager_activity(
+            db,
+            actor=actor,
+            action="cert_deploy",
+            status="error",
+            detail_key="cert.deploy.failed",
+            detail_params={
+                "certificate_id": cert.id,
+                "deployment_id": deployment.id,
+                "host_id": deployment.host_id,
+                "error": str(exc),
+            },
+        )
+        return {"ok": False, "deployment_id": deployment.id, "error": str(exc)}
+
+    try:
         result = await agent_client.install_cert(
             endpoint,
             token,
@@ -48,10 +80,10 @@ async def redeploy_deployment(
             fullchain_pem=material.fullchain_pem,
             privkey_pem=material.privkey_pem,
             target_name=deployment.target_name,
-            command_timeout=30.0,
-            timeout=90.0,
+            command_timeout=command_timeout,
+            timeout=request_timeout,
         )
-    except (CertPemError, host_registry.HostRegistryError, agent_client.AgentClientError) as exc:
+    except Exception as exc:
         deployment.status = "deploy_failed"
         deployment.last_deploy_error = str(exc)
         if commit:

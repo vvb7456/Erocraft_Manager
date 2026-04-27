@@ -3,7 +3,7 @@ from __future__ import annotations
 
 Each cycle (60s by default):
   1. For every enabled ``wings_node`` manager_host: GET /v1/metrics (parallel).
-  2. Persist a complete NodeMetrics row (system + wings + containers).
+  2. Persist a complete HostMetrics row (system + wings + containers).
   3. Run the public-side reachability probe (Manager -> wings public).
   4. Evaluate alert rules and persist transitions.
   5. Cleanup data older than retention.
@@ -30,7 +30,7 @@ from app.core import alert_defaults
 from app.core.settings_store import get_settings_store
 from app.core.time import utc_naive_now
 from app.db.models.manager import HostAlertRule, HostAlertSettings, ManagerHost
-from app.db.models.monitoring import NodeAlert, NodeMetrics, ProbeResult
+from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
 from app.db.session import get_session_factory
 from app.services import agent_client, host_registry
 from app.services.metrics_builder import build_metrics_row
@@ -85,16 +85,6 @@ async def _probe_wings_public(
 
 
 # ---------------------------------------------------------------------------
-# Convert agent payload -> NodeMetrics row
-# ---------------------------------------------------------------------------
-#
-# The actual builder lives in app.services.metrics_builder so that the admin
-# "refresh now" endpoint can reuse it without reaching into this private
-# module.  Kept here as a thin alias so the rest of this file reads the same
-# way it did before the extraction.
-_build_metrics_row = build_metrics_row
-
-
 # ---------------------------------------------------------------------------
 # Alert engine — per-host configuration
 # ---------------------------------------------------------------------------
@@ -108,7 +98,6 @@ class HostAlertConfig:
     """Resolved per-host alert configuration (with defaults applied)."""
 
     host_id: int
-    node_id: int | None
     email_enabled: bool
     email_recipients: list[int]  # admin user ids; [] = use ALERT_DEFAULT_RECIPIENTS
     min_severity: str
@@ -185,7 +174,6 @@ async def _load_host_alert_config(
 
     return HostAlertConfig(
         host_id=host.id,
-        node_id=host.pterodactyl_node_id,
         email_enabled=email_enabled,
         email_recipients=recipients,
         min_severity=min_severity,
@@ -227,9 +215,9 @@ async def _maybe_notify(
     db: AsyncSession,
     config: HostAlertConfig,
     *,
-    node_name: str,
-    node_id: int | None,
-    alert_obj: NodeAlert,
+    host_name: str,
+    host_id: int | None,
+    alert_obj: HostAlert,
     kind: str,  # 'fired' | 'resolved'
     now: datetime,
 ) -> None:
@@ -258,8 +246,8 @@ async def _maybe_notify(
         ok, err = await send_alert_email(
             db,
             recipient_email=email,
-            node_name=node_name,
-            node_id=node_id,
+            host_name=host_name,
+            host_id=host_id,
             alert_type=alert_obj.alert_type,
             severity=alert_obj.severity,
             message=alert_obj.message or "",
@@ -272,7 +260,7 @@ async def _maybe_notify(
         else:
             logger.warning(
                 "alert email send failed (node=%s type=%s kind=%s recipient=%s): %s",
-                node_id, alert_obj.alert_type, kind, email, err,
+                host_id, alert_obj.alert_type, kind, email, err,
             )
 
     if sent_any and kind == "fired":
@@ -282,72 +270,89 @@ async def _maybe_notify(
 
 async def _check_alerts(
     db: AsyncSession,
-    metrics: NodeMetrics,
+    metrics: HostMetrics,
     *,
     config: HostAlertConfig,
-    node_name: str,
+    host_name: str,
+    is_wings: bool = False,
 ) -> None:
-    node_id = config.node_id
+    host_id = config.host_id
     now = utc_naive_now()
 
-    # --- reachability: 3 mutually-exclusive states ---
-    if not metrics.agent_online and not metrics.wings_online:
-        await _raise_or_skip(db, node_id, "node_offline", "critical",
-                             f"Node {node_id} unreachable (agent + wings down)",
-                             now, config=config, node_name=node_name)
-        await _auto_resolve(db, node_id, "agent_only_down", now,
-                            config=config, node_name=node_name)
-        await _auto_resolve(db, node_id, "wings_only_down", now,
-                            config=config, node_name=node_name)
-    elif not metrics.agent_online:
-        await _raise_or_skip(db, node_id, "agent_only_down", "warning",
-                             f"Node {node_id} agent unreachable (wings still online)",
-                             now, config=config, node_name=node_name)
-        await _auto_resolve(db, node_id, "node_offline", now,
-                            config=config, node_name=node_name)
-        await _auto_resolve(db, node_id, "wings_only_down", now,
-                            config=config, node_name=node_name)
-    elif not metrics.wings_online:
-        await _raise_or_skip(db, node_id, "wings_only_down", "critical",
-                             f"Node {node_id} wings unreachable (agent still online)",
-                             now, config=config, node_name=node_name)
-        await _auto_resolve(db, node_id, "node_offline", now,
-                            config=config, node_name=node_name)
-        await _auto_resolve(db, node_id, "agent_only_down", now,
-                            config=config, node_name=node_name)
+    # --- reachability ---
+    if is_wings:
+        # 3 mutually-exclusive states for wings nodes
+        if not metrics.agent_online and not metrics.wings_online:
+            await _raise_or_skip(db, host_id, "node_offline", "critical",
+                                 f"Host {host_id} unreachable (agent + wings down)",
+                                 now, config=config, host_name=host_name)
+            await _auto_resolve(db, host_id, "agent_only_down", now,
+                                config=config, host_name=host_name)
+            await _auto_resolve(db, host_id, "wings_only_down", now,
+                                config=config, host_name=host_name)
+        elif not metrics.agent_online:
+            await _raise_or_skip(db, host_id, "agent_only_down", "warning",
+                                 f"Host {host_id} agent unreachable (wings still online)",
+                                 now, config=config, host_name=host_name)
+            await _auto_resolve(db, host_id, "node_offline", now,
+                                config=config, host_name=host_name)
+            await _auto_resolve(db, host_id, "wings_only_down", now,
+                                config=config, host_name=host_name)
+        elif not metrics.wings_online:
+            await _raise_or_skip(db, host_id, "wings_only_down", "critical",
+                                 f"Host {host_id} wings unreachable (agent still online)",
+                                 now, config=config, host_name=host_name)
+            await _auto_resolve(db, host_id, "node_offline", now,
+                                config=config, host_name=host_name)
+            await _auto_resolve(db, host_id, "agent_only_down", now,
+                                config=config, host_name=host_name)
+        else:
+            await _auto_resolve(db, host_id, "node_offline", now,
+                                config=config, host_name=host_name)
+            await _auto_resolve(db, host_id, "agent_only_down", now,
+                                config=config, host_name=host_name)
+            await _auto_resolve(db, host_id, "wings_only_down", now,
+                                config=config, host_name=host_name)
     else:
-        await _auto_resolve(db, node_id, "node_offline", now,
-                            config=config, node_name=node_name)
-        await _auto_resolve(db, node_id, "agent_only_down", now,
-                            config=config, node_name=node_name)
-        await _auto_resolve(db, node_id, "wings_only_down", now,
-                            config=config, node_name=node_name)
+        # Non-wings: only agent matters, wings is intentionally offline.
+        if not metrics.agent_online:
+            await _raise_or_skip(db, host_id, "agent_only_down", "critical",
+                                 f"Host {host_id} agent unreachable",
+                                 now, config=config, host_name=host_name)
+        else:
+            await _auto_resolve(db, host_id, "agent_only_down", now,
+                                config=config, host_name=host_name)
+        # Wings-specific alerts should never be active for non-wings hosts.
+        await _auto_resolve(db, host_id, "node_offline", now,
+                            config=config, host_name=host_name)
+        await _auto_resolve(db, host_id, "wings_only_down", now,
+                            config=config, host_name=host_name)
 
     # --- CPU ---
     cpu_rule = config.rule("cpu_high")
     cpu_threshold = float(cpu_rule.get("threshold") or 90)
     cpu_sustain = int(cpu_rule.get("sustain_min") or 5)
     if metrics.cpu_pct is not None and metrics.cpu_pct > cpu_threshold:
-        if await _check_sustained_above(db, node_id, "cpu_pct", cpu_threshold, minutes=cpu_sustain):
-            await _raise_or_skip(db, node_id, "cpu_high", "warning",
+        if await _check_sustained_above(db, host_id, "cpu_pct", cpu_threshold, minutes=cpu_sustain):
+            await _raise_or_skip(db, host_id, "cpu_high", "warning",
                                  f"CPU {metrics.cpu_pct}% > {cpu_threshold}% sustained",
-                                 now, config=config, node_name=node_name)
+                                 now, config=config, host_name=host_name)
     else:
-        await _auto_resolve(db, node_id, "cpu_high", now,
-                            config=config, node_name=node_name)
+        await _auto_resolve(db, host_id, "cpu_high", now,
+                            config=config, host_name=host_name)
 
     # --- Memory ---
     mem_rule = config.rule("mem_high")
     mem_threshold = float(mem_rule.get("threshold") or 90)
     mem_sustain = int(mem_rule.get("sustain_min") or 5)
     if metrics.mem_pct is not None and metrics.mem_pct > mem_threshold:
-        if await _check_sustained_above(db, node_id, "mem_pct", mem_threshold, minutes=mem_sustain):
-            await _raise_or_skip(db, node_id, "mem_high", "warning",
+        if await _check_sustained_above(db, host_id, "mem_pct", mem_threshold, minutes=mem_sustain):
+            await _raise_or_skip(db, host_id, "mem_high", "warning",
                                  f"Memory {metrics.mem_pct}% > {mem_threshold}% sustained",
-                                 now, config=config, node_name=node_name)
+                                 now, config=config, host_name=host_name)
     else:
-        await _auto_resolve(db, node_id, "mem_high", now,
-                            config=config, node_name=node_name)
+        await _auto_resolve(db, host_id, "mem_high", now,
+                            config=config, host_name=host_name)
 
     # --- Swap ---
     swap_rule = config.rule("swap_high")
@@ -356,12 +361,12 @@ async def _check_alerts(
     if metrics.swap_total_mb and metrics.swap_total_mb > 0 and metrics.swap_used_mb is not None:
         swap_pct = round(metrics.swap_used_mb * 100.0 / metrics.swap_total_mb, 1)
     if swap_pct is not None and swap_pct > swap_threshold:
-        await _raise_or_skip(db, node_id, "swap_high", "warning",
+        await _raise_or_skip(db, host_id, "swap_high", "warning",
                              f"Swap {swap_pct}% > {swap_threshold}%",
-                             now, config=config, node_name=node_name)
+                             now, config=config, host_name=host_name)
     else:
-        await _auto_resolve(db, node_id, "swap_high", now,
-                            config=config, node_name=node_name)
+        await _auto_resolve(db, host_id, "swap_high", now,
+                            config=config, host_name=host_name)
 
     # --- Load ---
     load_rule = config.rule("load_high")
@@ -372,13 +377,13 @@ async def _check_alerts(
         load_limit = metrics.cpu_cores * load_factor
     if (metrics.load_1m is not None and load_limit is not None
             and metrics.load_1m > load_limit):
-        if await _check_sustained_above(db, node_id, "load_1m", load_limit, minutes=load_sustain):
-            await _raise_or_skip(db, node_id, "load_high", "warning",
+        if await _check_sustained_above(db, host_id, "load_1m", load_limit, minutes=load_sustain):
+            await _raise_or_skip(db, host_id, "load_high", "warning",
                                  f"Load {metrics.load_1m} > {load_limit:.2f} ({metrics.cpu_cores} cores × {load_factor})",
-                                 now, config=config, node_name=node_name)
+                                 now, config=config, host_name=host_name)
     else:
-        await _auto_resolve(db, node_id, "load_high", now,
-                            config=config, node_name=node_name)
+        await _auto_resolve(db, host_id, "load_high", now,
+                            config=config, host_name=host_name)
 
     # --- Disk ---
     disk_rule = config.rule("disk_high")
@@ -386,24 +391,24 @@ async def _check_alerts(
     disk_crit = float(disk_rule.get("critical_threshold") or 95)
     if metrics.disk_pct is not None:
         if metrics.disk_pct > disk_crit:
-            await _raise_or_skip(db, node_id, "disk_critical", "critical",
+            await _raise_or_skip(db, host_id, "disk_critical", "critical",
                                  f"Disk {metrics.disk_pct}% > {disk_crit}%",
-                                 now, config=config, node_name=node_name)
+                                 now, config=config, host_name=host_name)
         elif metrics.disk_pct > disk_warn:
-            await _raise_or_skip(db, node_id, "disk_high", "warning",
+            await _raise_or_skip(db, host_id, "disk_high", "warning",
                                  f"Disk {metrics.disk_pct}% > {disk_warn}%",
-                                 now, config=config, node_name=node_name)
-            await _auto_resolve(db, node_id, "disk_critical", now,
-                                config=config, node_name=node_name)
+                                 now, config=config, host_name=host_name)
+            await _auto_resolve(db, host_id, "disk_critical", now,
+                                config=config, host_name=host_name)
         else:
-            await _auto_resolve(db, node_id, "disk_high", now,
-                                config=config, node_name=node_name)
-            await _auto_resolve(db, node_id, "disk_critical", now,
-                                config=config, node_name=node_name)
+            await _auto_resolve(db, host_id, "disk_high", now,
+                                config=config, host_name=host_name)
+            await _auto_resolve(db, host_id, "disk_critical", now,
+                                config=config, host_name=host_name)
 
 
 async def _check_sustained_above(
-    db: AsyncSession, node_id: int, field_name: str, threshold: float, minutes: int,
+    db: AsyncSession, host_id: int, field_name: str, threshold: float, minutes: int,
 ) -> bool:
     """Return True if the field has been sustainedly above threshold.
 
@@ -416,12 +421,12 @@ async def _check_sustained_above(
         seconds, while adding no real safety (the sample-count gate already
         prevents firing on a single spike).
     """
-    col = getattr(NodeMetrics, field_name)
+    col = getattr(HostMetrics, field_name)
     cutoff = utc_naive_now() - timedelta(minutes=minutes)
     result = await db.execute(
-        select(col, NodeMetrics.ts)
-        .where(NodeMetrics.node_id == node_id, col.isnot(None), NodeMetrics.ts >= cutoff)
-        .order_by(NodeMetrics.ts.asc())
+        select(col, HostMetrics.ts)
+        .where(HostMetrics.host_id == host_id, col.isnot(None), HostMetrics.ts >= cutoff)
+        .order_by(HostMetrics.ts.asc())
     )
     rows = result.all()
     if len(rows) < 3:
@@ -431,16 +436,16 @@ async def _check_sustained_above(
 
 
 async def _raise_or_skip(
-    db: AsyncSession, node_id: int | None, alert_type: str, severity: str, message: str, now: datetime,
+    db: AsyncSession, host_id: int | None, alert_type: str, severity: str, message: str, now: datetime,
     *,
     config: HostAlertConfig | None = None,
-    node_name: str = "",
+    host_name: str = "",
 ) -> None:
     existing = await db.execute(
-        select(NodeAlert).where(
-            NodeAlert.node_id == node_id,
-            NodeAlert.alert_type == alert_type,
-            NodeAlert.resolved_at.is_(None),
+        select(HostAlert).where(
+            HostAlert.host_id == host_id,
+            HostAlert.alert_type == alert_type,
+            HostAlert.resolved_at.is_(None),
         )
     )
     open_row = existing.scalar_one_or_none()
@@ -448,13 +453,13 @@ async def _raise_or_skip(
         if config is not None:
             await _maybe_notify(
                 db, config,
-                node_name=node_name, node_id=node_id,
+                host_name=host_name, host_id=host_id,
                 alert_obj=open_row, kind="fired", now=now,
             )
         return
 
-    alert = NodeAlert(
-        node_id=node_id, alert_type=alert_type, severity=severity,
+    alert = HostAlert(
+        host_id=host_id, alert_type=alert_type, severity=severity,
         message=message, created_at=now,
     )
     db.add(alert)
@@ -463,22 +468,22 @@ async def _raise_or_skip(
     if config is not None:
         await _maybe_notify(
             db, config,
-            node_name=node_name, node_id=node_id,
+            host_name=host_name, host_id=host_id,
             alert_obj=alert, kind="fired", now=now,
         )
 
 
 async def _auto_resolve(
-    db: AsyncSession, node_id: int | None, alert_type: str, now: datetime,
+    db: AsyncSession, host_id: int | None, alert_type: str, now: datetime,
     *,
     config: HostAlertConfig | None = None,
-    node_name: str = "",
+    host_name: str = "",
 ) -> None:
     open_q = await db.execute(
-        select(NodeAlert).where(
-            NodeAlert.node_id == node_id,
-            NodeAlert.alert_type == alert_type,
-            NodeAlert.resolved_at.is_(None),
+        select(HostAlert).where(
+            HostAlert.host_id == host_id,
+            HostAlert.alert_type == alert_type,
+            HostAlert.resolved_at.is_(None),
         )
     )
     open_rows = open_q.scalars().all()
@@ -493,7 +498,7 @@ async def _auto_resolve(
             if row.notified:
                 await _maybe_notify(
                     db, config,
-                    node_name=node_name, node_id=node_id,
+                    host_name=host_name, host_id=host_id,
                     alert_obj=row, kind="resolved", now=now,
                 )
 
@@ -502,15 +507,15 @@ async def _check_probe_alerts(
     db: AsyncSession,
     *,
     host_configs: dict[int, HostAlertConfig],
-    node_names: dict[int, str],
+    host_names: dict[int, str],
 ) -> None:
     """Per-node probe alerting.
 
-    ``ProbeResult`` rows carry two orthogonal identifiers:
+    ``HostProbeResult`` rows carry two orthogonal identifiers:
 
     * ``source`` — ``"manager"`` for the public-side Wings probe, or
-      ``"agent:<node_id>"`` for agent-reported probes.
-    * ``probe_name`` — user-defined or ``wings_pub_<node_id>``.
+      ``"agent:<host_id>"`` for agent-reported probes.
+    * ``probe_name`` — user-defined or ``wings_pub_<host_id>``.
 
     We look at the latest row for each ``(source, probe_name)`` pair and
     raise / auto-resolve one alert per node, using the corresponding
@@ -525,20 +530,20 @@ async def _check_probe_alerts(
     cutoff = now - timedelta(minutes=5)
     latest_ts_subq = (
         select(
-            ProbeResult.source,
-            ProbeResult.probe_name,
-            func.max(ProbeResult.ts).label("max_ts"),
+            HostProbeResult.source,
+            HostProbeResult.probe_name,
+            func.max(HostProbeResult.ts).label("max_ts"),
         )
-        .where(ProbeResult.ts >= cutoff)
-        .group_by(ProbeResult.source, ProbeResult.probe_name)
+        .where(HostProbeResult.ts >= cutoff)
+        .group_by(HostProbeResult.source, HostProbeResult.probe_name)
         .subquery()
     )
     latest_rows = await db.execute(
-        select(ProbeResult).join(
+        select(HostProbeResult).join(
             latest_ts_subq,
-            (ProbeResult.source == latest_ts_subq.c.source)
-            & (ProbeResult.probe_name == latest_ts_subq.c.probe_name)
-            & (ProbeResult.ts == latest_ts_subq.c.max_ts),
+            (HostProbeResult.source == latest_ts_subq.c.source)
+            & (HostProbeResult.probe_name == latest_ts_subq.c.probe_name)
+            & (HostProbeResult.ts == latest_ts_subq.c.max_ts),
         )
     )
 
@@ -552,31 +557,31 @@ async def _check_probe_alerts(
             continue
         alert_type, severity = matched
 
-        node_id: int | None = None
+        host_id: int | None = None
         if probe.source and probe.source.startswith("agent:"):
             try:
-                node_id = int(probe.source.split(":", 1)[1])
+                host_id = int(probe.source.split(":", 1)[1])
             except ValueError:
-                node_id = None
+                host_id = None
         elif probe.probe_name.startswith("wings_pub_"):
             try:
-                node_id = int(probe.probe_name.rsplit("_", 1)[-1])
+                host_id = int(probe.probe_name.rsplit("_", 1)[-1])
             except ValueError:
-                node_id = None
+                host_id = None
 
-        node_name = node_names.get(node_id or -1, "") if node_id is not None else ""
-        config = host_configs.get(node_id) if node_id is not None else None
+        host_name = host_names.get(host_id or -1, "") if host_id is not None else ""
+        config = host_configs.get(host_id) if host_id is not None else None
 
         if not probe.ok:
             await _raise_or_skip(
-                db, node_id, alert_type, severity,
+                db, host_id, alert_type, severity,
                 f"Probe {probe.probe_name} failed", now,
-                config=config, node_name=node_name,
+                config=config, host_name=host_name,
             )
         else:
             await _auto_resolve(
-                db, node_id, alert_type, now,
-                config=config, node_name=node_name,
+                db, host_id, alert_type, now,
+                config=config, host_name=host_name,
             )
 
 
@@ -589,12 +594,12 @@ async def _cleanup_old_data(db: AsyncSession) -> None:
     store = get_settings_store()
     days = int(await store.get(db, "MONITOR_RETENTION_DAYS", 30))
     cutoff = utc_naive_now() - timedelta(days=days)
-    await db.execute(sa_delete(NodeMetrics).where(NodeMetrics.ts < cutoff))
-    await db.execute(sa_delete(ProbeResult).where(ProbeResult.ts < cutoff))
+    await db.execute(sa_delete(HostMetrics).where(HostMetrics.ts < cutoff))
+    await db.execute(sa_delete(HostProbeResult).where(HostProbeResult.ts < cutoff))
     await db.execute(
-        sa_delete(NodeAlert).where(
-            NodeAlert.resolved_at.isnot(None),
-            NodeAlert.created_at < cutoff,
+        sa_delete(HostAlert).where(
+            HostAlert.resolved_at.isnot(None),
+            HostAlert.created_at < cutoff,
         )
     )
 
@@ -605,144 +610,128 @@ async def _cleanup_old_data(db: AsyncSession) -> None:
 
 
 async def run_monitoring_collect() -> None:
-    """One full pull cycle. Called every 60 s by the scheduler."""
+    """One full pull cycle. Called every 60 s by the scheduler.
+
+    Iterates all enabled manager_hosts, pulls /v1/metrics from each agent,
+    stores metrics + probes keyed by host_id, and evaluates alert rules.
+    Wings hosts additionally get a public-side wings reachability probe.
+    """
     session_factory = get_session_factory()
     async with session_factory() as db:
         now = utc_naive_now()
 
         from app.db.models.pterodactyl import PanelNode
 
-        # Enabled wings_node manager_hosts drive the pull loop.
+        # All enabled hosts participate in the pull loop.
         host_result = await db.execute(
-            select(ManagerHost).where(
-                ManagerHost.kind == host_registry.KIND_WINGS_NODE,
-                ManagerHost.enabled.is_(True),
-                ManagerHost.pterodactyl_node_id.isnot(None),
-            )
+            select(ManagerHost).where(ManagerHost.enabled.is_(True))
         )
         hosts = host_result.scalars().all()
         if not hosts:
             return
 
-        monitored_ids = [h.pterodactyl_node_id for h in hosts]  # type: ignore[list-item]
+        # Pre-load panel nodes for wings hosts (public probe needs fqdn/scheme/port).
+        wings_hosts = [h for h in hosts if h.kind == host_registry.KIND_WINGS_NODE
+                       and h.pterodactyl_node_id is not None]
+        wings_nodes: dict[int, PanelNode] = {}
+        if wings_hosts:
+            nids = [h.pterodactyl_node_id for h in wings_hosts]
+            nresult = await db.execute(select(PanelNode).where(PanelNode.id.in_(nids)))
+            wings_nodes = {n.id: n for n in nresult.scalars().all()}
 
-        result = await db.execute(select(PanelNode).where(PanelNode.id.in_(monitored_ids)))
-        nodes = {n.id: n for n in result.scalars().all()}
-
-        # Global default recipients (used when a host row leaves recipients
-        # as NULL). Stored as comma-separated string of admin ids.
         global_recipients = await _load_global_default_recipients(db)
 
-        # Resolve per-host alert config once per cycle.
+        # Resolve credentials + alert config per host.
+        host_metas: list[tuple[ManagerHost, str, str]] = []
         host_configs: dict[int, HostAlertConfig] = {}
-        meta_map: dict[int, tuple[str, str, int]] = {}
         for host in hosts:
-            if host.pterodactyl_node_id is None:
-                continue
             config = await _load_host_alert_config(
                 db, host, global_default_recipients=global_recipients,
             )
-            host_configs[host.pterodactyl_node_id] = config
+            host_configs[host.id] = config
             try:
                 endpoint, token = host_registry.decrypt_credentials(host)
-            except host_registry.AgentNotConfigured as exc:
-                logger.warning(
-                    "agent credentials unusable for node %d (host=%d): %s",
-                    host.pterodactyl_node_id, host.id, exc,
-                )
+            except host_registry.AgentNotConfigured:
                 continue
-            meta_map[host.pterodactyl_node_id] = (endpoint, token, host.id)
+            host_metas.append((host, endpoint, token))
 
-        async def _pull_direct(node_id: int) -> dict | None:
-            ep_tok = meta_map.get(node_id)
-            if not ep_tok:
-                return None
-            endpoint, token, _host_id = ep_tok
+        async def _pull(host: ManagerHost, endpoint: str, token: str) -> tuple[int, dict | None]:
             url = f"{endpoint}/v1/metrics"
             try:
                 async with httpx.AsyncClient(timeout=10.0, verify=True, trust_env=False) as client:
                     resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
                 if resp.status_code >= 400:
-                    logger.warning("agent pull node %d -> HTTP %d", node_id, resp.status_code)
-                    return None
-                return resp.json()
+                    logger.warning("agent pull host %d -> HTTP %d", host.id, resp.status_code)
+                    return host.id, None
+                return host.id, resp.json()
             except httpx.HTTPError as exc:
-                logger.warning("agent pull node %d transport: %s", node_id, exc)
-                return None
+                logger.warning("agent pull host %d transport: %s", host.id, exc)
+                return host.id, None
 
-        async def _collect(node_id: int) -> tuple[int, dict | None, dict]:
-            node = nodes.get(node_id)
-            if not node:
-                logger.warning("monitored node %d not found in panel DB", node_id)
-                return node_id, None, {"ok": False, "error_msg": "Node not in DB"}
-            agent_payload, pub_result = await asyncio.gather(
-                _pull_direct(node_id),
-                _probe_wings_public(node_id, node.fqdn, node.scheme, node.daemon_listen),
-            )
-            return node_id, agent_payload, pub_result
+        async def _collect(host: ManagerHost, endpoint: str, token: str) -> tuple[int, dict | None, dict | None]:
+            public_task = None
+            node = None
+            if host.kind == host_registry.KIND_WINGS_NODE and host.pterodactyl_node_id:
+                node = wings_nodes.get(host.pterodactyl_node_id)
+                if node:
+                    public_task = asyncio.create_task(
+                        _probe_wings_public(host.pterodactyl_node_id, node.fqdn, node.scheme, node.daemon_listen)
+                    )
+            host_id, agent_payload = await _pull(host, endpoint, token)
+            pub_result = await public_task if public_task else None
+            return host_id, agent_payload, pub_result
 
-        try:
-            raw_results = await asyncio.gather(
-                *[_collect(nid) for nid in monitored_ids],
-                return_exceptions=True,
-            )
-        except Exception:  # pragma: no cover
-            logger.exception("monitoring pull cycle crashed unexpectedly")
-            raw_results = []
+        raw_results = await asyncio.gather(
+            *[_collect(h, ep, tok) for h, ep, tok in host_metas],
+            return_exceptions=True,
+        )
 
-        results: list[tuple[int, dict | None, dict]] = []
-        for nid, item in zip(monitored_ids, raw_results):
+        results: list[tuple[int, dict | None, dict | None]] = []
+        for item in raw_results:
             if isinstance(item, BaseException):
-                logger.warning("monitoring _collect(%d) failed: %r", nid, item)
-                results.append((nid, None, {"ok": False, "error_msg": f"collect error: {item!r}"}))
+                logger.warning("monitoring _collect failed: %r", item)
             else:
                 results.append(item)
 
-        for node_id, agent_payload, pub_result in results:
-            db.add(ProbeResult(
-                ts=now, source="manager",
-                probe_name=f"wings_pub_{node_id}",
-                ok=pub_result["ok"],
-                latency_ms=pub_result.get("latency_ms"),
-                error_msg=pub_result.get("error_msg"),
-            ))
+        seen_host_ids: list[int] = []
+        for host_id, agent_payload, pub_result in results:
+            # Public probe (wings only).
+            if pub_result is not None:
+                db.add(HostProbeResult(
+                    host_id=host_id, ts=now, source="manager",
+                    probe_name=f"wings_pub_{host_id}",
+                    ok=pub_result["ok"],
+                    latency_ms=pub_result.get("latency_ms"),
+                    error_msg=pub_result.get("error_msg"),
+                ))
 
-            metrics_row = _build_metrics_row(node_id, now, agent_payload)
-            metrics_row.public_reachable = pub_result["ok"]
+            metrics_row = build_metrics_row(host_id, now, agent_payload)
+            if pub_result is not None:
+                metrics_row.public_reachable = pub_result["ok"]
             db.add(metrics_row)
 
             if agent_payload:
+                seen_host_ids.append(host_id)
                 for p in agent_payload.get("probes", []):
-                    db.add(ProbeResult(
-                        ts=now,
-                        source=f"agent:{node_id}",
+                    db.add(HostProbeResult(
+                        host_id=host_id, ts=now,
+                        source=f"agent:{host_id}",
                         probe_name=p.get("name", "?"),
                         ok=bool(p.get("ok")),
                         latency_ms=p.get("latency_ms"),
                         error_msg=p.get("error_msg"),
                     ))
 
-            config = host_configs.get(node_id)
+            config = host_configs.get(host_id)
             if config is not None:
-                await _check_alerts(
-                    db, metrics_row,
-                    config=config,
-                    node_name=nodes[node_id].name if node_id in nodes else f"node-{node_id}",
-                )
+                host = next((h for h in hosts if h.id == host_id), None)
+                host_name = host.name if host else f"host-{host_id}"
+                host_is_wings = host.kind == host_registry.KIND_WINGS_NODE if host else False
+                await _check_alerts(db, metrics_row, config=config, host_name=host_name, is_wings=host_is_wings)
 
-        await _check_probe_alerts(
-            db,
-            host_configs=host_configs,
-            node_names={nid: n.name for nid, n in nodes.items()},
-        )
+        await _check_probe_alerts(db, host_configs=host_configs, host_names={h.id: h.name for h in hosts})
         await _cleanup_old_data(db)
 
-        # Mark hosts whose agent answered this cycle as freshly seen.
-        seen_host_ids = [
-            meta_map[node_id][2]
-            for node_id, agent_payload, _ in results
-            if agent_payload is not None and node_id in meta_map
-        ]
         if seen_host_ids:
             await db.execute(
                 ManagerHost.__table__.update()
@@ -751,4 +740,4 @@ async def run_monitoring_collect() -> None:
             )
 
         await db.commit()
-        logger.debug("agent-pull cycle committed for %d nodes", len(monitored_ids))
+        logger.debug("agent-pull cycle committed for %d hosts", len(results))

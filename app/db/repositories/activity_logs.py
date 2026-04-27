@@ -16,6 +16,7 @@ class ActivityLogRepository:
         page: int,
         per_page: int,
         actor: str | None = None,
+        category: str | None = None,
         action: str | None = None,
         status: str | None = None,
         host_id: int | None = None,
@@ -24,6 +25,8 @@ class ActivityLogRepository:
         filters = []
         if actor:
             filters.append(ManagerActivityLog.actor.ilike(f"%{actor}%"))
+        if category:
+            filters.append(ManagerActivityLog.category == category)
         if action:
             filters.append(ManagerActivityLog.action == action)
         if status:
@@ -71,6 +74,15 @@ class ActivityLogRepository:
             .distinct()
             .where(ManagerActivityLog.action != "")
             .order_by(ManagerActivityLog.action.asc())
+        )
+        return [str(value) for value in rows.scalars().all()]
+
+    async def distinct_categories(self, db: AsyncSession) -> list[str]:
+        rows = await db.execute(
+            select(ManagerActivityLog.category)
+            .distinct()
+            .where(ManagerActivityLog.category != "")
+            .order_by(ManagerActivityLog.category.asc())
         )
         return [str(value) for value in rows.scalars().all()]
 

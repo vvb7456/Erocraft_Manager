@@ -29,6 +29,9 @@ static/dist/
 docs/
 tests/
 
+# Claude Code
+CLAUDE.md
+
 # 编辑器 / Copilot
 .github/
 .continue/

@@ -11,15 +11,15 @@ from app.core.time import utc_naive_now as _utc_now
 from app.db.base import Base
 
 
-class NodeMetrics(Base):
-    __tablename__ = "manager_node_metrics"
+class HostMetrics(Base):
+    __tablename__ = "manager_host_metrics"
     __table_args__ = (
-        Index("idx_nm_node_ts", "node_id", "ts"),
-        Index("idx_nm_ts", "ts"),
+        Index("idx_hm_host_ts", "host_id", "ts"),
+        Index("idx_hm_ts", "ts"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    node_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    host_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     ts: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utc_now)
 
     # online status
@@ -56,14 +56,16 @@ class NodeMetrics(Base):
     container_disk_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
-class ProbeResult(Base):
-    __tablename__ = "manager_probe_results"
+class HostProbeResult(Base):
+    __tablename__ = "manager_host_probes"
     __table_args__ = (
-        Index("idx_pr_ts", "ts"),
-        Index("idx_pr_probe_ts", "probe_name", "ts"),
+        Index("idx_hp_ts", "ts"),
+        Index("idx_hp_probe_ts", "probe_name", "ts"),
+        Index("idx_hp_host_ts", "host_id", "ts"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    host_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     ts: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utc_now)
     source: Mapped[str] = mapped_column(String(20), nullable=False)
     probe_name: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -72,15 +74,15 @@ class ProbeResult(Base):
     error_msg: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
 
-class NodeAlert(Base):
-    __tablename__ = "manager_node_alerts"
+class HostAlert(Base):
+    __tablename__ = "manager_host_alerts"
     __table_args__ = (
-        Index("idx_na_node_active", "node_id", "resolved_at"),
-        Index("idx_na_created", "created_at"),
+        Index("idx_ha_host_active", "host_id", "resolved_at"),
+        Index("idx_ha_created", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    node_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    host_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     alert_type: Mapped[str] = mapped_column(String(30), nullable=False)
     severity: Mapped[str] = mapped_column(String(10), nullable=False, default="warning")
     message: Mapped[str | None] = mapped_column(String(500), nullable=True)

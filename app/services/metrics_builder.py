@@ -1,4 +1,4 @@
-"""Shared helper: convert an agent metrics payload into a NodeMetrics row.
+"""Shared helper: convert an agent metrics payload into a HostMetrics row.
 
 Extracted from ``app.jobs.tasks.monitoring`` so that both the periodic
 pull loop (jobs) and the admin "refresh now" endpoint (API) can build
@@ -13,23 +13,23 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.db.models.monitoring import NodeMetrics
+from app.db.models.monitoring import HostMetrics
 
 
 def build_metrics_row(
-    node_id: int,
+    host_id: int,
     ts: datetime,
     agent_payload: dict | None,
-) -> NodeMetrics:
-    """Map a `/v1/metrics` agent payload into a `NodeMetrics` ORM instance.
+) -> HostMetrics:
+    """Map a `/v1/metrics` agent payload into a `HostMetrics` ORM instance.
 
     A missing / falsy `agent_payload` yields a row with `agent_online=False`
     and `wings_online=False`, preserving the invariant that every pull
     cycle produces exactly one row per monitored node (see design §6.4).
     """
     if not agent_payload:
-        return NodeMetrics(
-            node_id=node_id,
+        return HostMetrics(
+            host_id=host_id,
             ts=ts,
             agent_online=False,
             wings_online=False,
@@ -40,8 +40,8 @@ def build_metrics_row(
     containers = agent_payload.get("containers") or {}
     load_avg = sys_data.get("load_avg") or []
 
-    return NodeMetrics(
-        node_id=node_id,
+    return HostMetrics(
+        host_id=host_id,
         ts=ts,
         agent_online=True,
         wings_online=bool(wings.get("ok")),

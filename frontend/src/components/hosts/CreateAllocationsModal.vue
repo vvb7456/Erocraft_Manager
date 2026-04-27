@@ -6,7 +6,7 @@
 // feedback before they submit.
 //
 // Backend contract:
-//   POST /api/admin/nodes/{node_id}/allocations
+//   POST /api/admin/hosts/{host_id}/allocations
 //   body: { ip: string, alias?: string, ports: string }
 //   201 → { created: AllocationOut[], skipped: [{port, reason}] }
 //   400 → invalid ip/expression (i18n key under common.apiErrors)
@@ -26,7 +26,7 @@ defineOptions({ name: 'CreateAllocationsModal' })
 
 const props = defineProps<{
   modelValue: boolean
-  nodeId: number
+  hostId: number
   defaultAlias?: string
 }>()
 const emit = defineEmits<{
@@ -106,7 +106,7 @@ async function submit() {
     const res = await post<{
       created: { id: number; port: number }[]
       skipped: { port: number; reason: string }[]
-    }>(`/api/admin/nodes/${props.nodeId}/allocations`, body)
+    }>(`/api/admin/hosts/${props.hostId}/allocations`, body)
     if (!res) return  // useApiFetch already toasted the error
     const c = res.created.length
     const s = res.skipped.length

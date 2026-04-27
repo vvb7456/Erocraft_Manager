@@ -22,8 +22,27 @@ class StatusDistribution(BaseModel):
     permanent: int
 
 
+class ExpiringServer(BaseModel):
+    id: int
+    name: str
+    ownerUsername: str | None
+    ownerEmail: str | None = None
+    nodeName: str | None = None
+    expiresAt: str | None = None  # ISO date YYYY-MM-DD
+    daysLeft: int
+    isSuspended: bool
+
+
+class CertSummary(BaseModel):
+    total: int
+    expiringSoon: int  # within each cert's own alert_threshold_days
+    expired: int
+
+
 class DashboardResponse(BaseModel):
     totalUsers: int
     totalServers: int
     normalCount: int
     statusDistribution: StatusDistribution
+    expiringServers: list[ExpiringServer]
+    certSummary: CertSummary

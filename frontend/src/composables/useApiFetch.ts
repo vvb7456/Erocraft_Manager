@@ -63,7 +63,7 @@ export function useApiFetch() {
         return null
       }
       // Handle 204 No Content
-      if (res.status === 204) return null
+      if (res.status === 204) return {} as T
       return await res.json() as T
     } catch {
       const msg = t('common.apiErrors.network')

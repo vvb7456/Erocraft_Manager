@@ -26,7 +26,7 @@ import Spinner from '@/components/ui/Spinner.vue'
 
 defineOptions({ name: 'HostAlertingSection' })
 
-const props = defineProps<{ hostId: number }>()
+const props = defineProps<{ hostId: number; hostKind: string }>()
 const { t } = useI18n({ useScope: 'global' })
 const { get, raw } = useApiFetch()
 const { toast } = useToast()
@@ -80,7 +80,9 @@ const defaults = ref<AlertsResponse['defaults'] | null>(null)
 const rulesByType = ref<Record<string, AlertRule>>({})
 const adminOptions = ref<AdminOpt[]>([])
 
-const TOGGLE_ONLY = ['node_offline', 'agent_only_down', 'wings_only_down', 'network_down', 'clash_down']
+const TOGGLE_ONLY = ['node_offline', 'agent_only_down', 'wings_only_down', 'network_down', 'clash_down', 'cert_source_expiring']
+const WINGS_ONLY_ALERTS = ['node_offline', 'wings_only_down']
+const isWings = computed(() => props.hostKind === 'wings_node')
 const SINGLE_THRESHOLD = ['cpu_high', 'mem_high', 'swap_high', 'load_high']
 const DUAL_THRESHOLD = ['disk_high', 'disk_critical']
 const ALL_TYPES = [...SINGLE_THRESHOLD, ...DUAL_THRESHOLD, ...TOGGLE_ONLY]
@@ -302,7 +304,8 @@ const loadFmt = (v: number) => v.toFixed(1)
         bordered
       >
         <ToggleSwitch
-          :modelValue="ruleEnabled(at)"
+          :modelValue="!isWings && WINGS_ONLY_ALERTS.includes(at) ? false : ruleEnabled(at)"
+          :disabled="!isWings && WINGS_ONLY_ALERTS.includes(at)"
           @update:modelValue="(v: boolean) => setRuleEnabled(at, v)"
           size="sm"
         />

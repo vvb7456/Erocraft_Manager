@@ -1,11 +1,11 @@
 <script setup lang="ts">
 // HostWingsSection — Wings 服务配置（panel.nodes 白名单字段 + push to wings）+ 服务状态 + 重启控制
 //
-// GET  /api/admin/nodes/{nodeId}/wings-config
+// GET  /api/admin/hosts/{hostId}/wings-config
 //   → { panel, wings_service, wings_service_error, runtime_restart_required_fields }
-// PUT  /api/admin/nodes/{nodeId}/wings-config (only changed fields)
+// PUT  /api/admin/hosts/{hostId}/wings-config (only changed fields)
 //   → { panel_updated, wings_pushed, applied, changed, requires_wings_restart, restart_required_fields, ... }
-// POST /api/admin/nodes/{nodeId}/wings/restart
+// POST /api/admin/hosts/{hostId}/wings/restart
 //   → { ok, output, error, duration_ms }  (proxied through agent's wings.restart command)
 //
 // Save UX mirrors SettingsPage: a floating DirtyBar drives the save flow,
@@ -37,7 +37,7 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 
 defineOptions({ name: 'HostWingsSection' })
 
-const props = defineProps<{ nodeId: number }>()
+const props = defineProps<{ hostId: number }>()
 const { t } = useI18n({ useScope: 'global' })
 const { get, post, raw } = useApiFetch()
 const { toast } = useToast()
@@ -120,7 +120,7 @@ async function load() {
   loading.value = true
   syncing.value = true
   try {
-    const data = await get<State>(`/api/admin/nodes/${props.nodeId}/wings-config`)
+    const data = await get<State>(`/api/admin/hosts/${props.hostId}/wings-config`)
     if (!data) return
     const p = data.panel || {}
     const normalized: FormState = {
@@ -185,7 +185,7 @@ function camelOf(s: string): string {
 async function performSave(): Promise<{ ok: boolean; pushed: boolean }> {
   const body: Record<string, unknown> = {}
   for (const f of dirtyFields.value) body[f] = form.value[f]
-  const res = await raw(`/api/admin/nodes/${props.nodeId}/wings-config`, {
+  const res = await raw(`/api/admin/hosts/${props.hostId}/wings-config`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -203,7 +203,7 @@ async function performRestart(): Promise<boolean> {
   restarting.value = true
   try {
     const r = await post<{ ok: boolean; error?: string; duration_ms?: number }>(
-      `/api/admin/nodes/${props.nodeId}/wings/restart`, {},
+      `/api/admin/hosts/${props.hostId}/wings/restart`, {},
     )
     if (!r) return false
     if (r.ok) {

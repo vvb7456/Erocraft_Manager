@@ -32,6 +32,7 @@ import AlertBanner from '@/components/ui/AlertBanner.vue'
 import HelpTip from '@/components/ui/HelpTip.vue'
 import DirtyBar from '@/components/ui/DirtyBar.vue'
 import HostAlertingSection from './sections/HostAlertingSection.vue'
+import HostCertSection from './sections/HostCertSection.vue'
 import type { HostDetail } from '@/types/host'
 
 defineOptions({ name: 'HostSettingPane' })
@@ -187,8 +188,7 @@ async function destroy() {
   if (!ok) return
   deleting.value = true
   try {
-    const r = await del(`/api/admin/hosts/${host.value.id}`)
-    if (r === undefined || r === null) return
+    await del(`/api/admin/hosts/${host.value.id}`)
     toast(t('hosts.actions.deleted', { name: host.value.name }), 'success')
     router.push({ name: 'hosts' })
   } finally {
@@ -289,7 +289,10 @@ const isWings = computed(() => host.value?.kind === 'wings_node')
     </BaseCard>
 
     <!-- ── Alerting ── -->
-    <HostAlertingSection :hostId="host.id" />
+    <HostAlertingSection :hostId="host.id" :hostKind="host.kind" />
+
+    <!-- ── Certificates ── -->
+    <HostCertSection v-if="host" :hostId="host.id" :hostKind="host.kind" />
 
     <!-- ── Danger zone ── -->
     <BaseCard variant="bg2" class="settings-card">

@@ -1,16 +1,18 @@
 # Erocraft Agent V2 — example configuration
 
-manager:
-  # Reserved for a future Push / registration mode. Phase-1 is Pull-only
-  # so Agent never actually calls this URL; may be omitted entirely.
-  # url: http://manager.example.com
-  node_id: 1
+# Optional. Reserved for future push/registration mode. The running agent does
+# not call Manager directly today. Non-Wings hosts should omit this section.
+# manager:
+#   url: http://manager.example.com
+#   node_id: 1                              # optional Wings/Pterodactyl legacy info
 
 agent:
-  bind: "0.0.0.0:48765"                     # high port, change per-node if shared IP
-  token: "REPLACE_WITH_SECURE_NODE_TOKEN"   # Bearer token; Manager stores encrypted copy
-  allow_ips: []                              # optional source-IP allowlist (empty = no restriction)
+  role: wings_node                            # wings_node | generic_host | synology_dsm
+  bind: "0.0.0.0:48765"                       # high port, change per-node if shared IP
+  token: "REPLACE_WITH_SECURE_NODE_TOKEN"     # Bearer token; Manager stores encrypted copy
+  # allow_ips: ["203.0.113.7"]                 # optional source-IP allowlist
 
+# Only role=wings_node reads this section. generic_host / synology_dsm can omit it.
 wings:
   config_path: /etc/pterodactyl/config.yml
   service_name: wings
@@ -25,25 +27,55 @@ probes:
   - name: clash_proxy
     type: http
     target: http://www.gstatic.com/generate_204
-    proxy: http://10.0.0.254:7890            # or socks5://host:port (needs httpx[socks])
+    proxy: http://10.0.0.254:7890              # or socks5://host:port (needs httpx[socks])
     timeout: 5
   # - name: clash_port
   #   type: tcp
-  #   target: 10.0.0.254:7890                 # just checks the port is listening
+  #   target: 10.0.0.254:7890                   # just checks the port is listening
   #   timeout: 5
   # - name: upstream_db
   #   type: tcp
-  #   target: 10.0.0.22:3306                  # generic TCP liveness; port-listening only
+  #   target: 10.0.0.22:3306                    # generic TCP liveness; port-listening only
   #   timeout: 5
 
 # Optional named certificate targets for generic Linux / nginx / NAS hosts.
 # Wings nodes normally leave this empty; cert.install with no target_name
 # writes to the api.ssl.cert/key paths from wings.config_path.
+#
+# Each target has a ``type`` field:
+#   file          — write PEM files to disk, optionally run reload_cmd
+#   synology_dsm  — import certificate via DSM API (needs synology config block)
 cert_install_targets:
   # - name: nginx
+  #   type: file
   #   cert_path: /etc/nginx/ssl/erocraft.com/fullchain.pem
   #   key_path: /etc/nginx/ssl/erocraft.com/privkey.pem
   #   reload_cmd: systemctl reload nginx
+  #
+  # - name: dsm_default
+  #   type: synology_dsm
+  #   synology:
+  #     certificate_desc: erocraft.com
+  #     create_if_missing: false
+  #     as_default: true
 
 logging:
   level: INFO
+
+# Minimal Synology DSM example:
+#
+# agent:
+#   role: synology_dsm
+#   bind: "0.0.0.0:48765"
+#   token: "REPLACE_WITH_SECURE_NODE_TOKEN"
+#
+# cert_install_targets:
+#   - name: dsm_default
+#     type: synology_dsm
+#     synology:
+#       certificate_desc: erocraft.com
+#       create_if_missing: false
+#       as_default: true
+#
+# logging:
+#   level: INFO

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------- collectors ----------
@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 class SystemMetrics(BaseModel):
     cpu_pct: float
     cpu_count: int
-    load_avg: list[float]
+    load_avg: List[float]
     mem_total_mb: int
     mem_used_mb: int
     mem_pct: float
@@ -22,17 +22,17 @@ class SystemMetrics(BaseModel):
     disk_total_mb: int
     disk_used_mb: int
     disk_pct: float
-    net_rx_bytes_sec: int | None = None
-    net_tx_bytes_sec: int | None = None
-    disk_read_bytes_sec: int | None = None
-    disk_write_bytes_sec: int | None = None
+    net_rx_bytes_sec: Optional[int] = None
+    net_tx_bytes_sec: Optional[int] = None
+    disk_read_bytes_sec: Optional[int] = None
+    disk_write_bytes_sec: Optional[int] = None
     uptime_sec: int
 
 
 class WingsStatus(BaseModel):
     ok: bool
-    version: str | None = None
-    error: str | None = None
+    version: Optional[str] = None
+    error: Optional[str] = None
 
 
 class ContainerAggregate(BaseModel):
@@ -49,32 +49,39 @@ class WingsConfigSummary(BaseModel):
     Sensitive fields (token) are excluded.
     """
 
-    api_host: str | None = None
-    api_port: int | None = None
-    api_ssl_enabled: bool | None = None
-    api_upload_limit_mb: int | None = None
-    sftp_bind_address: str | None = None
-    sftp_bind_port: int | None = None
-    system_data: str | None = None
-    docker_socket: str | None = None
-    debug: bool | None = None
+    api_host: Optional[str] = None
+    api_port: Optional[int] = None
+    api_ssl_enabled: Optional[bool] = None
+    api_upload_limit_mb: Optional[int] = None
+    sftp_bind_address: Optional[str] = None
+    sftp_bind_port: Optional[int] = None
+    system_data: Optional[str] = None
+    docker_socket: Optional[str] = None
+    debug: Optional[bool] = None
 
 
 class ProbeResult(BaseModel):
     name: str
     ok: bool
-    latency_ms: float | None = None
-    error_msg: str | None = None
+    latency_ms: Optional[float] = None
+    error_msg: Optional[str] = None
 
 
 class MetricsSnapshot(BaseModel):
     taken_at: datetime
-    node_id: int
+    node_id: Optional[int] = None
     system: SystemMetrics
     wings: WingsStatus
     containers: ContainerAggregate
-    wings_config: WingsConfigSummary | None = None
-    probes: list[ProbeResult] = Field(default_factory=list)
+    wings_config: Optional[WingsConfigSummary] = None
+    probes: List[ProbeResult] = Field(default_factory=list)
+
+    @field_validator("taken_at")
+    @classmethod
+    def _require_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("taken_at must be timezone-aware")
+        return v
 
 
 # ---------- commands ----------
@@ -82,7 +89,7 @@ class MetricsSnapshot(BaseModel):
 class CommandRequest(BaseModel):
     id: int
     type: str
-    params: dict | None = None
+    params: Optional[Dict[str, Any]] = None
 
 
 class CommandResponse(BaseModel):
@@ -91,19 +98,34 @@ class CommandResponse(BaseModel):
     # ``output`` is intentionally Any so handlers can return either a simple
     # string (e.g. ``ping`` -> "pong") or a structured payload (e.g.
     # ``wings.status`` -> systemd state dict). The wire format stays JSON.
-    output: Any | None = None
-    error: str | None = None
+    output: Optional[Any] = None
+    error: Optional[str] = None
     duration_ms: int
 
 
 # ---------- agent self status ----------
 
+class AgentCapabilities(BaseModel):
+    metrics_system: bool = False
+    metrics_wings: bool = False
+    cert_status: bool = False
+    cert_expiry_warning: bool = False
+    cert_install: bool = False
+    cert_targets: bool = False
+    wings_config: bool = False
+    wings_restart: bool = False
+    wings_service: bool = False
+    wings_logs: bool = False
+
+
 class AgentStatus(BaseModel):
     version: str
     started_at: datetime
     config_path: str
-    wings_config_path: str
+    wings_config_path: Optional[str] = None
     bind: str
+    role: str
+    capabilities: AgentCapabilities
 
 
 # ---------- wings service control ----------
@@ -112,8 +134,8 @@ class WingsServiceStatus(BaseModel):
     """systemd unit state for the wings service."""
 
     service_name: str
-    active_state: str | None = None       # systemd ActiveState: active/inactive/failed/...
-    sub_state: str | None = None          # SubState: running/dead/failed/...
-    main_pid: int | None = None
-    since: datetime | None = None         # when the unit entered current state
-    error: str | None = None              # populated when probe fails entirely
+    active_state: Optional[str] = None       # systemd ActiveState: active/inactive/failed/...
+    sub_state: Optional[str] = None          # SubState: running/dead/failed/...
+    main_pid: Optional[int] = None
+    since: Optional[datetime] = None         # when the unit entered current state
+    error: Optional[str] = None              # populated when probe fails entirely

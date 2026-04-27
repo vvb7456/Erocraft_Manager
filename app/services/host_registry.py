@@ -60,14 +60,12 @@ class AgentNotConfigured(HostRegistryError):
 #: kind that ties back to a Pterodactyl node row; the rest are generic
 #: agent-managed boxes (a sibling field ``kind`` is the UI's icon hint).
 KIND_WINGS_NODE = "wings_node"
-KIND_NGINX_PROXY = "nginx_proxy"
-KIND_NAS = "nas"
 KIND_GENERIC_LINUX = "generic_linux"
+KIND_SYNOLOGY_DSM = "synology_dsm"
 ALLOWED_KINDS: frozenset[str] = frozenset({
     KIND_WINGS_NODE,
-    KIND_NGINX_PROXY,
-    KIND_NAS,
     KIND_GENERIC_LINUX,
+    KIND_SYNOLOGY_DSM,
 })
 
 #: Length of the random Bearer token created on host registration / rotation.

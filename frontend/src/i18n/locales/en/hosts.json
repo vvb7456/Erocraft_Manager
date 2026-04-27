@@ -33,9 +33,8 @@
   },
   "kind": {
     "wings_node": "Wings node",
-    "nginx_proxy": "nginx proxy",
-    "nas": "NAS",
-    "generic_linux": "Linux"
+    "generic_linux": "Linux",
+    "synology_dsm": "Synology DSM"
   },
   "status": {
     "online": "Online",
@@ -77,8 +76,7 @@
       "agentUrl": "Agent URL",
       "agentUrlHint": "e.g. http://10.0.0.22:48765 — Manager pulls data from this URL.",
       "agentToken": "Agent Token",
-      "agentTokenHint": "Manager has pre-generated a 43-char URL-safe Bearer; it will be written to the DB on create. Use refresh to regenerate.",
-      "agentTokenRefresh": "Regenerate",
+      "agentTokenHint": "Start the agent on the host first. If token is empty in config, the agent will auto-generate one, write it back, and print AGENT_BOOTSTRAP_TOKEN in systemctl/journal logs. Paste that value here.",
       "pteroNode": "Panel node",
       "pteroNodeHint": "Required for wings_node: the matching Pterodactyl node.",
       "enabled": "Enabled",
@@ -314,6 +312,7 @@
         "wings_only_down": "Only wings unreachable",
         "network_down": "Public network down",
         "clash_down": "Clash unreachable",
+        "cert_source_expiring": "Certificate expiring soon",
         "cpu_high": "CPU high",
         "mem_high": "Memory high",
         "swap_high": "Swap high",
@@ -392,5 +391,28 @@
       "inUse": "Port :{port} is in use and cannot be deleted"
     },
     "notWings": "Allocations are only available for wings_node hosts."
+  },
+  "certs": {
+    "title": "Certificate Deployment",
+    "labelDomains": "Domains: ",
+    "labelTarget": "Target: ",
+    "wingsDefault": "Wings default",
+    "wingsDefaultOption": "Wings default path",
+    "wingsPathNote": "Writes to the api.ssl paths configured in wings config.yml and restarts Wings.",
+    "targetWillInstall": "Writes to the target「{name}」path declared in the agent config.",
+    "empty": "No certificates deployed to this host yet.",
+    "addDeployment": "Deploy Certificate",
+    "selectCert": "Select certificate",
+    "selectTarget": "Select target",
+    "confirmAdd": "Confirm deploy",
+    "sync": "Sync",
+    "remove": "Remove",
+    "confirmSyncTitle": "Force sync certificate",
+    "confirmSyncMessage": "Re-deploy certificate「{name}」to this host and restart the target service.",
+    "confirmRemoveTitle": "Remove certificate deployment",
+    "confirmRemoveMessage": "Remove certificate「{name}」deployment from this host. Existing certificate files on the host will not be deleted.",
+    "toastBound": "Certificate deployed",
+    "toastSynced": "Certificate synced",
+    "toastRemoved": "Deployment removed"
   }
 }

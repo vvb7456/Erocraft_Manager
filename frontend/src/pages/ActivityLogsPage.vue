@@ -12,7 +12,7 @@ import DataTable from '@/components/ui/DataTable.vue'
 
 defineOptions({ name: 'ActivityLogsPage' })
 
-const { t, te } = useI18n({ useScope: 'global' })
+const { t, te, tm, rt } = useI18n({ useScope: 'global' })
 const { get, loading } = useApiFetch()
 const appStore = useAppStore()
 
@@ -21,6 +21,7 @@ interface LogItem {
   id: number
   timestamp: string | null
   actor: string
+  category: string
   action: string
   status: string
   detailKey: string | null
@@ -80,12 +81,13 @@ function formatTime(ts: string | null): string {
   return d.toLocaleString('zh-CN', { timeZone: appStore.timezone, hour12: false })
 }
 
+
 function statusColor(status: string): string {
   if (status === 'success') return 'var(--green)'
-  if (status === 'failure') return 'var(--red)'
+  if (status === 'failed') return 'var(--red)'
+  if (status === 'partial') return 'var(--amber)'
   return 'var(--blue)'
 }
-
 function actorLabel(actor: string): string {
   if (actor === 'system') return t('logs.actor.system')
   if (actor === 'unknown') return t('logs.actor.unknown')
@@ -106,11 +108,29 @@ function detailLabel(log: LogItem): string {
   if (typeof params.type === 'string') {
     params.type = t(`logs.reminderType.${params.type}`, params.type)
   }
-  const key = `logs.detail.${log.detailKey}`
-  return te(key) ? t(key, params) : log.detailKey
+  if (typeof params.kind === 'string') {
+    params.kind = t(`hosts.kind.${params.kind}`, params.kind)
+  }
+  if (typeof params.language === 'string') {
+    params.language = t(`logs.language.${params.language}`, params.language)
+  }
+
+  // detail_key usually contains dots (e.g. "node.wings_config.update").
+  // Treat it as a flat key under logs.detail first to avoid path-splitting misses.
+  const detailMap = tm('logs.detail') as Record<string, unknown>
+  const flatMessage = detailMap?.[log.detailKey]
+  if (typeof flatMessage === 'string') {
+    return rt(flatMessage, params)
+  }
+
+  const escapedPath = `logs.detail.${log.detailKey.replace(/\./g, '\\.')}`
+  if (te(escapedPath)) {
+    return t(escapedPath, params)
+  }
+  return t('logs.detail.unknown', { key: log.detailKey })
 }
 
-const statusOptions = ['success', 'failure', 'info']
+const statusOptions = ['success', 'failed', 'partial', 'info']
 </script>
 
 <template>
@@ -235,7 +255,6 @@ const statusOptions = ['success', 'failure', 'info']
   color: var(--t2);
   font-size: .82rem;
 }
-
 /* Mobile card styles */
 .log-card-time {
   font-size: .78rem;

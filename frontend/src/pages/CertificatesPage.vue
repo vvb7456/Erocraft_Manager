@@ -11,19 +11,19 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import AddCard from '@/components/ui/AddCard.vue'
 import Badge from '@/components/ui/Badge.vue'
-import DataTable from '@/components/ui/DataTable.vue'
-import CardTap from '@/components/ui/CardTap.vue'
-import CardKV from '@/components/ui/CardKV.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
+import DataTable from '@/components/ui/DataTable.vue'
+import CardTap from '@/components/ui/CardTap.vue'
+import CardKV from '@/components/ui/CardKV.vue'
 import type { AcmeCertificate, AcmeStatus, CertificateDeployment, ManagedCertificate } from '@/types/certificate'
 import type { HostDetail } from '@/types/host'
 
 defineOptions({ name: 'CertificatesPage' })
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, post, del } = useApiFetch()
+const { get, post } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 
@@ -32,15 +32,11 @@ const acmeStatus = ref<AcmeStatus | null>(null)
 const hosts = ref<HostDetail[]>([])
 const loading = ref(true)
 const addOpen = ref(false)
-const bindingsOpen = ref(false)
-const selectedCertificate = ref<ManagedCertificate | null>(null)
+const renewingId = ref<number | null>(null)
+const registeringKey = ref<string | null>(null)
 const page = ref(1)
 const perPage = ref(20)
-const renewingId = ref<number | null>(null)
 const syncingId = ref<number | null>(null)
-const registeringDomain = ref<string | null>(null)
-const bindingHostId = ref<number | null>(null)
-const deletingDeploymentId = ref<number | null>(null)
 
 interface DeploymentRow {
   id: number
@@ -110,6 +106,10 @@ function hostAgentStatus(host: HostDetail | null): 'running' | 'error' | 'stoppe
   return host.inbound_reachable ? 'running' : 'error'
 }
 
+function deploymentPath(dep: CertificateDeployment): string {
+  return dep.target_cert_path || dep.target_name || t('certificates.common.unknown')
+}
+
 const hostsById = computed(() => new Map(hosts.value.map(h => [h.id, h])))
 
 const acmeByCertId = computed(() => {
@@ -162,20 +162,6 @@ const availableAcme = computed(() =>
   ),
 )
 
-const selectedBoundDefaultHostIds = computed(() =>
-  new Set((selectedCertificate.value?.deployments ?? [])
-    .filter(dep => !dep.target_name)
-    .map(dep => dep.host_id)),
-)
-
-const availableBindingHosts = computed(() =>
-  hosts.value.filter(host => !selectedBoundDefaultHostIds.value.has(host.id)),
-)
-
-function refreshSelectedCertificate(certId: number) {
-  selectedCertificate.value = certificates.value.find(cert => cert.id === certId) ?? null
-}
-
 async function loadAll() {
   loading.value = true
   try {
@@ -214,30 +200,8 @@ async function renewForce(cert: ManagedCertificate) {
   }
 }
 
-async function syncDeployment(row: DeploymentRow) {
-  const ok = await confirm({
-    title: t('certificates.confirm.syncTitle'),
-    message: t('certificates.confirm.syncMessage', { host: row.dep.host_name || row.host?.name || row.dep.host_id }),
-    confirmText: t('certificates.actions.forceSync'),
-    variant: 'danger',
-  })
-  if (!ok) return
-  syncingId.value = row.dep.id
-  try {
-    const res = await post<Record<string, unknown>>(
-      `/api/admin/certificates/${row.cert.id}/deployments/${row.dep.id}/redeploy`,
-    )
-    if (res) {
-      toast(t('certificates.toast.synced'), 'success')
-      await loadAll()
-    }
-  } finally {
-    syncingId.value = null
-  }
-}
-
 async function registerAcme(cert: AcmeCertificate) {
-  registeringDomain.value = cert.domain
+  registeringKey.value = `${cert.domain}-${cert.is_ecc}`
   try {
     const res = await post<ManagedCertificate>('/api/admin/certificates/acme/register', {
       domain: cert.domain,
@@ -248,65 +212,32 @@ async function registerAcme(cert: AcmeCertificate) {
       toast(t('certificates.toast.registered'), 'success')
       addOpen.value = false
       await loadAll()
-      refreshSelectedCertificate(res.id)
-      bindingsOpen.value = !!selectedCertificate.value
     }
   } finally {
-    registeringDomain.value = null
+    registeringKey.value = null
+  }
+}
+
+async function syncDeployment(row: DeploymentRow) {
+  const ok = await confirm({
+    title: t('certificates.confirm.syncTitle'),
+    message: t('certificates.confirm.syncMessage', { host: row.dep.host_name || row.host?.name || row.dep.host_id }),
+    confirmText: t('certificates.actions.forceSync'),
+    variant: 'default',
+  })
+  if (!ok) return
+  syncingId.value = row.dep.id
+  try {
+    await post(`/api/admin/certificates/${row.cert.id}/deployments/${row.dep.id}/redeploy`)
+    toast(t('certificates.toast.synced'), 'success')
+    await loadAll()
+  } finally {
+    syncingId.value = null
   }
 }
 
 function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
   return certStatus(cert) === 'error' ? 'danger' : 'default'
-}
-
-function deploymentPath(dep: CertificateDeployment): string {
-  return dep.target_cert_path || dep.target_name || t('certificates.common.unknown')
-}
-
-function openBindings(cert: ManagedCertificate) {
-  selectedCertificate.value = cert
-  bindingsOpen.value = true
-}
-
-async function addDefaultDeployment(host: HostDetail) {
-  if (!selectedCertificate.value) return
-  const certId = selectedCertificate.value.id
-  bindingHostId.value = host.id
-  try {
-    const res = await post<CertificateDeployment>(`/api/admin/certificates/${certId}/deployments`, {
-      host_id: host.id,
-      target_name: '',
-    })
-    if (res) {
-      toast(t('certificates.toast.bound'), 'success')
-      await loadAll()
-      refreshSelectedCertificate(certId)
-    }
-  } finally {
-    bindingHostId.value = null
-  }
-}
-
-async function removeDeployment(dep: CertificateDeployment) {
-  if (!selectedCertificate.value) return
-  const certId = selectedCertificate.value.id
-  const ok = await confirm({
-    title: t('certificates.confirm.unbindTitle'),
-    message: t('certificates.confirm.unbindMessage', { host: dep.host_name || dep.host_id }),
-    confirmText: t('certificates.actions.unbind'),
-    variant: 'danger',
-  })
-  if (!ok) return
-  deletingDeploymentId.value = dep.id
-  try {
-    await del(`/api/admin/certificates/${certId}/deployments/${dep.id}`)
-    toast(t('certificates.toast.unbound'), 'success')
-    await loadAll()
-    refreshSelectedCertificate(certId)
-  } finally {
-    deletingDeploymentId.value = null
-  }
 }
 </script>
 
@@ -352,7 +283,6 @@ async function removeDeployment(dep: CertificateDeployment) {
     <section class="cert-card-grid" aria-label="certificates">
       <div class="section-title-row cert-section-title">
         <h2>{{ t('certificates.certificates.title') }}</h2>
-        <span>{{ t('certificates.certificates.summary', { n: certificates.length }) }}</span>
       </div>
 
       <BaseCard
@@ -377,15 +307,6 @@ async function removeDeployment(dep: CertificateDeployment) {
             </div>
           </div>
           <div class="cert-card__actions">
-            <BaseButton
-              size="sm"
-              square
-              :ariaLabel="t('certificates.actions.manageNodes')"
-              :title="t('certificates.actions.manageNodes')"
-              @click="openBindings(cert)"
-            >
-              <MsIcon name="lan" size="xs" />
-            </BaseButton>
             <BaseButton
               size="sm"
               square
@@ -427,10 +348,9 @@ async function removeDeployment(dep: CertificateDeployment) {
       <AddCard class="cert-add-card" :label="t('certificates.addCard')" @click="addOpen = true" />
     </section>
 
-    <section class="node-section">
-      <div class="section-title-row">
+    <section class="deployment-section" aria-label="deployment statuses">
+      <div class="section-title-row deploy-section-title">
         <h2>{{ t('certificates.nodes.title') }}</h2>
-        <span>{{ t('certificates.nodes.summary', { n: deploymentRows.length }) }}</span>
       </div>
 
       <DataTable
@@ -531,6 +451,7 @@ async function removeDeployment(dep: CertificateDeployment) {
         </template>
       </DataTable>
     </section>
+
   </div>
 
   <BaseModal
@@ -560,91 +481,13 @@ async function removeDeployment(dep: CertificateDeployment) {
         <BaseButton
           size="sm"
           variant="primary"
-          :loading="registeringDomain === cert.domain"
+          :loading="registeringKey === `${cert.domain}-${cert.is_ecc}`"
           @click="registerAcme(cert)"
         >
           <MsIcon name="add" size="xs" />
           {{ t('certificates.selector.add') }}
         </BaseButton>
       </div>
-    </div>
-  </BaseModal>
-
-  <BaseModal
-    v-model="bindingsOpen"
-    :title="selectedCertificate ? t('certificates.bindings.title', { name: selectedCertificate.name }) : t('certificates.bindings.titleFallback')"
-    :subtitle="t('certificates.bindings.subtitle')"
-    icon="lan"
-    size="lg"
-  >
-    <div v-if="selectedCertificate" class="binding-panel">
-      <section class="binding-block">
-        <div class="binding-block__title">
-          <h3>{{ t('certificates.bindings.current') }}</h3>
-          <span>{{ t('certificates.bindings.currentSummary', { n: selectedCertificate.deployments.length }) }}</span>
-        </div>
-        <div v-if="selectedCertificate.deployments.length === 0" class="binding-empty">
-          {{ t('certificates.bindings.noBindings') }}
-        </div>
-        <div
-          v-for="dep in selectedCertificate.deployments"
-          :key="dep.id"
-          class="binding-row"
-        >
-          <div class="binding-row__main">
-            <strong>{{ dep.host_name || dep.host_id }}</strong>
-            <span>{{ dep.host_kind || '-' }} · {{ dep.target_name || t('certificates.bindings.defaultTarget') }}</span>
-            <small class="mono">{{ dep.target_cert_path || dep.target_path_error || t('certificates.common.unknown') }}</small>
-          </div>
-          <Badge size="sm" :color="deploymentStatus(dep) === 'ok' ? 'var(--green)' : deploymentStatus(dep) === 'error' ? 'var(--red)' : 'var(--amber)'">
-            {{ t(`certificates.deployment.${dep.status}`) }}
-          </Badge>
-          <BaseButton
-            size="sm"
-            variant="danger"
-            :loading="deletingDeploymentId === dep.id"
-            @click="removeDeployment(dep)"
-          >
-            <MsIcon name="link_off" size="xs" />
-            {{ t('certificates.actions.unbind') }}
-          </BaseButton>
-        </div>
-      </section>
-
-      <section class="binding-block">
-        <div class="binding-block__title">
-          <h3>{{ t('certificates.bindings.available') }}</h3>
-          <span>{{ t('certificates.bindings.availableSummary', { n: availableBindingHosts.length }) }}</span>
-        </div>
-        <div v-if="availableBindingHosts.length === 0" class="binding-empty">
-          {{ t('certificates.bindings.noAvailable') }}
-        </div>
-        <div
-          v-for="host in availableBindingHosts"
-          :key="host.id"
-          class="binding-row"
-        >
-          <div class="binding-row__main">
-            <strong>{{ host.name }}</strong>
-            <span>{{ host.kind }} · {{ host.hostname }}</span>
-            <small>{{ t('certificates.bindings.defaultTargetHint') }}</small>
-          </div>
-          <span class="status-cell">
-            <StatusDot :status="hostAgentStatus(host)" size="sm" />
-            {{ host.enabled === false ? t('certificates.agent.disabled') : host.inbound_reachable ? t('certificates.agent.online') : t('certificates.agent.offline') }}
-          </span>
-          <BaseButton
-            size="sm"
-            variant="primary"
-            :loading="bindingHostId === host.id"
-            :disabled="!host.enabled"
-            @click="addDefaultDeployment(host)"
-          >
-            <MsIcon name="add" size="xs" />
-            {{ t('certificates.actions.bind') }}
-          </BaseButton>
-        </div>
-      </section>
     </div>
   </BaseModal>
 </template>
@@ -677,6 +520,15 @@ async function removeDeployment(dep: CertificateDeployment) {
 .cert-card,
 .cert-add-card {
   min-height: 260px;
+}
+
+.deployment-section {
+  min-width: 0;
+}
+
+.deploy-section-title {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
 }
 
 .cert-card__top {
@@ -796,11 +648,6 @@ async function removeDeployment(dep: CertificateDeployment) {
   margin: 0;
   font-size: 1rem;
   color: var(--t1);
-}
-
-.section-title-row span {
-  color: var(--t3);
-  font-size: var(--text-sm);
 }
 
 .col-host { width: 16%; }
@@ -932,81 +779,6 @@ async function removeDeployment(dep: CertificateDeployment) {
   gap: var(--sp-2);
 }
 
-.binding-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-
-.binding-block {
-  min-width: 0;
-}
-
-.binding-block__title {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-2);
-}
-
-.binding-block__title h3 {
-  margin: 0;
-  color: var(--t1);
-  font-size: .95rem;
-}
-
-.binding-block__title span,
-.binding-empty {
-  color: var(--t3);
-  font-size: var(--text-sm);
-}
-
-.binding-empty {
-  padding: var(--sp-3);
-  border: 1px dashed var(--bd);
-  border-radius: var(--r-sm);
-  background: var(--bg2);
-}
-
-.binding-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: var(--sp-3);
-  align-items: center;
-  padding: var(--sp-3);
-  border: 1px solid var(--bd);
-  border-radius: var(--r-sm);
-  background: var(--bg2);
-}
-
-.binding-row + .binding-row {
-  margin-top: var(--sp-2);
-}
-
-.binding-row__main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.binding-row__main strong {
-  color: var(--t1);
-}
-
-.binding-row__main span,
-.binding-row__main small {
-  color: var(--t3);
-  font-size: var(--text-sm);
-}
-
-.binding-row__main small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 @media (max-width: 980px) {
   .stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1031,13 +803,8 @@ async function removeDeployment(dep: CertificateDeployment) {
     grid-template-columns: 1fr;
   }
 
-  .selector-meta,
-  .binding-block__title {
+  .selector-meta {
     justify-content: space-between;
-  }
-
-  .binding-row {
-    grid-template-columns: 1fr;
   }
 }
 </style>

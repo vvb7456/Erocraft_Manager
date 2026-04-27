@@ -10,6 +10,7 @@ class ActivityLogItem(BaseModel):
     id: int
     timestamp: str | None
     actor: str
+    category: str
     action: str
     status: str
     detailKey: str | None = None
@@ -18,6 +19,7 @@ class ActivityLogItem(BaseModel):
 
 class ActivityLogFilters(BaseModel):
     actors: list[str]
+    categories: list[str]
     actions: list[str]
 
 

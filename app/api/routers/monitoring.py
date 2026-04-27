@@ -13,7 +13,7 @@ from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
 from app.core.settings_store import get_settings_store
 from app.db.models.manager import ManagerHost
-from app.db.models.monitoring import NodeAlert, NodeMetrics, ProbeResult
+from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
 from app.db.models.pterodactyl import PanelNode, PteroUser
 from app.schemas.monitoring import (
     AlertItem,
@@ -35,17 +35,13 @@ router = APIRouter(tags=["monitoring"])
 # ---------------------------------------------------------------------------
 
 
-async def _get_monitored_node_ids(db: AsyncSession) -> list[int]:
-    """Return panel node ids of all enabled wings_node manager_hosts."""
+async def _get_monitored_host_ids(db: AsyncSession) -> list[int]:
+    """Return host ids of all enabled manager_hosts."""
     from app.services import host_registry
     result = await db.execute(
-        select(ManagerHost.pterodactyl_node_id).where(
-            ManagerHost.kind == host_registry.KIND_WINGS_NODE,
-            ManagerHost.enabled.is_(True),
-            ManagerHost.pterodactyl_node_id.isnot(None),
-        )
+        select(ManagerHost.id).where(ManagerHost.enabled.is_(True))
     )
-    return [int(nid) for (nid,) in result.all() if nid is not None]
+    return [int(hid) for (hid,) in result.all()]
 
 
 @router.get("/admin/monitoring/overview", response_model=MonitoringOverviewResponse)
@@ -54,53 +50,63 @@ async def monitoring_overview(
     db: AsyncSession = Depends(get_db),
 ) -> MonitoringOverviewResponse:
     """Get overview of all monitored nodes, probes, and alerts."""
-    monitored_ids = await _get_monitored_node_ids(db)
-    if not monitored_ids:
+    from app.services import host_registry
+
+    monitored_host_ids = await _get_monitored_host_ids(db)
+    if not monitored_host_ids:
         return MonitoringOverviewResponse(
             nodes=[], probes=[], alerts=AlertSummary()
         )
 
-    # Fetch node info from Panel
+    # Load all enabled hosts
     result = await db.execute(
-        select(PanelNode).where(PanelNode.id.in_(monitored_ids))
+        select(ManagerHost).where(ManagerHost.id.in_(monitored_host_ids))
     )
-    nodes_map = {n.id: n for n in result.scalars().all()}
+    host_map = {h.id: h for h in result.scalars().all()}
 
-    # Latest metrics per node (subquery for max ts per node)
+    # For wings hosts, load PanelNode info
+    wings_nids = {h.pterodactyl_node_id for h in host_map.values()
+                  if h.kind == host_registry.KIND_WINGS_NODE and h.pterodactyl_node_id}
+    panel_map: dict[int, PanelNode] = {}
+    if wings_nids:
+        presult = await db.execute(select(PanelNode).where(PanelNode.id.in_(wings_nids)))
+        panel_map = {n.id: n for n in presult.scalars().all()}
+
+    # Latest metrics per host
     latest_sub = (
         select(
-            NodeMetrics.node_id,
-            func.max(NodeMetrics.id).label("max_id"),
+            HostMetrics.host_id,
+            func.max(HostMetrics.id).label("max_id"),
         )
-        .where(NodeMetrics.node_id.in_(monitored_ids))
-        .group_by(NodeMetrics.node_id)
+        .where(HostMetrics.host_id.in_(monitored_host_ids))
+        .group_by(HostMetrics.host_id)
         .subquery()
     )
     result = await db.execute(
-        select(NodeMetrics).join(
-            latest_sub, NodeMetrics.id == latest_sub.c.max_id
-        )
+        select(HostMetrics).join(latest_sub, HostMetrics.id == latest_sub.c.max_id)
     )
-    metrics_map = {m.node_id: m for m in result.scalars().all()}
+    metrics_map = {m.host_id: m for m in result.scalars().all()}
 
-    # Active alerts per node
+    # Active alerts per host
     result = await db.execute(
-        select(NodeAlert.node_id, func.count(NodeAlert.id).label("cnt"))
-        .where(NodeAlert.node_id.in_(monitored_ids), NodeAlert.resolved_at.is_(None))
-        .group_by(NodeAlert.node_id)
+        select(HostAlert.host_id, func.count(HostAlert.id).label("cnt"))
+        .where(HostAlert.host_id.in_(monitored_host_ids), HostAlert.resolved_at.is_(None))
+        .group_by(HostAlert.host_id)
     )
-    alert_counts = {row.node_id: row.cnt for row in result}
+    alert_counts = {row.host_id: row.cnt for row in result}
 
-    nodes_out = []
-    for nid in monitored_ids:
-        node = nodes_map.get(nid)
-        if not node:
+    hosts_out = []
+    for hid in monitored_host_ids:
+        host = host_map.get(hid)
+        if not host:
             continue
-        m = metrics_map.get(nid)
-        nodes_out.append(NodeOverview(
-            id=nid,
-            name=node.name,
-            fqdn=node.fqdn,
+        m = metrics_map.get(hid)
+        panel_node = panel_map.get(host.pterodactyl_node_id) if host.pterodactyl_node_id else None
+        hosts_out.append(NodeOverview(
+            id=hid,
+            name=host.name,
+            fqdn=panel_node.fqdn if panel_node else host.hostname,
+            kind=host.kind,
             agentOnline=m.agent_online if m else False,
             wingsOnline=m.wings_online if m else False,
             publicReachable=m.public_reachable if m else None,
@@ -125,23 +131,23 @@ async def monitoring_overview(
             containerMemMb=m.container_mem_mb if m else None,
             containerCpuPct=m.container_cpu_pct if m else None,
             containerDiskMb=m.container_disk_mb if m else None,
-            activeAlerts=alert_counts.get(nid, 0),
+            activeAlerts=alert_counts.get(hid, 0),
         ))
 
     # Latest probes (distinct by source + probe_name, last 5 min)
     five_min_ago = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
     probe_sub = (
         select(
-            ProbeResult.source,
-            ProbeResult.probe_name,
-            func.max(ProbeResult.id).label("max_id"),
+            HostProbeResult.source,
+            HostProbeResult.probe_name,
+            func.max(HostProbeResult.id).label("max_id"),
         )
-        .where(ProbeResult.ts >= five_min_ago)
-        .group_by(ProbeResult.source, ProbeResult.probe_name)
+        .where(HostProbeResult.ts >= five_min_ago)
+        .group_by(HostProbeResult.source, HostProbeResult.probe_name)
         .subquery()
     )
     result = await db.execute(
-        select(ProbeResult).join(probe_sub, ProbeResult.id == probe_sub.c.max_id)
+        select(HostProbeResult).join(probe_sub, HostProbeResult.id == probe_sub.c.max_id)
     )
     probes_out = [
         ProbeOverview(
@@ -159,25 +165,25 @@ async def monitoring_overview(
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     active_count_result = await db.execute(
-        select(func.count(NodeAlert.id)).where(NodeAlert.resolved_at.is_(None))
+        select(func.count(HostAlert.id)).where(HostAlert.resolved_at.is_(None))
     )
     active_count = active_count_result.scalar() or 0
 
     today_count_result = await db.execute(
-        select(func.count(NodeAlert.id)).where(NodeAlert.created_at >= today_start)
+        select(func.count(HostAlert.id)).where(HostAlert.created_at >= today_start)
     )
     today_count = today_count_result.scalar() or 0
 
     return MonitoringOverviewResponse(
-        nodes=nodes_out,
+        nodes=hosts_out,
         probes=probes_out,
         alerts=AlertSummary(active=active_count, todayTotal=today_count),
     )
 
 
-@router.get("/admin/monitoring/nodes/{node_id}/history", response_model=NodeHistoryResponse)
+@router.get("/admin/hosts/{host_id}/history", response_model=NodeHistoryResponse)
 async def node_history(
-    node_id: int,
+    host_id: int,
     # Cap at 720 hours (30 days) to match MONITOR_RETENTION_DAYS default and
     # prevent a caller from requesting unbounded ranges that could OOM the
     # response path or hang the DB with a huge scan.
@@ -189,9 +195,9 @@ async def node_history(
     """Get historical metrics for a node."""
     since = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
     result = await db.execute(
-        select(NodeMetrics)
-        .where(NodeMetrics.node_id == node_id, NodeMetrics.ts >= since)
-        .order_by(NodeMetrics.ts)
+        select(HostMetrics)
+        .where(HostMetrics.host_id == host_id, HostMetrics.ts >= since)
+        .order_by(HostMetrics.ts)
     )
     rows = result.scalars().all()
 
@@ -219,7 +225,7 @@ async def node_history(
         for r in rows
     ]
 
-    return NodeHistoryResponse(nodeId=node_id, interval=used_interval, points=points)
+    return NodeHistoryResponse(hostId=host_id, interval=used_interval, points=points)
 
 
 # ---------------------------------------------------------------------------
@@ -228,14 +234,14 @@ async def node_history(
 
 
 _METRIC_TO_COLUMN = {
-    "cpu": NodeMetrics.cpu_pct,
-    "mem": NodeMetrics.mem_pct,
-    "disk": NodeMetrics.disk_pct,
-    "load": NodeMetrics.load_1m,
-    "net_rx": NodeMetrics.net_rx_bps,
-    "net_tx": NodeMetrics.net_tx_bps,
-    "disk_read": NodeMetrics.disk_read_bps,
-    "disk_write": NodeMetrics.disk_write_bps,
+    "cpu": HostMetrics.cpu_pct,
+    "mem": HostMetrics.mem_pct,
+    "disk": HostMetrics.disk_pct,
+    "load": HostMetrics.load_1m,
+    "net_rx": HostMetrics.net_rx_bps,
+    "net_tx": HostMetrics.net_tx_bps,
+    "disk_read": HostMetrics.disk_read_bps,
+    "disk_write": HostMetrics.disk_write_bps,
 }
 
 
@@ -247,9 +253,9 @@ _WINDOW_TO_SECONDS: dict[str, int] = {
 }
 
 
-@router.get("/admin/monitoring/history/{node_id}")
+@router.get("/admin/hosts/{host_id}/history/metrics")
 async def monitoring_history(
-    node_id: int,
+    host_id: int,
     metric: str = Query(...),
     window: str = Query("1h"),
     _admin: PteroUser = Depends(require_admin),
@@ -286,12 +292,12 @@ async def monitoring_history(
     # Portable expression using FROM_UNIXTIME so MariaDB/MySQL returns
     # a proper bucket timestamp.
     bucket_ts = func.from_unixtime(
-        func.floor(func.unix_timestamp(NodeMetrics.ts) / bucket_seconds) * bucket_seconds
+        func.floor(func.unix_timestamp(HostMetrics.ts) / bucket_seconds) * bucket_seconds
     )
 
     stmt = (
         select(bucket_ts.label("bucket"), func.avg(col).label("value"))
-        .where(NodeMetrics.node_id == node_id, NodeMetrics.ts >= since, col.isnot(None))
+        .where(HostMetrics.host_id == host_id, HostMetrics.ts >= since, col.isnot(None))
         .group_by("bucket")
         .order_by("bucket")
     )
@@ -306,7 +312,7 @@ async def monitoring_history(
         series.append([ts_ms, round(float(value), 2)])
 
     return {
-        "nodeId": node_id,
+        "hostId": host_id,
         "metric": metric,
         "window": window,
         "bucketSeconds": bucket_seconds,
@@ -330,7 +336,7 @@ async def admin_host_snapshot(
     Shape is tailored for the HostDetailPage overview tab's ECharts
     panel (see design doc §3.2). Non-wings hosts get a minimal
     payload — last_seen_at + inbound_reachable — since they have no
-    NodeMetrics rows.
+    HostMetrics rows.
     """
     from app.services import host_registry
 
@@ -349,15 +355,11 @@ async def admin_host_snapshot(
         "lastStatusAt": host.last_status_at.isoformat() if host.last_status_at else None,
     }
 
-    node_id = host.pterodactyl_node_id
-    if node_id is None:
-        return base | {"metrics": None, "probes": []}
-
     metrics_row = (
         await db.execute(
-            select(NodeMetrics)
-            .where(NodeMetrics.node_id == node_id)
-            .order_by(NodeMetrics.id.desc())
+            select(HostMetrics)
+            .where(HostMetrics.host_id == host.id)
+            .order_by(HostMetrics.id.desc())
             .limit(1)
         )
     ).scalar_one_or_none()
@@ -365,21 +367,20 @@ async def admin_host_snapshot(
     five_min_ago = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
     probe_sub = (
         select(
-            ProbeResult.source,
-            ProbeResult.probe_name,
-            func.max(ProbeResult.id).label("max_id"),
+            HostProbeResult.source,
+            HostProbeResult.probe_name,
+            func.max(HostProbeResult.id).label("max_id"),
         )
         .where(
-            ProbeResult.ts >= five_min_ago,
-            (ProbeResult.source == f"agent:{node_id}")
-            | (ProbeResult.probe_name == f"wings_pub_{node_id}"),
+            HostProbeResult.ts >= five_min_ago,
+            HostProbeResult.host_id == host.id,
         )
-        .group_by(ProbeResult.source, ProbeResult.probe_name)
+        .group_by(HostProbeResult.source, HostProbeResult.probe_name)
         .subquery()
     )
     probe_rows = (
         await db.execute(
-            select(ProbeResult).join(probe_sub, ProbeResult.id == probe_sub.c.max_id)
+            select(HostProbeResult).join(probe_sub, HostProbeResult.id == probe_sub.c.max_id)
         )
     ).scalars().all()
 
@@ -427,7 +428,7 @@ async def admin_host_snapshot(
     ]
 
     return base | {
-        "nodeId": node_id,
+        "hostId": host.id,
         "metrics": metrics_out,
         "probes": probes_out,
     }
@@ -441,22 +442,22 @@ async def list_alerts(
     db: AsyncSession = Depends(get_db),
 ) -> AlertListResponse:
     """List alerts (newest first)."""
-    query = select(NodeAlert).order_by(NodeAlert.created_at.desc()).limit(limit)
+    query = select(HostAlert).order_by(HostAlert.created_at.desc()).limit(limit)
     if active_only:
-        query = query.where(NodeAlert.resolved_at.is_(None))
+        query = query.where(HostAlert.resolved_at.is_(None))
     result = await db.execute(query)
     alerts = result.scalars().all()
 
-    count_q = select(func.count(NodeAlert.id))
+    count_q = select(func.count(HostAlert.id))
     if active_only:
-        count_q = count_q.where(NodeAlert.resolved_at.is_(None))
+        count_q = count_q.where(HostAlert.resolved_at.is_(None))
     total = (await db.execute(count_q)).scalar() or 0
 
     return AlertListResponse(
         items=[
             AlertItem(
                 id=a.id,
-                nodeId=a.node_id,
+                hostId=a.host_id,
                 alertType=a.alert_type,
                 severity=a.severity,
                 message=a.message,
@@ -477,7 +478,7 @@ async def resolve_alert(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Manually resolve an alert."""
-    result = await db.execute(select(NodeAlert).where(NodeAlert.id == alert_id))
+    result = await db.execute(select(HostAlert).where(HostAlert.id == alert_id))
     alert = result.scalar_one_or_none()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")

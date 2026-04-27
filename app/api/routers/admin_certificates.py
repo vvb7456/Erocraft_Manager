@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_admin
@@ -213,6 +213,11 @@ def _cert_status_paths(payload: dict[str, Any], target_name: str) -> tuple[str |
         )
         if target is None:
             return None, None, f"agent target not found: {target_name}"
+        if target.get("type") == "synology_dsm":
+            dsm_id = target.get("dsm_cert_id")
+            desc = target.get("certificate_desc") or target_name
+            label = f"dsm:{dsm_id}" if dsm_id else f"dsm:{desc}"
+            return label, None, None
         paths = target.get("paths") if isinstance(target, dict) else None
     else:
         paths = payload.get("wings_yaml_paths")
@@ -356,9 +361,38 @@ async def _add_deployment_row(
     body: DeploymentIn,
 ) -> ManagerCertDeployment:
     try:
-        await host_registry.require_host_by_id(db, body.host_id)
+        host = await host_registry.require_host_by_id(db, body.host_id)
     except host_registry.HostNotFound as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    # Validate target_name against agent for non-wings hosts.
+    # Wings hosts allow empty target_name (default api.ssl paths).
+    if host.kind != host_registry.KIND_WINGS_NODE and not body.target_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="target_name is required for non-wings hosts",
+        )
+
+    if body.target_name:
+        try:
+            endpoint, token = await host_registry.get_credentials(db, body.host_id)
+        except host_registry.AgentNotConfigured as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        try:
+            cert_status = await agent_client.get_cert_status(endpoint, token, timeout=15.0)
+        except agent_client.AgentClientError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"failed to reach agent: {exc}",
+            ) from exc
+        targets = cert_status.get("targets") or []
+        known = {item.get("name") for item in targets if isinstance(item, dict)}
+        if body.target_name not in known:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"unknown target_name: {body.target_name!r} (available: {sorted(known)})",
+            )
+
     dep = ManagerCertDeployment(
         certificate_id=cert_id,
         host_id=body.host_id,
@@ -751,8 +785,22 @@ async def redeploy_certificate(
     admin: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    dep = await _require_deployment(db, cert_id, deployment_id)
-    return await redeploy_deployment(db, dep, actor=admin.username)
+    # manager-jobs may update the same deployment row concurrently (status
+    # scanner/dispatcher). Retry once on MySQL 1020 to avoid surfacing a
+    # transient write-conflict as a hard API failure.
+    for _attempt in range(2):
+        dep = await _require_deployment(db, cert_id, deployment_id)
+        try:
+            return await redeploy_deployment(db, dep, actor=admin.username)
+        except OperationalError as exc:
+            if "1020" not in str(exc):
+                raise
+            await db.rollback()
+            continue
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="deployment row changed concurrently; please retry",
+    )
 
 
 @router.post("/admin/certificates/{cert_id}/renew-force")

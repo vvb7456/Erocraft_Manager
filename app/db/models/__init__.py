@@ -14,7 +14,7 @@ from app.db.models.manager import (
     ServerMeta,
     SystemSetting,
 )
-from app.db.models.monitoring import NodeAlert, NodeMetrics, ProbeResult
+from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
 from app.db.models.pterodactyl import (
     ActivityLog,
     ActivityLogSubject,

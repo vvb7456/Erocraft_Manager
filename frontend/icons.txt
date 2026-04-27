@@ -46,6 +46,9 @@ login
 # Monitoring — NodeCard, DashboardPage
 memory
 lan
+hub
+pie_chart
+verified
 
 # AppSidebar nav icons
 dashboard

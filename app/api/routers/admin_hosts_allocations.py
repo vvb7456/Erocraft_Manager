@@ -1,4 +1,4 @@
-"""Admin endpoints for managing port allocations on a Pterodactyl node.
+"""Admin endpoints for managing port allocations on a wings node, keyed by host id.
 
 Mirrors the Pterodactyl Panel "node allocations" UI: list all rows
 (assigned + unassigned), create one or more allocations from a port
@@ -6,6 +6,10 @@ expression, delete unassigned allocations one-at-a-time or in bulk.
 
 Allocations are pure ``panel.allocations`` rows — wings/agent are *not*
 contacted; the rows become real ports only when a server uses them.
+
+Routes are keyed by ``manager_hosts.id`` (the canonical inventory id)
+and resolve to the bound ``panel.nodes`` row internally via
+``host.pterodactyl_node_id``. Non-wings hosts return 400.
 
 Design: ``docs/HOST_ALLOCATIONS_DESIGN.md``.
 """
@@ -35,11 +39,12 @@ from app.schemas.allocations import (
     AllocationSummary,
     ServerBrief,
 )
+from app.services import host_registry
 from app.services.audit import log_manager_activity
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin/nodes", tags=["admin-allocations"])
+router = APIRouter(prefix="/admin/hosts", tags=["admin-allocations"])
 
 
 # ---------------------------------------------------------------------------
@@ -47,14 +52,35 @@ router = APIRouter(prefix="/admin/nodes", tags=["admin-allocations"])
 # ---------------------------------------------------------------------------
 
 
-async def _ensure_node_exists(db: AsyncSession, node_id: int) -> PanelNode:
-    node = await db.get(PanelNode, node_id)
-    if node is None:
+async def _resolve_node_id(db: AsyncSession, host_id: int) -> int:
+    """Return the panel ``nodes.id`` for a wings_node host.
+
+    404 when the host doesn't exist; 400 when the host is not a wings_node
+    or has no panel binding (allocations only apply to wings nodes).
+    """
+    try:
+        host = await host_registry.require_host_by_id(db, host_id)
+    except host_registry.HostNotFound as exc:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"node {node_id} not found",
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc),
+        ) from exc
+    if host.kind != host_registry.KIND_WINGS_NODE or host.pterodactyl_node_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"host {host_id} is not a wings_node with a panel binding "
+                "(allocations only apply to wings nodes)"
+            ),
         )
-    return node
+    if await db.get(PanelNode, host.pterodactyl_node_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"host {host_id} references panel node "
+                f"{host.pterodactyl_node_id}, which no longer exists"
+            ),
+        )
+    return host.pterodactyl_node_id
 
 
 def _serialize(row: Allocation, owner_name: str | None) -> AllocationOut:
@@ -95,10 +121,10 @@ async def _serialize_many(
 
 
 @router.get(
-    "/{node_id}/allocations", response_model=AllocationListResponse,
+    "/{host_id}/allocations", response_model=AllocationListResponse,
 )
-async def list_node_allocations(
-    node_id: int,
+async def list_host_allocations(
+    host_id: int,
     assigned: bool | None = Query(default=None),
     search: str | None = Query(default=None, max_length=191),
     page: int = Query(default=1, ge=1),
@@ -106,7 +132,7 @@ async def list_node_allocations(
     _admin: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> AllocationListResponse:
-    await _ensure_node_exists(db, node_id)
+    node_id = await _resolve_node_id(db, host_id)
     offset = (page - 1) * per_page
     items, total = await allocation_repository.list_all(
         db, node_id, assigned=assigned, search=search,
@@ -128,17 +154,17 @@ async def list_node_allocations(
 
 
 @router.post(
-    "/{node_id}/allocations",
+    "/{host_id}/allocations",
     response_model=AllocationCreateResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_node_allocations(
-    node_id: int,
+async def create_host_allocations(
+    host_id: int,
     body: AllocationCreateIn,
     admin: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> AllocationCreateResponse:
-    await _ensure_node_exists(db, node_id)
+    node_id = await _resolve_node_id(db, host_id)
 
     try:
         ports = parse_port_expression(body.ports)
@@ -146,7 +172,10 @@ async def create_node_allocations(
         await log_manager_activity(
             db, actor=admin.username, action="allocation.create",
             status="error", detail_key="allocation.create.bad_expression",
-            detail_params={"node_id": node_id, "ports": body.ports, "error": str(exc)},
+            detail_params={
+                "host_id": host_id, "node_id": node_id,
+                "ports": body.ports, "error": str(exc),
+            },
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc),
@@ -176,7 +205,8 @@ async def create_node_allocations(
         db, actor=admin.username, action="allocation.create", status="success",
         detail_key="allocation.create.ok",
         detail_params={
-            "node_id": node_id, "ip": ip, "alias": alias,
+            "host_id": host_id, "node_id": node_id,
+            "ip": ip, "alias": alias,
             "ports": body.ports,
             "created_count": len(created),
             "skipped_count": len(skipped),
@@ -190,16 +220,16 @@ async def create_node_allocations(
 
 
 @router.delete(
-    "/{node_id}/allocations/{allocation_id}",
+    "/{host_id}/allocations/{allocation_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_node_allocation(
-    node_id: int,
+async def delete_host_allocation(
+    host_id: int,
     allocation_id: int,
     admin: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    await _ensure_node_exists(db, node_id)
+    node_id = await _resolve_node_id(db, host_id)
 
     snapshot, error = await allocation_repository.delete_one(
         db, node_id, allocation_id,
@@ -208,14 +238,15 @@ async def delete_node_allocation(
     if error == "not_found":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"allocation {allocation_id} not found on node {node_id}",
+            detail=f"allocation {allocation_id} not found on host {host_id}",
         )
     if error == "in_use":
         await log_manager_activity(
             db, actor=admin.username, action="allocation.delete",
             status="error", detail_key="allocation.delete.in_use",
             detail_params={
-                "node_id": node_id, "allocation_id": allocation_id,
+                "host_id": host_id, "node_id": node_id,
+                "allocation_id": allocation_id,
                 "port": snapshot.port if snapshot else None,
             },
         )
@@ -230,35 +261,36 @@ async def delete_node_allocation(
         db, actor=admin.username, action="allocation.delete", status="success",
         detail_key="allocation.delete.ok",
         detail_params={
-            "node_id": node_id, "allocation_id": allocation_id,
+            "host_id": host_id, "node_id": node_id,
+            "allocation_id": allocation_id,
             "ip": snapshot.ip, "port": snapshot.port,
         },
     )
 
 
 @router.delete(
-    "/{node_id}/allocations", status_code=status.HTTP_204_NO_CONTENT,
+    "/{host_id}/allocations", status_code=status.HTTP_204_NO_CONTENT,
 )
-async def bulk_delete_node_allocations(
-    node_id: int,
+async def bulk_delete_host_allocations(
+    host_id: int,
     body: AllocationBulkDeleteIn,
     admin: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    await _ensure_node_exists(db, node_id)
+    node_id = await _resolve_node_id(db, host_id)
 
     deleted, conflicting = await allocation_repository.delete_many(
         db, node_id, body.ids,
     )
 
     if not deleted:
-        # delete_many returns ([], conflicting_or_missing) when blocked.
         conflict_ports = [r.port for r in conflicting]
         await log_manager_activity(
             db, actor=admin.username, action="allocation.delete_bulk",
             status="error", detail_key="allocation.delete.bulk_blocked",
             detail_params={
-                "node_id": node_id, "ids": body.ids,
+                "host_id": host_id, "node_id": node_id,
+                "ids": body.ids,
                 "conflicting_ports": conflict_ports,
             },
         )
@@ -266,7 +298,7 @@ async def bulk_delete_node_allocations(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
-                    "message": "some allocations are in use or do not belong to this node",
+                    "message": "some allocations are in use or do not belong to this host",
                     "conflicting_ports": conflict_ports,
                 },
             )
@@ -280,7 +312,7 @@ async def bulk_delete_node_allocations(
         db, actor=admin.username, action="allocation.delete_bulk",
         status="success", detail_key="allocation.delete.bulk_ok",
         detail_params={
-            "node_id": node_id,
+            "host_id": host_id, "node_id": node_id,
             "deleted_count": len(deleted),
             "ports": [r.port for r in deleted],
         },

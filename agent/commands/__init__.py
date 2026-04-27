@@ -38,9 +38,10 @@ async def execute(req: CommandRequest) -> CommandResponse:
             duration_ms=int((time.monotonic() - start) * 1000),
         )
     except Exception as e:
+        error_msg = str(e).strip() or type(e).__name__
         return CommandResponse(
             id=req.id,
             ok=False,
-            error=str(e)[:500],
+            error=error_msg[:500],
             duration_ms=int((time.monotonic() - start) * 1000),
         )

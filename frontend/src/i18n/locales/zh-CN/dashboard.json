@@ -18,6 +18,42 @@
   "chart": {
     "title": "服务器状态分布"
   },
+  "kpi": {
+    "servers": "实例",
+    "users": "用户",
+    "hosts": "主机",
+    "certs": "证书将到期",
+    "certTotal": "证书总数",
+    "activeAlerts": "告警"
+  },
+  "section": {
+    "infrastructure": "基础设施",
+    "alerts": "实时告警",
+    "expiring": "即将到期 (14 天内)",
+    "activity": "近期活动",
+    "trends": "集群趋势"
+  },
+  "kind": {
+    "offline": "离线"
+  },
+  "expiring": {
+    "daysUnit": "天"
+  },
+  "empty": {
+    "hosts": "暂无主机",
+    "alerts": "一切正常",
+    "expiring": "近 14 天无到期实例",
+    "activity": "暂无活动记录",
+    "trends": "暂无趋势数据"
+  },
+  "host": {
+    "add": "添加主机",
+    "empty": "空闲槽位",
+    "unpin": "从仪表盘移除",
+    "pickerTitle": "选择要展示的主机",
+    "pickerSubtitle": "还可添加 {remaining} 个",
+    "allPinned": "所有主机已展示"
+  },
   "notConfigured": "Pterodactyl API 未配置",
   "notConfiguredMsg": "请先在系统设置中填写面板地址和 API Key",
   "goToSettings": "前往设置",

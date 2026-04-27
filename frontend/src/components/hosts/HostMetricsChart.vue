@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // HostMetricsChart — single-metric ECharts line chart for one node.
 //
-// Pulls /api/admin/monitoring/history/{nodeId}?metric=&window= and renders a
+// Pulls /api/admin/monitoring/history/{hostId}?metric=&window= and renders a
 // time-series area chart. Used both inline in HostStatusPanel (small
 // 1h hero charts) and full-size in HostActivityPane (C9, with dataZoom).
 //
@@ -28,7 +28,7 @@ type Metric = 'cpu' | 'mem' | 'disk' | 'load'
 type Window = '1h' | '6h' | '24h' | '7d'
 
 const props = withDefaults(defineProps<{
-  nodeId: number
+  hostId: number
   metric: Metric
   window?: Window
   height?: number
@@ -55,11 +55,11 @@ const loading = ref(false)
 let pollTimer: number | null = null
 
 async function fetchHistory() {
-  if (!Number.isFinite(props.nodeId)) return
+  if (!Number.isFinite(props.hostId)) return
   loading.value = true
   try {
     const data = await get<{ series: HistoryPoint[] }>(
-      `/api/admin/monitoring/history/${props.nodeId}?metric=${props.metric}&window=${props.window}`,
+      `/api/admin/hosts/${props.hostId}/history/metrics?metric=${props.metric}&window=${props.window}`,
     )
     series.value = data?.series || []
   } finally {
@@ -76,7 +76,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (pollTimer !== null) clearInterval(pollTimer)
 })
-watch(() => [props.nodeId, props.metric, props.window], fetchHistory)
+watch(() => [props.hostId, props.metric, props.window], fetchHistory)
 
 // Theme tokens from CSS vars
 type Tokens = { ac: string; ac2: string; t1: string; t3: string; bd: string; bg2: string; amber: string; red: string }

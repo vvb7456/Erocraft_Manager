@@ -16,6 +16,7 @@ class NodeOverview(BaseModel):
     id: int
     name: str
     fqdn: str
+    kind: str = "wings_node"
     agentOnline: bool = False
     wingsOnline: bool = False
     publicReachable: bool | None = None
@@ -64,7 +65,7 @@ class MonitoringOverviewResponse(BaseModel):
 
 class AlertItem(BaseModel):
     id: int
-    nodeId: int | None = None
+    hostId: int | None = None
     alertType: str
     severity: str
     message: str | None = None
@@ -90,6 +91,6 @@ class HistoryPoint(BaseModel):
 
 
 class NodeHistoryResponse(BaseModel):
-    nodeId: int
+    hostId: int
     interval: str
     points: list[HistoryPoint]

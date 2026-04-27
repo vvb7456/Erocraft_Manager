@@ -26,8 +26,7 @@
     "deployOk": "All synced"
   },
   "certificates": {
-    "title": "Certificate Details",
-    "summary": "{n} certificates"
+    "title": "Certificate Details"
   },
   "status": {
     "ok": "OK",
@@ -65,7 +64,6 @@
   },
   "nodes": {
     "title": "Managed Nodes",
-    "summary": "{n} deployment targets",
     "empty": "No certificate deployment targets",
     "perPage": "Rows/page",
     "host": "Node",
@@ -88,7 +86,9 @@
     "noBindings": "This certificate does not manage any nodes yet.",
     "noAvailable": "No default-target nodes are available.",
     "defaultTarget": "Default target",
-    "defaultTargetHint": "Writes to the default certificate target exposed by this host's agent"
+    "defaultTargetHint": "Writes to the default certificate target exposed by this host's agent",
+    "loadingTargets": "Loading available targets...",
+    "targetCount": "{n} target(s) available"
   },
   "selector": {
     "title": "Select acme.sh Certificate",

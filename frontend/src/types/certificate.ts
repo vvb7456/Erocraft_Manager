@@ -70,3 +70,22 @@ export interface AcmeStatus {
   registered_count: number
   certificates: AcmeCertificate[]
 }
+
+export interface CertTarget {
+  name: string
+  type: 'file' | 'synology_dsm' | string
+  exists: boolean | null
+  paths: { cert: string; key: string } | null
+  certificate_desc: string | null
+  dsm_cert_id: string | null
+  is_default: boolean | null
+  domains: string[] | null
+  services: Record<string, unknown>[] | null
+  current_cert: Record<string, unknown> | null
+  error: string | null
+}
+
+export interface CertTargetsResponse {
+  targets: CertTarget[]
+  wings_yaml_paths: Record<string, string | null> | null
+}

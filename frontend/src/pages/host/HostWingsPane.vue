@@ -15,7 +15,7 @@ defineOptions({ name: 'HostWingsPane' })
 const { t } = useI18n({ useScope: 'global' })
 const host = inject<Ref<HostDetail | null>>('hostDetail')!
 
-const nodeId = computed(() => host.value?.pterodactyl_node_id ?? null)
+const hostId = computed(() => host.value?.id ?? null)
 const isWings = computed(() => host.value?.kind === 'wings_node')
 
 // Page-wide dirty-form orchestration. HostWingsSection registers itself.
@@ -25,11 +25,11 @@ dirtyForm.attachLeaveGuard()
 
 <template>
   <div v-if="!host" class="muted">{{ t('hosts.detail.loading') }}</div>
-  <div v-else-if="!isWings || !nodeId" class="muted">{{ t('hosts.setting.wings.notWings') }}</div>
+  <div v-else-if="!isWings || !hostId" class="muted">{{ t('hosts.setting.wings.notWings') }}</div>
   <div v-else class="wings-panel">
     <BaseCard variant="bg2" class="wings-card">
       <p class="section-note">{{ t('hosts.setting.wings.desc') }}</p>
-      <HostWingsSection :nodeId="nodeId" />
+      <HostWingsSection :hostId="hostId" />
     </BaseCard>
   </div>
   <DirtyBar

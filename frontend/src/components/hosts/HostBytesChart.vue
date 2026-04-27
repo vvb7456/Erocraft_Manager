@@ -31,7 +31,7 @@ interface SeriesSpec {
 }
 
 const props = withDefaults(defineProps<{
-  nodeId: number
+  hostId: number
   series: SeriesSpec[]     // typically 2 legs
   window?: Window
   height?: number
@@ -51,13 +51,13 @@ const data = ref<Point[][]>([])   // one array per series
 const loading = ref(false)
 
 async function fetchAll() {
-  if (!Number.isFinite(props.nodeId)) return
+  if (!Number.isFinite(props.hostId)) return
   loading.value = true
   try {
     const results = await Promise.all(
       props.series.map(s =>
         get<{ series: Point[] }>(
-          `/api/admin/monitoring/history/${props.nodeId}?metric=${s.metric}&window=${props.window}`,
+          `/api/admin/hosts/${props.hostId}/history/metrics?metric=${s.metric}&window=${props.window}`,
         ).then(d => d?.series || []),
       ),
     )
@@ -68,7 +68,7 @@ async function fetchAll() {
 }
 
 onMounted(fetchAll)
-watch(() => [props.nodeId, props.window, props.series.map(s => s.metric).join('|')], fetchAll)
+watch(() => [props.hostId, props.window, props.series.map(s => s.metric).join('|')], fetchAll)
 
 // Theme tokens
 type Tokens = { ac: string; blue: string; amber: string; green: string; t1: string; t3: string; bd: string; bg2: string }

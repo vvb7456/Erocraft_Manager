@@ -24,7 +24,7 @@ const { get } = useApiFetch()
 
 interface AlertItem {
   id: number
-  nodeId: number | null
+  hostId: number | null
   alertType: string
   severity: 'info' | 'warning' | 'critical'
   message: string | null
@@ -48,9 +48,9 @@ onMounted(() => {
 onBeforeUnmount(() => { if (alertTimer !== null) clearInterval(alertTimer) })
 
 const activeAlerts = computed(() => {
-  const nid = host.value?.pterodactyl_node_id
-  if (nid == null) return []
-  return alerts.value.filter(a => a.nodeId === nid)
+  const hid = host.value?.id
+  if (hid == null) return []
+  return alerts.value.filter(a => a.hostId === hid)
 })
 
 function severityTone(s: string): 'info' | 'warning' | 'danger' {

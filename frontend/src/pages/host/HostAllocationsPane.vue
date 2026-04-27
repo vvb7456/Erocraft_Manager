@@ -2,10 +2,10 @@
 // HostAllocationsPane — Pterodactyl-Panel-style port allocation manager.
 // Mounted only on wings_node hosts (parent route hides the tab otherwise).
 // Reads/writes the shared `panel.allocations` table via:
-//   GET    /api/admin/nodes/{node_id}/allocations?assigned=&search=&page=&per_page=
-//   POST   /api/admin/nodes/{node_id}/allocations            { ip, alias?, ports }
-//   DELETE /api/admin/nodes/{node_id}/allocations/{id}
-//   DELETE /api/admin/nodes/{node_id}/allocations            { ids: number[] }
+//   GET    /api/admin/hosts/{host_id}/allocations?assigned=&search=&page=&per_page=
+//   POST   /api/admin/hosts/{host_id}/allocations            { ip, alias?, ports }
+//   DELETE /api/admin/hosts/{host_id}/allocations/{id}
+//   DELETE /api/admin/hosts/{host_id}/allocations            { ids: number[] }
 import { computed, inject, onMounted, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -59,7 +59,7 @@ const { toast } = useToast()
 const { confirm } = useConfirm()
 
 const host = inject<Ref<HostDetail | null>>('hostDetail')!
-const nodeId = computed(() => host.value?.pterodactyl_node_id ?? null)
+const hostId = computed(() => host.value?.id ?? null)
 const isWings = computed(() => host.value?.kind === 'wings_node')
 
 // ── List state ──
@@ -116,7 +116,7 @@ const createOpen = ref(false)
 
 // ── Loaders ──
 async function load(silent = false) {
-  if (!nodeId.value) return
+  if (!hostId.value) return
   if (!silent) listLoading.value = true
   try {
     const params = new URLSearchParams()
@@ -126,7 +126,7 @@ async function load(silent = false) {
     params.set('page', String(page.value))
     params.set('per_page', String(perPage.value))
     const data = await get<ListResponse>(
-      `/api/admin/nodes/${nodeId.value}/allocations?${params.toString()}`,
+      `/api/admin/hosts/${hostId.value}/allocations?${params.toString()}`,
     )
     if (data) {
       items.value = data.items
@@ -149,7 +149,7 @@ watch([filterAssigned, searchTerm], () => {
   load()
 })
 watch([page, perPage], () => load())
-watch(nodeId, (id) => { if (id) load() })
+watch(hostId, (id) => { if (id) load() })
 
 onMounted(() => {
   // Allocations are wings-only; redirect away when host is not a wings node.
@@ -158,7 +158,7 @@ onMounted(() => {
     router.replace({ name: 'host-overview', params: { id: String(host.value.id) } })
     return
   }
-  if (nodeId.value) load()
+  if (hostId.value) load()
 })
 
 // React when the host detail finishes loading after this pane mounts.
@@ -187,7 +187,7 @@ async function deleteOne(a: AllocationOut) {
   if (!ok) return
   try {
     const res = await fetch(
-      `/api/admin/nodes/${nodeId.value}/allocations/${a.id}`,
+      `/api/admin/hosts/${hostId.value}/allocations/${a.id}`,
       { method: 'DELETE' },
     )
     if (res.ok) {
@@ -215,7 +215,7 @@ async function bulkDelete() {
   })
   if (!ok) return
   try {
-    const res = await fetch(`/api/admin/nodes/${nodeId.value}/allocations`, {
+    const res = await fetch(`/api/admin/hosts/${hostId.value}/allocations`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids }),
@@ -263,7 +263,7 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
 
 <template>
   <div v-if="!host" class="muted">{{ t('hosts.detail.loading') }}</div>
-  <AlertBanner v-else-if="!isWings || !nodeId" tone="info" :icon="'info'">
+  <AlertBanner v-else-if="!isWings || !hostId" tone="info" :icon="'info'">
     {{ t('hosts.allocations.notWings') }}
   </AlertBanner>
 
@@ -438,9 +438,9 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
     </DataTable>
 
     <CreateAllocationsModal
-      v-if="nodeId"
+      v-if="hostId"
       v-model="createOpen"
-      :node-id="nodeId"
+      :host-id="hostId"
       :default-alias="host?.hostname || ''"
       @created="onCreated"
     />

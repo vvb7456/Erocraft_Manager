@@ -51,7 +51,7 @@ class ManagerHost(Base):
     HTTPS pull. ``kind`` identifies the host's role:
 
     * ``wings_node`` — a Pterodactyl wings node (``pterodactyl_node_id`` set)
-    * ``nginx_proxy`` / ``nas`` / ``generic_linux`` — generic agent-managed
+    * ``generic_linux`` / ``synology_dsm`` — generic agent-managed
       host without a corresponding panel.nodes row
 
     The encrypted ``agent_token_enc`` is Fernet-sealed with
@@ -223,12 +223,14 @@ class ManagerActivityLog(Base):
     __table_args__ = (
         Index("idx_timestamp", "timestamp"),
         Index("idx_actor", "actor"),
+        Index("idx_category", "category"),
         Index("idx_action", "action"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
     actor: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    category: Mapped[str] = mapped_column(String(32), nullable=False, default="other")
     action: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     detail_key: Mapped[str | None] = mapped_column(String(120), nullable=True)

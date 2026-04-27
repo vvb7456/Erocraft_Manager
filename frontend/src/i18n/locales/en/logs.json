@@ -3,6 +3,7 @@
   "filter": {
     "actor": "Actor",
     "actorPlaceholder": "Filter actor",
+    "category": "Category",
     "action": "Action",
     "status": "Status",
     "all": "All"
@@ -11,6 +12,7 @@
     "time": "Time",
     "actor": "Actor",
     "action": "Action",
+    "category": "Category",
     "status": "Status",
     "details": "Details"
   },
@@ -20,8 +22,20 @@
   },
   "status_label": {
     "success": "Success",
-    "failure": "Failed",
+    "failed": "Failed",
+    "partial": "Partial",
     "info": "Info"
+  },
+  "category": {
+    "auth": "Authentication",
+    "server": "Servers",
+    "user": "Users",
+    "host_node": "Hosts & Nodes",
+    "automation": "Automation",
+    "settings": "Settings",
+    "certificate": "Certificates",
+    "email": "Email",
+    "other": "Other"
   },
   "action": {
     "auth": "Authentication",
@@ -36,19 +50,18 @@
       "delete": "Allocation Delete",
       "delete_bulk": "Allocation Bulk Delete"
     },
-    "create_host": "Create Host",
-    "delete_host": "Delete Host",
-    "probe_host": "Probe Host",
-    "rotate_agent_token": "Rotate Agent Token",
-    "restart_wings": "Restart Wings",
-    "reset_node_daemon_token": "Reset Node Daemon Token",
-    "update_node_wings_config": "Update Node Wings Config",
-    "host_alerts_update": "Update Host Alerts",
-    "global_defaults_update": "Update Global Defaults"
+    "host": "Host Operation",
+    "node": "Node Operation",
+    "certificate": "Certificate Operation",
+    "other": "Other"
   },
   "reminderType": {
     "expiry": "expiry reminder",
     "pre_delete": "pre-delete reminder"
+  },
+  "language": {
+    "zh": "Chinese",
+    "en": "English"
   },
   "detail": {
     "login_failed": "Failed login attempt for {username}.",
@@ -89,7 +102,61 @@
     "automated_reminder_started": "Started {type} task.",
     "automated_reminder_noop": "Task complete. No servers need {type} emails.",
     "automated_reminder_finished": "Task complete. Sent {sent} {type} emails.",
-    "automated_reminder_failed": "{type} task failed unexpectedly: {error}"
+    "automated_reminder_failed": "{type} task failed unexpectedly: {error}",
+    "host.create.probe_failed": "Create host failed during probe: {error}",
+    "host.create.ok": "Host created: {name} ({kind})",
+    "host.probe.ok": "Host probe succeeded.",
+    "host.probe.failed": "Host probe failed: {error}",
+    "host.probe.unconfigured": "Host probe is not configured: {error}",
+    "host.create.invalid": "Create host request is invalid: {error}",
+    "host.patch.ok": "Host updated: #{host_id} (fields: {changed})",
+    "host.delete.ok": "Host deleted: {name}",
+    "host.alerts.update": "Host alert settings updated for host #{host_id}.",
+    "host.token.rotate": "Host token rotated for host #{host_id}.",
+    "node.wings_config.update": "Wings config updated for host #{host_id}.",
+    "node.daemon_token.reset": "Node daemon token reset for node #{node_id}.",
+    "node.wings.restart": "Wings restarted for host #{host_id}.",
+    "global_defaults.update": "Global defaults updated.",
+    "monitoring_settings_change": "Monitoring settings updated.",
+    "user_language_changed": "User language changed to {language}.",
+    "register_request": "Registration requested for {username} ({email}).",
+    "register_verified": "Registration verified for {username}.",
+    "email_sent": "Email sent to {recipient}.",
+    "email_failed": "Email send failed to {recipient}: {error}",
+    "test_email_sent": "SMTP test email sent to {recipient}.",
+    "cert.deploy.success": "Certificate deployed to host #{host_id}.",
+    "cert.deploy.failed": "Certificate deployment failed on host #{host_id}: {error}",
+    "cert.deployment.create": "Certificate deployment binding created for host #{host_id}.",
+    "cert.deployment.delete": "Certificate deployment binding removed for host #{host_id}.",
+    "cert.acme.register": "acme.sh certificate registered for {domain}.",
+    "allocation.create.ok": "Allocation created on node #{node_id}: {ip}:{port}.",
+    "allocation.create.bad_expression": "Allocation expression is invalid: {ports}",
+    "allocation.delete.ok": "Allocation deleted: {ip}:{port}.",
+    "allocation.delete.in_use": "Allocation in use and cannot be deleted: {ip}:{port}.",
+    "allocation.delete.bulk_ok": "Bulk allocation delete finished. Deleted: {deleted_count}, ports: {ports}.",
+    "allocation.delete.bulk_blocked": "Bulk allocation delete blocked on node #{node_id}. Conflicts: {conflicting_ports}",
+    "admin_server.details.update": "Server details updated: {server_name} (#{server_id}).",
+    "admin_server.owner.update": "Server owner updated: {server_name} (#{server_id}).",
+    "admin_server.build.update": "Server build limits updated: {server_name} (#{server_id}).",
+    "admin_server.startup.update": "Server startup updated: {server_name} (#{server_id}).",
+    "admin_server.variables.update": "Server variables updated: {server_name} (#{server_id}).",
+    "admin_server.egg.switch": "Server egg switched: {server_name} (#{server_id}).",
+    "admin_server.reinstall": "Server reinstall requested: {server_name} (#{server_id}).",
+    "admin_server.allocations.primary": "Server primary allocation changed: {server_name} (#{server_id}).",
+    "admin_server.allocations.add": "Server allocation added: {server_name} (#{server_id}).",
+    "admin_server.allocations.remove": "Server allocation removed: {server_name} (#{server_id}).",
+    "cert.create": "Certificate created: {name} (#{certificate_id}).",
+    "cert.patch": "Certificate updated: #{certificate_id}. Fields: {changed}",
+    "cert.delete": "Certificate deleted: {name} (#{certificate_id}).",
+    "cert.settings.update": "Certificate settings updated. Changed: {changed}",
+    "cert.renew_force": "Certificate force-renew executed: #{certificate_id}, changed={changed}, dispatched={dispatch_count}.",
+    "cert.renew_force.failed": "Certificate force-renew failed: #{certificate_id}, {error}",
+    "cert.source_changed": "Certificate source changed webhook handled: {source_path}, certs={certificate_count}, dispatch={dispatch_count}.",
+    "cert.alert.sent": "Certificate alert emails sent: cert #{certificate_id}, type={alert_type}, severity={severity}, sent={sent}.",
+    "forgot_password.site_url_not_configured": "Cannot send reset email: SITE_URL is not configured.",
+    "register.site_url_not_configured": "Cannot send registration verification email: SITE_URL is not configured.",
+    "server.delete.remote_db_leftover": "Server deleted with leftover remote DB cleanup issues: {errors}",
+    "unknown": "Unknown log detail: {key}"
   },
   "pagination": {
     "per_page": "per page"

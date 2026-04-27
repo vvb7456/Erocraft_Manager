@@ -18,6 +18,42 @@
   "chart": {
     "title": "Server Status Distribution"
   },
+  "kpi": {
+    "servers": "Servers",
+    "users": "Users",
+    "hosts": "Hosts",
+    "certs": "Certs Expiring",
+    "certTotal": "Total Certs",
+    "activeAlerts": "Alerts"
+  },
+  "section": {
+    "infrastructure": "Infrastructure",
+    "alerts": "Active Alerts",
+    "expiring": "Expiring within 14 days",
+    "activity": "Recent Activity",
+    "trends": "Cluster Trends"
+  },
+  "kind": {
+    "offline": "Offline"
+  },
+  "expiring": {
+    "daysUnit": "days"
+  },
+  "empty": {
+    "hosts": "No hosts registered",
+    "alerts": "All systems normal",
+    "expiring": "No expirations in the next 14 days",
+    "activity": "No recent activity",
+    "trends": "No trend data"
+  },
+  "host": {
+    "add": "Add host",
+    "empty": "Empty slot",
+    "unpin": "Remove from dashboard",
+    "pickerTitle": "Pin a host to the dashboard",
+    "pickerSubtitle": "You can add {remaining} more",
+    "allPinned": "All hosts already pinned"
+  },
   "notConfigured": "Pterodactyl API Not Configured",
   "notConfiguredMsg": "Please set the panel URL and API key in system settings first",
   "goToSettings": "Go to Settings",
