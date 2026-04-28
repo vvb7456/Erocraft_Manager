@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..collectors import certificates, wings_service
+from ..collectors import certificates, cloudflared_service, wings_service
 from ..config import AgentConfig
 
 
@@ -28,7 +28,10 @@ def _wings_cfg() -> AgentConfig:
     if _cfg is None:
         raise RuntimeError("agent config not initialized")
     if not _cfg.agent.is_wings:
-        raise RuntimeError("wings operations are only available on wings_node agents")
+        raise RuntimeError(
+            f"this command is only available on wings_node agents "
+            f"(current role: {_cfg.agent.role!r})"
+        )
     return _cfg
 
 
@@ -71,4 +74,70 @@ async def cert_install(params: dict) -> dict:
         fullchain_pem=str(params.get("fullchain_pem") or ""),
         privkey_pem=str(params.get("privkey_pem") or ""),
         timeout=float(params.get("timeout", 30.0)),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Cloudflare Tunnel (cloudflared) handlers
+#
+# These run on wings_node hosts only — they share the same systemd /
+# subprocess privilege model as wings.* handlers. See agent's
+# ``collectors/cloudflared_service.py`` for the actual file/systemd ops
+# and ``docs/CLOUDFLARE_TUNNEL_DESIGN.md`` §4 for the protocol.
+# ---------------------------------------------------------------------------
+
+
+async def cloudflared_setup(params: dict) -> dict:
+    """Verify cloudflared binary + (re)write our systemd unit.
+
+    params: ``{"force": bool}`` — if true, rewrites unit even when
+    already present.
+    """
+    _wings_cfg()  # gate to wings_node role
+    return await cloudflared_service.setup(force=bool(params.get("force", False)))
+
+
+async def cloudflared_write_config_minimal(params: dict) -> dict:
+    """Write credentials JSON + minimal config.yml (no ingress).
+
+    Required params: ``tunnel_id``, ``credentials_b64``. Optional:
+    ``protocol`` (default ``"http2"``). Ingress is managed remotely on
+    Cloudflare; cloudflared fetches it on startup and receives push
+    updates thereafter.
+    """
+    _wings_cfg()
+    return await cloudflared_service.write_config_minimal(
+        tunnel_id=str(params["tunnel_id"]),
+        credentials_b64=str(params["credentials_b64"]),
+        protocol=str(params.get("protocol", "http2")),
+    )
+
+
+async def cloudflared_restart(params: dict) -> dict:
+    """``systemctl restart cloudflared``."""
+    _wings_cfg()
+    return await cloudflared_service.restart_service(
+        timeout=float(params.get("timeout", 30.0)),
+    )
+
+
+async def cloudflared_enable(params: dict) -> dict:
+    """``systemctl enable --now cloudflared`` — used after first install."""
+    _wings_cfg()
+    return await cloudflared_service.enable_and_start(
+        timeout=float(params.get("timeout", 30.0)),
+    )
+
+
+async def cloudflared_status(params: dict) -> dict:
+    """Return current cloudflared install + service status."""
+    _wings_cfg()
+    return await cloudflared_service.status()
+
+
+async def cloudflared_uninstall(params: dict) -> dict:
+    """Stop + disable + (optionally) remove config files."""
+    _wings_cfg()
+    return await cloudflared_service.uninstall(
+        remove_config=bool(params.get("remove_config", True)),
     )

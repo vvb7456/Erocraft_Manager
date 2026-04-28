@@ -16,6 +16,14 @@ HANDLERS = {
     "wings.restart": handlers.wings_restart,
     "wings.status": handlers.wings_status,
     "cert.install": handlers.cert_install,
+    # Cloudflare Tunnel (remote-managed) — see
+    # docs/CF_REMOTE_MANAGED_TUNNEL_REFACTOR.md
+    "cloudflared.setup": handlers.cloudflared_setup,
+    "cloudflared.write_config_minimal": handlers.cloudflared_write_config_minimal,
+    "cloudflared.restart": handlers.cloudflared_restart,
+    "cloudflared.enable": handlers.cloudflared_enable,
+    "cloudflared.status": handlers.cloudflared_status,
+    "cloudflared.uninstall": handlers.cloudflared_uninstall,
 }
 
 

@@ -167,6 +167,101 @@ async def install_cert(
 
 
 # ---------------------------------------------------------------------------
+# Cloudflare Tunnel (cloudflared) commands
+# ---------------------------------------------------------------------------
+
+
+async def cloudflared_setup(
+    endpoint: str, token: str, *, force: bool = False, timeout: float = 30.0,
+) -> dict:
+    """Verify cloudflared binary + (re)write our systemd unit on the agent."""
+    return await _request(
+        "POST", endpoint, token, "/v1/commands",
+        json={
+            "id": 0,
+            "type": "cloudflared.setup",
+            "params": {"force": force},
+        },
+        timeout=timeout,
+    )
+
+
+async def cloudflared_write_config_minimal(
+    endpoint: str,
+    token: str,
+    *,
+    tunnel_id: str,
+    credentials_b64: str,
+    protocol: str = "http2",
+    timeout: float = 30.0,
+) -> dict:
+    """Push credentials JSON + a minimal ``config.yml`` (no ingress).
+
+    Ingress is managed remotely on Cloudflare; cloudflared fetches it on
+    startup and receives push updates thereafter. See
+    ``docs/CF_REMOTE_MANAGED_TUNNEL_REFACTOR.md``.
+    """
+    return await _request(
+        "POST", endpoint, token, "/v1/commands",
+        json={
+            "id": 0,
+            "type": "cloudflared.write_config_minimal",
+            "params": {
+                "tunnel_id": tunnel_id,
+                "credentials_b64": credentials_b64,
+                "protocol": protocol,
+            },
+        },
+        timeout=timeout,
+    )
+
+
+async def cloudflared_restart(
+    endpoint: str, token: str, *, timeout: float = 60.0,
+) -> dict:
+    return await _request(
+        "POST", endpoint, token, "/v1/commands",
+        json={"id": 0, "type": "cloudflared.restart", "params": {}},
+        timeout=timeout,
+    )
+
+
+async def cloudflared_enable(
+    endpoint: str, token: str, *, timeout: float = 60.0,
+) -> dict:
+    """``systemctl enable --now cloudflared`` — used right after first install."""
+    return await _request(
+        "POST", endpoint, token, "/v1/commands",
+        json={"id": 0, "type": "cloudflared.enable", "params": {}},
+        timeout=timeout,
+    )
+
+
+async def cloudflared_status(
+    endpoint: str, token: str, *, timeout: float = 10.0,
+) -> dict:
+    return await _request(
+        "POST", endpoint, token, "/v1/commands",
+        json={"id": 0, "type": "cloudflared.status", "params": {}},
+        timeout=timeout,
+    )
+
+
+async def cloudflared_uninstall(
+    endpoint: str, token: str, *, remove_config: bool = True, timeout: float = 30.0,
+) -> dict:
+    return await _request(
+        "POST", endpoint, token, "/v1/commands",
+        json={
+            "id": 0,
+            "type": "cloudflared.uninstall",
+            "params": {"remove_config": remove_config},
+        },
+        timeout=timeout,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Unauthenticated reachability
 # ---------------------------------------------------------------------------
 
