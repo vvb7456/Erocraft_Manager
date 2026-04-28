@@ -69,7 +69,7 @@ async def update_email_template(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="settings",
+        category="settings",
         status="success",
         detail_key="email_template_change",
         detail_params={"template": payload.type},
@@ -117,7 +117,7 @@ async def send_smtp_test_email(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="settings",
+        category="settings",
         status="success" if ok else "fail",
         detail_key="test_email_sent",
         detail_params={"recipient": str(payload.recipient), "error": err or ""},

@@ -22,7 +22,6 @@ interface LogItem {
   timestamp: string | null
   actor: string
   category: string
-  action: string
   status: string
   detailKey: string | null
   detailParams: Record<string, unknown>
@@ -36,7 +35,7 @@ interface LogResponse {
   totalPages: number
   filters: {
     actors: string[]
-    actions: string[]
+    categories: string[]
   }
 }
 
@@ -47,9 +46,9 @@ const perPage = ref(20)
 const totalPages = ref(1)
 const totalCount = ref(0)
 const filterActor = ref('')
-const filterAction = ref('')
+const filterCategory = ref('')
 const filterStatus = ref('')
-const actionOptions = ref<string[]>([])
+const categoryOptions = ref<string[]>([])
 
 // ── Fetch ──
 async function loadLogs() {
@@ -57,19 +56,19 @@ async function loadLogs() {
   params.set('page', String(page.value))
   params.set('per_page', String(perPage.value))
   if (filterActor.value) params.set('actor', filterActor.value)
-  if (filterAction.value) params.set('action', filterAction.value)
+  if (filterCategory.value) params.set('category', filterCategory.value)
   if (filterStatus.value) params.set('status', filterStatus.value)
   const data = await get<LogResponse>(`/api/admin/activity-logs?${params}`)
   if (data) {
     logs.value = data.logs
     totalPages.value = data.totalPages
     totalCount.value = data.total
-    actionOptions.value = data.filters.actions
+    categoryOptions.value = data.filters.categories
   }
 }
 
 onMounted(loadLogs)
-watch([filterActor, filterAction, filterStatus], () => {
+watch([filterActor, filterCategory, filterStatus], () => {
   page.value = 1
   loadLogs()
 })
@@ -94,9 +93,9 @@ function actorLabel(actor: string): string {
   return actor
 }
 
-function actionLabel(action: string): string {
-  const key = `logs.action.${action}`
-  return te(key) ? t(key) : action
+function categoryLabel(category: string): string {
+  const key = `logs.category.${category}`
+  return te(key) ? t(key) : category
 }
 
 function detailLabel(log: LogItem): string {
@@ -151,9 +150,9 @@ const statusOptions = ['success', 'failed', 'partial', 'info']
       </template>
       <template #end>
         <BaseSelect
-          v-model="filterAction"
-          :options="[{ value: '', label: t('logs.filter.all') }, ...actionOptions.map(a => ({ value: a, label: actionLabel(a) }))]"
-          :prefix="t('logs.filter.action') + ': '"
+          v-model="filterCategory"
+          :options="[{ value: '', label: t('logs.filter.all') }, ...categoryOptions.map(c => ({ value: c, label: categoryLabel(c) }))]"
+          :prefix="t('logs.filter.category') + ': '"
           size="sm"
           fit
         />
@@ -183,14 +182,14 @@ const statusOptions = ['success', 'failed', 'partial', 'info']
       <template #header>
         <th class="col-time">{{ t('logs.table.time') }}</th>
         <th class="col-actor">{{ t('logs.table.actor') }}</th>
-        <th class="col-action">{{ t('logs.table.action') }}</th>
+        <th class="col-action">{{ t('logs.table.category') }}</th>
         <th class="col-status">{{ t('logs.table.status') }}</th>
         <th class="col-details">{{ t('logs.table.details') }}</th>
       </template>
       <template #row="{ item: log }">
         <td class="col-time">{{ formatTime(log.timestamp) }}</td>
         <td class="col-actor">{{ actorLabel(log.actor) }}</td>
-        <td class="col-action"><code class="action-code">{{ actionLabel(log.action) }}</code></td>
+        <td class="col-action"><Badge size="sm">{{ categoryLabel(log.category) }}</Badge></td>
         <td class="col-status">
           <Badge :color="statusColor(log.status)">
             {{ t(`logs.status_label.${log.status}`, log.status) }}
@@ -210,7 +209,7 @@ const statusOptions = ['success', 'failed', 'partial', 'info']
             {{ t(`logs.status_label.${log.status}`, log.status) }}
           </Badge>
         </div>
-        <code class="action-code">{{ actionLabel(log.action) }}</code>
+        <Badge size="sm">{{ categoryLabel(log.category) }}</Badge>
         <div class="log-card-details">{{ detailLabel(log) }}</div>
       </template>
     </DataTable>
@@ -239,15 +238,6 @@ const statusOptions = ['success', 'failed', 'partial', 'info']
   color: var(--t3);
   font-size: var(--text-sm);
   white-space: nowrap;
-}
-
-.action-code {
-  font-family: var(--font-mono);
-  font-size: .78rem;
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: var(--bg2);
-  color: var(--t2);
 }
 
 .details-text {

@@ -17,6 +17,8 @@ const registry: Record<string, () => Promise<Component>> = {
 export interface EggMeta {
   /** Show "Open App" button for servers with this egg */
   hasWebUi?: boolean
+  /** Show "Network" tab + tunnel feature for servers with this egg */
+  hasTunnel?: boolean
   /** Env vars hidden from the generic settings form */
   hiddenVars?: string[]
   /** Env vars whose values should be masked in activity logs */
@@ -28,6 +30,7 @@ export interface EggMeta {
 const EGG_META: Record<string, EggMeta> = {
   SillyTavern: {
     hasWebUi: true,
+    hasTunnel: true,
     hiddenVars: ['FORCE_REINSTALL'],
     secretVars: ['PASSWORD'],
     label: 'SillyTavern',
@@ -63,4 +66,9 @@ export function getEggMeta(eggName: string): EggMeta {
 /** Check if servers with this egg expose a web UI. */
 export function hasWebUi(eggName: string): boolean {
   return EGG_META[eggName]?.hasWebUi ?? false
+}
+
+/** Check if servers with this egg expose the custom-domain (tunnel) feature. */
+export function hasTunnel(eggName: string): boolean {
+  return EGG_META[eggName]?.hasTunnel ?? false
 }

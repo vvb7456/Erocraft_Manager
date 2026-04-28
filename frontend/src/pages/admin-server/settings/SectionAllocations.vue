@@ -129,7 +129,20 @@ async function save(): Promise<boolean> {
     if (!r) return false
   }
   toast(t('adminServer.settings.saved'), 'success')
+  // Wings stores the new allocation but the docker container's published
+  // port mapping is fixed at `docker run` time. Hint that the operator
+  // (or the end user) must stop+start the server for the new port to be
+  // reachable. We don't auto-restart here because the change is admin-
+  // initiated and may target a server that should not be interrupted.
+  if (d.added.length > 0 || d.primaryChanged || d.removed.length > 0) {
+    toast(t('adminServer.settings.allocations.restartHint'), 'info')
+  }
   await reload()
+  // The detail watcher skips re-sync while isDirty is true to avoid
+  // stomping unsaved edits, so we must reset the baseline explicitly
+  // after a successful save - otherwise DirtyBar stays visible and a
+  // second save would replay the now-stale diff.
+  syncFromDetail()
   const ar = await get<{ allocations: ServerAllocationSummary[] }>(
     `/api/admin/servers/${sid}/allocations/available`,
   )

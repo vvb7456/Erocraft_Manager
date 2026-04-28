@@ -11,7 +11,10 @@
   "batch": {
     "selectAction": "Select action",
     "execute": "Execute",
-    "selected": "{n} selected"
+    "selected": "{n} selected",
+    "resultAllOk": "All {total} server actions dispatched",
+    "resultPartial": "Succeeded {ok}/{total}, failed: {names}",
+    "resultAllFail": "All {total} failed: {names}"
   },
   "pagination": {
     "perPage": "/ page"
@@ -133,6 +136,9 @@
     "edit": "Edit",
     "save": "Save",
     "saved": "File saved",
+    "unsavedChangesTitle": "Discard unsaved changes?",
+    "unsavedChangesMessage": "The file \"{name}\" has unsaved changes that will be lost if you close it now.",
+    "unsavedChangesDiscard": "Discard changes",
     "confirmDelete": "Are you sure you want to delete {n} selected file(s)?",
     "folderName": "Folder name",
     "fileName": "File name",
@@ -159,5 +165,57 @@
     "openFile": "Open file",
     "openFolder": "Open folder",
     "actions": "Actions"
+  },
+  "network": {
+    "tab": "Network",
+    "loadFailed": "Failed to load",
+    "retry": "Retry",
+    "addressSection": "Access addresses",
+    "addressDesc": "This server can be reached at the addresses below.",
+    "rawAddress": "Direct address",
+    "rawAddressHint": "A direct network address to the server. Fastest and most stable connection.",
+    "customDomain": "Custom domain",
+    "customDomainHint": "A friendly, easy-to-remember URL that opens in any browser — no port number required.",
+    "copyAddress": "Copy",
+    "copied": "Copied",
+
+    "section": "Custom domain",
+    "enableLabel": "Enable custom domain",
+    "enableHint": "Once enabled, the server gets a clean, memorable URL that opens directly in any browser — no port number required.",
+    "statusActive": "Enabled",
+    "statusFailed": "Something went wrong",
+    "statusFailedHint": "Try enabling it again. If it keeps failing, contact your administrator.",
+
+    "subdomainLabel": "URL prefix",
+    "subdomainPlaceholder": "e.g. mychat",
+    "subdomainHint": "Only lowercase letters, digits, and hyphens (-). Up to 32 characters. Cannot start or end with a hyphen.",
+    "subdomainInvalid": "Invalid format",    "subdomainRequired": "Please enter a URL prefix",    "subdomainTaken": "This prefix is already taken \u2014 please pick another",
+    "subdomainSave": "Save prefix",
+    "subdomainSaved": "Saved",
+    "subdomainCurrent": "Current URL",
+
+    "warning": {
+      "title": "Read this before turning it on",
+      "body": "A custom domain routes your traffic through an extra network hop. In many cases this actually makes the connection slower, laggier, or even drops it. If the direct address works fine for you, leave this off. Only turn it on if the direct address is completely unreachable. This feature is provided by Cloudflare; all traffic passes through Cloudflare\u2019s servers."
+    },
+
+    "disableConfirm": {
+      "title": "Turn off the custom domain?",
+      "message": "Once disabled, the custom URL stops working immediately. Any device that bookmarked it will need to switch back to the direct address.",
+      "confirm": "Turn it off"
+    },
+
+    "hostNotReady": {
+      "title": "Custom domain isn\u2019t available on this node yet",
+      "message": "Please contact an administrator to enable it."
+    },
+
+    "toast": {
+      "saved": "Settings saved",
+      "enableSuccess": "Custom domain enabled",
+      "disableSuccess": "Custom domain disabled",
+      "renameSuccess": "URL prefix updated",
+      "genericError": "Operation failed, please try again"
+    }
   }
 }

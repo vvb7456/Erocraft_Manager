@@ -100,32 +100,49 @@ export function useApiFetch() {
     })
   }
 
-  /** Raw fetch without JSON parsing (for file uploads, etc.) */
-  async function raw(url: string, opts: RequestInit = {}): Promise<Response | null> {
+  /** Raw fetch without JSON parsing (for file uploads, etc.).
+   *
+   * 401 always triggers session-clear + redirect (even with ``silent``).
+   * ``silent`` suppresses toasts on other non-OK statuses so the caller can
+   * inspect status codes (e.g. 409) and present its own message. The raw
+   * response (including non-OK!) is returned in that case so the caller can
+   * read the body. (Audit FM1.)
+   */
+  async function raw(
+    url: string,
+    opts: RequestInit & { silent?: boolean } = {},
+  ): Promise<Response | null> {
     loading.value = true
     error.value = null
+    const { silent, ...fetchOpts } = opts
     try {
-      const res = await fetch(url, opts)
+      const res = await fetch(url, fetchOpts)
+      if (res.status === 401) {
+        app.clearSessionUser()
+        redirectToLogin()
+        return null
+      }
       if (!res.ok) {
-        if (res.status === 401) {
-          app.clearSessionUser()
-          redirectToLogin()
+        let msg = `HTTP ${res.status}`
+        if (!silent) {
+          try {
+            const cloned = res.clone()
+            const body = await cloned.json()
+            msg = body.error || body.message || msg
+          } catch { /* ignore */ }
+          error.value = msg
+          toast(translateError(msg), 'error')
           return null
         }
-        let msg = `HTTP ${res.status}`
-        try {
-          const body = await res.json()
-          msg = body.error || body.message || msg
-        } catch { /* ignore */ }
+        // silent: surface the response so caller handles non-OK itself.
         error.value = msg
-        toast(translateError(msg), 'error')
-        return null
+        return res
       }
       return res
     } catch {
       const msg = t('common.apiErrors.network')
       error.value = msg
-      toast(msg, 'error')
+      if (!silent) toast(msg, 'error')
       return null
     } finally {
       loading.value = false

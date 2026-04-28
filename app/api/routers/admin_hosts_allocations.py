@@ -170,7 +170,7 @@ async def create_host_allocations(
         ports = parse_port_expression(body.ports)
     except PortExpressionError as exc:
         await log_manager_activity(
-            db, actor=admin.username, action="allocation.create",
+            db, actor=admin.username, category="server",
             status="error", detail_key="allocation.create.bad_expression",
             detail_params={
                 "host_id": host_id, "node_id": node_id,
@@ -202,7 +202,7 @@ async def create_host_allocations(
     serialized = await _serialize_many(db, created)
 
     await log_manager_activity(
-        db, actor=admin.username, action="allocation.create", status="success",
+        db, actor=admin.username, category="server", status="success",
         detail_key="allocation.create.ok",
         detail_params={
             "host_id": host_id, "node_id": node_id,
@@ -242,7 +242,7 @@ async def delete_host_allocation(
         )
     if error == "in_use":
         await log_manager_activity(
-            db, actor=admin.username, action="allocation.delete",
+            db, actor=admin.username, category="server",
             status="error", detail_key="allocation.delete.in_use",
             detail_params={
                 "host_id": host_id, "node_id": node_id,
@@ -258,7 +258,7 @@ async def delete_host_allocation(
     await db.commit()
     assert snapshot is not None
     await log_manager_activity(
-        db, actor=admin.username, action="allocation.delete", status="success",
+        db, actor=admin.username, category="server", status="success",
         detail_key="allocation.delete.ok",
         detail_params={
             "host_id": host_id, "node_id": node_id,
@@ -286,7 +286,7 @@ async def bulk_delete_host_allocations(
     if not deleted:
         conflict_ports = [r.port for r in conflicting]
         await log_manager_activity(
-            db, actor=admin.username, action="allocation.delete_bulk",
+            db, actor=admin.username, category="server",
             status="error", detail_key="allocation.delete.bulk_blocked",
             detail_params={
                 "host_id": host_id, "node_id": node_id,
@@ -309,7 +309,7 @@ async def bulk_delete_host_allocations(
 
     await db.commit()
     await log_manager_activity(
-        db, actor=admin.username, action="allocation.delete_bulk",
+        db, actor=admin.username, category="server",
         status="success", detail_key="allocation.delete.bulk_ok",
         detail_params={
             "host_id": host_id, "node_id": node_id,

@@ -4,14 +4,12 @@
     "actor": "执行者",
     "actorPlaceholder": "筛选执行者",
     "category": "分类",
-    "action": "操作类型",
     "status": "状态",
     "all": "全部"
   },
   "table": {
     "time": "时间",
     "actor": "执行者",
-    "action": "操作类型",
     "category": "分类",
     "status": "状态",
     "details": "详细信息"
@@ -27,32 +25,15 @@
     "info": "信息"
   },
   "category": {
-    "auth": "认证",
+    "auth": "身份验证",
     "server": "服务器",
     "user": "用户",
-    "host_node": "主机与节点",
-    "automation": "自动化",
-    "settings": "设置",
+    "host_node": "主机/节点",
+    "automation": "自动化任务",
+    "settings": "系统设置",
     "certificate": "证书",
     "email": "邮件",
-    "other": "其他"
-  },
-  "action": {
-    "auth": "认证",
-    "server": "服务器",
-    "user": "用户",
-    "account": "账户",
-    "settings": "设置",
-    "automation": "自动化",
-    "email": "邮件",
-    "allocation": {
-      "create": "分配创建",
-      "delete": "分配删除",
-      "delete_bulk": "分配批量删除"
-    },
-    "host": "主机操作",
-    "node": "节点操作",
-    "certificate": "证书操作",
+    "tunnel": "隧道",
     "other": "其他"
   },
   "reminderType": {
@@ -81,6 +62,7 @@
     "create_user": "创建用户 {username} (Email: {email})。",
     "edit_user": "更新用户 ID {user_id}。",
     "delete_user": "删除用户 ID {user_id} 及其 {server_count} 台服务器。",
+    "delete_user_partial": "删除用户 ID {user_id} 部分完成: 已删除 {deleted_server_count} 台服务器, 但用户行删除失败 ({error})。请重试删除该用户。",
     "batch_email_users": "批量邮件(用户)完成。成功: {success}, 失败: {failed}。",
     "batch_delete_users": "批量删除用户完成。成功: {success}, 失败: {failed}。",
     "forgot_password": "用户 {username} 请求密码重置邮件。",
@@ -112,7 +94,6 @@
     "host.patch.ok": "主机已更新: #{host_id} (字段: {changed})",
     "host.delete.ok": "主机已删除: {name}",
     "host.alerts.update": "主机 #{host_id} 告警设置已更新。",
-    "host.token.rotate": "主机 #{host_id} token 已轮换。",
     "node.wings_config.update": "主机 #{host_id} 的 Wings 配置已更新。",
     "node.daemon_token.reset": "节点 #{node_id} daemon token 已重置。",
     "node.wings.restart": "主机 #{host_id} 的 Wings 已重启。",
@@ -156,6 +137,14 @@
     "forgot_password.site_url_not_configured": "无法发送重置邮件: SITE_URL 未配置。",
     "register.site_url_not_configured": "无法发送注册验证邮件: SITE_URL 未配置。",
     "server.delete.remote_db_leftover": "服务器已删除，但远端数据库清理存在残留问题: {errors}",
+    "tunnel.bind.ok": "主机 {host_name} (#{host_id}) 已绑定 Cloudflare zone {cf_zone_name}。",
+    "tunnel.install.ok": "主机 {host_name} (#{host_id}) 已安装 cloudflared {cloudflared_version}，隧道 {cf_tunnel_id}。",
+    "tunnel.sync.ok": "主机 {host_name} (#{host_id}) ingress 已同步到 Cloudflare，配置版本 v{cf_config_version}。",
+    "tunnel.restart.ok": "主机 {host_name} (#{host_id}) cloudflared 已重启。",
+    "tunnel.uninstall.ok": "主机 {host_name} (#{host_id}) Cloudflare 隧道已卸载（agent: {agent_ok}）。",
+    "tunnel.server.enable.ok": "服务器 {server_name} (#{server_id}) 已开启隧道访问：{hostname}。",
+    "tunnel.server.rename.ok": "服务器 {server_name} (#{server_id}) 隧道域名已修改为 {hostname}。",
+    "tunnel.server.disable.ok": "服务器 {server_name} (#{server_id}) 隧道访问已关闭（原域名 {hostname}）。",
     "unknown": "未知日志详情: {key}"
   },
   "pagination": {

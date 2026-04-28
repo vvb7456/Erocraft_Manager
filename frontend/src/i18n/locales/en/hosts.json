@@ -122,8 +122,7 @@
       "overview": "Overview",
       "setting": "Agent settings",
       "wings": "Wings",
-      "allocations": "Allocations",
-      "activity": "Activity"
+      "allocations": "Allocations",      "tunnel": "Cloudflare Tunnel",      "activity": "Activity"
     },
     "loading": "Loading…",
     "notFound": "Host not found",
@@ -414,5 +413,77 @@
     "toastBound": "Certificate deployed",
     "toastSynced": "Certificate synced",
     "toastRemoved": "Deployment removed"
+  },
+  "tunnel": {
+    "runtimeTitle": "Cloudflare Tunnel runtime",
+    "serversTitle": "Connected servers",
+    "serversHint": "Servers proxied by this tunnel (Ingress routes)",
+    "empty": {
+      "title": "No Cloudflare Tunnel bound",
+      "desc": "Bind a tunnel to publish servers on this host as HTTPS subdomains — no public IP or port forwarding required."
+    },
+    "noZones": "No zones available with this token",
+    "bindOk": "Cloudflare account and zone bound",
+    "installOk": "Tunnel installed",
+    "syncOk": "Tunnel config synced",
+    "restartOk": "cloudflared restarted",
+    "uninstallOk": "Tunnel uninstalled",
+    "uninstallPartial": "Tunnel removed from Cloudflare, but agent cleanup failed: {err}",
+    "status": {
+      "unbound": "Unbound",
+      "uninstalled": "Not installed",
+      "probing": "Probing",
+      "unreachable": "Agent unreachable",
+      "inactive": "Stopped",
+      "no_unit": "Unit missing",
+      "active": "Running"
+    },
+    "liveProbeFailed": "Agent live probe failed",
+    "fields": {
+      "account": "CF Account ID",
+      "token": "CF API Token",
+      "zone": "Root domain",
+      "tunnelName": "Tunnel name",
+      "tunnelId": "Tunnel ID",
+      "configVersion": "Config version",
+      "lastSyncedAt": "Last synced"
+    },
+    "tips": {
+      "account": "In the Cloudflare Dashboard, the Account ID is shown in the right sidebar under \"Account ID\" with a copy button. The dashboard URL also includes it: dash.cloudflare.com/<Account ID>.",
+      "token": "Cloudflare Dashboard → top-right avatar → My Profile → API Tokens → Create Token. Required scopes: Account.Cloudflare Tunnel:Edit and Zone.DNS:Edit. Token is used only for this host and stored encrypted."
+    },
+    "actions": {
+      "bind": "Bind",
+      "rebind": "Bind / Change",
+      "install": "Install tunnel",
+      "sync": "Force sync",
+      "restart": "Restart",
+      "uninstall": "Uninstall"
+    },
+    "bind": {
+      "title": "Bind Cloudflare account and zone",
+      "step1Title": "Step 1: enter Account ID and API Token. Verify will fetch the available zone list.",
+      "step2Title": "Step 2: choose the root domain this host should use.",
+      "verify": "Verify and fetch zones",
+      "back": "Back",
+      "save": "Save binding",
+      "zonesFound": "{n} zone(s) found"
+    },
+    "confirm": {
+      "restartTitle": "Restart cloudflared?",
+      "restartMsg": "Servers proxied via this tunnel will be unreachable for a few seconds during restart.",
+      "uninstallTitle": "Uninstall Cloudflare Tunnel",
+      "uninstallMsg": "This stops and removes cloudflared on the host AND deletes the Cloudflare-side tunnel record. This cannot be undone.",
+      "uninstallBusyMsg": "{n} server(s) currently use this tunnel. They will lose tunnel access after uninstall.",
+      "uninstallTypePrompt": "Type the host name to confirm:"
+    },
+    "cols": {
+      "serverId": "Server",
+      "hostname": "Hostname",
+      "upstream": "Local target",
+      "status": "Status"
+    },
+    "serversEmptyNoTunnel": "Tunnel not installed. Server list will appear once deployment finishes.",
+    "serversEmptyReady": "No servers have enabled tunnel access yet. Bind a subdomain to a server in its detail page to see it here."
   }
 }

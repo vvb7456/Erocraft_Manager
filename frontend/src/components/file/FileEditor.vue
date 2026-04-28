@@ -3,6 +3,7 @@ import { ref, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
@@ -21,6 +22,7 @@ const emit = defineEmits<{
 const { t } = useI18n({ useScope: 'global' })
 const { get, post } = useApiFetch()
 const { toast } = useToast()
+const { confirm } = useConfirm()
 
 const open = ref(false)
 const fileName = ref('')
@@ -30,6 +32,9 @@ const saving = ref(false)
 const editorRef = ref<HTMLDivElement | null>(null)
 const mouseDownOnOverlay = ref(false)
 let editorView: any = null
+// Snapshot of file body at load (or last successful save) so close() can
+// detect unsaved changes. (Audit FM5.)
+let originalContent = ''
 
 async function openFile(name: string, fileSize?: number) {
   if (fileSize && fileSize > 5 * 1024 * 1024) {
@@ -49,6 +54,7 @@ async function openFile(name: string, fileSize?: number) {
   editorLoading.value = false
   if (data) {
     content.value = data.content
+    originalContent = data.content
     await nextTick()
     initCodeMirror(data.content, name)
   }
@@ -133,17 +139,30 @@ async function save() {
   )
   saving.value = false
   if (res !== undefined) {
+    originalContent = c
     toast(t('userServers.file.saved'), 'success')
     emit('saved')
   }
 }
 
-function close() {
+async function close() {
+  // Guard against accidental dismissal of unsaved edits. (Audit FM5.)
+  const current = editorView ? editorView.state.doc.toString() : content.value
+  if (open.value && current !== originalContent) {
+    const ok = await confirm({
+      title: t('userServers.file.unsavedChangesTitle'),
+      message: t('userServers.file.unsavedChangesMessage', { name: fileName.value }),
+      variant: 'danger',
+      confirmText: t('userServers.file.unsavedChangesDiscard'),
+    })
+    if (!ok) return
+  }
   open.value = false
   if (editorView) {
     editorView.destroy()
     editorView = null
   }
+  originalContent = ''
 }
 
 defineExpose({ openFile })

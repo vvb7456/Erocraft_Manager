@@ -187,7 +187,7 @@ async def forgot_password(
     await log_manager_activity(
         db,
         actor=username,
-        action="auth",
+        category="auth",
         status="success" if success else "failure",
         detail_key="forgot_password",
         detail_params={"username": username, "email": email},
@@ -266,7 +266,7 @@ async def reset_password(
     await log_manager_activity(
         db,
         actor=user.username,
-        action="auth",
+        category="auth",
         status="success",
         detail_key="reset_password",
         detail_params={"username": user.username},
@@ -434,7 +434,7 @@ async def register(
     await log_manager_activity(
         db,
         actor=username,
-        action="auth",
+        category="auth",
         status="success",
         detail_key="register_request",
         detail_params={"username": username, "email": email},
@@ -531,7 +531,7 @@ async def verify_registration(
     await log_manager_activity(
         db,
         actor=created.username,
-        action="auth",
+        category="auth",
         status="success",
         detail_key="register_verified",
         detail_params={"username": created.username, "email": created.email},

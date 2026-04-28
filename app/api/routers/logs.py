@@ -25,7 +25,6 @@ async def activity_logs(
     per_page: int = Query(default=30, ge=1, le=100),
     actor: str | None = None,
     category: str | None = None,
-    action: str | None = None,
     status: str | None = None,
     host_id: int | None = Query(default=None),
     node_id: int | None = Query(default=None),
@@ -36,14 +35,12 @@ async def activity_logs(
         per_page=per_page,
         actor=actor,
         category=category,
-        action=action,
         status=status,
         host_id=host_id,
         node_id=node_id,
     )
     actors = await activity_log_repository.distinct_actors(db)
     categories = await activity_log_repository.distinct_categories(db)
-    actions = await activity_log_repository.distinct_actions(db)
 
     def _detail_params(raw: str | None) -> dict[str, object]:
         if not raw:
@@ -61,7 +58,6 @@ async def activity_logs(
                 timestamp=log.timestamp.isoformat() if log.timestamp else None,
                 actor=log.actor,
                 category=log.category,
-                action=log.action,
                 status=log.status,
                 detailKey=log.detail_key,
                 detailParams=_detail_params(log.detail_params),
@@ -75,6 +71,5 @@ async def activity_logs(
         filters=ActivityLogFilters(
             actors=actors,
             categories=categories,
-            actions=actions,
         ),
     )

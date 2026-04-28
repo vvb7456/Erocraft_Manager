@@ -185,10 +185,14 @@ class Allocation(Base):
     # Pterodactyl schema links allocations to servers in two different ways:
     # `allocations.server_id` means an allocation belongs to a server, while
     # `servers.allocation_id` points to the primary allocation for that server.
+    # The two FKs form a cycle (Allocation.server_id <-> PteroServer.allocation_id),
+    # so we mark this side `post_update=True` to break the unit-of-work
+    # dependency cycle and let SQLAlchemy issue a separate UPDATE for the FK.
     server: Mapped[PteroServer | None] = relationship(
         "PteroServer",
         foreign_keys=[server_id],
         lazy="joined",
+        post_update=True,
     )
     node: Mapped[PanelNode] = relationship("PanelNode")
 

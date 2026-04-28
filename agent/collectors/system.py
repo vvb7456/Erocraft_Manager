@@ -108,12 +108,22 @@ def _read_cpu_times() -> tuple[int, int]:
 
     /proc/stat first line: "cpu user nice system idle iowait irq softirq steal guest guest_nice"
     Idle component = idle + iowait (matches psutil's behavior).
+
+    Returns (0, 0) if /proc/stat is unreadable (e.g. restricted container,
+    hidepid mount). Caller treats 0 total as "no measurement" and skips
+    the percentage calc rather than raising into /v1/metrics. (Audit A1.)
     """
-    with open("/proc/stat", "r", encoding="ascii") as f:
-        line = f.readline()
+    try:
+        with open("/proc/stat", "r", encoding="ascii") as f:
+            line = f.readline()
+    except OSError:
+        return 0, 0
     parts = line.split()
     # parts[0] == "cpu"
-    nums = [int(x) for x in parts[1:]]
+    try:
+        nums = [int(x) for x in parts[1:]]
+    except ValueError:
+        return 0, 0
     # Pad in case kernel reports fewer fields (very old kernels)
     while len(nums) < 8:
         nums.append(0)
@@ -146,17 +156,23 @@ def _cpu_percent_since_last_call() -> float:
 # ---- /proc/meminfo ----
 
 def _read_meminfo() -> dict[str, int]:
-    """Return /proc/meminfo as {key: kB}."""
+    """Return /proc/meminfo as {key: kB}.
+
+    Returns empty dict if /proc/meminfo is unreadable. (Audit A1.)
+    """
     out: dict[str, int] = {}
-    with open("/proc/meminfo", "r", encoding="ascii") as f:
-        for line in f:
-            key, _, rest = line.partition(":")
-            value = rest.strip().split()
-            if value:
-                try:
-                    out[key] = int(value[0])  # kB
-                except ValueError:
-                    continue
+    try:
+        with open("/proc/meminfo", "r", encoding="ascii") as f:
+            for line in f:
+                key, _, rest = line.partition(":")
+                value = rest.strip().split()
+                if value:
+                    try:
+                        out[key] = int(value[0])  # kB
+                    except ValueError:
+                        continue
+    except OSError:
+        return {}
     return out
 
 
@@ -204,20 +220,25 @@ def _read_net_totals() -> tuple[int, int]:
     """
     rx = 0
     tx = 0
-    with open("/proc/net/dev", "r", encoding="ascii") as f:
-        # First two lines are headers
-        for line in f.readlines()[2:]:
-            iface, _, rest = line.partition(":")
-            iface = iface.strip()
-            if not rest or not iface:
-                continue
-            fields = rest.split()
-            if len(fields) >= 9:
-                try:
-                    rx += int(fields[0])
-                    tx += int(fields[8])
-                except ValueError:
+    try:
+        with open("/proc/net/dev", "r", encoding="ascii") as f:
+            # First two lines are headers
+            for line in f.readlines()[2:]:
+                iface, _, rest = line.partition(":")
+                iface = iface.strip()
+                if not rest or not iface:
                     continue
+                fields = rest.split()
+                if len(fields) >= 9:
+                    try:
+                        rx += int(fields[0])
+                        tx += int(fields[8])
+                    except ValueError:
+                        continue
+    except OSError:
+        # /proc/net/dev unreadable in restricted containers — return zeros
+        # rather than crashing the whole metrics endpoint. (Audit A1.)
+        return 0, 0
     return rx, tx
 
 

@@ -63,19 +63,28 @@ const eggOptions = computed(() => eggList.value.map(e => ({ value: e.id, label: 
 const nodeOptions = computed(() => nodeList.value.map(n => ({ value: n.id, label: n.name })))
 const allocationOptions = computed(() => allocationList.value.map(a => ({ value: a.id, label: `${a.ip}:${a.port}` })))
 
-// Load eggs when nest changes
+// Load eggs when nest changes.
+// Increment a per-watcher request token before each load and only commit the
+// result if the token still matches when the response arrives. This prevents
+// a slow earlier request (eg. nest A) from clobbering a later one (nest B)
+// when the user clicks rapidly. (Audit FM7.)
+let eggReqSeq = 0
 watch(() => createForm.value.nest_id, async (nestId) => {
+  const seq = ++eggReqSeq
   eggList.value = []
   eggVariables.value = []
   createForm.value.egg_id = ''
   createForm.value.startup_command = ''
   if (!nestId) return
   const data = await get<{ eggs: any[] }>(`/api/admin/resources/nests/${nestId}/eggs`)
+  if (seq !== eggReqSeq) return
   if (data) eggList.value = data.eggs
 })
 
-// Load egg details when egg changes
+// Load egg details when egg changes (also guarded against stale responses).
+let varReqSeq = 0
 watch(() => createForm.value.egg_id, async (eggId) => {
+  const seq = ++varReqSeq
   eggVariables.value = []
   if (!eggId || !createForm.value.nest_id) return
   const egg = eggList.value.find(e => e.id === eggId)
@@ -84,6 +93,7 @@ watch(() => createForm.value.egg_id, async (eggId) => {
     if (egg.startup) createForm.value.startup_command = egg.startup
   }
   const data = await get<{ variables: any[] }>(`/api/admin/resources/nests/${createForm.value.nest_id}/eggs/${eggId}/variables`)
+  if (seq !== varReqSeq) return
   if (data) {
     eggVariables.value = data.variables
     const env: Record<string, string> = {}
@@ -94,12 +104,15 @@ watch(() => createForm.value.egg_id, async (eggId) => {
   }
 })
 
-// Load allocations when node changes
+// Load allocations when node changes (stale-response guard).
+let allocReqSeq = 0
 watch(() => createForm.value.node_id, async (nodeId) => {
+  const seq = ++allocReqSeq
   allocationList.value = []
   createForm.value.allocation_id = ''
   if (!nodeId) return
   const data = await get<{ allocations: any[] }>(`/api/admin/resources/nodes/${nodeId}/allocations`)
+  if (seq !== allocReqSeq) return
   if (data) {
     allocationList.value = data.allocations
     if (data.allocations.length > 0) {

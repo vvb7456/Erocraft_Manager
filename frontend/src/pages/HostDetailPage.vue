@@ -104,6 +104,7 @@ const tabs = computed(() => {
   if (host.value?.kind === 'wings_node') {
     items.push({ key: 'host-wings', label: t('hosts.detail.tabs.wings'), icon: 'settings_applications' })
     items.push({ key: 'host-allocations', label: t('hosts.detail.tabs.allocations'), icon: 'lan' })
+    items.push({ key: 'host-tunnel', label: t('hosts.detail.tabs.tunnel'), icon: 'cloud' })
   }
   items.push({ key: 'host-activity', label: t('hosts.detail.tabs.activity'), icon: 'history' })
   return items

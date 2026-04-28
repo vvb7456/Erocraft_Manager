@@ -422,7 +422,7 @@ class EmailClient:
         *,
         db: AsyncSession | None = None,
         actor: str = "system",
-        log_action: str = "email",
+        log_category: str = "email",
     ) -> None:
         self._brand_name = str(cfg.get("BRAND_NAME", "Erocraft Manager"))
         self._sender_email = str(cfg.get("SENDER_EMAIL", ""))
@@ -437,7 +437,7 @@ class EmailClient:
         self._site_url = site_url
         self._db = db
         self._actor = actor
-        self._log_action = log_action
+        self._log_category = log_category
         self._server: smtplib.SMTP | None = None
 
     # ── Connection management ──
@@ -557,7 +557,7 @@ class EmailClient:
         await log_manager_activity(
             self._db,
             actor=self._actor,
-            action=self._log_action,
+            category=self._log_category,
             status="success" if ok else "fail",
             detail_key="email_sent" if ok else "email_failed",
             detail_params={
@@ -622,7 +622,7 @@ async def send_test_email(
             if k in _TEST_EMAIL_OVERRIDE_KEYS and v not in (None, ""):
                 cfg[k] = v
     site_url = await get_site_url(db)
-    async with EmailClient(cfg, site_url, db=db, actor=actor, log_action="settings") as client:
+    async with EmailClient(cfg, site_url, db=db, actor=actor, log_category="settings") as client:
         return await client.send(
             recipient_email=recipient_email,
             subject="[Erocraft Manager] SMTP 配置测试邮件",

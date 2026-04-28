@@ -98,7 +98,7 @@ async def put_global_defaults(
         await db.commit()
 
     await log_manager_activity(
-        db, actor=admin.username, action="global_defaults_update", status="success",
+        db, actor=admin.username, category="settings", status="success",
         detail_key="global_defaults.update",
         detail_params={"keys": sorted(normalized.keys())},
     )

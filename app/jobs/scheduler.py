@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.jobstores.base import JobLookupError
 
 from app.core.runtime_settings import AUTOMATION_SPECS, MONITORING_SPECS, defaults_for
 from app.core.settings_store import get_settings_store
@@ -56,7 +57,20 @@ def _sync_monitor_job(scheduler: AsyncIOScheduler, interval: int) -> None:
     global _last_monitor_interval
     if interval == _last_monitor_interval:
         return
-    scheduler.reschedule_job(MONITORING_JOB_ID, trigger="interval", seconds=interval)
+    try:
+        scheduler.reschedule_job(MONITORING_JOB_ID, trigger="interval", seconds=interval)
+    except JobLookupError:
+        # Defensive: should not happen because build_scheduler() registers
+        # the job before the first sync, but a future refactor that calls
+        # _sync_monitor_job() pre-registration would crash the whole settings
+        # sync. Re-add the job in that case. (Audit M9.)
+        scheduler.add_job(
+            run_monitoring_collect,
+            id=MONITORING_JOB_ID,
+            trigger="interval",
+            seconds=interval,
+            replace_existing=True,
+        )
     _last_monitor_interval = interval
     logger.info("monitoring job interval set to %ds", interval)
 

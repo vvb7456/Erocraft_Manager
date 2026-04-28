@@ -54,7 +54,7 @@ interface ListResponse {
 
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
-const { get } = useApiFetch()
+const { get, raw } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 
@@ -186,10 +186,11 @@ async function deleteOne(a: AllocationOut) {
   })
   if (!ok) return
   try {
-    const res = await fetch(
+    const res = await raw(
       `/api/admin/hosts/${hostId.value}/allocations/${a.id}`,
-      { method: 'DELETE' },
+      { method: 'DELETE', silent: true },
     )
+    if (!res) return  // 401 already redirected, network error already toasted
     if (res.ok) {
       toast(t('hosts.allocations.delete.toastOk', { n: 1 }), 'success')
       selectedIds.value.delete(a.id)
@@ -215,11 +216,13 @@ async function bulkDelete() {
   })
   if (!ok) return
   try {
-    const res = await fetch(`/api/admin/hosts/${hostId.value}/allocations`, {
+    const res = await raw(`/api/admin/hosts/${hostId.value}/allocations`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids }),
+      silent: true,
     })
+    if (!res) return  // 401 already redirected, network error already toasted
     if (res.ok) {
       toast(t('hosts.allocations.delete.toastOk', { n: ids.length }), 'success')
       clearSelection()

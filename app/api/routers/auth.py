@@ -49,7 +49,7 @@ async def login(
         await log_manager_activity(
             db,
             actor=username or "unknown",
-            action="auth",
+            category="auth",
             status="failure",
             detail_key="login_failed",
             detail_params={"username": username or "unknown"},
@@ -75,7 +75,7 @@ async def login(
     await log_manager_activity(
         db,
         actor=user.username,
-        action="auth",
+        category="auth",
         status="success",
         detail_key="login_success",
         detail_params={"username": user.username},
@@ -116,7 +116,7 @@ async def logout(
     await log_manager_activity(
         db,
         actor=username,
-        action="auth",
+        category="auth",
         status="info",
         detail_key="logout",
         detail_params={"username": username},

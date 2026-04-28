@@ -123,6 +123,7 @@
       "setting": "Agent 设置",
       "wings": "Wings 设置",
       "allocations": "端口分配",
+      "tunnel": "Cloudflare Tunnel",
       "activity": "活动"
     },
     "loading": "加载中…",
@@ -414,5 +415,77 @@
     "toastBound": "证书已部署",
     "toastSynced": "证书已同步",
     "toastRemoved": "部署已移除"
+  },
+  "tunnel": {
+    "runtimeTitle": "Cloudflare Tunnel 运行状态",
+    "serversTitle": "接入服务器列表",
+    "serversHint": "当前通过该隧道代理的服务器（Ingress 路由）",
+    "empty": {
+      "title": "还未绑定 Cloudflare Tunnel",
+      "desc": "绑定后可将该主机上的服务器以 HTTPS 子域名对外发布，无需公网 IP 与端口转发。"
+    },
+    "noZones": "该 Token 下未发现可用 Zone",
+    "bindOk": "已绑定 Cloudflare 账号与 Zone",
+    "installOk": "隧道安装完成",
+    "syncOk": "隧道配置已同步",
+    "restartOk": "cloudflared 已重启",
+    "uninstallOk": "隧道已卸载",
+    "uninstallPartial": "隧道已从 Cloudflare 删除，但 agent 侧清理失败：{err}",
+    "status": {
+      "unbound": "未绑定",
+      "uninstalled": "未安装",
+      "probing": "探测中",
+      "unreachable": "Agent 不可达",
+      "inactive": "已停止",
+      "no_unit": "未注册",
+      "active": "运行中"
+    },
+    "liveProbeFailed": "Agent 实时探测失败",
+    "fields": {
+      "account": "CF Account ID",
+      "token": "CF API Token",
+      "zone": "选用根域",
+      "tunnelName": "Tunnel 名称",
+      "tunnelId": "Tunnel ID",
+      "configVersion": "配置版本",
+      "lastSyncedAt": "上次同步"
+    },
+    "tips": {
+      "account": "登录 Cloudflare Dashboard 后，右侧栏「Account ID」下方点击复制。URL 形如 dash.cloudflare.com/<Account ID>。",
+      "token": "在 Cloudflare Dashboard → 右上角头像 → My Profile → API Tokens → Create Token 创建。需勾选权限：Account.Cloudflare Tunnel:Edit 与 Zone.DNS:Edit。Token 仅用于该主机，在库里加密存储。"
+    },
+    "actions": {
+      "bind": "绑定",
+      "rebind": "绑定 / 更改",
+      "install": "安装隧道",
+      "sync": "强制同步",
+      "restart": "重启",
+      "uninstall": "卸载"
+    },
+    "bind": {
+      "title": "绑定 Cloudflare 账号与 Zone",
+      "step1Title": "第 1 步：填入 Account ID 与 API Token。点击验证后会拉取可用 Zone 列表。",
+      "step2Title": "第 2 步：选择该主机要使用的根域名。",
+      "verify": "验证并拉取 Zones",
+      "back": "上一步",
+      "save": "保存绑定",
+      "zonesFound": "发现 {n} 个可用 Zone"
+    },
+    "confirm": {
+      "restartTitle": "重启 cloudflared？",
+      "restartMsg": "重启期间（几秒）该主机的隧道服务器将临时不可访问。",
+      "uninstallTitle": "卸载 Cloudflare Tunnel",
+      "uninstallMsg": "将停止并移除主机上的 cloudflared，同时删除 Cloudflare 侧的 Tunnel 记录。本操作不可逆。",
+      "uninstallBusyMsg": "当前仍有 {n} 个服务器在使用该隧道。卸载后这些服务器将无法通过隧道访问。",
+      "uninstallTypePrompt": "请输入主机名以确认："
+    },
+    "cols": {
+      "serverId": "服务器",
+      "hostname": "访问域名",
+      "upstream": "本地目标",
+      "status": "状态"
+    },
+    "serversEmptyNoTunnel": "隧道未安装，该列表将在部署完成后可用。",
+    "serversEmptyReady": "还没有服务器启用隧道访问。在服务器详情页为其分配子域名后会出现在这里。"
   }
 }

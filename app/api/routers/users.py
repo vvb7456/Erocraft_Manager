@@ -99,11 +99,39 @@ async def _delete_user_remote(db: AsyncSession, user_id: int) -> int:
     server_ids = [int(server_id) for server_id in server_rows.scalars().all()]
     await db.commit()
 
+    deleted = 0
     for server_id in server_ids:
         await server_lifecycle.delete_server(db, server_id)
-    await server_lifecycle.delete_user(db, user_id)
+        deleted += 1
+    try:
+        await server_lifecycle.delete_user(db, user_id)
+    except LifecycleError as exc:
+        # Servers were deleted (each delete_server commits internally) but the
+        # user row could not be removed — most likely a transient DB issue.
+        # Log the partial state explicitly so an operator knows that retrying
+        # `DELETE /users/{id}` is safe (the server-deletion loop is now empty
+        # and only the user row needs to go). Without this log, the original
+        # 502 looks identical to "operation didn't start" and the user row
+        # silently leaks. (Audit H3.)
+        try:
+            await log_manager_activity(
+                db,
+                actor="system",
+                category="user",
+                status="failure",
+                detail_key="delete_user_partial",
+                detail_params={
+                    "user_id": user_id,
+                    "deleted_server_count": deleted,
+                    "error": str(exc)[:200],
+                },
+            )
+            await db.commit()
+        except Exception:  # noqa: BLE001
+            await db.rollback()
+        raise
     await db.commit()
-    return len(server_ids)
+    return deleted
 
 
 @router.get("/users", response_model=UsersListResponse)
@@ -230,7 +258,7 @@ async def create_user(
     await log_manager_activity(
         db,
         actor=admin_username,
-        action="user",
+        category="user",
         status="success",
         detail_key="create_user",
         detail_params={"username": username, "email": email},
@@ -295,7 +323,7 @@ async def update_user(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="user",
+        category="user",
         status="success",
         detail_key="edit_user",
         detail_params={"user_id": user_id},
@@ -321,7 +349,7 @@ async def delete_user(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="user",
+        category="user",
         status="success",
         detail_key="delete_user",
         detail_params={"user_id": user_id, "server_count": deleted_server_count},
@@ -349,7 +377,7 @@ async def batch_users(
 
         async with EmailClient(
             cfg, site_url, db=db,
-            actor=current_user.username, log_action="user",
+            actor=current_user.username, log_category="user",
         ) as client:
             for index, user in enumerate(users):
                 if not user.email:
@@ -385,7 +413,7 @@ async def batch_users(
         await log_manager_activity(
             db,
             actor=current_user.username,
-            action="user",
+            category="user",
             status="failure" if errors else "success",
             detail_key="batch_email_users",
             detail_params={"success": success, "failed": errors},
@@ -402,7 +430,7 @@ async def batch_users(
         await log_manager_activity(
             db,
             actor=current_user.username,
-            action="user",
+            category="user",
             status="failure" if errors else "success",
             detail_key="batch_delete_users",
             detail_params={"success": success, "failed": errors},

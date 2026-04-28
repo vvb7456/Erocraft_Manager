@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useClipboard } from '@/composables/useClipboard'
 import MsIcon from './MsIcon.vue'
 
 defineOptions({ name: 'SecretInput' })
@@ -41,6 +42,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
+const { copy: copyClipboard } = useClipboard()
 const instance = getCurrentInstance()
 
 const internalRevealed = ref(false)
@@ -103,12 +105,11 @@ function toggleVisibility() {
 
 async function copySecret() {
   if (!copyText.value) return
-  try {
-    await navigator.clipboard.writeText(copyText.value)
-    emit('copied', copyText.value)
-  } catch {
-    // ignore clipboard failures to preserve old behavior
-  }
+  // Toast feedback comes from useClipboard so users see why a copy fails
+  // (e.g. plain HTTP without secure context). The legacy `copied` event
+  // is still emitted on success for callers that wire extra UX (badge etc).
+  const ok = await copyClipboard(copyText.value)
+  if (ok) emit('copied', copyText.value)
 }
 </script>
 

@@ -168,7 +168,7 @@ async def create_host(
     probe = await host_registry.probe_credentials(body.agent_url, token)
     if not probe.get("ok"):
         await log_manager_activity(
-            db, actor=admin.username, action="create_host", status="error",
+            db, actor=admin.username, category="host_node", status="error",
             detail_key="host.create.probe_failed",
             detail_params={"name": body.name, "kind": body.kind, "error": probe.get("error")},
         )
@@ -191,7 +191,7 @@ async def create_host(
         )
     except host_registry.HostRegistryError as exc:
         await log_manager_activity(
-            db, actor=admin.username, action="create_host", status="error",
+            db, actor=admin.username, category="host_node", status="error",
             detail_key="host.create.invalid",
             detail_params={"name": body.name, "kind": body.kind, "error": str(exc)},
         )
@@ -199,7 +199,7 @@ async def create_host(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc),
         ) from exc
     await log_manager_activity(
-        db, actor=admin.username, action="create_host", status="success",
+        db, actor=admin.username, category="host_node", status="success",
         detail_key="host.create.ok",
         detail_params={
             "host_id": host.id, "name": host.name, "kind": host.kind,
@@ -249,7 +249,7 @@ async def patch_host(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc),
         ) from exc
     await log_manager_activity(
-        db, actor=admin.username, action="patch_host", status="success",
+        db, actor=admin.username, category="host_node", status="success",
         detail_key="host.patch.ok",
         detail_params={
             "host_id": host.id,
@@ -274,7 +274,7 @@ async def delete_host(
     snapshot = {"host_id": host.id, "name": host.name, "kind": host.kind}
     await host_registry.delete_host(db, host)
     await log_manager_activity(
-        db, actor=admin.username, action="delete_host", status="success",
+        db, actor=admin.username, category="host_node", status="success",
         detail_key="host.delete.ok", detail_params=snapshot,
     )
 
@@ -299,7 +299,7 @@ async def probe_host(
         result = await host_registry.probe(db, host)
     except host_registry.AgentNotConfigured as exc:
         await log_manager_activity(
-            db, actor=admin.username, action="probe_host", status="error",
+            db, actor=admin.username, category="host_node", status="error",
             detail_key="host.probe.unconfigured",
             detail_params={"host_id": host.id, "error": str(exc)},
         )
@@ -307,7 +307,7 @@ async def probe_host(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc),
         ) from exc
     await log_manager_activity(
-        db, actor=admin.username, action="probe_host",
+        db, actor=admin.username, category="host_node",
         status="success" if result.get("ok") else "error",
         detail_key="host.probe.ok" if result.get("ok") else "host.probe.failed",
         detail_params={
@@ -587,7 +587,7 @@ async def put_host_alerts(
     await db.commit()
 
     await log_manager_activity(
-        db, actor=admin.username, action="host_alerts_update", status="success",
+        db, actor=admin.username, category="host_node", status="success",
         detail_key="host.alerts.update",
         detail_params={
             "host_id": host.id,

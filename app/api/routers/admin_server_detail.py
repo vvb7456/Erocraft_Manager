@@ -30,6 +30,7 @@ from app.services.server_lifecycle import LifecycleError
 from app.services.server_management import (
     ServerManagementError,
     ServerManagementValidationError,
+    ServerNotFoundError,
 )
 from app.services.wings import WingsServiceError
 
@@ -37,6 +38,8 @@ router = APIRouter(prefix="/admin/servers", tags=["admin-server-detail"])
 
 
 def _server_management_http(exc: ServerManagementError) -> HTTPException:
+    if isinstance(exc, ServerNotFoundError):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     if isinstance(exc, ServerManagementValidationError):
         return HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -94,7 +97,7 @@ async def update_admin_server_details(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="success",
         detail_key="admin_server.details.update",
         detail_params={"server_id": server_id},
@@ -120,7 +123,7 @@ async def update_admin_server_owner(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="warning" if warning else "success",
         detail_key="admin_server.owner.update",
         detail_params={"server_id": server_id, "owner_id": payload.owner_id},
@@ -158,7 +161,7 @@ async def update_admin_server_build(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="success",
         detail_key="admin_server.build.update",
         detail_params={"server_id": server_id},
@@ -197,7 +200,7 @@ async def add_admin_server_allocations(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="success",
         detail_key="admin_server.allocations.add",
         detail_params={"server_id": server_id, "allocation_ids": payload.allocation_ids},
@@ -219,7 +222,7 @@ async def remove_admin_server_allocation(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="success",
         detail_key="admin_server.allocations.remove",
         detail_params={"server_id": server_id, "allocation_id": allocation_id},
@@ -245,7 +248,7 @@ async def set_admin_server_primary_allocation(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="success",
         detail_key="admin_server.allocations.primary",
         detail_params={"server_id": server_id, "allocation_id": payload.allocation_id},
@@ -276,7 +279,7 @@ async def update_admin_server_startup(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="success",
         detail_key="admin_server.startup.update",
         detail_params={"server_id": server_id},
@@ -308,7 +311,7 @@ async def switch_admin_server_egg(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="success",
         detail_key="admin_server.egg.switch",
         detail_params={"server_id": server_id, "egg_id": payload.egg_id},
@@ -330,7 +333,7 @@ async def update_admin_server_variables(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="success",
         detail_key="admin_server.variables.update",
         detail_params={"server_id": server_id, "variables": sorted(payload.variables)},
@@ -351,7 +354,7 @@ async def reinstall_admin_server(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="success",
         detail_key="admin_server.reinstall",
         detail_params={"server_id": server_id},

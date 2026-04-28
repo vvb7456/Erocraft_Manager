@@ -70,7 +70,7 @@ async def settings_save(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="settings",
+        category="settings",
         status="success",
         detail_key="settings_change",
         detail_params={"actor": current_user.username},
@@ -98,7 +98,7 @@ async def automation_save(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="settings",
+        category="settings",
         status="success",
         detail_key="automation_settings_change",
         detail_params={"actor": current_user.username},
@@ -126,7 +126,7 @@ async def monitoring_settings_save(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="settings",
+        category="settings",
         status="success",
         detail_key="monitoring_settings_change",
         detail_params={"actor": current_user.username},

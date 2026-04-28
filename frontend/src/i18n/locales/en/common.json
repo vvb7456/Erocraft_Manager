@@ -1,5 +1,10 @@
 {
   "listSep": ", ",
+  "clipboard": {
+    "copied": "Copied",
+    "failed": "Copy failed, please select and copy the text manually",
+    "empty": "Nothing to copy"
+  },
   "btn": {
     "save": "Save",
     "cancel": "Cancel",

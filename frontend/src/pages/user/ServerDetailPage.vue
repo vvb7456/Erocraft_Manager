@@ -10,7 +10,7 @@ import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import Badge from '@/components/ui/Badge.vue'
 import { getStatusDotKey, getStatusColor } from '@/utils/status'
-import { getEggMeta } from '@/config/eggRegistry'
+import { getEggMeta, hasTunnel } from '@/config/eggRegistry'
 
 defineOptions({ name: 'ServerDetailPage' })
 
@@ -40,6 +40,13 @@ interface ServerDetail {
   expirationDate: string | null
   daysLeft: number | null
   address: string | null
+  tunnel: {
+    status: string
+    hostname: string
+    customSubdomain: string | null
+    lastError: string | null
+  } | null
+  hostTunnelReady: boolean
 }
 
 const server = ref<ServerDetail | null>(null)
@@ -59,13 +66,21 @@ provide('isInstalling', isInstalling)
 
 const isSuspended = computed(() => server.value?.isSuspended ?? false)
 
-const tabs = computed(() => [
-  { key: 'server-console', label: t('userServers.console'), icon: 'terminal' },
-  { key: 'server-files', label: t('userServers.files'), icon: 'folder', disabled: isInstalling.value || stale.value || isSuspended.value },
-  { key: 'server-settings', label: (() => { const lbl = getEggMeta(server.value?.eggName ?? '').label; return lbl ? t('userServers.settings', { name: lbl }) : t('userServers.settingsGeneric') })(), icon: 'settings', disabled: isInstalling.value || stale.value || isSuspended.value },
-  { key: 'server-activity', label: t('activity.title'), icon: 'history', disabled: isInstalling.value || stale.value || isSuspended.value },
-  { key: 'server-more', label: t('userServers.more'), icon: 'more_horiz', disabled: isInstalling.value || stale.value || isSuspended.value },
-])
+const tabs = computed(() => {
+  const list: { key: string; label: string; icon: string; disabled?: boolean }[] = [
+    { key: 'server-console', label: t('userServers.console'), icon: 'terminal' },
+    { key: 'server-files', label: t('userServers.files'), icon: 'folder', disabled: isInstalling.value || stale.value || isSuspended.value },
+    { key: 'server-settings', label: (() => { const lbl = getEggMeta(server.value?.eggName ?? '').label; return lbl ? t('userServers.settings', { name: lbl }) : t('userServers.settingsGeneric') })(), icon: 'settings', disabled: isInstalling.value || stale.value || isSuspended.value },
+  ]
+  if (server.value && hasTunnel(server.value.eggName)) {
+    list.push({ key: 'server-network', label: t('userServers.network.tab'), icon: 'lan', disabled: isInstalling.value || stale.value || isSuspended.value })
+  }
+  list.push(
+    { key: 'server-activity', label: t('activity.title'), icon: 'history', disabled: isInstalling.value || stale.value || isSuspended.value },
+    { key: 'server-more', label: t('userServers.more'), icon: 'more_horiz', disabled: isInstalling.value || stale.value || isSuspended.value },
+  )
+  return list
+})
 
 const activeTab = computed(() => route.name as string)
 
@@ -150,9 +165,10 @@ watch(liveState, (newState, oldState) => {
   }
 })
 
-// Kick to console tab when connection becomes stale or server gets suspended on non-console tabs
-watch([stale, isSuspended], ([isStale, isSusp]) => {
-  if ((isStale || isSusp) && activeTab.value !== 'server-console') {
+// Kick to console tab when server enters a state where the active tab is
+// no longer usable (suspended / installing / stale connection).
+watch([stale, isSuspended, isInstalling], ([isStale, isSusp, isInst]) => {
+  if ((isStale || isSusp || isInst) && activeTab.value !== 'server-console') {
     router.replace({ name: 'server-console', params: { id: serverId.value } })
   }
 })

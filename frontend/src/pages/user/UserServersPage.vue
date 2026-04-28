@@ -118,7 +118,31 @@ async function executeBatchAction() {
     return true
   })
   if (!allowedIds.length) return
-  await Promise.allSettled(allowedIds.map(id => pendingStore.sendPower(id, actionTyped, toast)))
+  // Suppress per-server toasts (pass undefined for toastFn) so we can present
+  // a single aggregated summary at the end. (Audit FM6.)
+  const results = await Promise.allSettled(
+    allowedIds.map(id => pendingStore.sendPower(id, actionTyped, undefined)),
+  )
+  const failedIds: number[] = []
+  results.forEach((r, idx) => {
+    const id = allowedIds[idx]
+    if (r.status === 'rejected') failedIds.push(id)
+    else if (r.value !== null) failedIds.push(id)  // PowerError returned
+  })
+  const total = allowedIds.length
+  const okCount = total - failedIds.length
+  if (failedIds.length === 0) {
+    toast(t('userServers.batch.resultAllOk', { total }), 'success')
+  } else {
+    const failedNames = failedIds
+      .map(id => servers.value.find(s => s.id === id)?.name ?? `#${id}`)
+      .join('、')
+    if (okCount === 0) {
+      toast(t('userServers.batch.resultAllFail', { total, names: failedNames }), 'error')
+    } else {
+      toast(t('userServers.batch.resultPartial', { ok: okCount, total, names: failedNames }), 'warning')
+    }
+  }
   selectedIds.value = new Set()
   batchActionType.value = ''
 }

@@ -143,7 +143,40 @@ async def get_user_server_detail(
 ) -> UserServerDetail:
     today = await _today(db)
     item = _serialize_server(server, today)
-    return UserServerDetail.model_validate(item.model_dump())
+
+    # Tunnel info — best-effort lookup; failures should not break the
+    # core detail response (the Network tab will surface them on its own).
+    tunnel_info = None
+    host_tunnel_ready = False
+    try:
+        from app.services import host_registry
+        from app.db.models.manager import ManagerHostTunnel
+        from app.services.tunnel_manager import dispatcher as tm_dispatcher
+
+        host = await host_registry.get_host_by_node_id(db, server.node_id)
+        if host is not None:
+            res = await db.execute(
+                select(ManagerHostTunnel).where(
+                    ManagerHostTunnel.host_id == host.id,
+                )
+            )
+            ht = res.scalar_one_or_none()
+            host_tunnel_ready = bool(ht and ht.cf_tunnel_id)
+            st = await tm_dispatcher.get_server_tunnel(db, server.id)
+            if st is not None and st.status != "deleted":
+                tunnel_info = {
+                    "status": st.status,
+                    "hostname": st.hostname,
+                    "customSubdomain": st.custom_subdomain,
+                    "lastError": st.last_error,
+                }
+    except Exception:  # noqa: BLE001
+        pass
+
+    payload = item.model_dump()
+    payload["tunnel"] = tunnel_info
+    payload["hostTunnelReady"] = host_tunnel_ready
+    return UserServerDetail.model_validate(payload)
 
 
 @router.get("/servers/{server_id}/resources", response_model=ServerResourcesResponse)
@@ -326,18 +359,27 @@ async def reinstall_user_server(
         await db.commit()
 
     try:
-        await server_lifecycle.reinstall_server(db, server.id)
-    except LifecycleError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
-    if payload.force:
-        await server_repository.update_startup_variable(
-            db,
-            server_id=server.id,
-            egg_id=server.egg_id,
-            env_variable="FORCE_REINSTALL",
-            value="false",
-        )
+        try:
+            await server_lifecycle.reinstall_server(db, server.id)
+        except LifecycleError as exc:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    finally:
+        # Always reset FORCE_REINSTALL — without try/finally a Wings outage
+        # leaves it set to "true" and every subsequent reinstall (even from
+        # the UI's normal "reinstall" path) becomes a forced wipe. (Audit H2.)
+        if payload.force:
+            try:
+                await server_repository.update_startup_variable(
+                    db,
+                    server_id=server.id,
+                    egg_id=server.egg_id,
+                    env_variable="FORCE_REINSTALL",
+                    value="false",
+                )
+                await db.commit()
+            except Exception:  # noqa: BLE001
+                # Reset failure must not mask the original exception. Best-effort.
+                await db.rollback()
 
     await pterodactyl_activity_logger.log_server_activity(
         db,

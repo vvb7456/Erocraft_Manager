@@ -4,14 +4,12 @@
     "actor": "Actor",
     "actorPlaceholder": "Filter actor",
     "category": "Category",
-    "action": "Action",
     "status": "Status",
     "all": "All"
   },
   "table": {
     "time": "Time",
     "actor": "Actor",
-    "action": "Action",
     "category": "Category",
     "status": "Status",
     "details": "Details"
@@ -28,31 +26,14 @@
   },
   "category": {
     "auth": "Authentication",
-    "server": "Servers",
-    "user": "Users",
-    "host_node": "Hosts & Nodes",
+    "server": "Server",
+    "user": "User",
+    "host_node": "Host / Node",
     "automation": "Automation",
     "settings": "Settings",
-    "certificate": "Certificates",
+    "certificate": "Certificate",
     "email": "Email",
-    "other": "Other"
-  },
-  "action": {
-    "auth": "Authentication",
-    "server": "Servers",
-    "user": "Users",
-    "account": "Account",
-    "settings": "Settings",
-    "automation": "Automation",
-    "email": "Email",
-    "allocation": {
-      "create": "Allocation Create",
-      "delete": "Allocation Delete",
-      "delete_bulk": "Allocation Bulk Delete"
-    },
-    "host": "Host Operation",
-    "node": "Node Operation",
-    "certificate": "Certificate Operation",
+    "tunnel": "Tunnel",
     "other": "Other"
   },
   "reminderType": {
@@ -81,6 +62,7 @@
     "create_user": "Created user {username} (Email: {email}).",
     "edit_user": "Updated user ID {user_id}.",
     "delete_user": "Deleted user ID {user_id} and their {server_count} servers.",
+    "delete_user_partial": "Partial delete for user ID {user_id}: removed {deleted_server_count} server(s) but the user row deletion failed ({error}). Please retry deleting the user.",
     "batch_email_users": "Batch user email complete. Success: {success}, failed: {failed}.",
     "batch_delete_users": "Batch user delete complete. Success: {success}, failed: {failed}.",
     "forgot_password": "User {username} requested a password reset email.",
@@ -112,7 +94,6 @@
     "host.patch.ok": "Host updated: #{host_id} (fields: {changed})",
     "host.delete.ok": "Host deleted: {name}",
     "host.alerts.update": "Host alert settings updated for host #{host_id}.",
-    "host.token.rotate": "Host token rotated for host #{host_id}.",
     "node.wings_config.update": "Wings config updated for host #{host_id}.",
     "node.daemon_token.reset": "Node daemon token reset for node #{node_id}.",
     "node.wings.restart": "Wings restarted for host #{host_id}.",
@@ -156,6 +137,14 @@
     "forgot_password.site_url_not_configured": "Cannot send reset email: SITE_URL is not configured.",
     "register.site_url_not_configured": "Cannot send registration verification email: SITE_URL is not configured.",
     "server.delete.remote_db_leftover": "Server deleted with leftover remote DB cleanup issues: {errors}",
+    "tunnel.bind.ok": "Host {host_name} (#{host_id}) bound to Cloudflare zone {cf_zone_name}.",
+    "tunnel.install.ok": "Host {host_name} (#{host_id}) installed cloudflared {cloudflared_version}, tunnel {cf_tunnel_id}.",
+    "tunnel.sync.ok": "Host {host_name} (#{host_id}) ingress synced to Cloudflare. Config version: v{cf_config_version}.",
+    "tunnel.restart.ok": "Host {host_name} (#{host_id}) cloudflared restarted.",
+    "tunnel.uninstall.ok": "Host {host_name} (#{host_id}) Cloudflare tunnel uninstalled (agent ok: {agent_ok}).",
+    "tunnel.server.enable.ok": "Tunnel access enabled for server {server_name} (#{server_id}): {hostname}.",
+    "tunnel.server.rename.ok": "Tunnel hostname for server {server_name} (#{server_id}) changed to {hostname}.",
+    "tunnel.server.disable.ok": "Tunnel access disabled for server {server_name} (#{server_id}) (was {hostname}).",
     "unknown": "Unknown log detail: {key}"
   },
   "pagination": {

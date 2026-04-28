@@ -322,7 +322,7 @@ async def put_wings_config(
     await log_manager_activity(
         db,
         actor=admin.username,
-        action="update_node_wings_config",
+        category="host_node",
         status=log_status,
         detail_key="node.wings_config.update",
         detail_params={
@@ -397,7 +397,7 @@ async def reset_node_daemon_token(
         await log_manager_activity(
             db,
             actor=admin.username,
-            action="reset_node_daemon_token",
+            category="host_node",
             status="error",
             detail_key="node.daemon_token.reset",
             detail_params={
@@ -464,7 +464,7 @@ async def reset_node_daemon_token(
     await log_manager_activity(
         db,
         actor=admin.username,
-        action="reset_node_daemon_token",
+        category="host_node",
         status=log_status_value,
         detail_key="node.daemon_token.reset",
         detail_params={
@@ -517,7 +517,7 @@ async def restart_wings(
     await log_manager_activity(
         db,
         actor=admin.username,
-        action="restart_wings",
+        category="host_node",
         status="success" if result.get("ok") else "error",
         detail_key="node.wings.restart",
         detail_params={

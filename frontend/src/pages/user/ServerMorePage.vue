@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed, inject, ref, onMounted, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useToast } from '@/composables/useToast'
 import { useAppStore } from '@/stores/app'
+import { useClipboard } from '@/composables/useClipboard'
 import HelpTip from '@/components/ui/HelpTip.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 
 defineOptions({ name: 'ServerMorePage' })
 
 const { t } = useI18n({ useScope: 'global' })
-const { toast } = useToast()
+const { copy: copyValue } = useClipboard()
 const app = useAppStore()
 
 interface ServerCtx {
@@ -66,30 +66,6 @@ const clients = computed<ClientLink[]>(() => [
   { platform: t('userServers.connectPage.clientIos'), name: 'Documents by Readdle', url: 'https://apps.apple.com/cn/app/id364901807' },
   { platform: t('userServers.connectPage.clientAndroid'), name: 'Material Files', url: 'https://play.google.com/store/apps/details?id=me.zhanghai.android.files' },
 ])
-
-async function copyValue(value: string) {
-  if (!value) return
-  let ok = false
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(value)
-      ok = true
-    }
-  } catch { /* fall through to legacy path */ }
-  if (!ok) {
-    try {
-      const ta = document.createElement('textarea')
-      ta.value = value
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
-    } catch { /* ignore */ }
-  }
-  toast(t('userServers.connectPage.copied'), 'success')
-}
 </script>
 
 <template>

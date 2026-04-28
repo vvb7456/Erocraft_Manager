@@ -416,6 +416,18 @@ async def delete_server(db: AsyncSession, server_id: int, *, force: bool = False
         # Server already gone from DB
         return
 
+    # 0. Cloudflare Tunnel cleanup hook (Phase 2 wiring; no-op in Phase 1).
+    # Must run before any panel-side mutation so that even if the tunnel
+    # cleanup raises we have not yet touched the server row.
+    try:
+        from app.services.tunnel_manager import dispatcher as _tm_dispatcher
+        await _tm_dispatcher.on_server_pre_delete(db, server_id)
+    except Exception as exc:  # noqa: BLE001 — Phase 2 hook must never block deletion
+        logger.warning(
+            "tunnel_manager.on_server_pre_delete failed for server %s: %s",
+            server_id, exc,
+        )
+
     # 1. Delete physical backup archives on the node (best-effort)
     from sqlalchemy import select as sql_select
 
@@ -486,7 +498,7 @@ async def delete_server(db: AsyncSession, server_id: int, *, force: bool = False
         await log_manager_activity(
             db,
             actor="system",
-            action="delete_server_remote_db",
+            category="server",
             status="warning",
             detail_key="server.delete.remote_db_leftover",
             detail_params={"server_id": server_id, "errors": db_errors[:10]},

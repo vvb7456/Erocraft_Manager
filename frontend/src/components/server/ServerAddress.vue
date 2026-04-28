@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEggMeta } from '@/config/eggRegistry'
+import { useClipboard } from '@/composables/useClipboard'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 
@@ -10,6 +11,8 @@ defineOptions({ name: 'ServerAddress' })
 const props = defineProps<{
   /** Address strings to display (1-2, future cloudflare tunnel support) */
   addresses: string[]
+  /** Optional tunnel hostname; rendered as a separate labeled row when present */
+  tunnelHostname?: string
   /** URL for the "open app" button. If omitted, no button shown */
   openUrl?: string
   /** Disable the open button (e.g. server not running) */
@@ -21,14 +24,18 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
+const { copy: copyToClipboard } = useClipboard()
 const copiedIndex = ref<number | null>(null)
 
 async function copy(address: string, index: number) {
-  try {
-    await navigator.clipboard.writeText(address)
+  // Silent mode: the inline check-mark icon is the success feedback.
+  // The composable still toasts on failure so the user knows why nothing
+  // happened (HTTP context with no fallback, etc.).
+  const ok = await copyToClipboard(address, { silent: true })
+  if (ok) {
     copiedIndex.value = index
     setTimeout(() => { copiedIndex.value = null }, 2000)
-  } catch { /* clipboard API not available */ }
+  }
 }
 
 const openBtnLabel = computed(() => {
@@ -68,6 +75,17 @@ function openLink() {
         <MsIcon :name="copiedIndex === i ? 'check' : 'content_copy'" />
       </button>
     </div>
+    <div
+      v-if="tunnelHostname"
+      class="address-line address-line--tunnel"
+      :class="{ 'address-line--large': !openUrl && !compact }"
+    >
+      <MsIcon name="public" class="tunnel-icon" />
+      <span class="address-text">{{ tunnelHostname }}</span>
+      <button class="copy-btn" :title="t('userServers.address.copy')" @click="copy(tunnelHostname, -1)">
+        <MsIcon :name="copiedIndex === -1 ? 'check' : 'content_copy'" />
+      </button>
+    </div>
   </div>
 </template>
 
@@ -94,6 +112,16 @@ function openLink() {
 
 .address-line--large {
   padding: var(--sp-2);
+}
+
+.address-line--tunnel {
+  border-color: color-mix(in srgb, var(--ac) 30%, var(--bd));
+}
+
+.tunnel-icon {
+  font-size: 14px;
+  color: var(--ac);
+  flex-shrink: 0;
 }
 
 .address-text {

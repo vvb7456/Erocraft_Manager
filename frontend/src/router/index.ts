@@ -71,6 +71,7 @@ const router = createRouter({
         { path: 'console', name: 'server-console', component: () => import('@/pages/user/ServerConsolePage.vue') },
         { path: 'files', name: 'server-files', component: () => import('@/pages/user/ServerFilesPage.vue') },
         { path: 'settings', name: 'server-settings', component: () => import('@/pages/user/ServerSettingsPage.vue') },
+        { path: 'network', name: 'server-network', component: () => import('@/pages/user/ServerNetworkPage.vue') },
         { path: 'activity', name: 'server-activity', component: () => import('@/pages/user/ServerActivityPage.vue') },
         { path: 'more', name: 'server-more', component: () => import('@/pages/user/ServerMorePage.vue') },
       ],
@@ -176,6 +177,12 @@ const router = createRouter({
           path: 'allocations',
           name: 'host-allocations',
           component: () => import('@/pages/host/HostAllocationsPane.vue'),
+          meta: { admin: true },
+        },
+        {
+          path: 'tunnel',
+          name: 'host-tunnel',
+          component: () => import('@/pages/host/HostTunnelPane.vue'),
           meta: { admin: true },
         },
         {

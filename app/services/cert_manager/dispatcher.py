@@ -60,7 +60,7 @@ async def redeploy_deployment(
         await log_manager_activity(
             db,
             actor=actor,
-            action="cert_deploy",
+            category="certificate",
             status="error",
             detail_key="cert.deploy.failed",
             detail_params={
@@ -91,7 +91,7 @@ async def redeploy_deployment(
         await log_manager_activity(
             db,
             actor=actor,
-            action="cert_deploy",
+            category="certificate",
             status="error",
             detail_key="cert.deploy.failed",
             detail_params={
@@ -111,7 +111,7 @@ async def redeploy_deployment(
         await log_manager_activity(
             db,
             actor=actor,
-            action="cert_deploy",
+            category="certificate",
             status="error",
             detail_key="cert.deploy.failed",
             detail_params={
@@ -149,7 +149,7 @@ async def redeploy_deployment(
     await log_manager_activity(
         db,
         actor=actor,
-        action="cert_deploy",
+        category="certificate",
         status="success",
         detail_key="cert.deploy.success",
         detail_params={
@@ -241,6 +241,28 @@ async def dispatch_pending_deployments(
             deployment.status in {"outdated", "unknown", "deploy_failed"}
             or deployment.deployed_fingerprint_sha256 != cert.source_fingerprint_sha256
         )
-        if pending:
+        if not pending:
+            continue
+        # Isolate per-deployment failures so one host's DB hiccup or agent
+        # outage doesn't strand the rest of the batch for an entire scheduler
+        # cycle. Failed items are still picked up by the next run because
+        # their status / fingerprint mismatch persists. (Audit H5.)
+        try:
             out.append(await redeploy_deployment(db, deployment, actor=actor))
+        except Exception as exc:  # noqa: BLE001
+            try:
+                await db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+            logger.exception(
+                "redeploy_deployment failed for deployment_id=%s host_id=%s cert_id=%s: %s",
+                deployment.id, deployment.host_id, cert.id, exc,
+            )
+            out.append({
+                "ok": False,
+                "deployment_id": deployment.id,
+                "certificate_id": cert.id,
+                "host_id": deployment.host_id,
+                "error": str(exc),
+            })
     return out

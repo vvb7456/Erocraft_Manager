@@ -224,14 +224,12 @@ class ManagerActivityLog(Base):
         Index("idx_timestamp", "timestamp"),
         Index("idx_actor", "actor"),
         Index("idx_category", "category"),
-        Index("idx_action", "action"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
     actor: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     category: Mapped[str] = mapped_column(String(32), nullable=False, default="other")
-    action: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     detail_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
     detail_params: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -308,3 +306,136 @@ class ManagerEmailTemplate(Base):
         default=_utc_now,
         onupdate=_utc_now,
     )
+
+
+
+# ---------------------------------------------------------------------------
+# Cloudflare Tunnel — see docs/CLOUDFLARE_TUNNEL_DESIGN.md
+# ---------------------------------------------------------------------------
+
+
+class ManagerHostTunnel(Base):
+    """Per-host Cloudflare Tunnel binding (1:1 with manager_hosts).
+
+    Holds the CF account credentials, the chosen zone, and the cloudflared
+    install state for one wings host. The CF tunnel UUID + secret are NULL
+    until the install flow successfully creates the tunnel.
+
+    The CF API token + tunnel secret are Fernet-encrypted at rest (same
+    scheme used elsewhere — :func:`app.core.security.encrypt_value`).
+    """
+
+    __tablename__ = "manager_host_tunnels"
+    __table_args__ = (
+        UniqueConstraint("host_id", name="uk_host_tunnel_host"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    host_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("manager_hosts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    cf_account_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    cf_api_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    cf_zone_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    cf_zone_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    cf_tunnel_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cf_tunnel_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cf_tunnel_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cloudflared_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # NOTE: there is intentionally no ``cloudflared_status`` column.
+    # Whether cloudflared is actually running is an agent-live signal,
+    # not a DB cache. The DB only records what we have told CF
+    # (cf_tunnel_id, cf_tunnel_secret_enc, cf_config_version, last_synced_at).
+    # See docs/CF_TUNNEL_PSEUDOCODE.md.
+    cf_config_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now, onupdate=_utc_now,
+    )
+
+
+class ManagerServerTunnel(Base):
+    """Per-server tunnel hostname (1:1 with panel.servers).
+
+    ``server_id`` references panel.servers.id but is **not** a FK (cross-schema
+    Pterodactyl table; consistency maintained at application layer via
+    pre-delete hooks in :mod:`app.services.server_lifecycle`).
+
+    ``cf_dns_record_id`` is the CF DNS record id we created so we can delete
+    it later. ``upstream_port`` is a snapshot of the server's primary
+    allocation port at the time tunnel was enabled (refreshed on port change
+    via :func:`tunnel_manager.dispatcher.on_server_port_changed`).
+    """
+
+    __tablename__ = "manager_server_tunnels"
+    __table_args__ = (
+        UniqueConstraint("server_id", name="uk_server_tunnel_server"),
+        UniqueConstraint("hostname", name="uk_server_tunnel_hostname"),
+        Index("ix_server_tunnel_status", "status"),
+        Index("ix_server_tunnel_host_tunnel", "host_tunnel_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    server_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    host_tunnel_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("manager_host_tunnels.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    hostname: Mapped[str] = mapped_column(String(255), nullable=False)
+    custom_subdomain: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    upstream_port: Mapped[int] = mapped_column(Integer, nullable=False)
+    upstream_scheme: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="http",
+    )
+    cf_dns_record_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Lifecycle: only "active" (steady) or "failed" (push_remote_ingress
+    # failure). enable/change always set this synchronously; there is no
+    # provisioning intermediate state.
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="active",
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enabled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now, onupdate=_utc_now,
+    )
+
+
+class ManagerOrphanResource(Base):
+    """CF-side resources that have no matching DB row.
+
+    Populated by the reconciler (``app/jobs/tasks/tunnel_reconcile.py``) when
+    it sees a CF tunnel or DNS record that doesn't correspond to any manager
+    DB row — e.g. due to a half-completed install, an out-of-band Dashboard
+    deletion, or a host that was physically destroyed without going through
+    the uninstall flow.
+
+    Admins review the list and either delete the CF resource (cleanup) or
+    mark it ignored.
+    """
+
+    __tablename__ = "manager_orphan_resources"
+    __table_args__ = (
+        UniqueConstraint(
+            "resource_type", "cf_resource_id", name="uk_orphan_resource",
+        ),
+        Index("ix_orphan_type", "resource_type"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    resource_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    cf_account_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    cf_zone_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cf_resource_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    cf_resource_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now,
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)

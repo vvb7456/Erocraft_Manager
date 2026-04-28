@@ -17,7 +17,6 @@ class ActivityLogRepository:
         per_page: int,
         actor: str | None = None,
         category: str | None = None,
-        action: str | None = None,
         status: str | None = None,
         host_id: int | None = None,
         node_id: int | None = None,
@@ -27,8 +26,6 @@ class ActivityLogRepository:
             filters.append(ManagerActivityLog.actor.ilike(f"%{actor}%"))
         if category:
             filters.append(ManagerActivityLog.category == category)
-        if action:
-            filters.append(ManagerActivityLog.action == action)
         if status:
             filters.append(ManagerActivityLog.status == status)
         # detail_params is a JSON-encoded Text column; use substring
@@ -65,15 +62,6 @@ class ActivityLogRepository:
             .distinct()
             .where(ManagerActivityLog.actor != "")
             .order_by(ManagerActivityLog.actor.asc())
-        )
-        return [str(value) for value in rows.scalars().all()]
-
-    async def distinct_actions(self, db: AsyncSession) -> list[str]:
-        rows = await db.execute(
-            select(ManagerActivityLog.action)
-            .distinct()
-            .where(ManagerActivityLog.action != "")
-            .order_by(ManagerActivityLog.action.asc())
         )
         return [str(value) for value in rows.scalars().all()]
 

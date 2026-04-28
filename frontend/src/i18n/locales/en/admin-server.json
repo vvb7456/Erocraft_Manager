@@ -129,6 +129,7 @@
       "errors": {
         "empty": "Keep at least one port"
       },
+      "restartHint": "Saved. Stop and start the server for the new port to take effect inside the container.",
       "confirm": {
         "title": "Update allocations",
         "message": "This will remove {rm} port(s) and swap the primary {swap} time(s), disconnecting any sessions using them. Continue?",

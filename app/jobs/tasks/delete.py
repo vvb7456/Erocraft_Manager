@@ -47,7 +47,7 @@ async def run_delete_task() -> None:
         await log_manager_activity(
             db,
             actor="system",
-            action="automation",
+            category="automation",
             status="info",
             detail_key="automated_delete_started",
         )
@@ -60,7 +60,7 @@ async def run_delete_task() -> None:
                 await log_manager_activity(
                     db,
                     actor="system",
-                    action="automation",
+                    category="automation",
                     status="info",
                     detail_key="automated_delete_noop",
                 )
@@ -80,7 +80,7 @@ async def run_delete_task() -> None:
             await log_manager_activity(
                 db,
                 actor="system",
-                action="automation",
+                category="automation",
                 status="success" if success_count or not failed_ids else "failure",
                 detail_key="automated_delete_finished",
                 detail_params={"success": success_count, "failed": len(failed_ids), "failed_ids": ", ".join(str(server_id) for server_id in failed_ids)},
@@ -90,7 +90,7 @@ async def run_delete_task() -> None:
             await log_manager_activity(
                 db,
                 actor="system",
-                action="automation",
+                category="automation",
                 status="failure",
                 detail_key="automated_delete_failed",
                 detail_params={"error": str(exc)},

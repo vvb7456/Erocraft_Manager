@@ -45,6 +45,15 @@ class ServerManagementValidationError(ServerManagementError):
     """Raised for caller-correctable input errors."""
 
 
+class ServerNotFoundError(ServerManagementValidationError):
+    """Raised when the requested server id does not exist.
+
+    Subclass of ``ServerManagementValidationError`` so existing callers that
+    catch the parent still work, but routers can map this specifically to
+    HTTP 404 instead of 422. (Audit M3.)
+    """
+
+
 def _now() -> datetime:
     return datetime.utcnow().replace(microsecond=0)
 
@@ -57,7 +66,7 @@ async def _get_server(db: AsyncSession, server_id: int) -> PteroServer:
     )
     server = result.scalar_one_or_none()
     if server is None:
-        raise ServerManagementValidationError(f"服务器 {server_id} 不存在")
+        raise ServerNotFoundError(f"服务器 {server_id} 不存在")
     return server
 
 

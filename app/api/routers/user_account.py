@@ -101,7 +101,7 @@ async def update_user_account(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="account",
+        category="user",
         status="success",
         detail_key="user_password_changed",
         detail_params={"username": current_user.username},
@@ -136,7 +136,7 @@ async def update_user_language(
         await log_manager_activity(
             db,
             actor=user.username,
-            action="account",
+            category="user",
             status="success",
             detail_key="user_language_changed",
             detail_params={"username": user.username, "language": payload.language},
@@ -241,7 +241,7 @@ async def change_email(
     await log_manager_activity(
         db,
         actor=cur_username,
-        action="account",
+        category="user",
         status="success",
         detail_key="email_change_requested",
         detail_params={"username": cur_username, "new_email": new_email},
@@ -320,7 +320,7 @@ async def confirm_email(
     await log_manager_activity(
         db,
         actor=user.username,
-        action="account",
+        category="user",
         status="success",
         detail_key="email_changed",
         detail_params={"username": user.username, "old_email": old_email, "new_email": record.new_email},

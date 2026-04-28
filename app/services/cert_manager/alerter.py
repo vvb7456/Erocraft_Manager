@@ -75,7 +75,7 @@ async def _notify(
         await log_manager_activity(
             db,
             actor="system",
-            action="cert_alert",
+            category="certificate",
             status="success",
             detail_key="cert.alert.sent",
             detail_params={

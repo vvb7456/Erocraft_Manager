@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { watch, ref, onUnmounted } from 'vue'
+import { lockBodyScroll, unlockBodyScroll } from './BaseModal.vue'
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
@@ -18,11 +19,15 @@ function onOverlay(e: MouseEvent) {
   if (e.target === e.currentTarget) close()
 }
 
-/* lock body scroll */
+/* Lock body scroll via the shared BaseModal counter so that closing a
+   BottomSheet stacked on top of an open BaseModal (or vice versa) does not
+   prematurely re-enable page scrolling. (Audit FM4.) */
+let isLocked = false
 watch(() => props.modelValue, (open) => {
-  document.body.style.overflow = open ? 'hidden' : ''
+  if (open && !isLocked) { lockBodyScroll(); isLocked = true }
+  else if (!open && isLocked) { unlockBodyScroll(); isLocked = false }
 })
-onUnmounted(() => { document.body.style.overflow = '' })
+onUnmounted(() => { if (isLocked) { unlockBodyScroll(); isLocked = false } })
 </script>
 
 <template>

@@ -8,7 +8,6 @@ defineOptions({ name: 'DashboardActivityRow' })
 const props = defineProps<{
   timestamp: string | null
   actor: string
-  action: string
   status: string
   category?: string | null
   detailKey?: string | null
@@ -35,9 +34,10 @@ const actorLabel = computed(() => {
   return props.actor
 })
 
-const actionLabel = computed(() => {
-  const key = `logs.action.${props.action}`
-  return te(key) ? t(key) : props.action
+const categoryLabel = computed(() => {
+  const cat = props.category || 'other'
+  const key = `logs.category.${cat}`
+  return te(key) ? t(key) : cat
 })
 
 const statusMeta = computed(() => {
@@ -77,7 +77,7 @@ const detailText = computed(() => {
 })
 
 const fullTitle = computed(() => {
-  const parts = [actionLabel.value]
+  const parts = [categoryLabel.value]
   if (detailText.value) parts.push(detailText.value)
   if (props.timestamp) parts.push(props.timestamp)
   return parts.join(' · ')
@@ -89,7 +89,7 @@ const fullTitle = computed(() => {
     <span class="ago">{{ timeAgo }}</span>
     <MsIcon :name="statusMeta.icon" size="xs" :style="{ color: statusMeta.color }" class="st" />
     <span class="actor">{{ actorLabel }}</span>
-    <span class="action">{{ actionLabel }}</span>
+    <span class="action">{{ categoryLabel }}</span>
     <span v-if="detailText" class="sep">·</span>
     <span v-if="detailText" class="detail">{{ detailText }}</span>
   </div>

@@ -208,10 +208,22 @@ async function saveAll(): Promise<boolean> {
   if (hasErrors.value) return false
   saveLoading.value = true
   try {
-    const r1 = await post<{ message: string }>('/api/admin/settings', settings.value)
-    const r2 = await post<{ message: string }>('/api/admin/automation', automation.value)
-    if (!r1 || !r2) return false
-    await app.loadVersion()
+    // Only PUT the section(s) that actually changed. This avoids
+    // round-tripping a stale automation payload when the user only
+    // touched a settings field (and vice versa), which historically
+    // caused unrelated runtime values to be re-applied on every save.
+    // (Audit FH2.)
+    const settingsDirty = JSON.stringify(settings.value) !== orig.value.settings
+    const autoDirty = JSON.stringify(automation.value) !== orig.value.automation
+    if (settingsDirty) {
+      const r = await post<{ message: string }>('/api/admin/settings', settings.value)
+      if (!r) return false
+    }
+    if (autoDirty) {
+      const r = await post<{ message: string }>('/api/admin/automation', automation.value)
+      if (!r) return false
+    }
+    if (settingsDirty) await app.loadVersion()
     toast(t('settings.saved'), 'success')
     snapshot()
     return true

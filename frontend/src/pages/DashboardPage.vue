@@ -75,7 +75,7 @@ interface AlertItem {
   message: string | null; createdAt: string; resolvedAt: string | null; notified: boolean
 }
 interface ActivityItem {
-  id: number; timestamp: string | null; actor: string; action: string; status: string
+  id: number; timestamp: string | null; actor: string; status: string
   category?: string | null; detailKey?: string | null; detailParams?: Record<string, unknown> | null
 }
 
@@ -140,7 +140,7 @@ watch(() => monitoring.value?.nodes, (nodes) => {
     }
   }
   autoFilledOnce.value = true
-})
+}, { immediate: true })
 
 const pinnedHosts = computed<DashboardHostData[]>(() =>
   pinnedIds.value.map(id => hostMap.value[id]).filter((x): x is DashboardHostData => !!x),
@@ -572,7 +572,6 @@ onUnmounted(() => {
                 :key="log.id"
                 :timestamp="log.timestamp"
                 :actor="log.actor"
-                :action="log.action"
                 :status="log.status"
                 :category="log.category"
                 :detail-key="log.detailKey"

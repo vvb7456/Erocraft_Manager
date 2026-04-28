@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import time
@@ -20,6 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.models.pterodactyl import PanelNode
+
+logger = logging.getLogger(__name__)
 
 
 class WingsServiceError(RuntimeError):
@@ -238,7 +241,7 @@ class WingsService:
                 )
         except httpx.HTTPError as exc:
             raise WingsServiceError(f"Wings connection failed: {exc!r}") from exc
-        if response.status_code != 200:
+        if response.status_code not in (200, 204):
             detail = ""
             try:
                 body = response.json()
@@ -247,10 +250,28 @@ class WingsService:
             except Exception:
                 pass
             raise WingsServiceError(detail or f"HTTP {response.status_code}")
+        # Wings returns either 204 No Content (success, no body) or 200 with
+        # a JSON body (`{"applied": true|false}`). The fallback to
+        # ``{"applied": True}`` below is therefore only correct when the body
+        # is genuinely empty. A 200 with a *non-empty* body that fails to
+        # parse is suspicious — historically this silently set ``applied=True``
+        # and caused the daemon-token rotation flow to persist credentials
+        # that wings never actually adopted (auth permanently broken).
+        # Refuse loudly in that case. (Audit H6.)
+        if response.status_code == 204 or not response.content:
+            return {"applied": True}
         try:
             return response.json()
-        except Exception:
-            return {"applied": True}
+        except ValueError as exc:
+            preview = response.text[:200] if response.text else ""
+            logger.warning(
+                "wings POST /api/update returned 200 with unparseable body "
+                "(node_id=%s, len=%s): %s",
+                node_id, len(response.content or b""), preview,
+            )
+            raise WingsServiceError(
+                f"wings returned 200 with unparseable body (len={len(response.content or b'')})"
+            ) from exc
 
     # ------------------------------------------------------------------
     # Server lifecycle (Phase X — direct DB + Wings, no Application API)

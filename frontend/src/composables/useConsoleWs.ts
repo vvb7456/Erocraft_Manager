@@ -2,9 +2,9 @@ import { ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
+import { useClipboard } from '@/composables/useClipboard'
 import { useServerActivityReporter } from '@/composables/useServerActivityReporter'
 import { useServerResourceStore } from '@/stores/serverResources'
-import router from '@/router'
 
 export interface UseConsoleWsOptions {
   serverId: Ref<number | undefined>
@@ -13,8 +13,9 @@ export interface UseConsoleWsOptions {
 
 export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
   const { t } = useI18n({ useScope: 'global' })
-  const { get } = useApiFetch()
+  const { get, raw } = useApiFetch()
   const { toast } = useToast()
+  const { copy: copyToClipboard } = useClipboard()
   const { reportServerActivity } = useServerActivityReporter(serverId)
   const resourceStore = useServerResourceStore()
 
@@ -127,21 +128,24 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
 
   async function fetchWingsToken(): Promise<WingsTokenResponse | null> {
     if (!serverId.value) return null
-    try {
-      const res = await fetch(`/api/user/servers/${serverId.value}/wings-token`)
-      if (res.status === 401) {
-        router.push({ name: 'login' })
+    // Use raw() so 401 triggers session-clear + login redirect via the
+    // shared useApiFetch handler (the previous bare fetch() pushed to login
+    // without clearing pinia auth state, leaving the global header chrome
+    // out of sync). silent: true lets us still inspect 403 ourselves to
+    // surface the suspend banner. (Audit FM2.)
+    const res = await raw(`/api/user/servers/${serverId.value}/wings-token`, { silent: true })
+    if (!res) return null  // 401 redirected, network error
+    if (res.status === 403) {
+      const body = await res.json().catch(() => ({}))
+      if (body?.detail?.error === 'server_suspended' || body?.error === 'server_suspended') {
+        suspended.value = true
         return null
       }
-      if (res.status === 403) {
-        const body = await res.json().catch(() => ({}))
-        if (body.error === 'server_suspended') {
-          suspended.value = true
-          return null
-        }
-      }
-      if (!res.ok) return null
-      suspended.value = false
+      return null
+    }
+    if (!res.ok) return null
+    suspended.value = false
+    try {
       return await res.json()
     } catch {
       return null
@@ -191,6 +195,11 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
       disconnected.value = true
       return
     }
+    // Capture the serverId at scheduling time. If the user navigates to a
+    // different server inside the backoff window, we abort the reconnect
+    // instead of attaching a new-server WebSocket to the (now-stale) old
+    // terminal instance. (Audit FM3.)
+    const boundServerId = serverId.value
     reconnecting.value = true
     disconnected.value = false
     const delay = RECONNECT_DELAYS[reconnectAttempt.value] ?? 16000
@@ -211,6 +220,14 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
       reconnectTimer = null
       if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null }
       reconnectCountdown.value = 0
+      // Bail if the user switched servers (or the page unmounted) during the
+      // backoff window. Without this guard, fetchWingsToken() would request
+      // a token for the *new* server and _setupWs() would attach the new
+      // socket's events to the old terminal/resourceStore mappings.
+      if (serverId.value !== boundServerId) {
+        reconnecting.value = false
+        return
+      }
       const data = await fetchWingsToken()
       if (!data) {
         if (suspended.value) {
@@ -218,7 +235,16 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
           disconnected.value = true
           return
         }
+        // Re-check binding before re-scheduling (fetchWingsToken is async).
+        if (serverId.value !== boundServerId) {
+          reconnecting.value = false
+          return
+        }
         scheduleReconnect()
+        return
+      }
+      if (serverId.value !== boundServerId) {
+        reconnecting.value = false
         return
       }
       _setupWs(data)
@@ -292,13 +318,16 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
     term.loadAddon(fitAddon)
     term.loadAddon(webLinksAddon)
 
-    // Ctrl+C: copy selected text
+    // Ctrl+C: copy selected text. Silent (no toast on every copy) but
+    // routes through useClipboard so the legacy execCommand fallback
+    // applies on plain HTTP, where navigator.clipboard would otherwise
+    // reject silently.
     term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.type !== 'keydown') return true
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         const selection = term!.getSelection()
         if (selection) {
-          navigator.clipboard.writeText(selection)
+          void copyToClipboard(selection, { silent: true })
           term!.clearSelection()
         }
         return false

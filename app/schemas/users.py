@@ -38,7 +38,10 @@ class UpdateUserRequest(BaseModel):
     email: EmailStr
     firstName: str = ""
     lastName: str = ""
-    password: str | None = None
+    # Bcrypt has a 72-byte hard limit; the panel rejects longer passwords with
+    # an opaque "invalid password" later in the flow. Min length matches the
+    # public-registration / reset-password screens. (Audit M8.)
+    password: str | None = Field(default=None, min_length=8, max_length=72)
     language: str | None = None
 
 

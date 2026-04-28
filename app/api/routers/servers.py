@@ -287,7 +287,7 @@ async def create_server(
     await log_manager_activity(
         db,
         actor=actor_username,
-        action="server",
+        category="server",
         status="success",
         detail_key="create_server",
         detail_params={"actor": actor_username, "server_name": payload.server_name, "server_id": server_id},
@@ -335,7 +335,7 @@ async def renew_server(
     await log_manager_activity(
         db,
         actor=actor_username,
-        action="server",
+        category="server",
         status="success",
         detail_key="renew_server",
         detail_params={"actor": actor_username, "server_name": server_name, "server_id": server_id, "date": new_date.isoformat()},
@@ -364,7 +364,7 @@ async def toggle_suspend(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="success",
         detail_key="unsuspend_server" if was_suspended else "suspend_server",
         detail_params={"actor": current_user.username, "server_name": server.name, "server_id": server_id},
@@ -399,7 +399,7 @@ async def batch_servers(
         await log_manager_activity(
             db,
             actor=actor_username,
-            action="server",
+            category="server",
             status="failure" if errors else "success",
             detail_key=f"batch_{action}",
             detail_params={"success": success, "failed": errors},
@@ -449,7 +449,7 @@ async def batch_servers(
         await log_manager_activity(
             db,
             actor=actor_username,
-            action="server",
+            category="server",
             status="failure" if errors else "success",
             detail_key="batch_renew",
             detail_params={"success": success, "failed": errors},
@@ -474,7 +474,7 @@ async def batch_servers(
         await log_manager_activity(
             db,
             actor=actor_username,
-            action="server",
+            category="server",
             status="failure" if errors else "success",
             detail_key="batch_delete",
             detail_params={"success": success, "failed": errors},
@@ -539,7 +539,7 @@ async def batch_servers(
     await log_manager_activity(
         db,
         actor=actor_username,
-        action="server",
+        category="server",
         status="failure" if errors else "success",
         detail_key="batch_email",
         detail_params={"success": success, "failed": errors},
@@ -567,7 +567,7 @@ async def delete_server(
     await log_manager_activity(
         db,
         actor=current_user.username,
-        action="server",
+        category="server",
         status="success",
         detail_key="delete_server",
         detail_params={"actor": current_user.username, "server_name": server.name, "server_id": server_id},
@@ -613,7 +613,7 @@ async def update_server(
     await log_manager_activity(
         db,
         actor=actor_username,
-        action="server",
+        category="server",
         status="success",
         detail_key="set_expiry",
         detail_params={"actor": actor_username, "server_name": server_name, "server_id": server_id, "date": new_date.isoformat()},

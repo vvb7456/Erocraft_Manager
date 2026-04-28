@@ -25,6 +25,13 @@ class UserServerNode(BaseModel):
     sftpPort: int | None = None
 
 
+class UserServerTunnelInfo(BaseModel):
+    status: str
+    hostname: str
+    customSubdomain: str | None
+    lastError: str | None = None
+
+
 class UserServerItem(BaseModel):
     id: int
     uuid: str
@@ -48,6 +55,8 @@ class UserServerItem(BaseModel):
 
 class UserServerDetail(UserServerItem):
     model_config = ConfigDict(title="UserServerDetail")
+    tunnel: UserServerTunnelInfo | None = None
+    hostTunnelReady: bool = False
 
 
 class ServerResourcesResponse(BaseModel):

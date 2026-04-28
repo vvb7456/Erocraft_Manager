@@ -85,7 +85,7 @@ async def run_reminder_task(reminder_type: str) -> None:
         await log_manager_activity(
             db,
             actor="system",
-            action="automation",
+            category="automation",
             status="info",
             detail_key="automated_reminder_started",
             detail_params={"type": reminder_type},
@@ -97,7 +97,7 @@ async def run_reminder_task(reminder_type: str) -> None:
                 await log_manager_activity(
                     db,
                     actor="system",
-                    action="automation",
+                    category="automation",
                     status="info",
                     detail_key="automated_reminder_noop",
                     detail_params={"type": reminder_type},
@@ -120,7 +120,7 @@ async def run_reminder_task(reminder_type: str) -> None:
             site_url = await get_site_url(db)
             async with EmailClient(
                 cfg, site_url, db=db, actor=f"job:{reminder_type}_reminder",
-                log_action="automation",
+                log_category="automation",
             ) as client:
                 if reminder_type == "expiry":
                     sent_count = await _send_expiry_reminders(
@@ -148,7 +148,7 @@ async def run_reminder_task(reminder_type: str) -> None:
             await log_manager_activity(
                 db,
                 actor="system",
-                action="automation",
+                category="automation",
                 status="success",
                 detail_key="automated_reminder_finished",
                 detail_params={"type": reminder_type, "sent": sent_count},
@@ -158,7 +158,7 @@ async def run_reminder_task(reminder_type: str) -> None:
             await log_manager_activity(
                 db,
                 actor="system",
-                action="automation",
+                category="automation",
                 status="failure",
                 detail_key="automated_reminder_failed",
                 detail_params={"type": reminder_type, "error": str(exc)},

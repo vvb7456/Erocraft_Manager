@@ -8,6 +8,7 @@ from app.api.routers.admin_global_defaults import router as admin_global_default
 from app.api.routers.admin_hosts import router as admin_hosts_router
 from app.api.routers.admin_hosts_allocations import router as admin_hosts_allocations_router
 from app.api.routers.admin_hosts_wings import router as admin_hosts_wings_router
+from app.api.routers.admin_hosts_tunnel import router as admin_hosts_tunnel_router
 from app.api.routers.admin_server_detail import router as admin_server_detail_router
 from app.api.routers.email_templates import router as email_templates_router
 from app.api.routers.logs import router as logs_router
@@ -20,6 +21,7 @@ from app.api.routers.system import router as system_router
 from app.api.routers.user_account import router as user_account_router
 from app.api.routers.user_files import router as user_files_router
 from app.api.routers.user_servers import router as user_servers_router
+from app.api.routers.user_servers_tunnel import router as user_servers_tunnel_router
 from app.api.routers.users import router as users_router
 
 api_router = APIRouter()
@@ -29,6 +31,7 @@ api_router.include_router(admin_global_defaults_router)
 api_router.include_router(admin_hosts_router)
 api_router.include_router(admin_hosts_allocations_router)
 api_router.include_router(admin_hosts_wings_router)
+api_router.include_router(admin_hosts_tunnel_router)
 api_router.include_router(admin_server_detail_router)
 api_router.include_router(email_templates_router)
 api_router.include_router(logs_router)
@@ -41,6 +44,7 @@ api_router.include_router(system_router)
 api_router.include_router(user_account_router)
 api_router.include_router(user_files_router)
 api_router.include_router(user_servers_router)
+api_router.include_router(user_servers_tunnel_router)
 api_router.include_router(users_router)
 
 __all__ = ["api_router"]

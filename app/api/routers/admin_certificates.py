@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 from typing import Any
 
@@ -233,6 +234,34 @@ def _cert_status_paths(payload: dict[str, Any], target_name: str) -> tuple[str |
     )
 
 
+async def _prefetch_cert_status_for_hosts(
+    db: AsyncSession,
+    host_ids: list[int],
+    cert_status_cache: dict[int, tuple[dict[str, Any] | None, str | None]],
+) -> None:
+    """Fan-out agent /cert/status calls in parallel and populate the cache.
+
+    Without this, ``_load_deployments`` (and every endpoint that builds a
+    CertificateOut) walks deployments serially with a 3s agent timeout each,
+    so a 5-host certificate takes up to 15s to render. (Audit M4.)
+    """
+    pending = [hid for hid in set(host_ids) if hid not in cert_status_cache]
+    if not pending:
+        return
+
+    async def _fetch_one(hid: int) -> tuple[int, dict[str, Any] | None, str | None]:
+        try:
+            endpoint, token = await host_registry.get_credentials(db, hid)
+            payload = await agent_client.get_cert_status(endpoint, token, timeout=3.0)
+            return hid, payload, None
+        except (host_registry.HostRegistryError, agent_client.AgentClientError) as exc:
+            return hid, None, str(exc)
+
+    results = await asyncio.gather(*(_fetch_one(hid) for hid in pending))
+    for hid, payload, err in results:
+        cert_status_cache[hid] = (payload, err)
+
+
 async def _deployment_target_paths(
     db: AsyncSession,
     dep: ManagerCertDeployment,
@@ -300,6 +329,13 @@ async def _load_deployments(
             .order_by(ManagerCertDeployment.id)
         )
     ).all()
+    # Pre-fetch all distinct host cert statuses concurrently. This is a no-op
+    # for hosts already in the cache (e.g. shared cache across the list endpoint).
+    await _prefetch_cert_status_for_hosts(
+        db,
+        [int(dep.host_id) for dep, _host in rows],
+        cert_status_cache,
+    )
     out: list[DeploymentOut] = []
     for dep, host in rows:
         cert_path, key_path, path_error = await _deployment_target_paths(db, dep, cert_status_cache)
@@ -555,7 +591,7 @@ async def register_acme_certificate(
     await log_manager_activity(
         db,
         actor=admin.username,
-        action="cert_acme_register",
+        category="certificate",
         status="success" if scan_result.get("ok") else "partial",
         detail_key="cert.acme.register",
         detail_params={
@@ -605,7 +641,7 @@ async def create_certificate(
     await log_manager_activity(
         db,
         actor=admin.username,
-        action="cert_create",
+        category="certificate",
         status="success" if scan_result.get("ok") else "partial",
         detail_key="cert.create",
         detail_params={
@@ -651,7 +687,7 @@ async def save_certificate_settings(
     await log_manager_activity(
         db,
         actor=admin.username,
-        action="cert_settings",
+        category="settings",
         status="success",
         detail_key="cert.settings.update",
         detail_params={"changed": sorted(updates.keys())},
@@ -693,7 +729,7 @@ async def patch_certificate(
     await log_manager_activity(
         db,
         actor=admin.username,
-        action="cert_patch",
+        category="certificate",
         status="success",
         detail_key="cert.patch",
         detail_params={"certificate_id": cert.id, "changed": changed, "source_scan": scan_result},
@@ -714,7 +750,7 @@ async def delete_certificate(
     await log_manager_activity(
         db,
         actor=admin.username,
-        action="cert_delete",
+        category="certificate",
         status="success",
         detail_key="cert.delete",
         detail_params=snapshot,
@@ -746,7 +782,7 @@ async def add_deployment(
     await log_manager_activity(
         db,
         actor=admin.username,
-        action="cert_deployment_create",
+        category="certificate",
         status="success",
         detail_key="cert.deployment.create",
         detail_params={"certificate_id": cert_id, "deployment_id": dep.id, "host_id": dep.host_id},
@@ -771,7 +807,7 @@ async def delete_deployment(
     await log_manager_activity(
         db,
         actor=admin.username,
-        action="cert_deployment_delete",
+        category="certificate",
         status="success",
         detail_key="cert.deployment.delete",
         detail_params=snapshot,
@@ -821,7 +857,7 @@ async def renew_certificate_force(
         await log_manager_activity(
             db,
             actor=admin.username,
-            action="cert_renew_force",
+            category="certificate",
             status="error",
             detail_key="cert.renew_force.failed",
             detail_params={"certificate_id": cert.id, "domain": acme_cert.domain, "error": str(exc)},
@@ -843,7 +879,7 @@ async def renew_certificate_force(
     await log_manager_activity(
         db,
         actor=admin.username,
-        action="cert_renew_force",
+        category="certificate",
         status=status_text,
         detail_key="cert.renew_force",
         detail_params={
@@ -937,7 +973,7 @@ async def cert_source_changed_webhook(
     await log_manager_activity(
         db,
         actor="webhook",
-        action="cert_source_changed",
+        category="certificate",
         status="success",
         detail_key="cert.source_changed",
         detail_params={

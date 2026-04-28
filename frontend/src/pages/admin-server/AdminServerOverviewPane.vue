@@ -9,7 +9,7 @@
 import { computed, inject, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { useToast } from '@/composables/useToast'
+import { useClipboard } from '@/composables/useClipboard'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import ServerStatTile from '@/components/admin-server/ServerStatTile.vue'
@@ -24,7 +24,7 @@ defineOptions({ name: 'AdminServerOverviewPane' })
 
 const { t, locale } = useI18n({ useScope: 'global' })
 const router = useRouter()
-const { toast } = useToast()
+const { copy: copyToClipboard } = useClipboard()
 
 const detail = inject<Ref<AdminServerDetailResponse | null>>('adminServerDetail')!
 const runtime = inject<Ref<ServerRuntimeResponse | null>>('adminServerRuntime')!
@@ -167,12 +167,10 @@ function jumpHost() {
   router.push({ name: 'host-overview', params: { id: detail.value.managerHost.id } })
 }
 async function copy(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast(t('adminServer.overview.copied'), 'success', 1500)
-  } catch {
-    toast(t('adminServer.overview.copyFailed'), 'error')
-  }
+  await copyToClipboard(text, {
+    successMessage: t('adminServer.overview.copied'),
+    failureMessage: t('adminServer.overview.copyFailed'),
+  })
 }
 </script>
 

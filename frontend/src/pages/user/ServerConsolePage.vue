@@ -26,6 +26,8 @@ interface ServerDetail {
   eggId: number; eggName: string; status: string | null; address: string | null
   limits: { memory: number; disk: number; cpu: number }
   expirationDate: string | null; daysLeft: number | null
+  tunnel: { status: string; hostname: string; customSubdomain: string | null; lastError: string | null } | null
+  hostTunnelReady: boolean
 }
 
 const server = inject<Ref<ServerDetail | null>>('server')!
@@ -80,7 +82,13 @@ const expirationColor = computed(() => {
 
 // ── Server address ──
 const isWebEgg = computed(() => server.value ? hasWebUi(server.value.eggName) : false)
-const serverUrl = computed(() => server.value?.address ? `http://${server.value.address}` : null)
+const tunnelHostname = computed(() =>
+  server.value?.tunnel?.status === 'active' ? server.value.tunnel.hostname : undefined,
+)
+const serverUrl = computed(() => {
+  if (tunnelHostname.value) return `https://${tunnelHostname.value}`
+  return server.value?.address ? `http://${server.value.address}` : null
+})
 
 // ── Console ──
 const termEl = ref<HTMLElement | null>(null)
@@ -141,6 +149,7 @@ onBeforeUnmount(() => {
       <BaseCard v-if="server?.address" variant="bg3" class="mobile-card">
         <ServerAddress
           :addresses="[server.address]"
+          :tunnel-hostname="tunnelHostname"
           :open-url="isWebEgg ? serverUrl! : undefined"
           :open-disabled="state !== 'running'"
           :egg-name="server.eggName"
@@ -246,6 +255,7 @@ onBeforeUnmount(() => {
         </div>
         <ServerAddress
           :addresses="[server.address]"
+          :tunnel-hostname="tunnelHostname"
           :open-url="isWebEgg ? serverUrl! : undefined"
           :open-disabled="state !== 'running'"
           :egg-name="server.eggName"
