@@ -32,7 +32,7 @@
     "send_welcome": "发送欢迎邮件",
     "email_sent": "欢迎邮件已发送",
     "email_failed": "欢迎邮件发送失败",
-    "create_and_server": "创建并开通服务器"
+    "create_and_server": "创建用户并开通服务器"
   },
   "edit": {
     "title": "编辑用户",

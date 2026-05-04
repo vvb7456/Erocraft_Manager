@@ -19,7 +19,8 @@ from app.core.runtime_settings import AUTOMATION_SPECS, SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.time import local_today
 from app.db.models import Egg, PteroServer, PteroUser, ServerMeta
-from app.db.repositories.servers import server_repository
+from app.db.models.billing import BillingPlan
+from app.db.repositories.servers import exclude_placeholders, server_repository
 from app.schemas.servers import (
     BatchServersRequest,
     BatchServersResponse,
@@ -30,6 +31,7 @@ from app.schemas.servers import (
     ServersListResponse,
     ServerListItem,
     ToggleSuspendResponse,
+    UpdateServerPlanRequest,
     UpdateServerRequest,
 )
 from app.services.audit import log_manager_activity
@@ -83,6 +85,36 @@ async def _server_defaults(db: AsyncSession) -> dict[str, int | str]:
         "DEFAULT_ALLOCATIONS": SETTINGS_SPECS["DEFAULT_ALLOCATIONS"].default_value(),
     }
     return await store.get_many(db, defaults)
+
+
+async def _apply_plan_change(
+    db: AsyncSession,
+    server: PteroServer,
+    new_plan_id: int | None,
+) -> tuple[BillingPlan | None, BillingPlan | None]:
+    """Update manager_server_meta.plan_id for a server (no resource side effects).
+
+    Returns (old_plan, new_plan) where each may be None. Raises HTTPException if new_plan_id is invalid.
+    """
+    old_plan: BillingPlan | None = None
+    new_plan: BillingPlan | None = None
+
+    meta = server.meta
+    old_plan_id = meta.plan_id if meta is not None else None
+    if old_plan_id is not None:
+        old_plan = await db.get(BillingPlan, old_plan_id)
+
+    if new_plan_id is not None:
+        new_plan = await db.get(BillingPlan, new_plan_id)
+        if new_plan is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="套餐不存在")
+
+    if meta is None:
+        db.add(ServerMeta(server_id=server.id, plan_id=new_plan_id))
+    else:
+        meta.plan_id = new_plan_id
+
+    return old_plan, new_plan
 
 
 async def _set_meta_expiration(db: AsyncSession, server_id: int, expiration_date: date) -> None:
@@ -183,10 +215,24 @@ async def list_servers(
         rows = await db.execute(select(Egg.id, Egg.name).where(Egg.id.in_(egg_ids)))
         egg_names = {egg_id: egg_name for egg_id, egg_name in rows.all()}
 
+    plan_ids = sorted({
+        server.meta.plan_id
+        for server in servers
+        if server.meta is not None and server.meta.plan_id is not None
+    })
+    plans: dict[int, BillingPlan] = {}
+    if plan_ids:
+        rows = await db.execute(
+            select(BillingPlan).where(BillingPlan.id.in_(plan_ids))
+        )
+        plans = {p.id: p for p in rows.scalars().all()}
+
     items: list[ServerListItem] = []
     for server in servers:
         expiration_date = server.expiration_date
         days_left, status_label = _classify_server(expiration_date, today)
+        meta_plan_id = server.meta.plan_id if server.meta is not None else None
+        plan_obj = plans.get(meta_plan_id) if meta_plan_id is not None else None
         items.append(
             ServerListItem(
                 pteroId=server.id,
@@ -199,6 +245,9 @@ async def list_servers(
                 daysLeft=days_left,
                 statusLabel=status_label,
                 isSuspended=server.is_suspended,
+                planId=meta_plan_id,
+                planCode=plan_obj.code if plan_obj else None,
+                planName=plan_obj.display_name if plan_obj else None,
             )
         )
 
@@ -418,7 +467,7 @@ async def batch_servers(
         rows = await db.execute(
             select(PteroServer)
             .options(selectinload(PteroServer.meta))
-            .where(PteroServer.id.in_(server_ids))
+            .where(PteroServer.id.in_(server_ids), exclude_placeholders())
             .order_by(PteroServer.id.asc())
         )
         servers = list(rows.scalars().all())
@@ -485,6 +534,53 @@ async def batch_servers(
             failed=errors,
         )
 
+    if action == "update_plan":
+        new_plan_id = payload.planId
+        if new_plan_id is not None:
+            target = await db.get(BillingPlan, new_plan_id)
+            if target is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="套餐不存在")
+
+        rows = await db.execute(
+            select(PteroServer)
+            .options(selectinload(PteroServer.meta))
+            .where(PteroServer.id.in_(server_ids), exclude_placeholders())
+            .order_by(PteroServer.id.asc())
+        )
+        servers = list(rows.scalars().all())
+
+        for server in servers:
+            try:
+                old_plan, new_plan = await _apply_plan_change(db, server, new_plan_id)
+                await db.commit()
+                await log_manager_activity(
+                    db,
+                    actor=actor_username,
+                    category="server",
+                    status="success",
+                    detail_key="admin_server.plan.update",
+                    detail_params={
+                        "server_name": server.name,
+                        "server_id": server.id,
+                        "old_plan": old_plan.display_name if old_plan else "—",
+                        "new_plan": new_plan.display_name if new_plan else "—",
+                    },
+                )
+                success += 1
+            except HTTPException:
+                await db.rollback()
+                errors += 1
+            except Exception:
+                await db.rollback()
+                errors += 1
+                logger.exception("Failed to update plan for server %s", server.id)
+
+        return BatchServersResponse(
+            message=f"操作完成：成功 {success}，失败 {errors}",
+            success=success,
+            failed=errors,
+        )
+
     template = await load_template(db, "bulk")
     brand_name = await get_settings_store().get(
         db,
@@ -496,7 +592,7 @@ async def batch_servers(
     rows = await db.execute(
         select(PteroServer)
         .options(selectinload(PteroServer.meta), selectinload(PteroServer.owner))
-        .where(PteroServer.id.in_(server_ids))
+        .where(PteroServer.id.in_(server_ids), exclude_placeholders())
         .order_by(PteroServer.id.asc())
     )
     servers = list(rows.scalars().all())
@@ -619,3 +715,44 @@ async def update_server(
         detail_params={"actor": actor_username, "server_name": server_name, "server_id": server_id, "date": new_date.isoformat()},
     )
     return MessageResponse(message=f"到期日期已更新为 {new_date.isoformat()}")
+
+
+@router.patch("/servers/{server_id}/plan", response_model=MessageResponse)
+async def update_server_plan(
+    server_id: int,
+    payload: UpdateServerPlanRequest,
+    current_user: PteroUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """Update only the plan binding of a server. Does not touch resources, image, startup, or expiration."""
+    server = await server_repository.get_by_id(db, server_id)
+    if server is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="服务器不存在")
+    # Ensure meta is loaded
+    await db.refresh(server, attribute_names=["meta"])
+
+    try:
+        old_plan, new_plan = await _apply_plan_change(db, server, payload.planId)
+        await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Failed to update plan for server %s", server_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="更新套餐绑定失败") from exc
+
+    await log_manager_activity(
+        db,
+        actor=current_user.username,
+        category="server",
+        status="success",
+        detail_key="admin_server.plan.update",
+        detail_params={
+            "server_name": server.name,
+            "server_id": server_id,
+            "old_plan": old_plan.display_name if old_plan else "—",
+            "new_plan": new_plan.display_name if new_plan else "—",
+        },
+    )
+    return MessageResponse(message="套餐绑定已更新")

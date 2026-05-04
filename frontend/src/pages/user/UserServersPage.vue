@@ -24,6 +24,8 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 import UsageBar from '@/components/ui/UsageBar.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { getStatusDotKey, getStatusColor } from '@/utils/status'
+import { useRenewFlow } from '@/composables/useRenewFlow'
+import CreateOrderModal from '@/components/CreateOrderModal.vue'
 
 defineOptions({ name: 'UserServersPage' })
 
@@ -53,6 +55,8 @@ interface Server {
   expirationDate: string | null
   daysLeft: number | null
   address: string | null
+  planId: number | null
+  hasUpgradeOptions: boolean
 }
 
 const servers = ref<Server[]>([])
@@ -379,6 +383,20 @@ function goToDetail(s: Server) {
   router.push({ name: 'server-console', params: { id: s.id } })
 }
 
+const { openRenew, loading: renewLoading } = useRenewFlow()
+async function onRenew(s: Server) {
+  if (!s.planId) return
+  await openRenew({ serverId: s.id, serverName: s.name, planId: s.planId })
+}
+
+// ── Upgrade ──
+const upgradeModalOpen = ref(false)
+const upgradeServer = ref<Server | null>(null)
+function onUpgrade(s: Server) {
+  upgradeServer.value = s
+  upgradeModalOpen.value = true
+}
+
 // ── Mobile action sheet ──
 const mobileActionServer = ref<Server | null>(null)
 const mobileActionOpen = ref(false)
@@ -493,8 +511,11 @@ function openMobileAction(s: Server) {
             <BaseButton size="sm" :loading="pendingStore.has(s.id)" :disabled="s.isSuspended || s.isInstalling || resourceStore.isStale(s.id) || pendingStore.has(s.id) || liveState(s) === 'starting' || liveState(s) === 'stopping'" @click="togglePower(s)">
               <MsIcon :name="powerBtnIcon(s)" size="xs" /> {{ powerBtnLabel(s) }}
             </BaseButton>
-            <BaseButton size="sm" disabled>
-              {{ t('userServers.renew') }}
+            <BaseButton size="sm" :disabled="!s.planId" :loading="renewLoading" :title="s.planId ? '' : t('userServers.renewFlow.noPlan')" @click="onRenew(s)">
+              <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+            </BaseButton>
+            <BaseButton size="sm" :disabled="!s.hasUpgradeOptions" @click="onUpgrade(s)">
+              <MsIcon name="arrow_upward" size="xs" /> {{ t('userServers.upgrade.button') }}
             </BaseButton>
             <BaseButton v-if="s.address && hasWebUi(s.eggName)" variant="primary" size="sm" :disabled="s.isSuspended || s.isInstalling || liveState(s) !== 'running'" @click="openUrl(s)">
               <MsIcon name="open_in_new" size="xs" /> {{ openLabel(s.eggName) }}
@@ -585,14 +606,26 @@ function openMobileAction(s: Server) {
         <button :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling || resourceStore.isStale(mobileActionServer.id) || pendingStore.has(mobileActionServer.id) || liveState(mobileActionServer) === 'starting' || liveState(mobileActionServer) === 'stopping'" @click="mobileActionOpen = false; togglePower(mobileActionServer!)">
           <MsIcon :name="powerBtnIcon(mobileActionServer)" size="sm" /> {{ powerBtnLabel(mobileActionServer) }}
         </button>
-        <button disabled>
-          <MsIcon name="shopping_cart" size="sm" /> {{ t('userServers.renew') }}
+        <button :disabled="!mobileActionServer.planId" :title="mobileActionServer.planId ? '' : t('userServers.renewFlow.noPlan')" @click="mobileActionOpen = false; onRenew(mobileActionServer!)">
+          <MsIcon name="autorenew" size="sm" /> {{ t('userServers.renew') }}
+        </button>
+        <button :disabled="!mobileActionServer.hasUpgradeOptions" @click="mobileActionOpen = false; onUpgrade(mobileActionServer!)">
+          <MsIcon name="arrow_upward" size="sm" /> {{ t('userServers.upgrade.button') }}
         </button>
         <button v-if="mobileActionServer.address && hasWebUi(mobileActionServer.eggName)" :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling || liveState(mobileActionServer) !== 'running'" @click="mobileActionOpen = false; openUrl(mobileActionServer!)">
           <MsIcon name="open_in_new" size="sm" /> {{ openLabel(mobileActionServer!.eggName) }}
         </button>
       </template>
     </ActionSheet>
+    <!-- Upgrade Plan Modal -->
+    <CreateOrderModal
+      v-if="upgradeServer"
+      v-model="upgradeModalOpen"
+      :plan="null"
+      mode="upgrade"
+      :target-server-id="upgradeServer.id"
+      :server-name="upgradeServer.name"
+    />
   </div>
 </template>
 

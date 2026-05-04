@@ -1,12 +1,7 @@
 {
   "title": "主机",
-  "subtitle": "管理所有 Erocraft Agent 接入的服务器（Wings 节点 / nginx 代理 / NAS / 通用 Linux）。",
   "summary": {
-    "total": "共 {n} 台",
-    "online": "在线 {n}",
-    "offline": "离线 {n}",
-    "disabled": "已停用 {n}",
-    "unconfigured": "未配置 {n}"
+    "total": "共 {n} 台"
   },
   "stats": {
     "total": "主机数量",
@@ -15,11 +10,10 @@
     "other": "其他主机",
     "filtered": "当前筛选 {n} 台",
     "agentReachable": "Agent 可达",
-    "otherSub": "非 Wings 节点"
+    "otherSub": "非 Wings 主机"
   },
   "list": {
     "empty": "暂无主机，点击右上角「新建主机」添加第一台。",
-    "loading": "加载主机列表…",
     "perPage": "条/页"
   },
   "columns": {
@@ -32,14 +26,14 @@
     "actions": "操作"
   },
   "kind": {
-    "wings_node": "Wings 节点",
+    "wings_node": "Wings 主机",
     "generic_linux": "Linux",
     "synology_dsm": "Synology DSM"
   },
   "status": {
     "online": "在线",
     "offline": "离线",
-    "disabled": "已停用",
+    "disabled": "已禁用",
     "unconfigured": "未配置"
   },
   "toolbar": {
@@ -51,19 +45,14 @@
     "search": "搜索名称 / 主机名 / 地址"
   },
   "actions": {
-    "probe": "探测",
     "delete": "删除",
     "open": "查看详情",
-    "more": "更多操作",
-    "probeOk": "主机 {name} 探测成功",
-    "probeFail": "主机 {name} 探测失败：{err}",
     "deleted": "主机 {name} 已删除"
   },
   "confirm": {
     "delete_title": "删除主机",
     "delete_msg": "确定删除主机 \"{name}\"？此操作不可撤销。"
   },
-  "tbd": "该功能将在下一步实现",
   "create": {
     "title": "新建主机",
     "fields": {
@@ -80,12 +69,11 @@
       "pteroNode": "面板节点",
       "pteroNodeHint": "wings_node 必填：Pterodactyl Panel 中对应的节点。",
       "enabled": "启用",
-      "enabledHint": "停用后 Manager 不再轮询此主机。"
+      "enabledHint": "禁用后 Manager 不再轮询此主机。"
     },
     "create": "创建",
     "cancel": "取消",
     "creating": "创建中…",
-    "probeOk": "Probe 成功",
     "created": "主机已创建",
     "createFailed": "创建失败"
   },
@@ -126,10 +114,7 @@
       "tunnel": "Cloudflare Tunnel",
       "activity": "活动"
     },
-    "loading": "加载中…",
-    "notFound": "找不到该主机",
-    "overviewPlaceholder": "概览面板将在 C7 落地：状态 chip、ECharts 仪表盘、资源明细、近 1h hero 趋势、活跃告警。下方为当前 host 原始数据：",
-    "settingPlaceholder": "设置面板将在 C8 落地：Agent 连接、Token 重置、wings_config、告警配置、危险区域。"
+    "loading": "加载中…"
   },
   "activity": {
     "window": {
@@ -213,19 +198,16 @@
       "title": "Agent 连接",
       "kindLocked": "创建后类型不可修改。",
       "panelNodeLocked": "面板节点绑定不可修改。如需更换节点请重建主机。",
-      "enabledHint": "停用后 Manager 不再轮询此主机。",
+      "enabledHint": "禁用后 Manager 不再轮询此主机。",
       "tokenLabel": "Agent Token",
       "tokenHint": "点击「重置」生成一个新 token，保存后同步更新主机 config.yaml。",
       "tokenPendingHint": "新 token 已生成，保存后生效。请立即复制并更新节点上的 agent config.yaml。",
       "tokenReset": "重置",
       "tokenCancelReset": "取消重置",
       "tokenWarning": "警告：保存后旧 token 立即作废；agent config.yaml 未同步会导致采集中断。",
-      "probe": "探测连通",
-      "discard": "放弃修改",
-      "save": "保存"
+      "probe": "探测连通"
     },
     "wings": {
-      "title": "Wings 服务",
       "desc": "维护该节点的 Wings 与 Panel 节点参数，并按需执行重启。",
       "notWings": "该主机不是 Wings 节点",
       "saved": "已保存（{n} 个字段变更）",
@@ -249,7 +231,7 @@
       "restartRequired": "以下字段需 Wings 重启后生效：{fields}",
       "restart": "重启 Wings",
       "restartConfirmTitle": "重启 Wings？",
-      "restartConfirmMsg": "重启过程中该节点上的所有服务器将短暂离线。",
+      "restartConfirmMsg": "重启过程中该主机上的所有服务器将短暂离线。",
       "restartOk": "Wings 已重启（{ms} ms）",
       "restartFail": "重启失败：{err}",
       "saveAndRestartTitle": "保存并重启 Wings？",
@@ -287,8 +269,7 @@
       "resetDefaults": "全部重置为默认",
       "channelSection": "通知通道",
       "rulesSection": "告警类型与阈值",
-      "rulesTip": "未开启的类型表示该主机不生成该告警。未修改的阈值使用全局默认。",
-      "rulesTitle": "告警类型与阈值",
+      "rulesTip": "未启用的类型表示该主机不生成该告警。未修改的阈值使用全局默认。",
       "threshold": "阈值",
       "warningThreshold": "warning %",
       "criticalThreshold": "critical %",
@@ -308,7 +289,7 @@
         "cooldown": "同一主机同一告警类型在冷却期内不重复发送。"
       },
       "types": {
-        "node_offline": "节点离线",
+        "node_offline": "主机离线",
         "agent_only_down": "仅 Agent 不可达",
         "wings_only_down": "仅 Wings 不可达",
         "network_down": "公网不通",
@@ -329,7 +310,6 @@
     }
   },
   "allocations": {
-    "summary": "共 {total} 个（已分配 {assigned} · 未分配 {unassigned}）",
     "summaryFiltered": "共 {n} 个",
     "filter": {
       "label": "状态",
@@ -337,7 +317,9 @@
       "assigned": "已分配",
       "unassigned": "未分配"
     },
-    "search": { "placeholder": "搜索端口 / IP / 服务器" },
+    "search": {
+      "placeholder": "搜索端口 / IP / 服务器"
+    },
     "columns": {
       "select": "选择",
       "ip": "IP",
@@ -355,19 +337,14 @@
     "empty": "该节点尚未分配任何端口",
     "emptyFiltered": "无匹配端口",
     "selection": {
-      "action": "选择操作",
-      "execute": "执行",
-      "selected": "已选 {n} 个",
-      "clear": "取消选择",
       "bulkDelete": "删除"
     },
     "actions": {
-      "create": "新增端口",
-      "delete": "删除",
-      "openServer": "查看服务器"
+      "create": "新建端口",
+      "delete": "删除"
     },
     "create": {
-      "title": "新增端口",
+      "title": "新建端口",
       "ip": "IP 地址",
       "ipHint": "默认 0.0.0.0，表示监听节点所有网卡。",
       "alias": "别名（域名）",
@@ -399,8 +376,6 @@
     "labelTarget": "目标：",
     "wingsDefault": "Wings 默认",
     "wingsDefaultOption": "Wings 默认路径",
-    "wingsPathNote": "将写入 Wings config.yml 中配置的 api.ssl 路径并重启 Wings。",
-    "targetWillInstall": "将写入 agent 配置中声明的 target「{name}」路径。",
     "empty": "该主机尚未部署任何证书。",
     "addDeployment": "部署证书",
     "selectCert": "选择证书",
@@ -464,20 +439,16 @@
     },
     "bind": {
       "title": "绑定 Cloudflare 账号与 Zone",
-      "step1Title": "第 1 步：填入 Account ID 与 API Token。点击验证后会拉取可用 Zone 列表。",
-      "step2Title": "第 2 步：选择该主机要使用的根域名。",
       "verify": "验证并拉取 Zones",
       "back": "上一步",
-      "save": "保存绑定",
-      "zonesFound": "发现 {n} 个可用 Zone"
+      "save": "保存绑定"
     },
     "confirm": {
       "restartTitle": "重启 cloudflared？",
       "restartMsg": "重启期间（几秒）该主机的隧道服务器将临时不可访问。",
       "uninstallTitle": "卸载 Cloudflare Tunnel",
       "uninstallMsg": "将停止并移除主机上的 cloudflared，同时删除 Cloudflare 侧的 Tunnel 记录。本操作不可逆。",
-      "uninstallBusyMsg": "当前仍有 {n} 个服务器在使用该隧道。卸载后这些服务器将无法通过隧道访问。",
-      "uninstallTypePrompt": "请输入主机名以确认："
+      "uninstallBusyMsg": "当前仍有 {n} 个服务器在使用该隧道。卸载后这些服务器将无法通过隧道访问。"
     },
     "cols": {
       "serverId": "服务器",

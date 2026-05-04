@@ -1,12 +1,7 @@
 {
   "title": "仪表盘",
   "stats": {
-    "totalServers": "服务器总数",
-    "totalUsers": "用户总数",
-    "normalRate": "正常运行率",
-    "expiringSoon": "即将到期",
-    "expired": "已过期",
-    "suspended": "已冻结"
+    "totalServers": "服务器总数"
   },
   "status": {
     "normal": "正常",
@@ -33,14 +28,10 @@
     "activity": "近期活动",
     "trends": "集群趋势"
   },
-  "kind": {
-    "offline": "离线"
-  },
   "expiring": {
     "daysUnit": "天"
   },
   "empty": {
-    "hosts": "暂无主机",
     "alerts": "一切正常",
     "expiring": "近 14 天无到期实例",
     "activity": "暂无活动记录",
@@ -56,9 +47,5 @@
   },
   "notConfigured": "Pterodactyl API 未配置",
   "notConfiguredMsg": "请先在系统设置中填写面板地址和 API Key",
-  "goToSettings": "前往设置",
-  "infrastructure": "基础设施状态",
-  "connectivity": "连通性",
-  "viewAlerts": "查看",
-  "alertBanner": "{count} 条活跃告警"
+  "goToSettings": "前往设置"
 }

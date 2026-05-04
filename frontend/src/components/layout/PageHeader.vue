@@ -70,7 +70,7 @@ function goCrumb(item: BreadcrumbItem) {
               <span
                 v-if="index < props.breadcrumbs.length - 1"
                 class="page-breadcrumb__sep"
-              >&gt;</span>
+              >/</span>
             </template>
           </span>
           <span v-else>{{ title }}</span>

@@ -166,6 +166,32 @@ SETTINGS_SPECS: dict[str, SettingSpec] = _register({
         lambda: _env_bool("ALLOW_PUBLIC_REGISTRATION", True),
         _normalize_bool,
     ),
+    # ---- Support contact info (shown in SupportModal, public-readable) ----
+    "SUPPORT_EMAIL": SettingSpec(
+        "SUPPORT_EMAIL", "branding",
+        lambda: _env_str("SUPPORT_EMAIL", ""),
+        _normalize_str,
+    ),
+    "SUPPORT_QQ_GROUP": SettingSpec(
+        "SUPPORT_QQ_GROUP", "branding",
+        lambda: _env_str("SUPPORT_QQ_GROUP", ""),
+        _normalize_str,
+    ),
+    "SUPPORT_QQ": SettingSpec(
+        "SUPPORT_QQ", "branding",
+        lambda: _env_str("SUPPORT_QQ", ""),
+        _normalize_str,
+    ),
+    "SUPPORT_WECHAT": SettingSpec(
+        "SUPPORT_WECHAT", "branding",
+        lambda: _env_str("SUPPORT_WECHAT", ""),
+        _normalize_str,
+    ),
+    "SUPPORT_FOOTER_NOTE": SettingSpec(
+        "SUPPORT_FOOTER_NOTE", "branding",
+        lambda: _env_str("SUPPORT_FOOTER_NOTE", ""),
+        _normalize_str,
+    ),
     "DEFAULT_NEST_ID": SettingSpec(
         "DEFAULT_NEST_ID",
         "server_defaults",
@@ -340,6 +366,65 @@ CERTIFICATE_SPECS: dict[str, SettingSpec] = _register({
         "certificates",
         lambda: _env_str("CERT_ALERT_EMAIL_ADMIN_IDS", ""),
         _normalize_id_list,
+    ),
+})
+
+
+BILLING_SPECS: dict[str, SettingSpec] = _register({
+    # ---- Hupijiao gateway credentials (B-class, UI-editable, sensitive) ----
+    "HUPIJIAO_APPID": SettingSpec(
+        "HUPIJIAO_APPID", "billing",
+        lambda: _env_str("HUPIJIAO_APPID", ""),
+        _normalize_str,
+        sensitive=True,
+    ),
+    "HUPIJIAO_APPSECRET": SettingSpec(
+        "HUPIJIAO_APPSECRET", "billing",
+        lambda: _env_str("HUPIJIAO_APPSECRET", ""),
+        _normalize_str,
+        sensitive=True,
+    ),
+    "HUPIJIAO_ENABLED": SettingSpec(
+        "HUPIJIAO_ENABLED", "billing",
+        lambda: _env_bool("HUPIJIAO_ENABLED", False),
+        _normalize_bool,
+    ),
+    "HUPIJIAO_DISPLAY_NAME": SettingSpec(
+        "HUPIJIAO_DISPLAY_NAME", "billing",
+        lambda: _env_str("HUPIJIAO_DISPLAY_NAME", "支付宝"),
+        _normalize_str,
+    ),
+    # ---- Hupijiao gateway runtime config (B-class, UI-editable) ----
+    # NOTE: notify_url + return_url are auto-derived from SITE_URL by the
+    # backend (see app/services/billing/orders.py::_runtime_site_url) and
+    # therefore not exposed here. Only fields that genuinely require admin
+    # input (REFERER for Hupijiao server-side check, endpoint pool) remain.
+    "HUPIJIAO_REFERER": SettingSpec(
+        "HUPIJIAO_REFERER", "billing",
+        lambda: _env_str("HUPIJIAO_REFERER", "https://app.erocraft.com/"),
+        _normalize_str,
+    ),
+    "HUPIJIAO_GATEWAY_ENDPOINTS": SettingSpec(
+        "HUPIJIAO_GATEWAY_ENDPOINTS", "billing",
+        lambda: _env_str(
+            "HUPIJIAO_GATEWAY_ENDPOINTS",
+            "https://api.xunhupay.com,https://api.dpweixin.com",
+        ),
+        _normalize_str,
+    ),
+    # ---- Billing runtime parameters ----
+    # 5 min hard cap — payment QR codes typically valid up to 5 min.
+    "BILLING_ORDER_PAY_TIMEOUT_MIN": SettingSpec(
+        "BILLING_ORDER_PAY_TIMEOUT_MIN", "billing",
+        lambda: _env_int("BILLING_ORDER_PAY_TIMEOUT_MIN", 5),
+        _int_clamper(3, 5, 5),
+    ),
+    # refund_retry job runs every 15 min; if a refund stays PENDING beyond
+    # this many hours it becomes a manager incident.
+    "BILLING_REFUND_STUCK_HOURS": SettingSpec(
+        "BILLING_REFUND_STUCK_HOURS", "billing",
+        lambda: _env_int("BILLING_REFUND_STUCK_HOURS", 24),
+        _int_clamper(1, 168, 24),
     ),
 })
 

@@ -14,6 +14,7 @@ import FormField from '@/components/form/FormField.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
+import PlanChangeModal from '@/components/servers/PlanChangeModal.vue'
 import type { AdminServerDetailResponse } from '@/types/adminServer'
 
 defineOptions({ name: 'AdminServerLifecyclePane' })
@@ -170,6 +171,36 @@ async function doDelete() {
 watch(detail, () => {
   resetRenewDate()
 }, { immediate: true })
+
+// ── Plan Change ──
+const planModalOpen = ref(false)
+const currentPlanId = computed(() => server.value?.planId ?? null)
+const currentPlanName = computed(() => server.value?.planName ?? null)
+
+async function onPlanModalConfirmed(planId: number | null) {
+  if (!serverId.value) return
+  try {
+    const res = await fetch(`/api/admin/servers/${serverId.value}/plan`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planId }),
+    })
+    if (res.ok) {
+      toast(t('servers.toast.plan_updated'), 'success')
+      planModalOpen.value = false
+      await reload()
+    } else {
+      let msg = `HTTP ${res.status}`
+      try {
+        const body = await res.json()
+        msg = body.detail || body.error || body.message || msg
+      } catch { /* ignore */ }
+      toast(msg, 'error')
+    }
+  } catch {
+    toast(t('common.apiErrors.network'), 'error')
+  }
+}
 </script>
 
 <template>
@@ -202,6 +233,22 @@ watch(detail, () => {
         <BaseButton variant="primary" :loading="loading" @click="doRenew">
           <MsIcon name="update" size="xs" />
           {{ t('adminServer.lifecycle.renew.action') }}
+        </BaseButton>
+      </div>
+    </BaseCard>
+
+    <BaseCard variant="bg2" class="lifecycle-card">
+      <SectionHeader icon="swap_horiz" flush>{{ t('adminServer.lifecycle.plan.sectionTitle') }}</SectionHeader>
+      <div class="plan-current">
+        <span class="plan-current__label">{{ t('adminServer.lifecycle.plan.currentBinding') }}</span>
+        <span class="plan-current__value" :class="{ 'plan-current__value--none': !currentPlanName }">
+          {{ currentPlanName ?? '—' }}
+        </span>
+      </div>
+      <div class="card-actions">
+        <BaseButton variant="primary" @click="planModalOpen = true">
+          <MsIcon name="swap_horiz" size="xs" />
+          {{ t('adminServer.lifecycle.plan.action') }}
         </BaseButton>
       </div>
     </BaseCard>
@@ -255,6 +302,14 @@ watch(detail, () => {
         </BaseButton>
       </template>
     </BaseModal>
+
+    <PlanChangeModal
+      v-model="planModalOpen"
+      :server-name="serverName"
+      :current-plan-id="currentPlanId"
+      :current-plan-name="currentPlanName"
+      @confirmed="onPlanModalConfirmed"
+    />
   </div>
 </template>
 
@@ -336,6 +391,30 @@ watch(detail, () => {
 
 .lifecycle-card--danger {
   border-color: color-mix(in srgb, var(--red) 22%, var(--bd));
+}
+
+.plan-current {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+
+.plan-current__label {
+  color: var(--t2);
+  font-size: var(--text-sm);
+}
+
+.plan-current__value {
+  color: var(--ac2);
+  font-weight: 500;
+  font-size: var(--text-sm);
+}
+
+.plan-current__value--none {
+  color: var(--t3);
+  font-weight: 400;
 }
 
 .delete-modal {

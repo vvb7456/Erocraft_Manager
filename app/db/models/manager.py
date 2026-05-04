@@ -40,6 +40,11 @@ class ServerMeta(Base):
         primary_key=True,
     )
     expiration_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # v2 billing: which plan this server is currently bound to. Written by
+    # ``_effect_new_purchase`` (and Phase B ``_effect_upgrade``); never written
+    # by manual server creation. Renew reads this to look up price + period.
+    # See ``docs/BILLING_DESIGN.md`` §3.3.2.
+    plan_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     server: Mapped["PteroServer"] = relationship("PteroServer", back_populates="meta")
 

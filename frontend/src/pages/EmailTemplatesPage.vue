@@ -1,62 +1,34 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { provideDirtyForm, useDirtyFormSection } from '@/composables/useDirtyForm'
 import PageHeader from '@/components/layout/PageHeader.vue'
+import TabSwitcher from '@/components/ui/TabSwitcher.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
 import BaseTextarea from '@/components/form/BaseTextarea.vue'
-import Spinner from '@/components/ui/Spinner.vue'
 import FormField from '@/components/form/FormField.vue'
-import SectionHeader from '@/components/ui/SectionHeader.vue'
-import ChipSelect, { type ChipOption } from '@/components/ui/ChipSelect.vue'
-import MsIcon from '@/components/ui/MsIcon.vue'
-import Badge from '@/components/ui/Badge.vue'
+import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import DirtyBar from '@/components/ui/DirtyBar.vue'
-import { useTheme } from '@/composables/useTheme'
+import MsIcon from '@/components/ui/MsIcon.vue'
 
 defineOptions({ name: 'EmailTemplatesPage' })
 
-const { t } = useI18n({ useScope: 'global' })
-const { get, post } = useApiFetch()
-const { toast } = useToast()
-const { confirm } = useConfirm()
-const theme = useTheme()
-
 type TemplateKey =
-  | 'bulk'
-  | 'reminder'
-  | 'preDelete'
-  | 'createUser'
-  | 'passwordReset'
-  | 'emailChange'
-  | 'registerVerify'
-  | 'alertFired'
-  | 'alertResolved'
+  | 'bulk' | 'reminder' | 'preDelete' | 'createUser' | 'passwordReset'
+  | 'emailChange' | 'registerVerify' | 'alertFired' | 'alertResolved'
+  | 'orderPaid' | 'orderApplyFailed' | 'orderApplyAlert' | 'orderRefunded'
 
-interface TemplateData {
-  subject: string
-  body: string
-}
+interface TemplateData { subject: string; body: string }
 
-interface PreviewResponse {
-  renderedSubject: string
-  html: string
-}
-
-const TEMPLATE_KEYS: TemplateKey[] = [
-  'bulk',
-  'reminder',
-  'preDelete',
-  'createUser',
-  'passwordReset',
-  'emailChange',
-  'registerVerify',
-  'alertFired',
-  'alertResolved',
+const KEYS: TemplateKey[] = [
+  'bulk', 'reminder', 'preDelete', 'createUser', 'passwordReset',
+  'emailChange', 'registerVerify', 'alertFired', 'alertResolved',
+  'orderPaid', 'orderApplyFailed', 'orderApplyAlert', 'orderRefunded',
 ]
 
 const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
@@ -69,204 +41,120 @@ const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
   registerVerify: ['brand_name', 'username', 'email', 'verify_url'],
   alertFired: ['brand_name', 'node_name', 'node_id', 'alert_type', 'alert_type_label', 'severity', 'severity_label', 'message', 'fired_at'],
   alertResolved: ['brand_name', 'node_name', 'node_id', 'alert_type', 'alert_type_label', 'message', 'fired_at', 'resolved_at'],
+  orderPaid: ['brand_name', 'order_no', 'plan_name', 'period_count', 'total_days', 'total_yuan', 'currency_code', 'paid_at', 'applied_at', 'server_uuid'],
+  orderApplyFailed: ['brand_name', 'order_no', 'plan_name', 'total_yuan', 'currency_code', 'paid_at', 'apply_error'],
+  orderApplyAlert: ['brand_name', 'order_no', 'username', 'email', 'plan_name', 'total_yuan', 'currency_code', 'apply_retry_count', 'apply_error'],
+  orderRefunded: ['brand_name', 'order_no', 'refund_no', 'refund_amount_yuan', 'currency_code', 'refund_reason', 'refunded_at'],
 }
 
-const templates = ref<Record<TemplateKey, TemplateData>>({
-  bulk: { subject: '', body: '' },
-  reminder: { subject: '', body: '' },
-  preDelete: { subject: '', body: '' },
-  createUser: { subject: '', body: '' },
-  passwordReset: { subject: '', body: '' },
-  emailChange: { subject: '', body: '' },
-  registerVerify: { subject: '', body: '' },
-  alertFired: { subject: '', body: '' },
-  alertResolved: { subject: '', body: '' },
-})
+const { t } = useI18n({ useScope: 'global' })
+const { get, post } = useApiFetch()
+const { toast } = useToast()
+const { confirm } = useConfirm()
 
-// Snapshot of saved server-side values; updated after each successful
-// save() / saveAllDirty(). Used to compute per-template dirty flags.
-const orig = ref<Record<TemplateKey, TemplateData>>({
-  bulk: { subject: '', body: '' },
-  reminder: { subject: '', body: '' },
-  preDelete: { subject: '', body: '' },
-  createUser: { subject: '', body: '' },
-  passwordReset: { subject: '', body: '' },
-  emailChange: { subject: '', body: '' },
-  registerVerify: { subject: '', body: '' },
-  alertFired: { subject: '', body: '' },
-  alertResolved: { subject: '', body: '' },
-})
-
-function isTemplateDirty(key: TemplateKey): boolean {
-  const cur = templates.value[key]
-  const o = orig.value[key]
-  return cur.subject !== o.subject || cur.body !== o.body
-}
-const dirtyKeys = computed<TemplateKey[]>(() =>
-  TEMPLATE_KEYS.filter(isTemplateDirty),
-)
-const isDirty = computed(() => dirtyKeys.value.length > 0)
-
-const activeTemplate = ref<TemplateKey>('bulk')
-const initialLoading = ref(true)
+const activeKey = ref<TemplateKey>('bulk')
+const loading = ref(true)
 const saveLoading = ref(false)
-const previewLoading = ref(false)
 const previewHtml = ref('')
 const previewSubject = ref('')
-const prefersDarkQuery = ref<MediaQueryList | null>(null)
+const previewLoading = ref(false)
+let previewReqId = 0
 
-let previewTimer: ReturnType<typeof setTimeout> | null = null
-let previewRequestId = 0
-
-const currentTemplate = computed(() => templates.value[activeTemplate.value])
-const currentVariables = computed(() => TEMPLATE_VARIABLES[activeTemplate.value])
-const chipOptions = computed<ChipOption[]>(() =>
-  TEMPLATE_KEYS.map((key) => ({
-    value: key,
-    label: t(`emailTemplates.${key}.title`),
-    title: t(`emailTemplates.${key}.desc`),
-  })),
+const empty = (): TemplateData => ({ subject: '', body: '' })
+const all = ref<Record<TemplateKey, TemplateData>>(
+  Object.fromEntries(KEYS.map(k => [k, empty()])) as Record<TemplateKey, TemplateData>,
 )
-const sanitizedPreviewHtml = computed(() => sanitizePreviewHtml(previewHtml.value))
-const previewTheme = computed<'dark' | 'light'>(() => {
-  if (theme.mode.value === 'dark') return 'dark'
-  if (theme.mode.value === 'light') return 'light'
-  return prefersDarkQuery.value?.matches ? 'dark' : 'light'
-})
+const savedAll = ref<Record<TemplateKey, TemplateData>>(
+  Object.fromEntries(KEYS.map(k => [k, empty()])) as Record<TemplateKey, TemplateData>,
+)
 
-function tokenLabel(key: string): string {
-  return `{{${key}}}`
+const cur = computed(() => all.value[activeKey.value])
+const saved = computed(() => savedAll.value[activeKey.value])
+const isDirty = computed(() => cur.value.subject !== saved.value.subject || cur.value.body !== saved.value.body)
+const vars = computed(() => TEMPLATE_VARIABLES[activeKey.value])
+
+const tabs = KEYS.map(k => ({ key: k, label: t(`emailTemplates.${k}.title`) }))
+
+// ── Variable chip actions ──
+function insertVar(key: string) {
+  const ta = document.querySelector('.tpl-body-textarea') as HTMLTextAreaElement | null
+  if (!ta) return
+  const s = ta.selectionStart; const e = ta.selectionEnd
+  const c = all.value[activeKey.value]
+  c.body = c.body.slice(0, s) + `{{${key}}}` + c.body.slice(e)
+  void nextTick(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + key.length + 4 })
 }
 
-function sanitizePreviewHtml(html: string): string {
-  if (!html || typeof window === 'undefined') return html
-  const doc = new DOMParser().parseFromString(html, 'text/html')
-
-  doc.querySelectorAll('script, iframe, object, embed').forEach((node) => node.remove())
-  doc.querySelectorAll('*').forEach((el) => {
-    for (const attr of [...el.attributes]) {
-      const name = attr.name.toLowerCase()
-      const value = attr.value.trim().toLowerCase()
-      if (name.startsWith('on') || value.startsWith('javascript:')) {
-        el.removeAttribute(attr.name)
-      }
-    }
-  })
-
-  return '<!doctype html>\n' + doc.documentElement.outerHTML
+async function copyVar(key: string) {
+  await navigator.clipboard.writeText(`{{${key}}}`)
+  toast(t('emailTemplates.varCopied', { key }), 'success')
 }
 
-async function fetchPreview() {
-  const requestId = ++previewRequestId
+// ── Preview ──
+async function loadPreview() {
   previewLoading.value = true
-
+  const rid = ++previewReqId
+  let html = ''
   try {
     const res = await fetch('/api/admin/email-templates/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: activeTemplate.value,
-        subject: currentTemplate.value.subject,
-        body: currentTemplate.value.body,
-        theme: previewTheme.value,
-      }),
+      body: JSON.stringify({ type: activeKey.value, subject: all.value[activeKey.value].subject, body: all.value[activeKey.value].body, theme: 'dark' }),
     })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
-    const data = await res.json() as PreviewResponse
-    if (requestId !== previewRequestId) return
-    previewSubject.value = data.renderedSubject
-    previewHtml.value = data.html
-  } catch {
-    if (requestId !== previewRequestId) return
-    previewSubject.value = ''
-    previewHtml.value = ''
-  } finally {
-    if (requestId === previewRequestId) previewLoading.value = false
-  }
+    if (res.ok) {
+      const data = await res.json() as { renderedSubject: string; html: string }
+      previewSubject.value = data.renderedSubject
+      html = sanitize(data.html)
+    }
+  } catch { /* ignore */ }
+  if (rid !== previewReqId) return
+  previewHtml.value = html
+  previewLoading.value = false
 }
 
+function sanitize(html: string): string {
+  if (!html) return ''
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  doc.querySelectorAll('script, iframe, object, embed').forEach(n => n.remove())
+  doc.querySelectorAll('*').forEach(el => {
+    for (const a of [...el.attributes]) {
+      if (a.name.startsWith('on') || (a.value || '').toLowerCase().startsWith('javascript:')) el.removeAttribute(a.name)
+    }
+  })
+  return '<!doctype html>\n' + doc.documentElement.outerHTML
+}
+
+let previewTimer: ReturnType<typeof setTimeout> | null = null
 function schedulePreview() {
   if (previewTimer) clearTimeout(previewTimer)
-  previewTimer = setTimeout(() => {
-    void fetchPreview()
-  }, 220)
+  previewTimer = setTimeout(loadPreview, 300)
 }
 
-async function loadData() {
-  const templateData = await get<Record<string, TemplateData>>('/api/admin/email-templates')
-  if (templateData) {
-    for (const key of TEMPLATE_KEYS) {
-      const data = {
-        subject: templateData[key]?.subject ?? '',
-        body: templateData[key]?.body ?? '',
-      }
-      templates.value[key] = { ...data }
-      orig.value[key] = { ...data }
-    }
-  }
-
-  initialLoading.value = false
-  schedulePreview()
-}
-
-async function save(): Promise<boolean> {
+// ── Save / discard ──
+async function save() {
   saveLoading.value = true
-  const res = await post<{ message: string }>('/api/admin/email-templates', {
-    type: activeTemplate.value,
-    subject: currentTemplate.value.subject,
-    body: currentTemplate.value.body,
+  const k = activeKey.value; const c = all.value[k]
+  const res = await post('/api/admin/email-templates', {
+    type: k,
+    subject: c.subject,
+    body: c.body,
   })
   saveLoading.value = false
   if (res) {
-    orig.value[activeTemplate.value] = { ...currentTemplate.value }
+    savedAll.value[k] = { ...c }
     toast(t('emailTemplates.saved'), 'success')
-    return true
-  }
-  return false
-}
-
-async function saveAllDirty(): Promise<boolean> {
-  if (!isDirty.value) return true
-  saveLoading.value = true
-  let allOk = true
-  const failed: string[] = []
-  for (const key of dirtyKeys.value.slice()) {
-    const cur = templates.value[key]
-    const res = await post<{ message: string }>('/api/admin/email-templates', {
-      type: key,
-      subject: cur.subject,
-      body: cur.body,
-    })
-    if (res) {
-      orig.value[key] = { ...cur }
-    } else {
-      allOk = false
-      failed.push(key)
-    }
-  }
-  saveLoading.value = false
-  if (allOk) {
-    toast(t('emailTemplates.savedAll', { n: TEMPLATE_KEYS.length }), 'success')
-  } else {
-    toast(t('emailTemplates.saveSomeFailed', { n: failed.length }), 'error')
-  }
-  return allOk
-}
-
-function discardAll() {
-  for (const key of TEMPLATE_KEYS) {
-    templates.value[key] = { ...orig.value[key] }
   }
 }
 
-// Page-wide dirty-form orchestration. The leave-guard reuses the email
-// templates' specialised "{n} unsaved" message via a custom prompt.
+function discard() {
+  all.value[activeKey.value] = { ...savedAll.value[activeKey.value] }
+}
+
 const dirtyForm = provideDirtyForm({
   prompt: async () => {
     const result = await confirm({
       title: t('emailTemplates.unsavedTitle'),
-      message: t('emailTemplates.unsavedMessage', { n: dirtyKeys.value.length }),
+      message: t('emailTemplates.unsavedMessage'),
       confirmText: t('emailTemplates.unsavedSave'),
       cancelText: t('emailTemplates.unsavedDiscard'),
       altText: t('emailTemplates.unsavedStay'),
@@ -276,328 +164,142 @@ const dirtyForm = provideDirtyForm({
   },
 })
 dirtyForm.attachLeaveGuard()
-useDirtyFormSection({
-  name: 'email-templates',
-  isDirty,
-  save: saveAllDirty,
-  discard: discardAll,
-}, dirtyForm)
+useDirtyFormSection({ name: 'email-templates', isDirty, save, discard }, dirtyForm)
 
-function tplLabel(key: TemplateKey): string {
-  return t(`emailTemplates.${key}.title`)
-}
-
-watch(
-  () => [
-    activeTemplate.value,
-    currentTemplate.value.subject,
-    currentTemplate.value.body,
-    previewTheme.value,
-  ],
-  () => {
-    if (!initialLoading.value) schedulePreview()
-  },
-)
-
-function onSystemThemeChange() {
+async function loadData() {
+  const data = await get<Record<string, TemplateData>>('/api/admin/email-templates')
+  if (data) {
+    for (const k of KEYS) {
+      const d = { subject: data[k]?.subject ?? '', body: data[k]?.body ?? '' }
+      all.value[k] = { ...d }; savedAll.value[k] = { ...d }
+    }
+  }
+  loading.value = false
   schedulePreview()
 }
 
-onMounted(() => {
-  if (typeof window !== 'undefined') {
-    prefersDarkQuery.value = window.matchMedia('(prefers-color-scheme: dark)')
-    prefersDarkQuery.value.addEventListener('change', onSystemThemeChange)
-  }
-  void loadData()
+watch([activeKey, () => all.value[activeKey.value].subject, () => all.value[activeKey.value].body], () => {
+  if (!loading.value) schedulePreview()
 })
 
-onBeforeUnmount(() => {
-  if (previewTimer) clearTimeout(previewTimer)
-  prefersDarkQuery.value?.removeEventListener('change', onSystemThemeChange)
-})
+onMounted(loadData)
 </script>
 
 <template>
   <PageHeader :title="t('emailTemplates.title')" icon="mail" />
 
   <div class="page-body">
-    <div v-if="initialLoading" class="center-loading">
-      <Spinner size="lg" />
-    </div>
+    <LoadingCenter v-if="loading" />
 
     <template v-else>
+      <TabSwitcher v-model="activeKey" :tabs="tabs" />
+
       <div class="tpl-workspace">
-        <section class="tpl-column">
-          <SectionHeader icon="edit" flush>
-            {{ t('emailTemplates.editor') }}
-          </SectionHeader>
-
-          <ChipSelect v-model="activeTemplate" :options="chipOptions" />
-
-          <div class="tpl-vars">
-            <span class="tpl-vars-label">{{ t('emailTemplates.placeholders') }}</span>
-            <div class="tpl-vars-list">
-              <code
-                v-for="key in currentVariables"
-                :key="key"
+        <!-- Left: editor -->
+        <section class="tpl-col">
+          <BaseCard>
+            <div class="tpl-vars">
+              <span class="tpl-vars-label">{{ t('emailTemplates.placeholders') }}</span>
+              <button
+                v-for="v in vars" :key="v"
                 class="tpl-var-chip"
-                :title="t(`emailTemplates.var.${key}`)"
-                v-text="tokenLabel(key)"
+                :title="t(`emailTemplates.var.${v}`)"
+                @click="copyVar(v)"
+                @dblclick="insertVar(v)"
+                v-text="'{{' + v + '}}'"
               />
             </div>
-          </div>
 
-          <FormField :label="t('emailTemplates.subject')">
-            <BaseInput v-model="currentTemplate.subject" />
-          </FormField>
+            <FormField :label="t('emailTemplates.subject')">
+              <BaseInput v-model="all[activeKey].subject" />
+            </FormField>
 
-          <FormField :label="t('emailTemplates.body')">
-            <BaseTextarea v-model="currentTemplate.body" :rows="16" mono />
-          </FormField>
+            <FormField :label="t('emailTemplates.body')">
+              <BaseTextarea
+                v-model="all[activeKey].body"
+                :rows="18"
+                mono
+                input-class="tpl-body-textarea"
+              />
+            </FormField>
+          </BaseCard>
         </section>
 
-        <section class="tpl-column tpl-column--preview">
-          <SectionHeader icon="description" flush>
-            {{ t('emailTemplates.preview') }}
-          </SectionHeader>
-
-          <div class="tpl-preview-subject">
-            <span class="tpl-preview-label">{{ t('emailTemplates.previewSubject') }}</span>
-            <span class="tpl-preview-value">{{ previewSubject || t('emailTemplates.previewEmpty') }}</span>
-          </div>
-
-          <div class="tpl-preview-frame-shell" :class="{ 'tpl-preview-frame-shell--loading': previewLoading && !previewHtml }">
-            <div v-if="!previewHtml && previewLoading" class="tpl-preview-loading">
-              <Spinner size="lg" />
+        <!-- Right: preview -->
+        <section class="tpl-col tpl-col--preview">
+          <BaseCard>
+            <template #header>
+              <span class="tpl-preview-label">{{ t('emailTemplates.preview') }}</span>
+            </template>
+            <div v-if="previewSubject" class="tpl-preview-subject">{{ previewSubject }}</div>
+            <div class="tpl-preview-shell" :class="{ 'tpl-preview-shell--loading': previewLoading }">
+              <LoadingCenter v-if="previewLoading" />
+              <iframe
+                v-else-if="previewHtml"
+                class="tpl-preview-frame"
+                :srcdoc="previewHtml"
+                sandbox="allow-scripts"
+                title="email-preview"
+              />
+              <div v-else class="tpl-preview-empty">{{ t('emailTemplates.previewEmpty') }}</div>
             </div>
-            <div v-else-if="!previewHtml" class="tpl-preview-empty">
-              {{ t('emailTemplates.previewEmpty') }}
-            </div>
-            <iframe
-              v-else
-              class="tpl-preview-frame"
-              :srcdoc="sanitizedPreviewHtml"
-              sandbox="allow-scripts"
-              title="email-preview"
-            />
-          </div>
+          </BaseCard>
         </section>
       </div>
     </template>
   </div>
 
-  <DirtyBar
-    :dirty="dirtyForm.isDirty.value"
-    :saving="saveLoading"
-    confirm-before-unload
-  >
-    <template #hint>
-      <span class="db__text dirty-bar__text">
-        <MsIcon name="edit" />
-        {{ t('emailTemplates.unsavedHint', { n: dirtyKeys.length }) }}
-      </span>
-    </template>
-    <template #extra>
-      <div class="dirty-bar__chips">
-        <Badge
-          v-for="k in dirtyKeys"
-          :key="k"
-          color="#f59e0b"
-          class="dirty-bar__chip"
-          @click="activeTemplate = k"
-        >
-          {{ tplLabel(k) }}
-        </Badge>
-      </div>
-    </template>
-    <template #actions>
-      <div class="dirty-bar__actions">
-        <BaseButton size="sm" :disabled="saveLoading" @click="discardAll">
-          {{ t('emailTemplates.discardAll') }}
-        </BaseButton>
-        <BaseButton
-          v-if="isTemplateDirty(activeTemplate)"
-          size="sm"
-          :loading="saveLoading"
-          @click="save"
-        >
-          {{ t('emailTemplates.saveCurrent') }}
-        </BaseButton>
-        <BaseButton
-          variant="primary"
-          size="sm"
-          :loading="saveLoading"
-          @click="saveAllDirty"
-        >
-          {{ t('emailTemplates.saveAll', { n: dirtyKeys.length }) }}
-        </BaseButton>
-      </div>
-    </template>
-  </DirtyBar>
+  <DirtyBar :dirty="dirtyForm.isDirty.value" :saving="saveLoading" @save="dirtyForm.save" @discard="dirtyForm.discard" />
 </template>
 
 <style scoped>
-.center-loading {
-  display: flex;
-  justify-content: center;
-  padding: var(--sp-8);
-}
-
-/* DirtyBar slot overrides for the chip cluster + custom actions. The base
-   bar layout (positioning / shadow / transition) lives in DirtyBar.vue. */
-.dirty-bar__text {
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.dirty-bar__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1);
-  min-width: 0;
-}
-.dirty-bar__chip { cursor: pointer; }
-.dirty-bar__actions {
-  display: flex;
-  gap: var(--sp-2);
-  flex-shrink: 0;
-}
-
+/* Two-column workspace */
 .tpl-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--sp-6);
   align-items: start;
+  margin-top: var(--sp-4);
 }
+.tpl-col { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+.tpl-col--preview { position: sticky; top: calc(64px + var(--sp-4)); }
 
-.tpl-column {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  min-width: 0;
-}
-
-.tpl-column--preview {
-  position: sticky;
-  top: calc(64px + var(--sp-4));
-}
-
+/* Variable tokens */
 .tpl-vars {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
-
-.tpl-vars-label {
-  color: var(--t2);
-  font-size: var(--text-sm);
-  line-height: 30px;
-  white-space: nowrap;
-}
-
-.tpl-vars-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-}
-
-.tpl-var-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 var(--sp-3);
-  border-radius: var(--r-sm);
-  border: 1px solid color-mix(in srgb, var(--ac) 22%, var(--bd));
-  background: color-mix(in srgb, var(--acg) 64%, transparent);
-  color: var(--ac2);
-  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
-  font-size: 12px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.tpl-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: var(--sp-1);
-}
-
-.tpl-preview-subject {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  min-width: 0;
-  padding-bottom: var(--sp-2);
+  display: flex; align-items: center; gap: var(--sp-2);
+  flex-wrap: wrap; margin-bottom: var(--sp-3); padding-bottom: var(--sp-3);
   border-bottom: 1px solid var(--bd);
 }
-
-.tpl-preview-label {
-  color: var(--t2);
-  font-size: 12px;
-  white-space: nowrap;
+.tpl-vars-label { color: var(--t3); font-size: var(--text-sm); white-space: nowrap; }
+.tpl-var-chip {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border: 1px solid var(--bd);
+  border-radius: var(--r-xs); background: var(--bg-in);
+  color: var(--t2); font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: var(--text-xs); cursor: pointer; transition: border-color .15s, color .15s;
 }
+.tpl-var-chip:hover { border-color: var(--ac); color: var(--ac); }
 
-.tpl-preview-value {
-  color: var(--t1);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* Preview */
+.tpl-preview-label { font-weight: 600; }
+.tpl-preview-subject {
+  padding: var(--sp-2) 0; margin-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--bd);
+  font-size: var(--text-sm); font-weight: 600; color: var(--t1);
 }
-
-.tpl-preview-frame-shell {
-  min-height: 760px;
-  border: 1px solid var(--bd);
-  border-radius: var(--r-md);
-  overflow: hidden;
-  background: var(--bg3);
+.tpl-preview-shell {
+  min-height: 720px; border: 1px solid var(--bd);
+  border-radius: var(--r-sm); overflow: hidden; background: var(--bg3);
 }
-
-.tpl-preview-loading,
+.tpl-preview-shell--loading { display: flex; align-items: center; justify-content: center; }
+.tpl-preview-frame { width: 100%; min-height: 720px; border: 0; background: var(--bg3); }
 .tpl-preview-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 760px;
-  color: var(--t2);
-  font-size: var(--text-sm);
-}
-
-.tpl-preview-frame {
-  width: 100%;
-  min-height: 760px;
-  border: 0;
-  background: #ffffff;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 720px; color: var(--t2); font-size: var(--text-sm);
 }
 
 @media (max-width: 1080px) {
-  .tpl-workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .tpl-column--preview {
-    position: static;
-  }
-}
-
-@media (max-width: 720px) {
-  .tpl-vars {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .tpl-vars-label {
-    line-height: 1.5;
-  }
-
-  .tpl-preview-frame-shell,
-  .tpl-preview-loading,
-  .tpl-preview-empty,
-  .tpl-preview-frame {
-    min-height: 620px;
-  }
+  .tpl-workspace { grid-template-columns: 1fr; }
+  .tpl-col--preview { position: static; }
 }
 </style>

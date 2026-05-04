@@ -1,60 +1,55 @@
 {
   "title": "邮件模板",
-  "save": "保存模板",
   "saved": "模板已保存",
-  "savedAll": "已保存所有修改",
-  "saveSomeFailed": "有 {n} 个模板保存失败",
-  "saveCurrent": "保存当前",
-  "saveAll": "保存全部 ({n})",
-  "discardAll": "丢弃修改",
-  "unsavedHint": "{n} 个模板有未保存修改",
-  "unsavedTitle": "有未保存修改",
-  "unsavedMessage": "当前有 {n} 个模板修改尚未保存，是否全部保存？",
+  "unsavedTitle": "有未保存的更改",
+  "unsavedMessage": "当前模板有未保存的更改，是否保存？",
   "unsavedSave": "保存并离开",
   "unsavedDiscard": "丢弃并离开",
   "unsavedStay": "继续编辑",
-  "editor": "模板编辑",
   "preview": "实时预览",
-  "previewSubject": "预览主题",
   "previewEmpty": "暂无预览内容",
   "subject": "邮件主题",
   "body": "邮件正文",
+  "varCopied": "已复制 {key}",
   "placeholders": "可用变量",
   "bulk": {
-    "title": "批量通知",
-    "desc": "用于管理员手动发送的一般通知邮件。"
+    "title": "批量通知"
   },
   "reminder": {
-    "title": "到期提醒",
-    "desc": "用于服务器到期前的自动提醒邮件。"
+    "title": "到期提醒"
   },
   "preDelete": {
-    "title": "删除前提醒",
-    "desc": "用于服务器删除前的最终提醒邮件。"
+    "title": "删除前提醒"
   },
   "createUser": {
-    "title": "新用户通知",
-    "desc": "用于创建用户后引导对方设置账户密码。"
+    "title": "新用户通知"
   },
   "passwordReset": {
-    "title": "密码重置",
-    "desc": "用于忘记密码后的重置链接邮件。"
+    "title": "密码重置"
   },
   "emailChange": {
-    "title": "邮箱变更确认",
-    "desc": "用于确认账户邮箱变更请求。"
+    "title": "邮箱变更确认"
   },
   "registerVerify": {
-    "title": "注册验证",
-    "desc": "用户公开注册后用于验证邮箱并激活账户。"
+    "title": "注册验证"
   },
   "alertFired": {
-    "title": "告警触发",
-    "desc": "节点监控告警触发时发送给管理员。"
+    "title": "告警触发"
   },
   "alertResolved": {
-    "title": "告警恢复",
-    "desc": "节点监控告警恢复时发送给管理员。"
+    "title": "告警恢复"
+  },
+  "orderPaid": {
+    "title": "订单支付成功"
+  },
+  "orderApplyFailed": {
+    "title": "订单开通失败"
+  },
+  "orderApplyAlert": {
+    "title": "订单开通告警"
+  },
+  "orderRefunded": {
+    "title": "订单退款完成"
   },
   "var": {
     "brand_name": "品牌名称",
@@ -79,6 +74,21 @@
     "severity_label": "严重程度名称",
     "message": "告警消息",
     "fired_at": "触发时间",
-    "resolved_at": "恢复时间"
+    "resolved_at": "恢复时间",
+    "order_no": "订单号",
+    "plan_name": "套餐名称",
+    "period_count": "周期数",
+    "total_days": "总天数",
+    "total_yuan": "实付金额（元）",
+    "currency_code": "币种代码",
+    "paid_at": "支付时间",
+    "applied_at": "开通时间",
+    "server_uuid": "服务器 UUID",
+    "refund_no": "退款单号",
+    "refund_amount_yuan": "退款金额（元）",
+    "refund_reason": "退款原因",
+    "refunded_at": "退款完成时间",
+    "apply_error": "开通失败原因",
+    "apply_retry_count": "已重试次数"
   }
 }

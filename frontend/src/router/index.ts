@@ -57,6 +57,30 @@ const router = createRouter({
       meta: { layout: 'user' },
     },
     {
+      path: '/plans',
+      name: 'user-plans',
+      component: () => import('@/pages/user/UserPlansPage.vue'),
+      meta: { layout: 'user' },
+    },
+    {
+      path: '/orders',
+      name: 'user-orders',
+      component: () => import('@/pages/user/UserOrdersPage.vue'),
+      meta: { layout: 'user' },
+    },
+    {
+      path: '/orders/:id',
+      name: 'user-order-detail',
+      component: () => import('@/pages/user/UserOrderDetailPage.vue'),
+      meta: { layout: 'user' },
+    },
+    {
+      path: '/pay/:id',
+      name: 'user-pay',
+      component: () => import('@/pages/user/UserPayPage.vue'),
+      meta: { layout: 'blank' },
+    },
+    {
       path: '/account',
       name: 'account',
       component: () => import('@/pages/user/AccountPage.vue'),
@@ -192,6 +216,12 @@ const router = createRouter({
           meta: { admin: true },
         },
       ],
+    },
+    {
+      path: '/admin/billing',
+      name: 'admin-billing',
+      component: () => import('@/pages/admin/AdminBillingPage.vue'),
+      meta: { admin: true },
     },
     {
       path: '/admin/email-templates',

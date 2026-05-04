@@ -1,12 +1,7 @@
 {
   "title": "Dashboard",
   "stats": {
-    "totalServers": "Total Servers",
-    "totalUsers": "Total Users",
-    "normalRate": "Normal Rate",
-    "expiringSoon": "Expiring Soon",
-    "expired": "Expired",
-    "suspended": "Suspended"
+    "totalServers": "Total Servers"
   },
   "status": {
     "normal": "Normal",
@@ -33,14 +28,10 @@
     "activity": "Recent Activity",
     "trends": "Cluster Trends"
   },
-  "kind": {
-    "offline": "Offline"
-  },
   "expiring": {
     "daysUnit": "days"
   },
   "empty": {
-    "hosts": "No hosts registered",
     "alerts": "All systems normal",
     "expiring": "No expirations in the next 14 days",
     "activity": "No recent activity",
@@ -56,9 +47,5 @@
   },
   "notConfigured": "Pterodactyl API Not Configured",
   "notConfiguredMsg": "Please set the panel URL and API key in system settings first",
-  "goToSettings": "Go to Settings",
-  "infrastructure": "Infrastructure Status",
-  "connectivity": "Connectivity",
-  "viewAlerts": "View",
-  "alertBanner": "{count} active alert(s)"
+  "goToSettings": "Go to Settings"
 }

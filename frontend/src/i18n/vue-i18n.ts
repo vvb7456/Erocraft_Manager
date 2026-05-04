@@ -14,7 +14,6 @@ import zhVerifyEmail from './locales/zh-CN/verify-email.json'
 import zhServers from './locales/zh-CN/servers.json'
 import zhUsers from './locales/zh-CN/users.json'
 import zhLogs from './locales/zh-CN/logs.json'
-import zhAutomation from './locales/zh-CN/automation.json'
 import zhEmailTemplates from './locales/zh-CN/email-templates.json'
 import zhUserServers from './locales/zh-CN/user-servers.json'
 import zhServerSettings from './locales/zh-CN/server-settings.json'
@@ -24,6 +23,7 @@ import zhMonitoring from './locales/zh-CN/monitoring.json'
 import zhHosts from './locales/zh-CN/hosts.json'
 import zhAdminServer from './locales/zh-CN/admin-server.json'
 import zhCertificates from './locales/zh-CN/certificates.json'
+import zhBilling from './locales/zh-CN/billing.json'
 
 import enCommon from './locales/en/common.json'
 import enNav from './locales/en/nav.json'
@@ -38,7 +38,6 @@ import enVerifyEmail from './locales/en/verify-email.json'
 import enServers from './locales/en/servers.json'
 import enUsers from './locales/en/users.json'
 import enLogs from './locales/en/logs.json'
-import enAutomation from './locales/en/automation.json'
 import enEmailTemplates from './locales/en/email-templates.json'
 import enUserServers from './locales/en/user-servers.json'
 import enServerSettings from './locales/en/server-settings.json'
@@ -48,6 +47,7 @@ import enMonitoring from './locales/en/monitoring.json'
 import enHosts from './locales/en/hosts.json'
 import enAdminServer from './locales/en/admin-server.json'
 import enCertificates from './locales/en/certificates.json'
+import enBilling from './locales/en/billing.json'
 
 function detectLanguage(): string {
   const stored = localStorage.getItem('lang')
@@ -70,7 +70,7 @@ const i18n = createI18n({
       register: zhRegister,
       verifyEmail: zhVerifyEmail,
       users: zhUsers, logs: zhLogs,
-      automation: zhAutomation, emailTemplates: zhEmailTemplates,
+      emailTemplates: zhEmailTemplates,
       userServers: zhUserServers,
       serverSettings: zhServerSettings,
       account: zhAccount,
@@ -79,6 +79,7 @@ const i18n = createI18n({
       hosts: zhHosts,
       adminServer: zhAdminServer,
       certificates: zhCertificates,
+      billing: zhBilling,
     },
     en: {
       common: enCommon, nav: enNav, dashboard: enDashboard,
@@ -89,7 +90,7 @@ const i18n = createI18n({
       register: enRegister,
       verifyEmail: enVerifyEmail,
       users: enUsers, logs: enLogs,
-      automation: enAutomation, emailTemplates: enEmailTemplates,
+      emailTemplates: enEmailTemplates,
       userServers: enUserServers,
       serverSettings: enServerSettings,
       account: enAccount,
@@ -98,6 +99,7 @@ const i18n = createI18n({
       hosts: enHosts,
       adminServer: enAdminServer,
       certificates: enCertificates,
+      billing: enBilling,
     },
   },
 })

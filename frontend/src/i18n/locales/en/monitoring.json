@@ -1,23 +1,7 @@
 {
   "node": {
-    "online": "Online",
-    "offline": "Offline",
-    "partial": "Partial",
     "noAgent": "Agent not connected",
-    "running": "running",
-    "containers": "containers",
-    "cpu": "CPU",
-    "mem": "MEM",
-    "dsk": "DSK",
-    "swap": "swap",
-    "load": "load",
-    "up": "up",
-    "lastSeen": "last seen",
-    "ago": "{v} ago",
-    "agent": "Agent",
-    "wings": "Wings",
-    "public": "Public",
-    "cores": "{n}c"
+    "containers": "containers"
   },
   "probe": {
     "failed": "Failed",

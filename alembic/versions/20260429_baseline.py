@@ -279,7 +279,9 @@ CREATE TABLE `manager_orphan_resources` (
 CREATE TABLE `manager_server_meta` (
   `server_id` int(10) unsigned NOT NULL,
   `expiration_date` date DEFAULT NULL,
+  `plan_id` bigint(20) DEFAULT NULL,
   PRIMARY KEY (`server_id`),
+  KEY `idx_server_meta_plan` (`plan_id`),
   CONSTRAINT `manager_server_meta_ibfk_1` FOREIGN KEY (`server_id`) REFERENCES `servers` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
         """
@@ -380,25 +382,25 @@ CREATE TABLE `manager_billing_plans` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `code` varchar(64) NOT NULL,
   `display_name` varchar(128) NOT NULL,
-  `kind` enum('renew','new_purchase') NOT NULL,
   `price_fen` int(11) NOT NULL,
   `days` int(11) NOT NULL,
   `currency_code` char(3) NOT NULL DEFAULT 'CNY',
-  `node_id` int(11) DEFAULT NULL,
-  `egg_id` int(11) DEFAULT NULL,
-  `nest_id` int(11) DEFAULT NULL,
-  `cpu` int(11) DEFAULT NULL,
-  `memory_mb` int(11) DEFAULT NULL,
-  `disk_mb` int(11) DEFAULT NULL,
-  `swap_mb` int(11) DEFAULT 0,
-  `io` int(11) DEFAULT 500,
-  `database_limit` int(11) DEFAULT 0,
-  `backup_limit` int(11) DEFAULT 0,
-  `allocation_limit` int(11) DEFAULT NULL,
+  `period_options` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`period_options`)),
+  `node_id` int(11) NOT NULL,
+  `egg_id` int(11) NOT NULL,
+  `nest_id` int(11) NOT NULL,
+  `cpu` int(11) NOT NULL,
+  `memory_mb` int(11) NOT NULL,
+  `disk_mb` int(11) NOT NULL,
+  `swap_mb` int(11) NOT NULL DEFAULT 0,
+  `io` int(11) NOT NULL DEFAULT 500,
+  `database_limit` int(11) NOT NULL DEFAULT 0,
+  `backup_limit` int(11) NOT NULL DEFAULT 0,
+  `allocation_limit` int(11) NOT NULL,
   `oom_disabled` tinyint(1) NOT NULL DEFAULT 1,
-  `docker_image` varchar(255) DEFAULT NULL,
-  `startup_command` text DEFAULT NULL,
-  `env_defaults` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`env_defaults`)),
+  `docker_image` varchar(255) NOT NULL,
+  `startup_command` text NOT NULL,
+  `env_defaults` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`env_defaults`)),
   `is_active` tinyint(1) NOT NULL DEFAULT 1,
   `display_order` int(11) NOT NULL DEFAULT 0,
   `description_md` text DEFAULT NULL,
@@ -406,9 +408,13 @@ CREATE TABLE `manager_billing_plans` (
   `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_billing_plans_code` (`code`),
-  KEY `idx_billing_plans_active_kind` (`is_active`,`kind`),
+  KEY `idx_billing_plans_active` (`is_active`),
   CONSTRAINT `chk_billing_plans_days_pos` CHECK (`days` > 0),
-  CONSTRAINT `chk_billing_plans_price_pos` CHECK (`price_fen` > 0)
+  CONSTRAINT `chk_billing_plans_price_pos` CHECK (`price_fen` > 0),
+  CONSTRAINT `chk_billing_plans_cpu_pos` CHECK (`cpu` > 0),
+  CONSTRAINT `chk_billing_plans_memory_pos` CHECK (`memory_mb` > 0),
+  CONSTRAINT `chk_billing_plans_disk_pos` CHECK (`disk_mb` > 0),
+  CONSTRAINT `chk_billing_plans_alloc_pos` CHECK (`allocation_limit` > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
         """
     )
@@ -421,6 +427,10 @@ CREATE TABLE `manager_billing_orders` (
   `plan_id` bigint(20) NOT NULL,
   `plan_snapshot` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`plan_snapshot`)),
   `kind` enum('renew','new_purchase') NOT NULL,
+  `period_count` int(11) NOT NULL DEFAULT 1,
+  `discount_pct` decimal(5,2) NOT NULL DEFAULT 0.00,
+  `total_fen` int(11) NOT NULL,
+  `total_days` int(11) NOT NULL,
   `target_server_id` int(11) DEFAULT NULL,
   `reserved_node_id` int(11) DEFAULT NULL,
   `reserved_allocation_id` int(11) DEFAULT NULL,
@@ -447,7 +457,10 @@ CREATE TABLE `manager_billing_orders` (
   CONSTRAINT `fk_billing_orders_plan` FOREIGN KEY (`plan_id`) REFERENCES `manager_billing_plans` (`id`),
   CONSTRAINT `chk_billing_orders_renew_target` CHECK (`kind` <> 'renew' or `target_server_id` is not null),
   CONSTRAINT `chk_billing_orders_received_nonneg` CHECK (`received_fen` >= 0 and `refunded_fen` >= 0),
-  CONSTRAINT `chk_billing_orders_refunded_le_received` CHECK (`refunded_fen` <= `received_fen`)
+  CONSTRAINT `chk_billing_orders_refunded_le_received` CHECK (`refunded_fen` <= `received_fen`),
+  CONSTRAINT `chk_billing_orders_period_count_pos` CHECK (`period_count` > 0),
+  CONSTRAINT `chk_billing_orders_total_fen_pos` CHECK (`total_fen` > 0),
+  CONSTRAINT `chk_billing_orders_total_days_pos` CHECK (`total_days` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
         """
     )

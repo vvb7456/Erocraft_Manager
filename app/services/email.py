@@ -98,6 +98,10 @@ EMAIL_TEMPLATE_API_TO_INTERNAL = {
     "register_verify": "register_verify",
     "alert_fired": "alert_fired",
     "alert_resolved": "alert_resolved",
+    "order_paid": "order_paid",
+    "order_apply_failed": "order_apply_failed",
+    "order_apply_alert": "order_apply_alert",
+    "order_refunded": "order_refunded",
     "preDelete": "pre_delete",
     "createUser": "create_user",
     "passwordReset": "password_reset",
@@ -105,6 +109,10 @@ EMAIL_TEMPLATE_API_TO_INTERNAL = {
     "registerVerify": "register_verify",
     "alertFired": "alert_fired",
     "alertResolved": "alert_resolved",
+    "orderPaid": "order_paid",
+    "orderApplyFailed": "order_apply_failed",
+    "orderApplyAlert": "order_apply_alert",
+    "orderRefunded": "order_refunded",
 }
 
 EMAIL_TEMPLATE_INTERNAL_KEYS = (
@@ -117,6 +125,10 @@ EMAIL_TEMPLATE_INTERNAL_KEYS = (
     "register_verify",
     "alert_fired",
     "alert_resolved",
+    "order_paid",
+    "order_apply_failed",
+    "order_apply_alert",
+    "order_refunded",
 )
 
 _TEMPLATE_FILES = {
@@ -129,6 +141,10 @@ _TEMPLATE_FILES = {
     "register_verify": _PROJECT_ROOT / "templates" / "register_verify_template.json",
     "alert_fired": _PROJECT_ROOT / "templates" / "alert_fired_template.json",
     "alert_resolved": _PROJECT_ROOT / "templates" / "alert_resolved_template.json",
+    "order_paid": _PROJECT_ROOT / "templates" / "order_paid_template.json",
+    "order_apply_failed": _PROJECT_ROOT / "templates" / "order_apply_failed_template.json",
+    "order_apply_alert": _PROJECT_ROOT / "templates" / "order_apply_alert_template.json",
+    "order_refunded": _PROJECT_ROOT / "templates" / "order_refunded_template.json",
 }
 
 _PREVIEW_DUMMY_VALUES: dict[str, str] = {
@@ -151,6 +167,24 @@ _PREVIEW_DUMMY_VALUES: dict[str, str] = {
     "message": "CPU 92.3% > 90% sustained",
     "fired_at": "2026-04-21 14:32:11 UTC",
     "resolved_at": "2026-04-21 14:48:55 UTC",
+    # Billing preview values (BILLING_DESIGN.md §14)
+    "order_no": "O20260430000123",
+    "plan_name": "SillyTavern 高级型",
+    "period_count": "3",
+    "total_days": "90",
+    "total_fen": "5970",
+    "total_yuan": "59.70",
+    "currency_code": "CNY",
+    "paid_at": "2026-04-30 12:34:56 UTC",
+    "applied_at": "2026-04-30 12:35:08 UTC",
+    "server_uuid": "e6777f85-44e9-45f9-ace9-2c2099753e9c",
+    "refund_amount_fen": "5970",
+    "refund_amount_yuan": "59.70",
+    "refund_reason": "用户申请退款",
+    "refund_no": "R20260430000045",
+    "refunded_at": "2026-05-01 09:00:00 UTC",
+    "apply_error": "node has no available allocation",
+    "apply_retry_count": "3",
 }
 
 _PREVIEW_ACTIONS: dict[str, tuple[str, str]] = {
@@ -163,6 +197,10 @@ _PREVIEW_ACTIONS: dict[str, tuple[str, str]] = {
     "register_verify": ("验证邮箱并完成注册", "/#/verify-email?token=preview-token"),
     "alert_fired": ("查看监控面板", "/#/admin/dashboard"),
     "alert_resolved": ("查看监控面板", "/#/admin/dashboard"),
+    "order_paid": ("查看服务器", "/#/servers"),
+    "order_apply_failed": ("", ""),
+    "order_apply_alert": ("查看订单", "/#/admin/billing/orders"),
+    "order_refunded": ("查看订单", "/#/account"),
 }
 
 

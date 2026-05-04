@@ -202,6 +202,34 @@ async def delete_user(db: AsyncSession, user_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 
+async def find_available_allocation(
+    db: AsyncSession,
+    node_id: int,
+    *,
+    lock: bool = True,
+) -> int | None:
+    """Pick the lowest-id unassigned allocation on a node.
+
+    Used by billing order placement (docs/BILLING_DESIGN.md §6) to grab a
+    free port concurrently across racing orders. Combines ``ORDER BY id ASC``
+    + ``FOR UPDATE SKIP LOCKED`` so two orders on the same node see different
+    rows. Caller must hold a transaction; binds the chosen allocation to a
+    server before COMMIT to convert the lock into a permanent assignment.
+
+    Returns ``None`` when the node has no free allocations left.
+    """
+    stmt = (
+        select(Allocation.id)
+        .where(Allocation.node_id == node_id, Allocation.server_id.is_(None))
+        .order_by(Allocation.id.asc())
+        .limit(1)
+    )
+    if lock:
+        stmt = stmt.with_for_update(skip_locked=True)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 @dataclass(slots=True, frozen=True)
 class CreatedServer:
     id: int
@@ -464,6 +492,10 @@ async def update_server_limits(
 _EXPIRATION_LINE_RE = re.compile(
     r"(^|\n)到期时间[：:]\s*\d{4}[/-]\d{1,2}[/-]\d{1,2}(?=\n|$)"
 )
+# 占位阶段写入的「订单 EMxxxx…」行，apply 成功后一并清理。
+_ORDER_PLACEHOLDER_LINE_RE = re.compile(
+    r"(^|\n)订单\s+EM[A-Z0-9]+(?=\n|$)"
+)
 
 
 async def sync_server_expiration_description(
@@ -480,7 +512,8 @@ async def sync_server_expiration_description(
     if server is None:
         raise PanelDBError(f"服务器 {server_id} 不存在")
     old_desc = server.description or ""
-    cleaned = _EXPIRATION_LINE_RE.sub("", old_desc).strip()
+    cleaned = _EXPIRATION_LINE_RE.sub("", old_desc)
+    cleaned = _ORDER_PLACEHOLDER_LINE_RE.sub("", cleaned).strip()
     if expiration_iso is None:
         new_desc = cleaned
     else:

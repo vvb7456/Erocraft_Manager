@@ -1,23 +1,7 @@
 {
   "node": {
-    "online": "在线",
-    "offline": "离线",
-    "partial": "部分在线",
     "noAgent": "Agent 未连接",
-    "running": "运行中",
-    "containers": "容器",
-    "cpu": "CPU",
-    "mem": "内存",
-    "dsk": "磁盘",
-    "swap": "Swap",
-    "load": "负载",
-    "up": "运行",
-    "lastSeen": "上次心跳",
-    "ago": "{v} 前",
-    "agent": "Agent",
-    "wings": "Wings",
-    "public": "公网",
-    "cores": "{n} 核"
+    "containers": "容器"
   },
   "probe": {
     "failed": "失败",

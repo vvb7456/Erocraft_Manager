@@ -97,6 +97,9 @@ export interface AdminServerSummary {
   updatedAt: string | null
   installedAt: string | null
   expirationDate: string | null
+  planId: number | null
+  planCode: string | null
+  planName: string | null
 }
 
 export interface AdminServerDetailResponse {

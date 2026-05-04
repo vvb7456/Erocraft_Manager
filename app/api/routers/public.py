@@ -52,6 +52,11 @@ FORGOT_PASSWORD_GENERIC_MESSAGE = "如果该邮箱已注册，您将收到密码
 class BrandingResponse(BaseModel):
     brand_name: str
     allow_registration: bool
+    support_email: str = ""
+    support_qq_group: str = ""
+    support_qq: str = ""
+    support_wechat: str = ""
+    support_footer_note: str = ""
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -95,8 +100,22 @@ async def _site_url_or_503(db: AsyncSession, *, detail_key: str) -> str:
 @router.get("/public/branding", response_model=BrandingResponse)
 async def get_branding(db: AsyncSession = Depends(get_db)) -> BrandingResponse:
     store = get_settings_store()
-    allow = bool(await store.get(db, "ALLOW_PUBLIC_REGISTRATION", SETTINGS_SPECS["ALLOW_PUBLIC_REGISTRATION"].default_value()))
-    return BrandingResponse(brand_name=await _brand_name(db), allow_registration=allow)
+    keys = (
+        "BRAND_NAME", "ALLOW_PUBLIC_REGISTRATION",
+        "SUPPORT_EMAIL", "SUPPORT_QQ_GROUP", "SUPPORT_QQ",
+        "SUPPORT_WECHAT", "SUPPORT_FOOTER_NOTE",
+    )
+    defaults = {k: SETTINGS_SPECS[k].default_value() for k in keys}
+    values = await store.get_many(db, defaults)
+    return BrandingResponse(
+        brand_name=str(values["BRAND_NAME"]),
+        allow_registration=bool(values["ALLOW_PUBLIC_REGISTRATION"]),
+        support_email=str(values["SUPPORT_EMAIL"] or ""),
+        support_qq_group=str(values["SUPPORT_QQ_GROUP"] or ""),
+        support_qq=str(values["SUPPORT_QQ"] or ""),
+        support_wechat=str(values["SUPPORT_WECHAT"] or ""),
+        support_footer_note=str(values["SUPPORT_FOOTER_NOTE"] or ""),
+    )
 
 
 @router.post("/forgot-password", response_model=MessageResponse)

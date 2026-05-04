@@ -5,12 +5,33 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models.manager import ServerMeta
 from app.db.models.pterodactyl import EggVariable, PteroServer, ServerVariable
+
+
+# Billing 占位服务器行用 ``external_id LIKE 'pending:%'`` 标识 (docs/BILLING_DESIGN.md §6).
+# 所有面向"用户/admin 可见服务器"的 list 查询都需要排除这些占位行。资源统计
+# (dashboard) 不过滤，因为占位仍在物理上预占 CPU/内存/磁盘配额 (§13.5)。
+_PLACEHOLDER_PATTERN = "pending:%"
+
+
+def exclude_placeholders():
+    """SQL clause excluding billing placeholder rows (`external_id LIKE 'pending:%'`).
+
+    Use in any WHERE clause that loads "real" servers. See BILLING_DESIGN.md §13.5.
+    """
+    return or_(
+        PteroServer.external_id.is_(None),
+        PteroServer.external_id.notlike(_PLACEHOLDER_PATTERN),
+    )
+
+
+# Legacy alias kept for internal callers in this module.
+_exclude_placeholders = exclude_placeholders
 
 
 @dataclass(slots=True)
@@ -41,6 +62,7 @@ class ServerRepository:
         result = await db.execute(
             select(PteroServer)
             .options(selectinload(PteroServer.meta))
+            .where(_exclude_placeholders())
             .order_by(PteroServer.id.asc())
         )
         return list(result.scalars().all())
@@ -49,7 +71,7 @@ class ServerRepository:
         result = await db.execute(
             select(PteroServer)
             .options(selectinload(PteroServer.meta))
-            .where(PteroServer.owner_id == owner_id)
+            .where(PteroServer.owner_id == owner_id, _exclude_placeholders())
             .order_by(PteroServer.created_at.desc(), PteroServer.id.desc())
         )
         return list(result.scalars().all())
@@ -125,7 +147,11 @@ class ServerRepository:
             select(PteroServer)
             .join(ServerMeta, ServerMeta.server_id == PteroServer.id)
             .options(selectinload(PteroServer.meta))
-            .where(ServerMeta.expiration_date < today, PteroServer.status.is_(None))
+            .where(
+                ServerMeta.expiration_date < today,
+                PteroServer.status.is_(None),
+                _exclude_placeholders(),
+            )
             .order_by(PteroServer.id.asc())
         )
         return list(result.scalars().all())
@@ -135,7 +161,7 @@ class ServerRepository:
             select(PteroServer)
             .join(ServerMeta, ServerMeta.server_id == PteroServer.id)
             .options(selectinload(PteroServer.meta))
-            .where(ServerMeta.expiration_date == target_date)
+            .where(ServerMeta.expiration_date == target_date, _exclude_placeholders())
             .order_by(PteroServer.id.asc())
         )
         return list(result.scalars().all())
@@ -145,7 +171,7 @@ class ServerRepository:
             select(PteroServer)
             .join(ServerMeta, ServerMeta.server_id == PteroServer.id)
             .options(selectinload(PteroServer.meta))
-            .where(ServerMeta.expiration_date <= threshold)
+            .where(ServerMeta.expiration_date <= threshold, _exclude_placeholders())
             .order_by(PteroServer.id.asc())
         )
         return list(result.scalars().all())

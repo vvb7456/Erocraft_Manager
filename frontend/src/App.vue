@@ -4,6 +4,7 @@ import { RouterView, useRoute } from 'vue-router'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 import ConfirmProvider from '@/components/ui/ConfirmProvider.vue'
+import RenewFlowProvider from '@/components/billing/RenewFlowProvider.vue'
 import { provideToast } from '@/composables/useToast'
 import { useTheme } from '@/composables/useTheme'
 import { useAppStore } from '@/stores/app'
@@ -50,5 +51,6 @@ function onOverlayClick() {
   </template>
 
   <ToastContainer />
+  <RenewFlowProvider />
   </ConfirmProvider>
 </template>

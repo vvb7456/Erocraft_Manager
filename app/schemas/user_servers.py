@@ -51,6 +51,31 @@ class UserServerItem(BaseModel):
     expirationDate: str | None
     daysLeft: int | None
     address: str | None
+    planId: int | None = None
+    planCode: str | None = None
+    planName: str | None = None
+    hasUpgradeOptions: bool = False
+
+
+class UpgradeOption(BaseModel):
+    planCode: str
+    planName: str
+    displayOrder: int
+    categoryLabel: str | None
+    descriptionMd: str | None
+    cpu: int
+    memoryMb: int
+    diskMb: int
+    diffFen: int
+    priceFen: int
+
+
+class UpgradeOptionsResponse(BaseModel):
+    serverId: int
+    serverName: str
+    currentPlanName: str | None
+    remainingDays: int
+    options: list[UpgradeOption]
 
 
 class UserServerDetail(UserServerItem):

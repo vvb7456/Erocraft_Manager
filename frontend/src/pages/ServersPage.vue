@@ -22,6 +22,7 @@ import CardKV from '@/components/ui/CardKV.vue'
 import FormField from '@/components/form/FormField.vue'
 import CreateServerModal from '@/components/servers/CreateServerModal.vue'
 import RenewBottomSheet from '@/components/servers/RenewBottomSheet.vue'
+import PlanChangeModal from '@/components/servers/PlanChangeModal.vue'
 
 defineOptions({ name: 'ServersPage' })
 
@@ -44,6 +45,9 @@ interface ServerItem {
   daysLeft: number | null
   statusLabel: 'normal' | 'expiring_soon' | 'expired' | 'permanent'
   isSuspended: boolean
+  planId: number | null
+  planCode: string | null
+  planName: string | null
 }
 
 interface BatchServersResult {
@@ -99,6 +103,7 @@ const batchActionOptions = computed(() => [
   { value: 'suspend', label: t('servers.batch.suspend') },
   { value: 'unsuspend', label: t('servers.batch.unsuspend') },
   { value: 'renew', label: t('servers.batch.renew') },
+  { value: 'update_plan', label: t('servers.batch.update_plan') },
   { value: 'email', label: t('servers.batch.email') },
   { value: 'delete', label: t('servers.batch.delete') },
 ])
@@ -323,6 +328,11 @@ async function executeBatchAction() {
     return
   }
 
+  if (action === 'update_plan') {
+    openPlanChangeBatch()
+    return
+  }
+
   if (action === 'delete') {
     const ok = await confirm({
       title: t('servers.confirm.batch_delete_title'),
@@ -367,6 +377,75 @@ async function doBatchRenew() {
     selectedIds.value = new Set()
     batchActionType.value = ''
     await loadServers(true)
+  }
+}
+
+// ── Plan Change Modal ──
+const planModalOpen = ref(false)
+const planModalBatchMode = ref(false)
+const planModalServer = ref<ServerItem | null>(null)
+const planModalBatchCount = ref(0)
+
+function openPlanChangeForServer(s: ServerItem) {
+  planModalBatchMode.value = false
+  planModalServer.value = s
+  planModalOpen.value = true
+}
+
+function openPlanChangeBatch() {
+  planModalBatchMode.value = true
+  planModalServer.value = null
+  planModalBatchCount.value = selectedIds.value.size
+  planModalOpen.value = true
+}
+
+async function onPlanModalConfirmed(planId: number | null) {
+  if (planModalBatchMode.value) {
+    const ids = [...selectedIds.value]
+    if (!ids.length) {
+      planModalOpen.value = false
+      return
+    }
+    const res = await post<BatchServersResult>('/api/admin/servers/batch', {
+      action: 'update_plan',
+      serverIds: ids,
+      planId,
+    })
+    if (res) {
+      const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
+      toast(res.message, tone)
+      selectedIds.value = new Set()
+      batchActionType.value = ''
+      planModalOpen.value = false
+      await loadServers(true)
+    }
+  } else {
+    const s = planModalServer.value
+    if (!s) {
+      planModalOpen.value = false
+      return
+    }
+    try {
+      const res = await fetch(`/api/admin/servers/${s.pteroId}/plan`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId }),
+      })
+      if (res.ok) {
+        toast(t('servers.toast.plan_updated'), 'success')
+        planModalOpen.value = false
+        await loadServers(true)
+      } else {
+        let msg = `HTTP ${res.status}`
+        try {
+          const body = await res.json()
+          msg = body.detail || body.error || body.message || msg
+        } catch { /* ignore */ }
+        toast(msg, 'error')
+      }
+    } catch {
+      toast(t('common.apiErrors.network'), 'error')
+    }
   }
 }
 
@@ -484,10 +563,12 @@ function openMobileRenew(s: ServerItem) {
           {{ t('servers.table.id') }}
           <MsIcon v-if="sortBy === 'id'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
         </th>
+        <th class="col-status">{{ t('servers.table.panel_status') }}</th>
         <th class="col-name sortable" @click="toggleSort('server_name')">
           {{ t('servers.table.name') }}
           <MsIcon v-if="sortBy === 'server_name'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
         </th>
+        <th class="col-plan">{{ t('servers.table.plan') }}</th>
         <th class="col-egg">{{ t('servers.table.egg') }}</th>
         <th class="col-owner sortable" @click="toggleSort('owner_username')">
           {{ t('servers.table.owner') }}
@@ -497,7 +578,6 @@ function openMobileRenew(s: ServerItem) {
           {{ t('servers.table.expiration') }}
           <MsIcon v-if="sortBy === 'expiration_date'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
         </th>
-        <th class="col-status">{{ t('servers.table.panel_status') }}</th>
         <th class="col-actions">{{ t('servers.table.actions') }}</th>
       </template>
       <template #row="{ item: s }">
@@ -505,10 +585,19 @@ function openMobileRenew(s: ServerItem) {
           <input type="checkbox" :checked="selectedIds.has(s.pteroId)" @change="toggleSelect(s.pteroId)" />
         </td>
         <td class="col-id">{{ s.pteroId }}</td>
+        <td class="col-status">
+          <Badge :color="s.isSuspended ? 'var(--red)' : 'var(--green)'">
+            {{ panelStatusText(s) }}
+          </Badge>
+        </td>
         <td class="col-name">
           <a href="#" class="server-link" @click.prevent="router.push(`/admin/servers/${s.pteroId}`)">
             {{ s.name }}
           </a>
+        </td>
+        <td class="col-plan">
+          <span v-if="s.planName" class="plan-cell">{{ s.planName }}</span>
+          <span v-else class="plan-cell--none">—</span>
         </td>
         <td class="col-egg">{{ s.eggName || '—' }}</td>
         <td class="col-owner">
@@ -517,11 +606,6 @@ function openMobileRenew(s: ServerItem) {
         </td>
         <td class="col-expiry">
           <span :style="{ color: statusColor(s) }">{{ expirationText(s) }}</span>
-        </td>
-        <td class="col-status">
-          <Badge :color="s.isSuspended ? 'var(--red)' : 'var(--green)'">
-            {{ panelStatusText(s) }}
-          </Badge>
         </td>
         <td class="col-actions">
           <div class="action-group">
@@ -536,6 +620,9 @@ function openMobileRenew(s: ServerItem) {
                 <MsIcon name="update" size="xs" /> {{ t('servers.action.renew') }}
               </BaseButton>
             </div>
+            <BaseButton size="sm" @click="openPlanChangeForServer(s)">
+              <MsIcon name="swap_horiz" size="xs" /> {{ t('servers.action.update_plan') }}
+            </BaseButton>
             <BaseButton size="sm" :variant="s.isSuspended ? 'success' : 'warning'" @click="toggleSuspend(s)">
               <MsIcon :name="s.isSuspended ? 'check_circle' : 'block'" size="xs" />
               {{ s.isSuspended ? t('servers.action.unsuspend') : t('servers.action.suspend') }}
@@ -562,6 +649,7 @@ function openMobileRenew(s: ServerItem) {
           </div>
           <div class="card-detail">
             <CardKV :label="t('servers.table.owner')">{{ s.ownerUsername || '—' }}</CardKV>
+            <CardKV :label="t('servers.table.plan')">{{ s.planName || '—' }}</CardKV>
             <CardKV :label="t('servers.table.egg')">{{ s.eggName || '—' }}</CardKV>
           </div>
         </CardTap>
@@ -579,6 +667,9 @@ function openMobileRenew(s: ServerItem) {
         </button>
         <button @click="mobileActionOpen = false; openMobileRenew(mobileActionServer!)">
           <MsIcon name="update" size="sm" /> {{ t('servers.action.renew') }}
+        </button>
+        <button @click="mobileActionOpen = false; openPlanChangeForServer(mobileActionServer!)">
+          <MsIcon name="swap_horiz" size="sm" /> {{ t('servers.action.update_plan') }}
         </button>
         <button @click="mobileActionOpen = false; toggleSuspend(mobileActionServer!)">
           <MsIcon :name="mobileActionServer.isSuspended ? 'check_circle' : 'block'" size="sm" />
@@ -613,6 +704,17 @@ function openMobileRenew(s: ServerItem) {
 
   <!-- Create Server Modal -->
   <CreateServerModal v-model="createModalOpen" :pre-select-username="newForUser" @created="loadServers(true)" />
+
+  <!-- Plan Change Modal -->
+  <PlanChangeModal
+    v-model="planModalOpen"
+    :batch-mode="planModalBatchMode"
+    :batch-count="planModalBatchCount"
+    :server-name="planModalServer?.name"
+    :current-plan-id="planModalServer?.planId ?? null"
+    :current-plan-name="planModalServer?.planName ?? null"
+    @confirmed="onPlanModalConfirmed"
+  />
 </template>
 
 <style scoped>
@@ -641,10 +743,14 @@ function openMobileRenew(s: ServerItem) {
   white-space: nowrap;
 }
 .col-name { width: 18%; }
-.col-egg { width: 14%; color: var(--t2); font-size: .85rem; }
+.col-plan { width: 12%; color: var(--t2); font-size: .85rem; }
+.col-egg { width: 12%; color: var(--t2); font-size: .85rem; }
 .col-owner { width: 10%; }
 .col-expiry { width: 11%; }
 .col-status { width: 6%; }
+
+.plan-cell { color: var(--t1); }
+.plan-cell--none { color: var(--t3); }
 
 .server-link,
 .owner-link {

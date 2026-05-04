@@ -16,6 +16,7 @@
     "expiration": "到期时间",
     "panel_status": "状态",
     "egg": "预设",
+    "plan": "套餐",
     "actions": "操作"
   },
   "status": {
@@ -45,7 +46,8 @@
     "renew_days": "续期天数",
     "open_detail": "详情",
     "quick_renew": "快速续期",
-    "custom_date": "自定义日期"
+    "custom_date": "自定义日期",
+    "update_plan": "修改套餐"
   },
   "batch": {
     "select_action": "批量操作...",
@@ -55,7 +57,8 @@
     "unsuspend": "解冻",
     "renew": "续期",
     "email": "发送通知邮件",
-    "delete": "删除"
+    "delete": "删除",
+    "update_plan": "修改套餐"
   },
   "confirm": {
     "delete_title": "删除服务器",
@@ -70,6 +73,20 @@
     "unsuspend_msg": "确定要解冻服务器「{name}」吗？"
   },
   "empty": "暂无服务器数据",
+  "toast": {
+    "plan_updated": "套餐绑定已更新"
+  },
+  "modal": {
+    "updatePlan": {
+      "title": "修改套餐绑定",
+      "batchTitle": "批量修改套餐绑定（{n} 台）",
+      "currentBinding": "当前绑定",
+      "batchSubject": "将对选中的 {n} 台服务器统一应用以下绑定",
+      "targetPlan": "目标套餐",
+      "unbindOption": "— 解除绑定（无套餐） —",
+      "inactiveTag": "已下架"
+    }
+  },
   "pagination": {
     "per_page": "条/页"
   },

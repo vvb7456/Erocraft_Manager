@@ -1,0 +1,4 @@
+{
+    "subject": "【{{brand_name}}】订单开通告警：{{order_no}}",
+    "body": "订单 {{order_no}} 的自动开通流程出现异常，需要人工介入。\n\n用户：{{username}}（{{email}}）\n套餐：{{plan_name}}\n金额：¥{{total_yuan}}\n已重试：{{apply_retry_count}} 次\n失败原因：{{apply_error}}\n\n请前往管理后台 → 计费 → 订单查看详情。"
+}

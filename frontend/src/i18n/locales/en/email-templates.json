@@ -1,60 +1,55 @@
 {
   "title": "Email Templates",
-  "save": "Save Template",
   "saved": "Template saved",
-  "savedAll": "All changes saved",
-  "saveSomeFailed": "{n} template(s) failed to save",
-  "saveCurrent": "Save Current",
-  "saveAll": "Save All ({n})",
-  "discardAll": "Discard",
-  "unsavedHint": "{n} template(s) have unsaved changes",
   "unsavedTitle": "Unsaved Changes",
-  "unsavedMessage": "{n} template(s) have unsaved changes. Save them all?",
+  "unsavedMessage": "This template has unsaved changes. Save before leaving?",
   "unsavedSave": "Save & Leave",
   "unsavedDiscard": "Discard & Leave",
   "unsavedStay": "Keep Editing",
-  "editor": "Template Editor",
   "preview": "Live Preview",
-  "previewSubject": "Preview Subject",
   "previewEmpty": "No preview available",
   "subject": "Email Subject",
   "body": "Email Body",
+  "varCopied": "Copied {key}",
   "placeholders": "Available Variables",
   "bulk": {
-    "title": "Bulk Notification",
-    "desc": "Used for general notices sent manually by administrators."
+    "title": "Bulk Notification"
   },
   "reminder": {
-    "title": "Expiration Reminder",
-    "desc": "Used for automatic emails sent before server expiration."
+    "title": "Expiration Reminder"
   },
   "preDelete": {
-    "title": "Pre-Delete Warning",
-    "desc": "Used for the final notice before server deletion."
+    "title": "Pre-Delete Warning"
   },
   "createUser": {
-    "title": "New User Notification",
-    "desc": "Used to guide a new user to set their account password."
+    "title": "New User Notification"
   },
   "passwordReset": {
-    "title": "Password Reset",
-    "desc": "Used for forgot-password reset link emails."
+    "title": "Password Reset"
   },
   "emailChange": {
-    "title": "Email Change Confirmation",
-    "desc": "Used to confirm an account email change request."
+    "title": "Email Change Confirmation"
   },
   "registerVerify": {
-    "title": "Registration Verification",
-    "desc": "Sent after public sign-up to verify the email address and activate the account."
+    "title": "Registration Verification"
   },
   "alertFired": {
-    "title": "Alert Fired",
-    "desc": "Sent to admins when a node monitoring alert is triggered."
+    "title": "Alert Fired"
   },
   "alertResolved": {
-    "title": "Alert Resolved",
-    "desc": "Sent to admins when a node monitoring alert clears."
+    "title": "Alert Resolved"
+  },
+  "orderPaid": {
+    "title": "Order Paid"
+  },
+  "orderApplyFailed": {
+    "title": "Order Apply Failed"
+  },
+  "orderApplyAlert": {
+    "title": "Order Apply Alert"
+  },
+  "orderRefunded": {
+    "title": "Order Refunded"
   },
   "var": {
     "brand_name": "Brand Name",
@@ -79,6 +74,21 @@
     "severity_label": "Severity Label",
     "message": "Alert Message",
     "fired_at": "Fired At",
-    "resolved_at": "Resolved At"
+    "resolved_at": "Resolved At",
+    "order_no": "Order Number",
+    "plan_name": "Plan Name",
+    "period_count": "Periods",
+    "total_days": "Total Days",
+    "total_yuan": "Total Amount (Yuan)",
+    "currency_code": "Currency Code",
+    "paid_at": "Paid At",
+    "applied_at": "Applied At",
+    "server_uuid": "Server UUID",
+    "refund_no": "Refund Number",
+    "refund_amount_yuan": "Refund Amount (Yuan)",
+    "refund_reason": "Refund Reason",
+    "refunded_at": "Refunded At",
+    "apply_error": "Apply Error",
+    "apply_retry_count": "Apply Retry Count"
   }
 }

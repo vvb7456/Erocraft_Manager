@@ -1,12 +1,9 @@
 {
   "listSep": ", ",
-  "clipboard": {
-    "copied": "Copied",
-    "failed": "Copy failed, please select and copy the text manually",
-    "empty": "Nothing to copy"
-  },
   "btn": {
     "save": "Save",
+    "saveDirty": "Save changes",
+    "discard": "Discard changes",
     "cancel": "Cancel",
     "delete": "Delete",
     "close": "Close",
@@ -26,9 +23,9 @@
   },
   "theme_toggle": "Toggle Theme",
   "no_matches": "No matches",
-  "search_hint": "Search\u2026",
+  "search_hint": "Search…",
   "empty": "No data",
-  "filter_hint": "Filter\u2026",
+  "filter_hint": "Filter…",
   "chip_more": "+{n} more",
   "chip_collapse": "Collapse",
   "footer": {
@@ -113,5 +110,6 @@
       "site_url_not_configured": "The system has not configured a public site URL. Please contact an administrator.",
       "create_failed": "Failed to create the account. Please register again or contact an administrator"
     }
-  }
+  },
+  "loading": "Loading…"
 }

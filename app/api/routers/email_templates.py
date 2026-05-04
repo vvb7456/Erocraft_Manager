@@ -50,6 +50,10 @@ async def get_email_templates(
         registerVerify=_payload("register_verify"),
         alertFired=_payload("alert_fired"),
         alertResolved=_payload("alert_resolved"),
+        orderPaid=_payload("order_paid"),
+        orderApplyFailed=_payload("order_apply_failed"),
+        orderApplyAlert=_payload("order_apply_alert"),
+        orderRefunded=_payload("order_refunded"),
     )
 
 

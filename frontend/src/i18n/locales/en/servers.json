@@ -16,6 +16,7 @@
     "expiration": "Expiration",
     "panel_status": "Status",
     "egg": "Egg",
+    "plan": "Plan",
     "actions": "Actions"
   },
   "status": {
@@ -45,7 +46,8 @@
     "renew_days": "Renew Days",
     "open_detail": "Detail",
     "quick_renew": "Quick Renew",
-    "custom_date": "Custom Date"
+    "custom_date": "Custom Date",
+    "update_plan": "Change Plan"
   },
   "batch": {
     "select_action": "Batch action...",
@@ -55,7 +57,8 @@
     "unsuspend": "Unsuspend",
     "renew": "Renew",
     "email": "Send Notification",
-    "delete": "Delete"
+    "delete": "Delete",
+    "update_plan": "Change Plan"
   },
   "confirm": {
     "delete_title": "Delete Server",
@@ -70,6 +73,20 @@
     "unsuspend_msg": "Are you sure you want to unsuspend server \"{name}\"?"
   },
   "empty": "No servers found",
+  "toast": {
+    "plan_updated": "Plan binding updated"
+  },
+  "modal": {
+    "updatePlan": {
+      "title": "Change Plan Binding",
+      "batchTitle": "Batch Change Plan Binding ({n} servers)",
+      "currentBinding": "Current Binding",
+      "batchSubject": "The following binding will be applied to {n} selected server(s)",
+      "targetPlan": "Target Plan",
+      "unbindOption": "— Unbind (No Plan) —",
+      "inactiveTag": "Inactive"
+    }
+  },
   "pagination": {
     "per_page": "per page"
   },

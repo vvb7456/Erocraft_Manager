@@ -40,6 +40,7 @@ interface ServerDetail {
   expirationDate: string | null
   daysLeft: number | null
   address: string | null
+  planId: number | null
   tunnel: {
     status: string
     hostname: string
@@ -125,6 +126,11 @@ function onTabChange(key: string) {
   router.push({ name: key, params: { id: serverId.value } })
 }
 
+const headerBreadcrumbs = computed(() => [
+  { label: t('userServers.title'), to: { name: 'user-servers' } },
+  { label: server.value?.name || '' },
+])
+
 // Read live state from the centralized store (sidebar already polling)
 const liveState = computed(() => {
   if (!server.value) return 'offline'
@@ -179,7 +185,7 @@ watch([stale, isSuspended, isInstalling], ([isStale, isSusp, isInst]) => {
   <LoadingCenter v-if="loading && !server" />
 
   <template v-else-if="server">
-    <PageHeader icon="dns" :title="server.name">
+    <PageHeader icon="dns" :title="server.name" :breadcrumbs="headerBreadcrumbs">
       <template #badge>
         <Badge :color="statusBadge().color">
           <StatusDot :status="dotKey" size="sm" />

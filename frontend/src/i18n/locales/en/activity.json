@@ -12,46 +12,11 @@
     "console": "Console",
     "system": "System"
   },
-  "today": "Today",
-  "yesterday": "Yesterday",
   "col": {
     "time": "Time",
     "event": "Event",
     "detail": "Details",
-    "user": "User",
-    "ip": "IP"
-  },
-  "server": {
-    "power": {
-      "start": "Started server",
-      "stop": "Stopped server",
-      "restart": "Restarted server",
-      "kill": "Force killed server"
-    },
-    "file": {
-      "read": "Read file",
-      "download": "Downloaded file",
-      "write": "Wrote file",
-      "create-directory": "Created directory",
-      "rename": "Renamed file",
-      "copy": "Copied file",
-      "compress": "Compressed files",
-      "decompress": "Decompressed file",
-      "delete": "Deleted files",
-      "pull": "Pulled remote file",
-      "uploaded": "Uploaded file"
-    },
-    "startup": {
-      "edit": "Edited startup variable"
-    },
-    "settings": {
-      "rename": "Renamed server",
-      "description": "Changed server description"
-    },
-    "console": {
-      "command": "Sent console command"
-    },
-    "reinstall": "Reinstalled server"
+    "user": "User"
   },
   "props": {
     "filesCount": "and {n} more files",

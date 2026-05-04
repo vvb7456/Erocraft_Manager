@@ -1,4 +1,4 @@
 {
-    "subject": "您的账户已创建",
-    "body": "您的账户已创建完成。\n\n用户名：{{username}}\n\n请点击下方按钮设置账户密码。"
+    "subject": "【{{brand_name}}】账户已创建",
+    "body": "您在 {{brand_name}} 的账户已创建完成。\n\n用户名：{{username}}\n\n请设置账户密码以开始使用。"
 }

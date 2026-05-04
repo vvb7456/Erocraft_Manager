@@ -5,12 +5,15 @@ import { useAppStore } from '@/stores/app'
 import { useClipboard } from '@/composables/useClipboard'
 import HelpTip from '@/components/ui/HelpTip.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
+import SupportModal from '@/components/billing/SupportModal.vue'
 
 defineOptions({ name: 'ServerMorePage' })
 
 const { t } = useI18n({ useScope: 'global' })
 const { copy: copyValue } = useClipboard()
 const app = useAppStore()
+
+const supportOpen = ref(false)
 
 interface ServerCtx {
   id: number
@@ -152,7 +155,22 @@ const clients = computed<ClientLink[]>(() => [
         <MsIcon name="open_in_new" size="sm" />
       </a>
     </div>
+
+    <div class="m-sub">
+      {{ t('userServers.connectPage.supportSection') }}
+    </div>
+
+    <div class="kv-row">
+      <span class="support-hint">
+        {{ t('billing.orders.supportHint') }}
+        <a href="#" class="support-link" @click.prevent="supportOpen = true">
+          {{ t('billing.orders.supportLink') }}
+        </a>
+      </span>
+    </div>
   </div>
+
+  <SupportModal v-model="supportOpen" />
 </template>
 
 <style scoped>
@@ -244,6 +262,24 @@ const clients = computed<ClientLink[]>(() => [
 }
 
 .kv-row__link:hover {
+  text-decoration: underline;
+}
+
+.support-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--text-sm);
+  color: var(--t2);
+}
+
+.support-link {
+  color: var(--ac);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.support-link:hover {
   text-decoration: underline;
 }
 </style>

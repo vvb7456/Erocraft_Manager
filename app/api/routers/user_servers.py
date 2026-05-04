@@ -20,7 +20,9 @@ from app.core.runtime_settings import AUTOMATION_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.time import local_today
 from app.db.models.pterodactyl import ActivityLog, ActivityLogSubject, PteroServer, PteroUser
+from app.db.models.billing import BillingPlan
 from app.db.repositories.servers import server_repository
+from app.services.billing._pricing import remaining_billable_days, upgrade_diff_fen
 from app.schemas.user_servers import (
     PowerActionRequest,
     ReinstallRequest,
@@ -29,6 +31,8 @@ from app.schemas.user_servers import (
     ServerResourcesResponse,
     StartupVariableItem,
     StartupVariableUpdate,
+    UpgradeOption,
+    UpgradeOptionsResponse,
     UserActivityActor,
     UserActivityLogItem,
     UserActivityLogsResponse,
@@ -61,7 +65,13 @@ async def _today(db: AsyncSession) -> date:
     return local_today(str(timezone_name))
 
 
-def _serialize_server(server: PteroServer, today: date) -> UserServerItem:
+def _serialize_server(
+    server: PteroServer,
+    today: date,
+    *,
+    plan: BillingPlan | None = None,
+    has_upgrade_options: bool = False,
+) -> UserServerItem:
     expiration_date = server.expiration_date
     days_left = (expiration_date - today).days if expiration_date is not None else None
     allocation_ip = server.allocation.ip_alias or server.allocation.ip if server.allocation else None
@@ -101,6 +111,10 @@ def _serialize_server(server: PteroServer, today: date) -> UserServerItem:
         expirationDate=expiration_date.isoformat() if expiration_date else None,
         daysLeft=days_left,
         address=address,
+        planId=server.meta.plan_id if server.meta else None,
+        planCode=plan.code if plan else None,
+        planName=plan.display_name if plan else None,
+        hasUpgradeOptions=has_upgrade_options,
     )
 
 
@@ -133,7 +147,51 @@ async def list_user_servers(
         servers = await server_repository.list_for_admin(db)
     else:
         servers = await server_repository.list_for_owner(db, current_user.id)
-    return [_serialize_server(server, today) for server in servers]
+
+    # Bulk load plans to avoid N+1
+    plan_ids = {s.meta.plan_id for s in servers if s.meta and s.meta.plan_id}
+    plans: dict[int, BillingPlan] = {}
+    if plan_ids:
+        rows = await db.execute(select(BillingPlan).where(BillingPlan.id.in_(plan_ids)))
+        plans = {p.id: p for p in rows.scalars().all()}
+
+    # Load all active plans for hasUpgradeOptions calculation
+    active_rows = await db.execute(
+        select(BillingPlan).where(BillingPlan.is_active.is_(True))
+    )
+    active_plans = list(active_rows.scalars().all())
+
+    # Group active plans by egg_id for quick lookup
+    active_by_egg: dict[int, list[BillingPlan]] = {}
+    for p in active_plans:
+        active_by_egg.setdefault(p.egg_id, []).append(p)
+
+    def _has_upgrade(server: PteroServer) -> bool:
+        if server.is_suspended:
+            return False
+        if server.expiration_date is not None and server.expiration_date < today:
+            return False
+        plan_id = server.meta.plan_id if server.meta else None
+        if plan_id is None:
+            return False
+        old_plan = plans.get(plan_id)
+        if old_plan is None:
+            return False
+        candidates = active_by_egg.get(server.egg_id, [])
+        return any(
+            p.id != old_plan.id and p.price_fen > old_plan.price_fen
+            for p in candidates
+        )
+
+    return [
+        _serialize_server(
+            server,
+            today,
+            plan=plans.get(server.meta.plan_id) if server.meta and server.meta.plan_id else None,
+            has_upgrade_options=_has_upgrade(server),
+        )
+        for server in servers
+    ]
 
 
 @router.get("/servers/{server_id}", response_model=UserServerDetail)
@@ -142,7 +200,22 @@ async def get_user_server_detail(
     db: AsyncSession = Depends(get_db),
 ) -> UserServerDetail:
     today = await _today(db)
-    item = _serialize_server(server, today)
+    plan: BillingPlan | None = None
+    has_upgrade = False
+    plan_id = server.meta.plan_id if server.meta else None
+    if plan_id:
+        plan = await db.get(BillingPlan, plan_id)
+    if plan and not server.is_suspended and (server.expiration_date is None or server.expiration_date >= today):
+        candidates = await db.execute(
+            select(BillingPlan).where(
+                BillingPlan.is_active.is_(True),
+                BillingPlan.egg_id == server.egg_id,
+                BillingPlan.price_fen > plan.price_fen,
+                BillingPlan.id != plan.id,
+            )
+        )
+        has_upgrade = candidates.first() is not None
+    item = _serialize_server(server, today, plan=plan, has_upgrade_options=has_upgrade)
 
     # Tunnel info — best-effort lookup; failures should not break the
     # core detail response (the Network tab will surface them on its own).
@@ -177,6 +250,54 @@ async def get_user_server_detail(
     payload["tunnel"] = tunnel_info
     payload["hostTunnelReady"] = host_tunnel_ready
     return UserServerDetail.model_validate(payload)
+
+
+@router.get("/servers/{server_id}/upgrade-options", response_model=UpgradeOptionsResponse)
+async def get_upgrade_options(
+    server: PteroServer = Depends(get_owned_server),
+    db: AsyncSession = Depends(get_db),
+) -> UpgradeOptionsResponse:
+    today = await _today(db)
+    plan_id = server.meta.plan_id if server.meta else None
+    if plan_id is None:
+        return UpgradeOptionsResponse(
+            serverId=server.id, serverName=server.name,
+            currentPlanName=None, remainingDays=0, options=[],
+        )
+    old_plan = await db.get(BillingPlan, plan_id)
+    if old_plan is None:
+        return UpgradeOptionsResponse(
+            serverId=server.id, serverName=server.name,
+            currentPlanName=None, remainingDays=0, options=[],
+        )
+    remaining = remaining_billable_days(server.expiration_date, today)
+    rows = await db.execute(
+        select(BillingPlan).where(
+            BillingPlan.is_active.is_(True),
+            BillingPlan.egg_id == server.egg_id,
+            BillingPlan.price_fen > old_plan.price_fen,
+            BillingPlan.id != old_plan.id,
+        ).order_by(BillingPlan.display_order.asc(), BillingPlan.price_fen.asc())
+    )
+    candidates = rows.scalars().all()
+    options = []
+    for p in candidates:
+        diff_fen = upgrade_diff_fen(old_plan, p, remaining)
+        if diff_fen <= 0:
+            continue
+        options.append(UpgradeOption(
+            planCode=p.code, planName=p.display_name,
+            displayOrder=p.display_order, categoryLabel=p.category_label,
+            descriptionMd=p.description_md,
+            cpu=p.cpu, memoryMb=p.memory_mb, diskMb=p.disk_mb,
+            diffFen=diff_fen,
+            priceFen=p.price_fen,
+        ))
+    return UpgradeOptionsResponse(
+        serverId=server.id, serverName=server.name,
+        currentPlanName=old_plan.display_name,
+        remainingDays=remaining, options=options,
+    )
 
 
 @router.get("/servers/{server_id}/resources", response_model=ServerResourcesResponse)

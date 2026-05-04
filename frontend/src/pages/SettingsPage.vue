@@ -23,6 +23,7 @@ import DirtyBar from '@/components/ui/DirtyBar.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import AccountSettingsPanel from '@/components/account/AccountSettingsPanel.vue'
+import ChipSelect from '@/components/ui/ChipSelect.vue'
 import { TIMEZONE_OPTIONS } from '@/config/timezones'
 
 defineOptions({ name: 'SettingsPage' })
@@ -38,6 +39,7 @@ const activeTab = ref('account')
 const tabs = computed<TabItem[]>(() => [
   { key: 'account',    label: t('settings.account.title'),  icon: 'lock' },
   { key: 'smtp',       label: t('settings.smtp.title'),     icon: 'mail' },
+  { key: 'payment',    label: t('settings.payment.title'),  icon: 'payments' },
   { key: 'branding',   label: t('settings.branding.title'), icon: 'palette' },
   { key: 'defaults',   label: t('settings.defaults.title'), icon: 'tune' },
   { key: 'automation', label: t('settings.automation.title'), icon: 'schedule' },
@@ -46,6 +48,7 @@ const tabs = computed<TabItem[]>(() => [
 // ── State ──
 const initialLoading = ref(true)
 const settings = ref<Record<string, any>>({})
+const billingSettings = ref<Record<string, any>>({})
 const automation = ref({
   AUTOMATION_RUN_HOUR: 2,
   AUTOMATION_RUN_MINUTE: 0,
@@ -58,6 +61,25 @@ const automation = ref({
   TIMEZONE: 'Asia/Shanghai',
 })
 const saveLoading = ref(false)
+
+// ── Payment tab helpers ──
+const GATEWAY_CODES = ['hupijiao'] as const
+const activeGateway = ref<string>('hupijiao')
+const gatewayChips = computed(() =>
+  GATEWAY_CODES.map(code => ({ value: code, label: getBillingStr(`${code.toUpperCase()}_DISPLAY_NAME`) || code }))
+)
+function getBillingStr(key: string, def = ''): string { return billingSettings.value[key] ?? def }
+function setBillingStr(key: string, val: string) { billingSettings.value[key] = val }
+function getBillingNum(key: string, def = 0): number { return Number(billingSettings.value[key]) || def }
+function setBillingNum(key: string, val: string | number | boolean | (string | number | boolean)[]) {
+  const v = Array.isArray(val) ? val[0] : val
+  billingSettings.value[key] = Number(v)
+}
+function getBillingBool(key: string): boolean {
+  const v = billingSettings.value[key]
+  return v === true || v === 'true' || v === '1'
+}
+function setBillingBool(key: string, val: boolean) { billingSettings.value[key] = val }
 
 // ── SMTP test email ──
 const testEmailRecipient = ref('')
@@ -119,14 +141,16 @@ watch(() => getNum('DEFAULT_NEST_ID'), async (nestId) => {
 
 // ── Fetch ──
 onMounted(async () => {
-  const [settingsData, autoData, nestsRes, nodesRes] = await Promise.all([
+  const [settingsData, autoData, billingData, nestsRes, nodesRes] = await Promise.all([
     get<Record<string, any>>('/api/admin/settings'),
     get<Record<string, any>>('/api/admin/automation'),
+    get<Record<string, any>>('/api/admin/billing/settings'),
     get<{ nests: any[] }>('/api/admin/resources/nests'),
     get<{ nodes: any[] }>('/api/admin/resources/nodes'),
   ])
   if (settingsData) settings.value = settingsData
   if (autoData) Object.assign(automation.value, autoData)
+  if (billingData) billingSettings.value = billingData
   if (nestsRes) nestList.value = nestsRes.nests
   if (nodesRes) nodeList.value = nodesRes.nodes
   const nestId = getNum('DEFAULT_NEST_ID')
@@ -142,25 +166,29 @@ onMounted(async () => {
 //
 // account tab is handled by AccountSettingsPanel which manages its own
 // state — it does not contribute to dirty here. All other tabs share
-// the two reactive blobs (settings / automation).
+// the two reactive blobs (settings / automation / billingSettings).
 const orig = ref({
   settings: '{}',
   automation: '{}',
+  billing: '{}',
 })
 function snapshot() {
   orig.value.settings   = JSON.stringify(settings.value)
   orig.value.automation = JSON.stringify(automation.value)
+  orig.value.billing    = JSON.stringify(billingSettings.value)
 }
 const isDirty = computed(() => {
   if (activeTab.value === 'account') return false
-  if (JSON.stringify(settings.value)   !== orig.value.settings) return true
-  if (JSON.stringify(automation.value) !== orig.value.automation) return true
+  if (JSON.stringify(settings.value)        !== orig.value.settings) return true
+  if (JSON.stringify(automation.value)      !== orig.value.automation) return true
+  if (JSON.stringify(billingSettings.value) !== orig.value.billing) return true
   return false
 })
 
 function discardChanges() {
-  settings.value   = JSON.parse(orig.value.settings)
-  automation.value = JSON.parse(orig.value.automation)
+  settings.value        = JSON.parse(orig.value.settings)
+  automation.value      = JSON.parse(orig.value.automation)
+  billingSettings.value = JSON.parse(orig.value.billing)
 }
 
 // ── Save ──
@@ -193,6 +221,17 @@ function validateAll(): ValidationError[] {
     }
   }
 
+  // Payment: REFERER, if non-empty, must be http(s)://
+  const payUrlFields: [string, string][] = [
+    ['HUPIJIAO_REFERER', 'settings.payment.referer'],
+  ]
+  for (const [key, labelKey] of payUrlFields) {
+    const v = String(billingSettings.value[key] || '').trim()
+    if (v && !URL_RE.test(v)) {
+      errs.push({ tab: 'payment', label: t(labelKey), message: t('settings.validate.invalidUrl') })
+    }
+  }
+
   return errs
 }
 
@@ -215,12 +254,17 @@ async function saveAll(): Promise<boolean> {
     // (Audit FH2.)
     const settingsDirty = JSON.stringify(settings.value) !== orig.value.settings
     const autoDirty = JSON.stringify(automation.value) !== orig.value.automation
+    const billingDirty = JSON.stringify(billingSettings.value) !== orig.value.billing
     if (settingsDirty) {
       const r = await post<{ message: string }>('/api/admin/settings', settings.value)
       if (!r) return false
     }
     if (autoDirty) {
       const r = await post<{ message: string }>('/api/admin/automation', automation.value)
+      if (!r) return false
+    }
+    if (billingDirty) {
+      const r = await post<{ message: string }>('/api/admin/billing/settings', { settings: billingSettings.value })
       if (!r) return false
     }
     if (settingsDirty) await app.loadVersion()
@@ -365,6 +409,109 @@ async function onTabChange(next: string) {
                 <ToggleSwitch :modelValue="getBool('ALLOW_PUBLIC_REGISTRATION')" @update:modelValue="setBool('ALLOW_PUBLIC_REGISTRATION', $event)" size="sm" />
               </FormField>
             </BaseCard>
+
+            <BaseCard variant="bg2" class="settings-card">
+              <SectionHeader icon="support_agent" flush>{{ t('settings.branding.support.title') }}</SectionHeader>
+              <p class="section-note">{{ t('settings.branding.support.desc') }}</p>
+              <FormField :label="t('settings.branding.support.email')" layout="horizontal">
+                <BaseInput :modelValue="getStr('SUPPORT_EMAIL')" type="email" @update:modelValue="setStr('SUPPORT_EMAIL', $event)" />
+              </FormField>
+              <FormField :label="t('settings.branding.support.qqGroup')" layout="horizontal">
+                <BaseInput :modelValue="getStr('SUPPORT_QQ_GROUP')" @update:modelValue="setStr('SUPPORT_QQ_GROUP', $event)" />
+              </FormField>
+              <FormField :label="t('settings.branding.support.qq')" layout="horizontal">
+                <BaseInput :modelValue="getStr('SUPPORT_QQ')" @update:modelValue="setStr('SUPPORT_QQ', $event)" />
+              </FormField>
+              <FormField :label="t('settings.branding.support.wechat')" layout="horizontal">
+                <BaseInput :modelValue="getStr('SUPPORT_WECHAT')" @update:modelValue="setStr('SUPPORT_WECHAT', $event)" />
+              </FormField>
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.branding.support.footerNote') }}
+                  <HelpTip :text="t('settings.branding.support.footerNote_tip')" />
+                </template>
+                <BaseInput :modelValue="getStr('SUPPORT_FOOTER_NOTE')" @update:modelValue="setStr('SUPPORT_FOOTER_NOTE', $event)" />
+              </FormField>
+            </BaseCard>
+          </template>
+
+          <template v-else-if="activeTab === 'payment'">
+            <!-- Card 1: Enabled gateways -->
+            <BaseCard variant="bg2" class="settings-card">
+              <SectionHeader icon="hub" flush>{{ t('settings.payment.gateways.title') }}</SectionHeader>
+              <p class="section-note">{{ t('settings.payment.gateways.desc') }}</p>
+              <FormField :label="t('settings.payment.gateways.enabled')" layout="horizontal">
+                <BaseSelect
+                  :modelValue="getBillingBool('HUPIJIAO_ENABLED') ? ['hupijiao'] : []"
+                  :options="[{ value: 'hupijiao', label: t('settings.payment.gateways.hupijiao') }]"
+                  multiple
+                  @update:modelValue="setBillingBool('HUPIJIAO_ENABLED', (($event as string[]).includes('hupijiao')))"
+                />
+              </FormField>
+            </BaseCard>
+
+            <!-- Gateway config cards: ChipSelect to switch, one card per gateway -->
+            <template v-if="getBillingBool('HUPIJIAO_ENABLED')">
+              <div class="pay-gateway-switcher">
+                <ChipSelect :options="gatewayChips" :modelValue="activeGateway" @update:modelValue="activeGateway = String($event)" />
+              </div>
+
+              <!-- Hupijiao card -->
+              <template v-if="activeGateway === 'hupijiao'">
+                <BaseCard variant="bg2" class="settings-card">
+                  <SectionHeader icon="badge" flush>{{ t('settings.payment.credentials.title') }}</SectionHeader>
+                  <p class="section-note">{{ t('settings.payment.credentials.desc') }}</p>
+                  <FormField :label="t('settings.payment.credentials.displayName')" layout="horizontal">
+                    <BaseInput :modelValue="getBillingStr('HUPIJIAO_DISPLAY_NAME')" @update:modelValue="setBillingStr('HUPIJIAO_DISPLAY_NAME', $event)" />
+                  </FormField>
+                  <FormField :label="t('settings.payment.credentials.appid')" layout="horizontal">
+                    <BaseInput :modelValue="getBillingStr('HUPIJIAO_APPID')" @update:modelValue="setBillingStr('HUPIJIAO_APPID', $event)" />
+                  </FormField>
+                  <FormField :label="t('settings.payment.credentials.appsecret')" layout="horizontal">
+                    <SecretInput :modelValue="getBillingStr('HUPIJIAO_APPSECRET')" @update:modelValue="setBillingStr('HUPIJIAO_APPSECRET', $event)" />
+                  </FormField>
+                </BaseCard>
+
+                <BaseCard variant="bg2" class="settings-card">
+                  <SectionHeader icon="link" flush>{{ t('settings.payment.urls.title') }}</SectionHeader>
+                  <p class="section-note">{{ t('settings.payment.urls.desc') }}</p>
+                  <FormField layout="horizontal">
+                    <template #label>
+                      {{ t('settings.payment.referer') }}
+                      <HelpTip :text="t('settings.payment.referer_tip')" />
+                    </template>
+                    <BaseInput :modelValue="getBillingStr('HUPIJIAO_REFERER')" @update:modelValue="setBillingStr('HUPIJIAO_REFERER', $event)" />
+                  </FormField>
+                  <FormField layout="horizontal">
+                    <template #label>
+                      {{ t('settings.payment.gatewayEndpoints') }}
+                      <HelpTip :text="t('settings.payment.gatewayEndpoints_tip')" />
+                    </template>
+                    <BaseInput :modelValue="getBillingStr('HUPIJIAO_GATEWAY_ENDPOINTS')" @update:modelValue="setBillingStr('HUPIJIAO_GATEWAY_ENDPOINTS', $event)" />
+                  </FormField>
+                </BaseCard>
+              </template>
+            </template>
+
+            <!-- Quota & policy card (always visible) -->
+            <BaseCard variant="bg2" class="settings-card">
+              <SectionHeader icon="tune" flush>{{ t('settings.payment.quotas.title') }}</SectionHeader>
+              <p class="section-note">{{ t('settings.payment.quotas.desc') }}</p>
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.payment.payTimeout') }}
+                  <HelpTip :text="t('settings.payment.payTimeout_tip')" />
+                </template>
+                <NumberInput :modelValue="getBillingNum('BILLING_ORDER_PAY_TIMEOUT_MIN', 5)" @update:modelValue="setBillingNum('BILLING_ORDER_PAY_TIMEOUT_MIN', $event)" :min="3" :max="5" />
+              </FormField>
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.payment.refundStuckHours') }}
+                  <HelpTip :text="t('settings.payment.refundStuckHours_tip')" />
+                </template>
+                <NumberInput :modelValue="getBillingNum('BILLING_REFUND_STUCK_HOURS', 24)" @update:modelValue="setBillingNum('BILLING_REFUND_STUCK_HOURS', $event)" :min="1" :max="168" />
+              </FormField>
+            </BaseCard>
           </template>
 
           <template v-else-if="activeTab === 'defaults'">
@@ -466,32 +613,22 @@ async function onTabChange(next: string) {
   <DirtyBar
     :dirty="dirtyForm.isDirty.value"
     :saving="saveLoading"
-    :layout="hasErrors ? 'stack' : 'row'"
     confirm-before-unload
     @save="saveAll"
     @discard="discardChanges"
   >
     <template v-if="hasErrors" #hint>
-      <div class="dirty-bar__errors">
-        <div class="dirty-bar__err-head">
-          <MsIcon name="error" />
-          {{ t('settings.validate.header', { n: errors.length }) }}
-        </div>
-        <ul class="dirty-bar__err-list">
-          <li v-for="(e, i) in errors" :key="i" class="dirty-bar__err-item" @click="activeTab = e.tab">
-            <Badge color="#f59e0b">{{ tabLabel(e.tab) }}</Badge>
-            <span class="dirty-bar__err-label">{{ e.label }}</span>
-            <span class="dirty-bar__err-msg">{{ e.message }}</span>
-          </li>
-        </ul>
-      </div>
+      <span class="db-err-hint">
+        <MsIcon name="error" />
+        {{ t('settings.validate.header', { n: errors.length }) }}
+      </span>
     </template>
-    <template v-if="hasErrors" #actions>
-      <div class="dirty-bar__actions">
-        <BaseButton size="sm" @click="discardChanges">
-          {{ t('settings.discardBtn') }}
-        </BaseButton>
-      </div>
+    <template v-if="hasErrors" #extra>
+      <span
+        v-for="(e, i) in errors" :key="i"
+        class="db-err-chip"
+        @click="activeTab = e.tab"
+      ><Badge color="var(--amber)">{{ tabLabel(e.tab) }}</Badge> {{ e.label }}</span>
     </template>
   </DirtyBar>
 </template>
@@ -540,49 +677,17 @@ async function onTabChange(next: string) {
   margin-right: auto;
 }
 
-/* DirtyBar slot overrides for the validation-error list. The base bar
-   layout (positioning / shadow / transition) lives in DirtyBar.vue;
-   only the error-list cosmetics are page-local. */
-.dirty-bar__actions {
-  display: flex;
-  gap: var(--sp-2);
-  flex-shrink: 0;
+/* Validation error chips in DirtyBar */
+.db-err-hint { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--red); font-size: var(--text-sm); font-weight: 500; }
+.db-err-chip {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  font-size: var(--text-xs); cursor: pointer; white-space: nowrap;
+  color: var(--t2); border-radius: var(--r-xs); padding: 2px 4px;
+  transition: background .12s;
 }
-.dirty-bar__errors {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.dirty-bar__err-head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--amber);
-  margin-bottom: var(--sp-1);
-}
-.dirty-bar__err-head :deep(.ms-icon) { font-size: 1.1rem; }
-.dirty-bar__err-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 9rem;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-.dirty-bar__err-item {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: var(--r-xs);
-  transition: background .12s ease;
-}
+.db-err-chip:hover { background: var(--bg-in); }
+
+.pay-gateway-switcher { margin-bottom: var(--sp-1); }
 .dirty-bar__err-item:hover {
   background: color-mix(in srgb, var(--amber) 10%, transparent);
 }

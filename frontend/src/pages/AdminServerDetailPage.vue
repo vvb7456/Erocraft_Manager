@@ -161,11 +161,7 @@ const activeTabLabel = computed(() =>
 
 const headerBreadcrumbs = computed(() => [
   { label: t('servers.title'), to: { name: 'servers' } },
-  {
-    label: headerTitle.value,
-    to: { name: 'admin-server-overview', params: { id: serverId.value } },
-  },
-  { label: activeTabLabel.value },
+  { label: headerTitle.value },
 ])
 
 watch(

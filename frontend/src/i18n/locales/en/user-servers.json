@@ -4,6 +4,19 @@
   "openApp": "Open {name}",
   "openAppGeneric": "Open App",
   "renew": "Renew",
+  "upgrade": {
+    "button": "Upgrade",
+    "modalTitle": "Upgrade Plan",
+    "currentPlan": "Current plan: {name} · {days} days left",
+    "selectTarget": "Select target plan",
+    "diffLabel": "Upgrade difference",
+    "noOptions": "No upgrade options available",
+    "restartRequired": "Restart the server after upgrading to apply the new configuration."
+  },
+  "renewFlow": {
+    "planLoadFailed": "Failed to load plan details",
+    "noPlan": "This server has no plan attached, renewal unavailable"
+  },
   "searchPlaceholder": "Search servers...",
   "scope": {
     "all": "Show all servers"
@@ -60,6 +73,7 @@
     "debugSection": "Debug Info",
     "sftpSection": "SFTP Connection",
     "clientSection": "SFTP Clients",
+    "supportSection": "Need help",
     "sftpTip": "SFTP lets you manage server files like a local folder. Great for uploading/downloading large files or batch edits. Log in with your account password on this system.",
     "debugTip": "Provide the following info when contacting support or reporting issues.",
     "host": "Host",
@@ -71,7 +85,6 @@
     "serverUuid": "Server UUID",
     "shortId": "Short ID",
     "node": "Node",
-    "copied": "Copied",
     "clientDesktop": "Desktop",
     "clientIos": "iOS",
     "clientAndroid": "Android"
@@ -104,7 +117,6 @@
     "goToSettings": "Go to Settings"
   },
   "resources": {
-    "title": "Resources",
     "cpu": "CPU",
     "memory": "Memory",
     "disk": "Disk",
@@ -171,51 +183,32 @@
     "loadFailed": "Failed to load",
     "retry": "Retry",
     "addressSection": "Access addresses",
-    "addressDesc": "This server can be reached at the addresses below.",
     "rawAddress": "Direct address",
     "rawAddressHint": "A direct network address to the server. Fastest and most stable connection.",
     "customDomain": "Custom domain",
     "customDomainHint": "A friendly, easy-to-remember URL that opens in any browser — no port number required.",
     "copyAddress": "Copy",
-    "copied": "Copied",
-
     "section": "Custom domain",
     "enableLabel": "Enable custom domain",
     "enableHint": "Once enabled, the server gets a clean, memorable URL that opens directly in any browser — no port number required.",
     "statusActive": "Enabled",
     "statusFailed": "Something went wrong",
     "statusFailedHint": "Try enabling it again. If it keeps failing, contact your administrator.",
-
     "subdomainLabel": "URL prefix",
     "subdomainPlaceholder": "e.g. mychat",
     "subdomainHint": "Only lowercase letters, digits, and hyphens (-). Up to 32 characters. Cannot start or end with a hyphen.",
-    "subdomainInvalid": "Invalid format",    "subdomainRequired": "Please enter a URL prefix",    "subdomainTaken": "This prefix is already taken \u2014 please pick another",
-    "subdomainSave": "Save prefix",
-    "subdomainSaved": "Saved",
-    "subdomainCurrent": "Current URL",
-
+    "subdomainInvalid": "Invalid format",
+    "subdomainRequired": "Please enter a URL prefix",
     "warning": {
       "title": "Read this before turning it on",
-      "body": "A custom domain routes your traffic through an extra network hop. In many cases this actually makes the connection slower, laggier, or even drops it. If the direct address works fine for you, leave this off. Only turn it on if the direct address is completely unreachable. This feature is provided by Cloudflare; all traffic passes through Cloudflare\u2019s servers."
+      "body": "A custom domain routes your traffic through an extra network hop. In many cases this actually makes the connection slower, laggier, or even drops it. If the direct address works fine for you, leave this off. Only turn it on if the direct address is completely unreachable. This feature is provided by Cloudflare; all traffic passes through Cloudflare’s servers."
     },
-
-    "disableConfirm": {
-      "title": "Turn off the custom domain?",
-      "message": "Once disabled, the custom URL stops working immediately. Any device that bookmarked it will need to switch back to the direct address.",
-      "confirm": "Turn it off"
-    },
-
     "hostNotReady": {
-      "title": "Custom domain isn\u2019t available on this node yet",
+      "title": "Custom domain isn’t available on this host yet",
       "message": "Please contact an administrator to enable it."
     },
-
     "toast": {
-      "saved": "Settings saved",
-      "enableSuccess": "Custom domain enabled",
-      "disableSuccess": "Custom domain disabled",
-      "renameSuccess": "URL prefix updated",
-      "genericError": "Operation failed, please try again"
+      "saved": "Settings saved"
     }
   }
 }

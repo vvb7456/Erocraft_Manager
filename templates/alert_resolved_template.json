@@ -1,4 +1,4 @@
 {
-    "subject": "[已恢复] {{node_name}} - {{alert_type_label}}",
-    "body": "之前的告警已自动恢复：\n\n节点：{{node_name}} (ID: {{node_id}})\n告警类型：{{alert_type_label}}\n严重程度：{{severity_label}}\n触发时间：{{fired_at}}\n恢复时间：{{resolved_at}}\n\n触发详情：\n{{message}}\n\n如需查看历史告警与指标，请前往监控面板。"
+    "subject": "【{{brand_name}}】[已恢复] {{node_name}} — {{alert_type_label}}",
+    "body": "以下告警已自动恢复：\n\n节点：{{node_name}}（ID：{{node_id}}）\n告警类型：{{alert_type_label}}\n严重程度：{{severity_label}}\n触发时间：{{fired_at}}\n恢复时间：{{resolved_at}}"
 }

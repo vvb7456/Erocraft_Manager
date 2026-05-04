@@ -1,0 +1,4 @@
+{
+    "subject": "【{{brand_name}}】订单支付成功",
+    "body": "您的订单已支付成功，服务器已开通。\n\n订单号：{{order_no}}\n套餐：{{plan_name}}\n周期：{{period_count}} 期（共 {{total_days}} 天）\n金额：¥{{total_yuan}}\n支付时间：{{paid_at}}"
+}

@@ -10,6 +10,18 @@ from apscheduler.jobstores.base import JobLookupError
 from app.core.runtime_settings import AUTOMATION_SPECS, MONITORING_SPECS, defaults_for
 from app.core.settings_store import get_settings_store
 from app.db.session import get_session_factory
+from app.jobs.tasks.billing import (
+    APPLY_RETRY_JOB_ID,
+    ORDER_CLOSE_JOB_ID,
+    ORDER_QUERY_JOB_ID,
+    PLACEHOLDER_LEAK_JOB_ID,
+    REFUND_RETRY_JOB_ID,
+    run_apply_retry,
+    run_order_close,
+    run_order_query,
+    run_placeholder_leak_monitor,
+    run_refund_retry,
+)
 from app.jobs.tasks.certificates import (
     CERT_AUTO_DISPATCH_JOB_ID,
     CERT_DEPLOYMENT_SCAN_JOB_ID,
@@ -177,5 +189,55 @@ def build_scheduler() -> AsyncIOScheduler:
         coalesce=True,
         max_instances=1,
         misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        run_order_close,
+        id=ORDER_CLOSE_JOB_ID,
+        trigger="interval",
+        minutes=1,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=30,
+    )
+    scheduler.add_job(
+        run_order_query,
+        id=ORDER_QUERY_JOB_ID,
+        trigger="interval",
+        minutes=3,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=60,
+    )
+    scheduler.add_job(
+        run_apply_retry,
+        id=APPLY_RETRY_JOB_ID,
+        trigger="interval",
+        minutes=1,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=30,
+    )
+    scheduler.add_job(
+        run_refund_retry,
+        id=REFUND_RETRY_JOB_ID,
+        trigger="interval",
+        minutes=15,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=300,
+    )
+    scheduler.add_job(
+        run_placeholder_leak_monitor,
+        id=PLACEHOLDER_LEAK_JOB_ID,
+        trigger="interval",
+        hours=1,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=600,
     )
     return scheduler

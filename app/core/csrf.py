@@ -28,6 +28,15 @@ logger = logging.getLogger(__name__)
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
+# Path prefixes that bypass the Origin/Referer check entirely.
+# These endpoints are only ever called server-to-server (payment gateway
+# webhooks, ACME HTTP-01 callbacks, etc.) and authenticate via signed
+# payloads, not browser cookies.
+EXEMPT_PREFIXES: tuple[str, ...] = (
+    "/api/webhook/",
+    "/api/cert/source-changed",
+)
+
 
 class OriginCheckMiddleware(BaseHTTPMiddleware):
     """Reject state-changing requests whose Origin/Referer does not match Host."""
@@ -35,6 +44,11 @@ class OriginCheckMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.method not in UNSAFE_METHODS:
             return await call_next(request)
+
+        path = request.url.path
+        for prefix in EXEMPT_PREFIXES:
+            if path.startswith(prefix):
+                return await call_next(request)
 
         host = request.headers.get("host", "").lower()
         if not host:

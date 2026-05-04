@@ -18,6 +18,9 @@ class ServerListItem(BaseModel):
     daysLeft: int | None
     statusLabel: str
     isSuspended: bool
+    planId: int | None = None
+    planCode: str | None = None
+    planName: str | None = None
 
 
 class ServersListResponse(BaseModel):
@@ -63,9 +66,14 @@ class CreateServerResponse(MessageResponse):
 
 
 class BatchServersRequest(BaseModel):
-    action: Literal["suspend", "unsuspend", "renew", "email", "delete"]
+    action: Literal["suspend", "unsuspend", "renew", "email", "delete", "update_plan"]
     serverIds: list[int] = Field(min_length=1)
     days: int | None = None
+    planId: int | None = None
+
+
+class UpdateServerPlanRequest(BaseModel):
+    planId: int | None = None
 
 
 class BatchServersResponse(MessageResponse):

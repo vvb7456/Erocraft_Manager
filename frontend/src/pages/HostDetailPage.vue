@@ -121,11 +121,7 @@ const activeTabLabel = computed(() =>
 
 const headerBreadcrumbs = computed(() => [
   { label: t('hosts.title'), to: { name: 'hosts' } },
-  {
-    label: host.value?.name || t('hosts.detail.title'),
-    to: { name: 'host-overview', params: { id: hostId.value } },
-  },
-  { label: activeTabLabel.value },
+  { label: host.value?.name || t('hosts.detail.title') },
 ])
 
 // Non-monitor host tabs follow "enter-refresh" semantics: load once when

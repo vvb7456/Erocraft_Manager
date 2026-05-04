@@ -1,4 +1,4 @@
 {
-    "subject": "您的服务器即将到期",
-    "body": "您在 {{brand_name}} 的 {{server_count}} 台服务器将于 {{expiration_date}} 到期。\n\n服务器列表：\n{{server_list}}\n\n请及时续费或处理相关服务。"
+    "subject": "【{{brand_name}}】服务器即将到期",
+    "body": "您在 {{brand_name}} 的 {{server_count}} 台服务器将于 {{expiration_date}} 到期。\n\n服务器列表：\n{{server_list}}\n\n请及时续费，以免服务中断。"
 }

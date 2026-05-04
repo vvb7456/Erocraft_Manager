@@ -8,6 +8,22 @@ delete_forever
 campaign
 notifications_active
 
+# SupportModal dynamic icons
+chat
+
+# Payment gateway icons (returned dynamically from /api/user/payment-gateways)
+qr_code_2
+payments
+
+# UserPayPage / SupportModal — payment status and contact
+check_circle
+error_outline
+support_agent
+content_copy
+home
+forum
+account_circle
+
 # BaseSelect — multi-select checkboxes
 check_box
 check_box_outline_blank
@@ -136,3 +152,14 @@ code
 audio_file
 video_file
 save
+
+# UserOrderDetailPage — bill view
+print
+paid
+arrow_forward
+
+# AdminPlansPage / PlanEditorModal
+local_offer
+add
+play_circle
+undo

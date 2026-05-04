@@ -1,4 +1,4 @@
 {
-    "subject": "[{{severity_label}}] {{node_name}} - {{alert_type_label}}",
-    "body": "监控系统检测到节点告警，请及时关注：\n\n节点：{{node_name}} (ID: {{node_id}})\n告警类型：{{alert_type_label}}\n严重程度：{{severity_label}}\n触发时间：{{fired_at}}\n\n详情：\n{{message}}\n\n请前往监控面板查看完整指标与历史数据。"
+    "subject": "【{{brand_name}}】[{{severity_label}}] {{node_name}} — {{alert_type_label}}",
+    "body": "节点：{{node_name}}（ID：{{node_id}}）\n告警类型：{{alert_type_label}}\n严重程度：{{severity_label}}\n触发时间：{{fired_at}}\n\n详情：\n{{message}}"
 }

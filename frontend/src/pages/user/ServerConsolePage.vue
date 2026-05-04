@@ -14,6 +14,8 @@ import Spinner from '@/components/ui/Spinner.vue'
 import PowerControls from '@/components/server/PowerControls.vue'
 import ResourceStats from '@/components/server/ResourceStats.vue'
 import ServerAddress from '@/components/server/ServerAddress.vue'
+import { useRenewFlow } from '@/composables/useRenewFlow'
+import CreateOrderModal from '@/components/CreateOrderModal.vue'
 import 'xterm/css/xterm.css'
 
 defineOptions({ name: 'ServerConsolePage' })
@@ -23,15 +25,36 @@ const resourceStore = useServerResourceStore()
 
 interface ServerDetail {
   id: number; uuid: string; nodeId: number; isSuspended: boolean
+  name: string
   eggId: number; eggName: string; status: string | null; address: string | null
   limits: { memory: number; disk: number; cpu: number }
   expirationDate: string | null; daysLeft: number | null
+  planId: number | null
+  hasUpgradeOptions: boolean
   tunnel: { status: string; hostname: string; customSubdomain: string | null; lastError: string | null } | null
   hostTunnelReady: boolean
 }
 
 const server = inject<Ref<ServerDetail | null>>('server')!
 const isInstalling = inject<Ref<boolean>>('isInstalling', ref(false))
+
+// ── Renewal flow ──
+const { openRenew, loading: renewLoading } = useRenewFlow()
+const canRenew = computed(() => !!server.value?.planId)
+async function onRenew() {
+  if (!server.value || !server.value.planId) return
+  await openRenew({
+    serverId: server.value.id,
+    serverName: server.value.name,
+    planId: server.value.planId,
+  })
+}
+
+// ── Upgrade flow ──
+const upgradeModalOpen = ref(false)
+function onUpgrade() {
+  upgradeModalOpen.value = true
+}
 
 // ── Resource state ──
 const res = computed(() => server.value ? resourceStore.resources[server.value.id] : null)
@@ -157,6 +180,37 @@ onBeforeUnmount(() => {
         />
       </BaseCard>
 
+      <!-- Lifecycle (expiration + renew) -->
+      <BaseCard variant="bg3" class="mobile-card">
+        <div class="mobile-lifecycle-card">
+          <div class="mobile-lifecycle-card__head">
+            <MsIcon name="schedule" class="section-icon" />
+            <span class="mobile-lifecycle-label">{{ t('userServers.expiration') }}：</span>
+            <span v-if="server?.expirationDate" class="lifecycle-value">
+              {{ server.expirationDate }}
+              <span class="lifecycle-remaining" :style="{ color: expirationColor }">（{{ expirationText }}）</span>
+            </span>
+            <span v-else class="lifecycle-value">{{ expirationText }}</span>
+          </div>
+          <BaseButton
+            size="sm"
+            :disabled="!canRenew"
+            :loading="renewLoading"
+            :title="canRenew ? '' : t('userServers.renewFlow.noPlan')"
+            @click="onRenew"
+          >
+            <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+          </BaseButton>
+          <BaseButton
+            size="sm"
+            :disabled="!server?.hasUpgradeOptions"
+            @click="onUpgrade"
+          >
+            <MsIcon name="arrow_upward" size="xs" /> {{ t('userServers.upgrade.button') }}
+          </BaseButton>
+        </div>
+      </BaseCard>
+
       <!-- Power controls -->
       <BaseCard variant="bg3" class="mobile-card">
         <PowerControls
@@ -185,6 +239,17 @@ onBeforeUnmount(() => {
           <MsIcon name="block" class="reconnect-icon" />
           <span class="reconnect-text">{{ t('userServers.status.suspended') }}</span>
           <span class="reconnect-hint">{{ t('userServers.suspendedHint') }}</span>
+          <BaseButton
+            size="sm"
+            variant="primary"
+            class="overlay-renew-btn"
+            :disabled="!canRenew"
+            :loading="renewLoading"
+            :title="canRenew ? '' : t('userServers.renewFlow.noPlan')"
+            @click="onRenew"
+          >
+            <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+          </BaseButton>
         </div>
         <!-- Reconnecting overlay -->
         <div v-else-if="reconnecting" class="terminal-overlay terminal-overlay--reconnect">
@@ -244,6 +309,16 @@ onBeforeUnmount(() => {
             <span class="lifecycle-remaining" :style="{ color: expirationColor }">（{{ expirationText }}）</span>
           </span>
           <span v-else class="lifecycle-value">{{ expirationText }}</span>
+          <BaseButton
+            size="sm"
+            class="lifecycle-renew-btn"
+            :disabled="!canRenew"
+            :loading="renewLoading"
+            :title="canRenew ? '' : t('userServers.renewFlow.noPlan')"
+            @click="onRenew"
+          >
+            <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+          </BaseButton>
         </div>
       </BaseCard>
 
@@ -313,19 +388,6 @@ onBeforeUnmount(() => {
           <span class="mobile-preset-label">{{ t('userServers.table.preset') }}：</span>
           <span class="mobile-preset-value">{{ server?.eggName ?? '—' }}</span>
         </div>
-        <!-- Lifecycle (single line) -->
-        <div class="mobile-lifecycle">
-          <div class="mobile-lifecycle-left">
-            <MsIcon name="schedule" class="section-icon" />
-            <span class="mobile-lifecycle-label">{{ t('userServers.expiration') }}：</span>
-            <span v-if="server?.expirationDate" class="lifecycle-value">
-              {{ server.expirationDate }}
-              <span class="lifecycle-remaining" :style="{ color: expirationColor }">（{{ expirationText }}）</span>
-            </span>
-            <span v-else class="lifecycle-value">{{ expirationText }}</span>
-          </div>
-          <span v-if="server?.isSuspended" class="mobile-suspended-badge">{{ t('userServers.status.suspended') }}</span>
-        </div>
         <!-- Stats -->
         <ResourceStats
           v-if="server"
@@ -341,6 +403,16 @@ onBeforeUnmount(() => {
       </BaseCard>
     </div>
   </div>
+
+  <!-- Upgrade Plan Modal -->
+  <CreateOrderModal
+    v-if="server"
+    v-model="upgradeModalOpen"
+    :plan="null"
+    mode="upgrade"
+    :target-server-id="server.id"
+    :server-name="server.name"
+  />
 </template>
 
 <style scoped>
@@ -371,36 +443,28 @@ onBeforeUnmount(() => {
   display: none;
 }
 
-/* ── Mobile lifecycle ── */
-.mobile-lifecycle {
+/* ── Mobile lifecycle card ── */
+.mobile-lifecycle-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: var(--sp-2);
-  margin-bottom: var(--sp-2);
-  border-bottom: 1px solid var(--bd);
+  gap: var(--sp-3);
+  flex-wrap: wrap;
 }
 
-.mobile-lifecycle-left {
+.mobile-lifecycle-card__head {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .mobile-lifecycle-label {
   font-size: var(--text-sm);
   color: var(--t2);
   white-space: nowrap;
-}
-
-.mobile-suspended-badge {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--red);
-  padding: 2px var(--sp-2);
-  background: color-mix(in srgb, var(--red) 10%, var(--bg-in));
-  border: 1px solid color-mix(in srgb, var(--red) 25%, var(--bd));
-  border-radius: var(--r-pill);
 }
 
 /* ═══ Status card ═══ */
@@ -459,6 +523,10 @@ onBeforeUnmount(() => {
 .reconnect-hint {
   font-size: var(--text-xs);
   color: var(--t3);
+}
+
+.overlay-renew-btn {
+  margin-top: var(--sp-3);
 }
 
 .terminal-container {
@@ -583,7 +651,10 @@ onBeforeUnmount(() => {
 /* ── Lifecycle ── */
 .lifecycle-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
 }
 
 .lifecycle-value {
@@ -596,6 +667,10 @@ onBeforeUnmount(() => {
   font-family: 'IBM Plex Sans', sans-serif;
   font-size: var(--text-xs);
   font-weight: 600;
+}
+
+.lifecycle-renew-btn {
+  flex-shrink: 0;
 }
 
 /* ═══ Mobile layout ═══ */

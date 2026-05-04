@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import Allocation, Egg, EggVariable, ManagerHost, Nest, PteroServer, PteroUser, ServerVariable
+from app.db.models.billing import BillingPlan
 from app.schemas.admin_server_detail import (
     AdminServerDetailResponse,
     AdminServerSummary,
@@ -124,6 +125,11 @@ async def get_server_detail(db: AsyncSession, server_id: int) -> AdminServerDeta
     )
     variable_pairs = list(variable_rows.all())
 
+    plan_id = server.meta.plan_id if server.meta is not None else None
+    plan_obj: BillingPlan | None = None
+    if plan_id is not None:
+        plan_obj = await db.get(BillingPlan, plan_id)
+
     return AdminServerDetailResponse(
         server=AdminServerSummary(
             id=int(server.id),
@@ -157,6 +163,9 @@ async def get_server_detail(db: AsyncSession, server_id: int) -> AdminServerDeta
             updated_at=server.updated_at,
             installed_at=server.installed_at,
             expiration_date=server.expiration_date.isoformat() if server.expiration_date else None,
+            plan_id=plan_id,
+            plan_code=plan_obj.code if plan_obj else None,
+            plan_name=plan_obj.display_name if plan_obj else None,
         ),
         owner=ServerOwnerSummary(
             id=int(server.owner.id),

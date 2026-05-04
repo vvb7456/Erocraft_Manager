@@ -1,0 +1,4 @@
+{
+    "subject": "【{{brand_name}}】退款完成",
+    "body": "您的退款已处理完成。\n\n订单号：{{order_no}}\n退款单号：{{refund_no}}\n退款金额：¥{{refund_amount_yuan}}\n原因：{{refund_reason}}\n完成时间：{{refunded_at}}\n\n款项将按原支付渠道退回，到账时间以渠道为准。如长时间未收到，请联系客服并提供退款单号。"
+}

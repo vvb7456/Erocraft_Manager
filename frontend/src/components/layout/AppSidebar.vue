@@ -2,12 +2,8 @@
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { useServerResourceStore } from '@/stores/serverResources'
-import { useApiFetch } from '@/composables/useApiFetch'
-import { computed, ref, onBeforeUnmount, watch } from 'vue'
+import { computed } from 'vue'
 import MsIcon from '../ui/MsIcon.vue'
-import StatusDot from '../ui/StatusDot.vue'
-import { getStatusDotKey } from '@/utils/status'
 import BaseButton from '../ui/BaseButton.vue'
 import LanguageToggle from '../ui/LanguageToggle.vue'
 
@@ -17,8 +13,6 @@ const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
 const route = useRoute()
 const app = useAppStore()
-const resourceStore = useServerResourceStore()
-const { get } = useApiFetch()
 
 // ── Layout mode ──
 const isUserLayout = computed(() => route.meta.layout === 'user')
@@ -47,38 +41,6 @@ const accountItem: NavItem = {
   page: 'account', icon: 'person', labelKey: 'nav.account',
 }
 
-// ── User server list ──
-interface ServerItem {
-  id: number
-  name: string
-  status: string | null
-  isSuspended: boolean
-  isInstalling: boolean
-}
-
-const servers = ref<ServerItem[]>([])
-const serversExpanded = ref(true)
-
-async function loadServers() {
-  const data = await get<ServerItem[]>('/api/user/servers', { silent: true })
-  if (data) {
-    servers.value = data
-    const ids = data.map(s => s.id)
-    if (ids.length > 0) {
-      resourceStore.subscribe('sidebar', ids, 10000)
-    }
-  }
-}
-
-function statusDotKey(s: ServerItem): 'running' | 'loading' | 'error' | 'stopped' {
-  const st = resourceStore.getState(s.id) || s.status || 'offline'
-  return getStatusDotKey(st, s.isSuspended, s.isInstalling, resourceStore.isStale(s.id))
-}
-
-function toggleExpand() {
-  serversExpanded.value = !serversExpanded.value
-}
-
 // ── Navigation ──
 const currentPage = computed(() => {
   const name = typeof route.name === 'string' ? route.name : ''
@@ -86,22 +48,12 @@ const currentPage = computed(() => {
   // highlighted while the user is drilled in.
   if (name.startsWith('host-')) return 'hosts'
   if (name.startsWith('admin-server-')) return 'servers'
+  if (name.startsWith('server-')) return 'user-servers'
   return name
 })
-const currentServerId = computed(() => route.params.id ? Number(route.params.id) : null)
 
 function navTo(item: NavItem) {
   router.push({ name: item.page })
-  if (window.innerWidth <= 768) app.closeMobileSidebar()
-}
-
-function goOverview() {
-  router.push({ name: 'user-servers' })
-  if (window.innerWidth <= 768) app.closeMobileSidebar()
-}
-
-function goToServer(id: number) {
-  router.push({ name: 'server-console', params: { id } })
   if (window.innerWidth <= 768) app.closeMobileSidebar()
 }
 
@@ -110,20 +62,6 @@ async function doLogout() {
   app.clearSessionUser()
   router.push({ name: 'login' })
 }
-
-// ── Lifecycle ──
-watch(isUserLayout, (val) => {
-  if (val) {
-    loadServers()
-  } else {
-    servers.value = []
-    resourceStore.unsubscribe('sidebar')
-  }
-}, { immediate: true })
-
-onBeforeUnmount(() => {
-  resourceStore.unsubscribe('sidebar')
-})
 </script>
 
 <template>
@@ -143,43 +81,34 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="sidebar-nav">
-      <!-- ═══ User layout: server list ═══ -->
+      <!-- ═══ User layout: flat nav ═══ -->
       <template v-if="isUserLayout">
-        <div class="nav-group">
-          <button
-            class="nav-item nav-item--group"
-            @click="toggleExpand"
-          >
-            <span class="icon"><MsIcon name="dns" size="md" /></span>
-            <span class="nav-label">{{ t('nav.servers') }}</span>
-            <span
-              v-if="!app.sidebarCollapsed"
-              class="expand-arrow"
-              :class="{ expanded: serversExpanded }"
-            ><MsIcon name="expand_more" size="sm" /></span>
-          </button>
+        <button
+          class="nav-item"
+          :class="{ active: currentPage === 'user-servers' }"
+          @click="navTo({ page: 'user-servers', icon: 'dns', labelKey: 'nav.myServers' })"
+        >
+          <span class="icon"><MsIcon name="dns" size="md" /></span>
+          <span class="nav-label">{{ t('nav.myServers') }}</span>
+        </button>
 
-          <div v-if="serversExpanded && !app.sidebarCollapsed" class="nav-sub">
-            <button
-              class="nav-sub-item"
-              :class="{ active: currentPage === 'user-servers' }"
-              @click="goOverview"
-            >
-              <MsIcon name="monitoring" size="sm" />
-              <span class="nav-sub-label">{{ t('nav.overview') }}</span>
-            </button>
-            <button
-              v-for="s in servers"
-              :key="s.id"
-              class="nav-sub-item"
-              :class="{ active: currentServerId === s.id }"
-              @click="goToServer(s.id)"
-            >
-              <StatusDot :status="statusDotKey(s)" size="sm" />
-              <span class="nav-sub-label">{{ s.name }}</span>
-            </button>
-          </div>
-        </div>
+        <button
+          class="nav-item"
+          :class="{ active: currentPage === 'user-plans' }"
+          @click="navTo({ page: 'user-plans', icon: 'storefront', labelKey: 'nav.plans' })"
+        >
+          <span class="icon"><MsIcon name="storefront" size="md" /></span>
+          <span class="nav-label">{{ t('nav.plans') }}</span>
+        </button>
+
+        <button
+          class="nav-item"
+          :class="{ active: currentPage === 'user-orders' }"
+          @click="navTo({ page: 'user-orders', icon: 'receipt_long', labelKey: 'nav.orders' })"
+        >
+          <span class="icon"><MsIcon name="receipt_long" size="md" /></span>
+          <span class="nav-label">{{ t('nav.orders') }}</span>
+        </button>
       </template>
 
       <!-- ═══ Admin layout: static nav + hosts group ═══ -->
@@ -203,6 +132,15 @@ onBeforeUnmount(() => {
             >
               <span class="icon"><MsIcon name="dvr" size="md" /></span>
               <span class="nav-label">{{ t('nav.hosts') }}</span>
+            </button>
+
+            <button
+              class="nav-item"
+              :class="{ active: currentPage === 'admin-billing' }"
+              @click="navTo({ page: 'admin-billing', icon: 'receipt_long', labelKey: 'nav.adminBilling' })"
+            >
+              <span class="icon"><MsIcon name="receipt_long" size="md" /></span>
+              <span class="nav-label">{{ t('nav.adminBilling') }}</span>
             </button>
           </template>
         </template>

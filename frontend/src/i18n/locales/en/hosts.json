@@ -1,12 +1,7 @@
 {
   "title": "Hosts",
-  "subtitle": "Manage every server connected via Erocraft Agent (wings nodes, nginx proxies, NAS, generic Linux boxes).",
   "summary": {
-    "total": "{n} total",
-    "online": "{n} online",
-    "offline": "{n} offline",
-    "disabled": "{n} disabled",
-    "unconfigured": "{n} unconfigured"
+    "total": "{n} total"
   },
   "stats": {
     "total": "Hosts",
@@ -15,11 +10,10 @@
     "other": "Other Hosts",
     "filtered": "{n} in current filter",
     "agentReachable": "Agent reachable",
-    "otherSub": "Non-Wings nodes"
+    "otherSub": "Non-Wings hosts"
   },
   "list": {
     "empty": "No hosts yet. Click “Add host” in the top right to register the first one.",
-    "loading": "Loading hosts…",
     "perPage": "rows/page"
   },
   "columns": {
@@ -32,7 +26,7 @@
     "actions": "Actions"
   },
   "kind": {
-    "wings_node": "Wings node",
+    "wings_node": "Wings host",
     "generic_linux": "Linux",
     "synology_dsm": "Synology DSM"
   },
@@ -51,19 +45,14 @@
     "search": "Search name / hostname / URL"
   },
   "actions": {
-    "probe": "Probe",
     "delete": "Delete",
     "open": "Open",
-    "more": "More actions",
-    "probeOk": "Probe of {name} succeeded",
-    "probeFail": "Probe of {name} failed: {err}",
     "deleted": "Host {name} deleted"
   },
   "confirm": {
     "delete_title": "Delete host",
     "delete_msg": "Delete host \"{name}\"? This cannot be undone."
   },
-  "tbd": "This action will ship in the next step",
   "create": {
     "title": "Add host",
     "fields": {
@@ -85,7 +74,6 @@
     "create": "Create",
     "cancel": "Cancel",
     "creating": "Creating…",
-    "probeOk": "Probe OK",
     "created": "Host created",
     "createFailed": "Create failed"
   },
@@ -122,12 +110,11 @@
       "overview": "Overview",
       "setting": "Agent settings",
       "wings": "Wings",
-      "allocations": "Allocations",      "tunnel": "Cloudflare Tunnel",      "activity": "Activity"
+      "allocations": "Allocations",
+      "tunnel": "Cloudflare Tunnel",
+      "activity": "Activity"
     },
-    "loading": "Loading…",
-    "notFound": "Host not found",
-    "overviewPlaceholder": "The overview pane lands in C7: status chips, ECharts gauges, resource details, last-1h hero trends and active alerts. Raw host payload below:",
-    "settingPlaceholder": "The settings pane lands in C8: Agent connection, token reset, wings_config, alerting, danger zone."
+    "loading": "Loading…"
   },
   "activity": {
     "window": {
@@ -218,12 +205,9 @@
       "tokenReset": "Reset",
       "tokenCancelReset": "Cancel reset",
       "tokenWarning": "Warning: the old token stops working as soon as you save; failing to update the agent config.yaml will break collection.",
-      "probe": "Probe",
-      "discard": "Discard changes",
-      "save": "Save"
+      "probe": "Probe"
     },
     "wings": {
-      "title": "Wings service",
       "desc": "Maintain this node's Wings and Panel node parameters, and restart Wings when needed.",
       "notWings": "This host is not a Wings node",
       "saved": "Saved ({n} field(s) changed)",
@@ -247,7 +231,7 @@
       "restartRequired": "The following fields require a Wings restart to take effect: {fields}",
       "restart": "Restart Wings",
       "restartConfirmTitle": "Restart Wings?",
-      "restartConfirmMsg": "All servers on this node will briefly go offline while Wings restarts.",
+      "restartConfirmMsg": "All servers on this host will briefly go offline while Wings restarts.",
       "restartOk": "Wings restarted ({ms} ms)",
       "restartFail": "Restart failed: {err}",
       "saveAndRestartTitle": "Save and restart Wings?",
@@ -286,7 +270,6 @@
       "channelSection": "Notification channel",
       "rulesSection": "Alert types & thresholds",
       "rulesTip": "Disabled types will not raise alerts on this host. Unmodified thresholds use global defaults.",
-      "rulesTitle": "Alert types & thresholds",
       "threshold": "Threshold",
       "warningThreshold": "warning %",
       "criticalThreshold": "critical %",
@@ -306,7 +289,7 @@
         "cooldown": "Same alert type for the same host won't re-fire within the cooldown window."
       },
       "types": {
-        "node_offline": "Node offline",
+        "node_offline": "Host offline",
         "agent_only_down": "Only agent unreachable",
         "wings_only_down": "Only wings unreachable",
         "network_down": "Public network down",
@@ -327,7 +310,6 @@
     }
   },
   "allocations": {
-    "summary": "{total} total ({assigned} assigned · {unassigned} free)",
     "summaryFiltered": "{n} total",
     "filter": {
       "label": "Status",
@@ -335,7 +317,9 @@
       "assigned": "Assigned",
       "unassigned": "Unassigned"
     },
-    "search": { "placeholder": "Search port / IP / server" },
+    "search": {
+      "placeholder": "Search port / IP / server"
+    },
     "columns": {
       "select": "Select",
       "ip": "IP",
@@ -353,16 +337,11 @@
     "empty": "No allocations on this node yet.",
     "emptyFiltered": "No allocations match the current filter.",
     "selection": {
-      "action": "Select action",
-      "execute": "Execute",
-      "selected": "{n} selected",
-      "clear": "Clear",
       "bulkDelete": "Delete"
     },
     "actions": {
       "create": "New allocations",
-      "delete": "Delete",
-      "openServer": "Open server"
+      "delete": "Delete"
     },
     "create": {
       "title": "New allocations",
@@ -397,8 +376,6 @@
     "labelTarget": "Target: ",
     "wingsDefault": "Wings default",
     "wingsDefaultOption": "Wings default path",
-    "wingsPathNote": "Writes to the api.ssl paths configured in wings config.yml and restarts Wings.",
-    "targetWillInstall": "Writes to the target「{name}」path declared in the agent config.",
     "empty": "No certificates deployed to this host yet.",
     "addDeployment": "Deploy Certificate",
     "selectCert": "Select certificate",
@@ -462,20 +439,16 @@
     },
     "bind": {
       "title": "Bind Cloudflare account and zone",
-      "step1Title": "Step 1: enter Account ID and API Token. Verify will fetch the available zone list.",
-      "step2Title": "Step 2: choose the root domain this host should use.",
       "verify": "Verify and fetch zones",
       "back": "Back",
-      "save": "Save binding",
-      "zonesFound": "{n} zone(s) found"
+      "save": "Save binding"
     },
     "confirm": {
       "restartTitle": "Restart cloudflared?",
       "restartMsg": "Servers proxied via this tunnel will be unreachable for a few seconds during restart.",
       "uninstallTitle": "Uninstall Cloudflare Tunnel",
       "uninstallMsg": "This stops and removes cloudflared on the host AND deletes the Cloudflare-side tunnel record. This cannot be undone.",
-      "uninstallBusyMsg": "{n} server(s) currently use this tunnel. They will lose tunnel access after uninstall.",
-      "uninstallTypePrompt": "Type the host name to confirm:"
+      "uninstallBusyMsg": "{n} server(s) currently use this tunnel. They will lose tunnel access after uninstall."
     },
     "cols": {
       "serverId": "Server",

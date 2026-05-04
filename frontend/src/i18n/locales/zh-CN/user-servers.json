@@ -4,6 +4,19 @@
   "openApp": "打开 {name}",
   "openAppGeneric": "打开应用",
   "renew": "续费",
+  "upgrade": {
+    "button": "升级",
+    "modalTitle": "升级套餐",
+    "currentPlan": "当前套餐：{name} · 剩余 {days} 天",
+    "selectTarget": "选择目标套餐",
+    "diffLabel": "升级差价",
+    "noOptions": "没有可升级的套餐",
+    "restartRequired": "升级后需手动重启服务器才能应用新配置。"
+  },
+  "renewFlow": {
+    "planLoadFailed": "套餐信息加载失败",
+    "noPlan": "此服务器未绑定套餐，无法续费"
+  },
   "searchPlaceholder": "搜索服务器...",
   "scope": {
     "all": "显示全部服务器"
@@ -60,6 +73,7 @@
     "debugSection": "Debug 信息",
     "sftpSection": "SFTP 连接",
     "clientSection": "SFTP 客户端",
+    "supportSection": "需要帮助",
     "sftpTip": "SFTP 让你像管理本地文件夹一样管理服务器文件，适合上传/下载大文件、批量替换文件等。使用本系统的账户密码登录。",
     "debugTip": "联系客服或反馈问题时请提供以下信息。",
     "host": "主机",
@@ -71,7 +85,6 @@
     "serverUuid": "服务器 UUID",
     "shortId": "短 ID",
     "node": "节点",
-    "copied": "已复制",
     "clientDesktop": "桌面端",
     "clientIos": "iOS",
     "clientAndroid": "Android"
@@ -85,7 +98,7 @@
   "reconnectFailed": "无法连接到服务器节点",
   "suspendedHint": "服务器已到期，请及时续费",
   "reconnectHint": "请检查网络或联系客服",
-  "serverOfflineHint": "使用电源控制开启服务器",
+  "serverOfflineHint": "使用电源控制启动服务器",
   "power": {
     "title": "电源控制",
     "start": "开机",
@@ -104,7 +117,6 @@
     "goToSettings": "前往设置"
   },
   "resources": {
-    "title": "资源使用",
     "cpu": "CPU",
     "memory": "内存",
     "disk": "磁盘",
@@ -137,7 +149,7 @@
     "save": "保存",
     "saved": "文件已保存",
     "unsavedChangesTitle": "放弃未保存的更改？",
-    "unsavedChangesMessage": "当前文件 “{name}” 有未保存的修改，关闭后将丢失。",
+    "unsavedChangesMessage": "当前文件 “{name}” 有未保存的更改，关闭后将丢失。",
     "unsavedChangesDiscard": "放弃更改",
     "confirmDelete": "确定要删除选中的 {n} 个文件吗？",
     "folderName": "文件夹名称",
@@ -171,53 +183,32 @@
     "loadFailed": "加载失败",
     "retry": "重试",
     "addressSection": "访问地址",
-    "addressDesc": "本服务器可使用下列地址进行访问。",
     "rawAddress": "直连地址",
     "rawAddressHint": "直连服务器的网络地址，访问速度最快、连接最为稳定。",
     "customDomain": "自定义域名",
     "customDomainHint": "为服务器提供一个友好、易记的访问网址，无需填写端口号即可在浏览器中打开。",
     "copyAddress": "复制",
-    "copied": "已复制",
-
     "section": "自定义域名",
     "enableLabel": "启用自定义域名",
     "enableHint": "启用后，本服务器将获得一个简洁、易记的访问网址，无需输入端口号即可在浏览器中打开。",
-    "statusActive": "已开启",
+    "statusActive": "已启用",
     "statusFailed": "出错了",
-    "statusFailedHint": "可尝试重新开启。如反复失败，请联系管理员。",
-
+    "statusFailedHint": "可尝试重新启用。如反复失败，请联系管理员。",
     "subdomainLabel": "网址前缀",
     "subdomainPlaceholder": "例如 mychat",
     "subdomainHint": "只能包含小写字母、数字、连字符 (-)，最长 32 个字符。开头和结尾不能是 -。",
     "subdomainInvalid": "格式不正确",
     "subdomainRequired": "请填写网址前缀",
-    "subdomainTaken": "该前缀已被占用，请换一个",
-    "subdomainSave": "保存前缀",
-    "subdomainSaved": "已保存",
-    "subdomainCurrent": "当前网址",
-
     "warning": {
-      "title": "开启前请先了解",
-      "body": "启用自定义域名后，访问流量会多经一段额外的网络路径，多数情况下会比直连访问更慢、更不稳定，甚至可能出现连接中断。如果直连地址已能正常访问，建议保持关闭；仅在直连地址无法访问时才建议启用。本功能由 Cloudflare 提供，启用后所有流量均会经过 Cloudflare 服务器中转。"
+      "title": "注意事项",
+      "body": "使用自定义域名访问服务器，流量会多经过一段额外的网络路径，可能会出现网络质量不如直连地址的情况，建议在直连卡顿，或客户端位于中国大陆之外时启用。"
     },
-
-    "disableConfirm": {
-      "title": "确定要关闭自定义域名吗？",
-      "message": "关闭后，自定义域名将立即停止工作。任何使用该网址访问的设备都需要改用直连地址。",
-      "confirm": "确定关闭"
-    },
-
     "hostNotReady": {
-      "title": "自定义域名功能尚未在该节点开通",
+      "title": "自定义域名功能尚未在该主机开通",
       "message": "请联系管理员开通后再使用。"
     },
-
     "toast": {
-      "saved": "设置已保存",
-      "enableSuccess": "自定义域名已开启",
-      "disableSuccess": "自定义域名已关闭",
-      "renameSuccess": "网址前缀已更新",
-      "genericError": "操作失败，请稍后重试"
+      "saved": "设置已保存"
     }
   }
 }

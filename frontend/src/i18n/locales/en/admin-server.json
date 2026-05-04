@@ -1,7 +1,6 @@
 {
   "title": "Server detail",
   "loading": "Loading server detail…",
-  "notFound": "Server not found",
   "controls": {
     "openConsole": "Console"
   },
@@ -60,14 +59,12 @@
       "stale": "Stale"
     },
     "expired": "expired",
-    "today": "today",
     "daysLeft": "{n}d left",
     "copy": "Copy",
     "copied": "Copied",
     "copyFailed": "Copy failed"
   },
   "settings": {
-    "loading": "Loading settings…",
     "saved": "Saved",
     "saveFailed": "Save failed",
     "unsavedHint": "Unsaved changes",
@@ -147,7 +144,6 @@
       "skipScripts": "Skip install scripts",
       "variables": "Egg variables",
       "noVariables": "No configurable variables",
-      "envVar": "Env",
       "errors": {
         "invalid": "{n} variable(s) failed validation",
         "imageRequired": "Docker image is required",
@@ -181,9 +177,6 @@
   "lifecycle": {
     "suspend": {
       "sectionTitle": "Suspend",
-      "desc": "Suspending the server immediately blocks user access. Restoring it re-enables normal access.",
-      "currentActive": "Current state: active",
-      "currentSuspended": "Current state: suspended",
       "suspendTitle": "Suspend server",
       "unsuspendTitle": "Restore server",
       "suspendMessage": "Suspend server {name}? This immediately affects user access.",
@@ -193,7 +186,6 @@
     },
     "renew": {
       "sectionTitle": "Renew",
-      "desc": "Set a new expiration date. If the server is already expired, the renewal starts from today.",
       "currentExpiration": "Expiration:",
       "targetDate": "Target date",
       "quickDays": "+{n} days",
@@ -206,15 +198,18 @@
     },
     "reinstall": {
       "sectionTitle": "Reinstall",
-      "desc": "Reinstall restarts the install flow and marks the server as installing. Use it only when you intend to rebuild the runtime environment.",
       "installingHint": "The server is already in an install flow. Reinstall is temporarily unavailable.",
       "title": "Start reinstall",
       "confirmMessage": "Start reinstall for server {name}? This will rerun the install flow.",
       "action": "Reinstall server"
     },
+    "plan": {
+      "sectionTitle": "Plan Binding",
+      "currentBinding": "Current Plan:",
+      "action": "Change Plan"
+    },
     "delete": {
       "sectionTitle": "Delete",
-      "desc": "Delete removes the panel record, releases resources, and attempts to destroy the Wings instance. Force delete continues removing the panel record even if Wings deletion fails.",
       "warning": "Server data is not retained after deletion. Force delete is only for broken remote states where a normal delete cannot complete.",
       "action": "Delete server",
       "forceAction": "Force delete server",

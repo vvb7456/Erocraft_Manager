@@ -108,7 +108,8 @@ function detailLabel(log: LogItem): string {
     params.type = t(`logs.reminderType.${params.type}`, params.type)
   }
   if (typeof params.kind === 'string') {
-    params.kind = t(`hosts.kind.${params.kind}`, params.kind)
+    const kindKey = `hosts.kind.${params.kind}`
+    if (te(kindKey)) params.kind = t(kindKey)
   }
   if (typeof params.language === 'string') {
     params.language = t(`logs.language.${params.language}`, params.language)

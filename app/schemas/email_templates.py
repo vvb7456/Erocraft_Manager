@@ -13,6 +13,7 @@ TemplateTypeLiteral = Literal[
     "bulk", "reminder", "preDelete", "createUser",
     "passwordReset", "emailChange", "registerVerify",
     "alertFired", "alertResolved",
+    "orderPaid", "orderApplyFailed", "orderApplyAlert", "orderRefunded",
 ]
 
 
@@ -43,6 +44,10 @@ class EmailTemplatesResponse(BaseModel):
     registerVerify: EmailTemplatePayload
     alertFired: EmailTemplatePayload
     alertResolved: EmailTemplatePayload
+    orderPaid: EmailTemplatePayload
+    orderApplyFailed: EmailTemplatePayload
+    orderApplyAlert: EmailTemplatePayload
+    orderRefunded: EmailTemplatePayload
 
 
 class SaveEmailTemplateRequest(BaseModel):

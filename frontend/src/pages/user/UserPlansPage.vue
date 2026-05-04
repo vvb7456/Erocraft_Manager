@@ -1,0 +1,195 @@
+<script setup lang="ts">
+/**
+ * UserPlansPage — `/plans`
+ *
+ * Browses active billing plans, grouped by ``category_label`` (admin-set
+ * UI label, decoupled from egg). Plans without a label fall into a final
+ * "其他" / "Others" section. Clicking "Buy now" posts to
+ * ``POST /api/user/orders`` and redirects to ``/orders/:id``.
+ */
+import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useApiFetch } from '@/composables/useApiFetch'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import SectionHeader from '@/components/ui/SectionHeader.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import LoadingCenter from '@/components/ui/LoadingCenter.vue'
+import AlertBanner from '@/components/ui/AlertBanner.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import PlanCard from '@/components/PlanCard.vue'
+import CreateOrderModal from '@/components/CreateOrderModal.vue'
+
+defineOptions({ name: 'UserPlansPage' })
+
+interface PeriodOption {
+  count: number
+  discount_pct: number
+}
+
+interface Plan {
+  id: number
+  code: string
+  display_name: string
+  price_fen: number
+  days: number
+  currency_code: string
+  period_options: PeriodOption[]
+  cpu: number
+  memory_mb: number
+  disk_mb: number
+  description_md: string | null
+  category_label: string | null
+  display_order: number
+  created_at: string
+  updated_at: string
+}
+
+interface PlanGroup {
+  label: string | null
+  plans: Plan[]
+}
+
+const { t } = useI18n({ useScope: 'global' })
+const { get } = useApiFetch()
+
+const plans = ref<Plan[]>([])
+const initialLoading = ref(true)
+const loadFailed = ref(false)
+
+// Cashier modal state
+const cashierOpen = ref(false)
+const cashierPlan = ref<Plan | null>(null)
+const cashierPeriodCount = ref<number | undefined>(undefined)
+
+/** Group plans by category_label, preserving display_order within each group. */
+const groups = computed<PlanGroup[]>(() => {
+  const map = new Map<string, PlanGroup>()
+  const order: string[] = []
+
+  for (const p of plans.value) {
+    const key = p.category_label ?? '__uncategorised__'
+    if (!map.has(key)) {
+      map.set(key, { label: p.category_label, plans: [] })
+      order.push(key)
+    }
+    map.get(key)!.plans.push(p)
+  }
+
+  // Push uncategorised group to the bottom
+  const idx = order.indexOf('__uncategorised__')
+  if (idx !== -1 && idx !== order.length - 1) {
+    order.splice(idx, 1)
+    order.push('__uncategorised__')
+  }
+
+  return order.map((k) => map.get(k)!)
+})
+
+async function loadPlans() {
+  loadFailed.value = false
+  const data = await get<Plan[]>('/api/user/plans', { silent: true })
+  if (data === null) {
+    loadFailed.value = true
+  } else {
+    plans.value = data
+  }
+  initialLoading.value = false
+}
+
+async function handleBuy(plan: Plan, period: PeriodOption) {
+  cashierPlan.value = plan
+  cashierPeriodCount.value = period.count
+  cashierOpen.value = true
+}
+
+onMounted(loadPlans)
+</script>
+
+<template>
+  <PageHeader icon="storefront" :title="t('billing.plans.pageTitle')" />
+
+  <div class="plans-page">
+    <LoadingCenter v-if="initialLoading" />
+
+    <AlertBanner v-else-if="loadFailed" tone="danger">
+      <div class="plans-page__error">
+        <span>{{ t('billing.plans.loadFailed') }}</span>
+        <BaseButton size="sm" variant="primary" @click="loadPlans">
+          {{ t('billing.plans.retry') }}
+        </BaseButton>
+      </div>
+    </AlertBanner>
+
+    <EmptyState
+      v-else-if="plans.length === 0"
+      icon="storefront"
+      :title="t('billing.plans.emptyTitle')"
+      :message="t('billing.plans.emptyHint')"
+    />
+
+    <template v-else>
+      <section
+        v-for="(group, idx) in groups"
+        :key="group.label ?? '__uncategorised__'"
+        class="plans-page__group"
+      >
+        <SectionHeader align="center" :flush="idx === 0">
+          {{ group.label ?? t('billing.plans.uncategorised') }}
+        </SectionHeader>
+        <div class="plans-grid">
+          <PlanCard
+            v-for="plan in group.plans"
+            :key="plan.id"
+            :plan="plan"
+            @buy="handleBuy"
+          />
+        </div>
+      </section>
+    </template>
+
+    <CreateOrderModal
+      v-model="cashierOpen"
+      :plan="cashierPlan"
+      :default-period-count="cashierPeriodCount"
+    />
+  </div>
+</template>
+
+<style scoped>
+.plans-page {
+  padding: var(--sp-5) var(--sp-6);
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.plans-page__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+}
+
+.plans-page__group + .plans-page__group {
+  margin-top: var(--sp-6);
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 340px));
+  gap: var(--sp-5);
+  align-items: stretch;
+  justify-content: center;
+}
+
+@media (max-width: 768px) {
+  .plans-page {
+    padding: var(--sp-4) var(--sp-3);
+  }
+
+  .plans-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-4);
+  }
+}
+</style>

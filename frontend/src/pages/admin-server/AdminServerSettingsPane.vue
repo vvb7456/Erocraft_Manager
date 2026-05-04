@@ -89,11 +89,13 @@ async function onSave() {
       @discard="dirtyForm.discard"
     >
       <template v-if="validationErrors.length > 0" #hint>
-        <span class="invalid-hint">
+        <span class="va-hint">
           <MsIcon name="error" size="sm" />
           {{ t('adminServer.settings.invalidHint', { n: validationErrors.length }) }}
-          <span class="invalid-first">{{ validationErrors[0] }}</span>
         </span>
+      </template>
+      <template v-if="validationErrors.length > 0" #extra>
+        <span v-for="(e, i) in validationErrors" :key="i" class="va-chip">{{ e }}</span>
       </template>
     </DirtyBar>
   </div>
@@ -109,18 +111,7 @@ async function onSave() {
 .settings-panel > * + * {
   margin-top: var(--sp-5);
 }
-.invalid-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  color: var(--red);
-  font-size: var(--text-sm);
-  font-weight: 500;
-}
-.invalid-first {
-  color: var(--t2);
-  font-weight: 400;
-  font-size: var(--text-xs);
-  font-family: 'IBM Plex Mono', monospace;
-}
+.va-hint { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--red); font-size: var(--text-sm); font-weight: 500; }
+.va-chip { font-size: var(--text-xs); color: var(--t2); white-space: nowrap; }
+.va-chip + .va-chip::before { content: ' · '; color: var(--t3); }
 </style>
