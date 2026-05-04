@@ -131,7 +131,7 @@ function schedulePreview() {
 }
 
 // ── Save / discard ──
-async function save() {
+async function save(): Promise<boolean> {
   saveLoading.value = true
   const k = activeKey.value; const c = all.value[k]
   const res = await post('/api/admin/email-templates', {
@@ -143,7 +143,9 @@ async function save() {
   if (res) {
     savedAll.value[k] = { ...c }
     toast(t('emailTemplates.saved'), 'success')
+    return true
   }
+  return false
 }
 
 function discard() {

@@ -390,7 +390,7 @@ function statusBadgeColor(s: string): string {
           <AlertBanner v-if="detail!.cloudflared_live_error" tone="warning" dense>
             {{ t('hosts.tunnel.liveProbeFailed') }}: {{ detail!.cloudflared_live_error }}
           </AlertBanner>
-          <AlertBanner v-if="detail!.last_error" tone="error" dense>
+          <AlertBanner v-if="detail!.last_error" tone="danger" dense>
             {{ detail!.last_error }}
           </AlertBanner>
 
@@ -566,7 +566,7 @@ function statusBadgeColor(s: string): string {
     <!-- ── Uninstall modal (typed-name confirmation) ── -->
     <BaseModal v-model="uninstallOpen" :title="t('hosts.tunnel.confirm.uninstallTitle')" icon="warning" size="sm">
       <div class="uninstall-body">
-        <AlertBanner tone="error" dense>
+        <AlertBanner tone="danger" dense>
           {{ detail && detail.server_tunnel_count > 0
             ? t('hosts.tunnel.confirm.uninstallBusyMsg', { n: detail.server_tunnel_count })
             : t('hosts.tunnel.confirm.uninstallMsg') }}

@@ -1,4 +1,15 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="P extends {
+  id: number
+  display_name: string
+  price_fen: number
+  days: number
+  currency_code: string
+  period_options: { count: number; discount_pct: number }[]
+  cpu: number
+  memory_mb: number
+  disk_mb: number
+  description_md: string | null
+}">
 /**
  * PlanCard — single billing plan tile used by UserPlansPage.
  *
@@ -32,13 +43,13 @@ interface Plan {
 }
 
 const props = defineProps<{
-  plan: Plan
+  plan: P
   loading?: boolean
   disabled?: boolean
 }>()
 
 const emit = defineEmits<{
-  buy: [plan: Plan, period: PeriodOption]
+  buy: [plan: P, period: PeriodOption]
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
