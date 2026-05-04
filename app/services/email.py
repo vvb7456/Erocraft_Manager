@@ -102,6 +102,7 @@ EMAIL_TEMPLATE_API_TO_INTERNAL = {
     "order_apply_failed": "order_apply_failed",
     "order_apply_alert": "order_apply_alert",
     "order_refunded": "order_refunded",
+    "server_installed": "server_installed",
     "preDelete": "pre_delete",
     "createUser": "create_user",
     "passwordReset": "password_reset",
@@ -113,6 +114,7 @@ EMAIL_TEMPLATE_API_TO_INTERNAL = {
     "orderApplyFailed": "order_apply_failed",
     "orderApplyAlert": "order_apply_alert",
     "orderRefunded": "order_refunded",
+    "serverInstalled": "server_installed",
 }
 
 EMAIL_TEMPLATE_INTERNAL_KEYS = (
@@ -129,6 +131,7 @@ EMAIL_TEMPLATE_INTERNAL_KEYS = (
     "order_apply_failed",
     "order_apply_alert",
     "order_refunded",
+    "server_installed",
 )
 
 _TEMPLATE_FILES = {
@@ -145,6 +148,7 @@ _TEMPLATE_FILES = {
     "order_apply_failed": _PROJECT_ROOT / "templates" / "order_apply_failed_template.json",
     "order_apply_alert": _PROJECT_ROOT / "templates" / "order_apply_alert_template.json",
     "order_refunded": _PROJECT_ROOT / "templates" / "order_refunded_template.json",
+    "server_installed": _PROJECT_ROOT / "templates" / "server_installed_template.json",
 }
 
 _PREVIEW_DUMMY_VALUES: dict[str, str] = {
@@ -201,6 +205,7 @@ _PREVIEW_ACTIONS: dict[str, tuple[str, str]] = {
     "order_apply_failed": ("", ""),
     "order_apply_alert": ("查看订单", "/#/admin/billing/orders"),
     "order_refunded": ("查看订单", "/#/account"),
+    "server_installed": ("进入控制台", "/#/servers/12345/console"),
 }
 
 

@@ -51,6 +51,9 @@
   "orderRefunded": {
     "title": "Order Refunded"
   },
+  "serverInstalled": {
+    "title": "Server Installed"
+  },
   "var": {
     "brand_name": "Brand Name",
     "username": "Username",
@@ -89,6 +92,7 @@
     "refund_reason": "Refund Reason",
     "refunded_at": "Refunded At",
     "apply_error": "Apply Error",
-    "apply_retry_count": "Apply Retry Count"
+    "apply_retry_count": "Apply Retry Count",
+    "installed_at": "Installed At"
   }
 }

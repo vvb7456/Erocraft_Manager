@@ -45,6 +45,14 @@ class ServerMeta(Base):
     # by manual server creation. Renew reads this to look up price + period.
     # See ``docs/BILLING_DESIGN.md`` §3.3.2.
     plan_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Set once when the "server installed" notification email has been sent
+    # for this server (or the row was backfilled on first deploy of the
+    # feature). Stays set across reinstalls so they don't re-trigger the
+    # email — only first-install completion notifies. NULL means "first
+    # install pending or notification not yet attempted".
+    install_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
 
     server: Mapped["PteroServer"] = relationship("PteroServer", back_populates="meta")
 

@@ -36,6 +36,7 @@ from app.jobs.tasks.cleanup import CLEANUP_JOB_ID, run_token_cleanup
 from app.jobs.tasks.delete import sync_delete_job
 from app.jobs.tasks.monitoring import MONITORING_JOB_ID, run_monitoring_collect
 from app.jobs.tasks.reminders import sync_reminder_jobs
+from app.jobs.tasks.server_install_notify import sync_install_notify_job
 from app.jobs.tasks.suspend import sync_suspend_job
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,7 @@ async def sync_managed_jobs(scheduler: AsyncIOScheduler) -> bool:
     sync_suspend_job(scheduler, values)
     sync_delete_job(scheduler, values)
     sync_reminder_jobs(scheduler, values)
+    sync_install_notify_job(scheduler, values)
     _last_settings_signature = signature
     logger.info("manager-jobs schedule updated from runtime settings")
     return True

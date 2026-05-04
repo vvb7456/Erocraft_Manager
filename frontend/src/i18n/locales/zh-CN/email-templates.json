@@ -51,6 +51,9 @@
   "orderRefunded": {
     "title": "订单退款完成"
   },
+  "serverInstalled": {
+    "title": "服务器安装完成"
+  },
   "var": {
     "brand_name": "品牌名称",
     "username": "用户名",
@@ -89,6 +92,7 @@
     "refund_reason": "退款原因",
     "refunded_at": "退款完成时间",
     "apply_error": "开通失败原因",
-    "apply_retry_count": "已重试次数"
+    "apply_retry_count": "已重试次数",
+    "installed_at": "安装完成时间"
   }
 }

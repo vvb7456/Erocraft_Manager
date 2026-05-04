@@ -1,0 +1,4 @@
+{
+    "subject": "【{{brand_name}}】服务器已开通完成",
+    "body": "您的服务器已部署完成，可以登录使用。\n\n服务器名称：{{server_name}}\n服务器 ID：{{server_id}}\n完成时间：{{installed_at}}\n\n点击下方按钮进入服务器控制台。"
+}

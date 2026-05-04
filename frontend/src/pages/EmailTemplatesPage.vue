@@ -22,6 +22,7 @@ type TemplateKey =
   | 'bulk' | 'reminder' | 'preDelete' | 'createUser' | 'passwordReset'
   | 'emailChange' | 'registerVerify' | 'alertFired' | 'alertResolved'
   | 'orderPaid' | 'orderApplyFailed' | 'orderApplyAlert' | 'orderRefunded'
+  | 'serverInstalled'
 
 interface TemplateData { subject: string; body: string }
 
@@ -29,6 +30,7 @@ const KEYS: TemplateKey[] = [
   'bulk', 'reminder', 'preDelete', 'createUser', 'passwordReset',
   'emailChange', 'registerVerify', 'alertFired', 'alertResolved',
   'orderPaid', 'orderApplyFailed', 'orderApplyAlert', 'orderRefunded',
+  'serverInstalled',
 ]
 
 const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
@@ -45,6 +47,7 @@ const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
   orderApplyFailed: ['brand_name', 'order_no', 'plan_name', 'total_yuan', 'currency_code', 'paid_at', 'apply_error'],
   orderApplyAlert: ['brand_name', 'order_no', 'username', 'email', 'plan_name', 'total_yuan', 'currency_code', 'apply_retry_count', 'apply_error'],
   orderRefunded: ['brand_name', 'order_no', 'refund_no', 'refund_amount_yuan', 'currency_code', 'refund_reason', 'refunded_at'],
+  serverInstalled: ['brand_name', 'username', 'server_name', 'server_id', 'server_uuid', 'installed_at'],
 }
 
 const { t } = useI18n({ useScope: 'global' })
