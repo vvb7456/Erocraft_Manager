@@ -189,6 +189,7 @@ _PREVIEW_DUMMY_VALUES: dict[str, str] = {
     "refunded_at": "2026-05-01 09:00:00 UTC",
     "apply_error": "node has no available allocation",
     "apply_retry_count": "3",
+    "installed_at": "2026-05-04 08:58:42 UTC",
 }
 
 _PREVIEW_ACTIONS: dict[str, tuple[str, str]] = {
@@ -735,7 +736,10 @@ async def send_alert_email(
         return False, f"missing template: {template_key}"
 
     site_url = await get_site_url(db)
+    store = get_settings_store()
+    brand_name = str(await store.get(db, "BRAND_NAME", SETTINGS_SPECS["BRAND_NAME"].default_value()))
     variables: dict[str, Any] = {
+        "brand_name": brand_name,
         "node_name": host_name,
         "node_id": "" if host_id is None else str(host_id),
         "alert_type": alert_type,

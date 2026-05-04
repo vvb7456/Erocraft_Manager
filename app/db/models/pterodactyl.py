@@ -32,7 +32,7 @@ class PteroUser(Base):
     name_last: Mapped[str | None] = mapped_column(String(191), nullable=True)
     password: Mapped[str] = mapped_column(Text, nullable=False)
     remember_token: Mapped[str | None] = mapped_column(String(191), nullable=True)
-    language: Mapped[str] = mapped_column(String(5), nullable=False, default="en")
+    language: Mapped[str] = mapped_column(String(5), nullable=False, default="zh")
     root_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     use_totp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     totp_secret: Mapped[str | None] = mapped_column(Text, nullable=True)

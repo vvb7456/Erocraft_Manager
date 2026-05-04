@@ -9,6 +9,7 @@
  */
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
@@ -16,6 +17,8 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import MsIcon from '@/components/ui/MsIcon.vue'
+import SupportModal from '@/components/billing/SupportModal.vue'
 import PlanCard from '@/components/PlanCard.vue'
 import CreateOrderModal from '@/components/CreateOrderModal.vue'
 
@@ -51,6 +54,7 @@ interface PlanGroup {
 
 const { t } = useI18n({ useScope: 'global' })
 const { get } = useApiFetch()
+const router = useRouter()
 
 const plans = ref<Plan[]>([])
 const initialLoading = ref(true)
@@ -60,6 +64,9 @@ const loadFailed = ref(false)
 const cashierOpen = ref(false)
 const cashierPlan = ref<Plan | null>(null)
 const cashierPeriodCount = ref<number | undefined>(undefined)
+
+// Support modal state
+const supportOpen = ref(false)
 
 /** Group plans by category_label, preserving display_order within each group. */
 const groups = computed<PlanGroup[]>(() => {
@@ -122,10 +129,19 @@ onMounted(loadPlans)
 
     <EmptyState
       v-else-if="plans.length === 0"
-      icon="storefront"
+      icon="inventory_2"
       :title="t('billing.plans.emptyTitle')"
       :message="t('billing.plans.emptyHint')"
-    />
+    >
+      <BaseButton variant="default" @click="router.push({ name: 'user-servers' })">
+        <MsIcon name="dns" />
+        {{ t('nav.myServers') }}
+      </BaseButton>
+      <BaseButton variant="primary" @click="supportOpen = true">
+        <MsIcon name="support_agent" />
+        {{ t('nav.contactSupport') }}
+      </BaseButton>
+    </EmptyState>
 
     <template v-else>
       <section
@@ -133,7 +149,7 @@ onMounted(loadPlans)
         :key="group.label ?? '__uncategorised__'"
         class="plans-page__group"
       >
-        <SectionHeader align="center" :flush="idx === 0">
+        <SectionHeader align="center" with-lines :flush="idx === 0">
           {{ group.label ?? t('billing.plans.uncategorised') }}
         </SectionHeader>
         <div class="plans-grid">
@@ -152,14 +168,20 @@ onMounted(loadPlans)
       :plan="cashierPlan"
       :default-period-count="cashierPeriodCount"
     />
+
+    <SupportModal v-model="supportOpen" />
   </div>
 </template>
 
 <style scoped>
 .plans-page {
   padding: var(--sp-5) var(--sp-6);
-  max-width: 1280px;
+  max-width: 1320px;
   margin: 0 auto;
+  min-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .plans-page__error {
@@ -171,13 +193,13 @@ onMounted(loadPlans)
 }
 
 .plans-page__group + .plans-page__group {
-  margin-top: var(--sp-6);
+  margin-top: var(--sp-8);
 }
 
 .plans-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 340px));
-  gap: var(--sp-5);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 360px));
+  gap: var(--sp-6);
   align-items: stretch;
   justify-content: center;
 }

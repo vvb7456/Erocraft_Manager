@@ -1,6 +1,7 @@
 {
   "title": "我的服务器",
   "empty": "暂无服务器",
+  "buyServer": "购买服务器",
   "openApp": "打开 {name}",
   "openAppGeneric": "打开应用",
   "renew": "续费",

@@ -76,7 +76,11 @@ onUnmounted(() => { mql?.removeEventListener('change', onMediaChange) })
   </div>
 
   <!-- Empty -->
-  <EmptyState v-else-if="items.length === 0" :icon="emptyIcon" :title="emptyText || t('common.empty')" />
+  <template v-else-if="items.length === 0">
+    <slot name="empty">
+      <EmptyState :icon="emptyIcon" :title="emptyText || t('common.empty')" />
+    </slot>
+  </template>
 
   <!-- Table (desktop) or Cards (mobile) -->
   <template v-else>

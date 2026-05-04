@@ -49,7 +49,7 @@ def _build_profile(user: PteroUser) -> UserAccountProfileResponse:
         username=user.username,
         email=user.email,
         is_admin=bool(user.root_admin),
-        language=user.language or "en",
+        language=user.language or "zh",
     )
 
 

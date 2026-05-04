@@ -78,7 +78,7 @@ const createLoading = ref(false)
 // Edit modal
 const editModalOpen = ref(false)
 const editUser = ref<UserItem | null>(null)
-const editForm = ref({ username: '', email: '', firstName: '', lastName: '', password: '', language: 'en' })
+const editForm = ref({ username: '', email: '', firstName: '', lastName: '', password: '', language: 'zh' })
 const editLoading = ref(false)
 
 // ── Options ──

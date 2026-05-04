@@ -14,6 +14,7 @@ TemplateTypeLiteral = Literal[
     "passwordReset", "emailChange", "registerVerify",
     "alertFired", "alertResolved",
     "orderPaid", "orderApplyFailed", "orderApplyAlert", "orderRefunded",
+    "serverInstalled",
 ]
 
 
@@ -48,6 +49,7 @@ class EmailTemplatesResponse(BaseModel):
     orderApplyFailed: EmailTemplatePayload
     orderApplyAlert: EmailTemplatePayload
     orderRefunded: EmailTemplatePayload
+    serverInstalled: EmailTemplatePayload
 
 
 class SaveEmailTemplateRequest(BaseModel):

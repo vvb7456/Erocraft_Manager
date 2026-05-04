@@ -413,11 +413,7 @@ function onCancel() {
       <!-- Plan hero -->
       <div class="hero">
         <div class="hero__main">
-          <h3 class="hero__name">{{ plan.display_name }}</h3>
-          <p v-if="plan.description_md" class="hero__desc">
-            {{ plan.description_md }}
-          </p>
-        </div>
+          <h3 class="hero__name">{{ plan.display_name }}</h3>        </div>
         <Badge v-if="plan.category_label" color="var(--ac)">
           {{ plan.category_label }}
         </Badge>

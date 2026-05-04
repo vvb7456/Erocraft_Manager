@@ -12,7 +12,7 @@ class UserAccountProfileResponse(BaseModel):
     username: str
     email: str
     is_admin: bool
-    language: str = "en"
+    language: str = "zh"
 
 
 class UpdateUserAccountRequest(BaseModel):

@@ -7,6 +7,7 @@ defineProps<{
   icon?: string
   flush?: boolean
   align?: 'left' | 'center'
+  withLines?: boolean
 }>()
 </script>
 
@@ -14,7 +15,7 @@ defineProps<{
   <div
     class="section-header"
     :class="[
-      { 'section-header--flush': flush },
+      { 'section-header--flush': flush, 'section-header--with-lines': withLines },
       `section-header--align-${align ?? 'left'}`,
     ]"
   >
@@ -44,6 +45,20 @@ defineProps<{
 .section-header--align-center {
   justify-content: center;
   text-align: center;
+}
+
+.section-header--align-center.section-header--with-lines {
+  position: relative;
+  gap: var(--sp-4);
+}
+
+.section-header--align-center.section-header--with-lines::before,
+.section-header--align-center.section-header--with-lines::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--bd);
+  max-width: 240px;
 }
 
 .section-header--align-center .section-title {

@@ -13,6 +13,7 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import Badge from '@/components/ui/Badge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -457,6 +458,18 @@ function openMobileAction(s: Server) {
       @update:page="page = $event"
       @update:per-page="perPage = $event; page = 1"
     >
+      <template #empty>
+        <EmptyState
+          icon="dns"
+          :title="t('userServers.empty')"
+        >
+          <BaseButton variant="primary" @click="router.push({ name: 'user-plans' })">
+            <MsIcon name="storefront" />
+            {{ t('userServers.buyServer') }}
+          </BaseButton>
+        </EmptyState>
+      </template>
+
       <template #header>
         <th class="col-check">
           <input type="checkbox" v-model="allSelected" />

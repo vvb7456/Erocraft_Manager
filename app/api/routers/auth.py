@@ -84,7 +84,7 @@ async def login(
         ok=True,
         username=user.username,
         is_admin=bool(user.root_admin),
-        language=user.language or "en",
+        language=user.language or "zh",
     )
 
 
@@ -96,7 +96,7 @@ async def me(
         ok=True,
         username=current_user.username,
         is_admin=bool(current_user.root_admin),
-        language=current_user.language or "en",
+        language=current_user.language or "zh",
     )
 
 

@@ -2,10 +2,11 @@
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import MsIcon from '../ui/MsIcon.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import LanguageToggle from '../ui/LanguageToggle.vue'
+import SupportModal from '@/components/billing/SupportModal.vue'
 
 defineOptions({ name: 'AppSidebar' })
 
@@ -61,6 +62,13 @@ async function doLogout() {
   await fetch('/api/logout', { method: 'POST' })
   app.clearSessionUser()
   router.push({ name: 'login' })
+}
+
+// ── Support modal ──
+const supportOpen = ref(false)
+function openSupport() {
+  supportOpen.value = true
+  if (window.innerWidth <= 768) app.closeMobileSidebar()
 }
 </script>
 
@@ -151,6 +159,15 @@ async function doLogout() {
       <button
         v-if="isUserLayout"
         class="nav-item"
+        @click="openSupport"
+      >
+        <span class="icon"><MsIcon name="support_agent" size="md" /></span>
+        <span class="nav-label">{{ t('nav.contactSupport') }}</span>
+      </button>
+
+      <button
+        v-if="isUserLayout"
+        class="nav-item"
         :class="{ active: currentPage === 'account' }"
         @click="navTo(accountItem)"
       >
@@ -187,6 +204,8 @@ async function doLogout() {
         </button>
       </div>
     </div>
+
+    <SupportModal v-model="supportOpen" />
   </nav>
 </template>
 

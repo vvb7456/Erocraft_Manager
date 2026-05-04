@@ -86,7 +86,7 @@ async def create_user(
     last_name: str,
     password: str,
     root_admin: bool = False,
-    language: str = "en",
+    language: str = "zh",
 ) -> CreatedUser:
     """Insert a new panel user. Caller is responsible for db.commit()."""
     user = PteroUser(
@@ -120,7 +120,7 @@ async def create_user_with_hashed_password(
     last_name: str,
     password_hash: str,
     root_admin: bool = False,
-    language: str = "en",
+    language: str = "zh",
 ) -> CreatedUser:
     """Insert a panel user using a pre-computed bcrypt ``$2y$`` hash.
 

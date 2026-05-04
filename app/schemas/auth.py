@@ -19,14 +19,14 @@ class LoginResponse(BaseModel):
     ok: bool
     username: str
     is_admin: bool
-    language: str = "en"
+    language: str = "zh"
 
 
 class MeResponse(BaseModel):
     ok: bool
     username: str
     is_admin: bool
-    language: str = "en"
+    language: str = "zh"
 
 
 class LogoutResponse(BaseModel):

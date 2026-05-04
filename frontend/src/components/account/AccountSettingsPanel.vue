@@ -51,7 +51,7 @@ const newPassword = ref('')
 const confirmPassword = ref('')
 const passwordBanner = ref('')
 
-const selectedLanguage = ref<BackendLocale>('en')
+const selectedLanguage = ref<BackendLocale>('zh')
 const languageBanner = ref('')
 
 const languageOptions = computed(() => [

@@ -1,6 +1,7 @@
 {
   "title": "My Servers",
   "empty": "No Servers",
+  "buyServer": "Buy a Server",
   "openApp": "Open {name}",
   "openAppGeneric": "Open App",
   "renew": "Renew",
