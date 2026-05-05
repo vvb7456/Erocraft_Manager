@@ -1,5 +1,10 @@
 {
   "listSep": "、",
+  "clipboard": {
+    "copied": "已复制",
+    "failed": "复制失败",
+    "empty": "没有可复制的内容"
+  },
   "btn": {
     "save": "保存",
     "saveDirty": "保存更改",

@@ -24,5 +24,32 @@
   },
   "pagination": {
     "perPage": "/ page"
+  },
+  "server": {
+    "power": {
+      "start": "Start server",
+      "stop": "Stop server",
+      "restart": "Restart server",
+      "kill": "Kill server"
+    },
+    "console": {
+      "command": "Console command"
+    },
+    "file": {
+      "read": "Read file",
+      "write": "Write file",
+      "rename": "Rename",
+      "delete": "Delete file",
+      "compress": "Compress",
+      "decompress": "Decompress",
+      "create-directory": "Create folder",
+      "download": "Download file",
+      "upload": "Upload file",
+      "uploaded": "Upload complete"
+    },
+    "startup": {
+      "edit": "Edit startup variable"
+    },
+    "reinstall": "Reinstall server"
   }
 }

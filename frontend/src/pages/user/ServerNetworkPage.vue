@@ -367,8 +367,7 @@ useDirtyFormSection(
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  padding: var(--sp-4);
-  max-width: 920px;
+  max-width: 760px;
   margin: 0 auto;
   width: 100%;
 }

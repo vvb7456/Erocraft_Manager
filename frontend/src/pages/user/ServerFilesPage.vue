@@ -484,6 +484,8 @@ async function onCreateFile() {
   align-items: center;
   gap: 2px;
   overflow-x: auto;
+  /* Contain horizontal rubber-band on iOS — a deep path can overflow on phones. */
+  overscroll-behavior-x: contain;
   min-width: 0;
 }
 
@@ -525,6 +527,7 @@ async function onCreateFile() {
   gap: var(--sp-3);
   position: relative;
   height: calc(100vh - 180px);
+  height: calc(100dvh - 180px);
   min-height: 360px;
 }
 
@@ -542,6 +545,8 @@ async function onCreateFile() {
 .tree-content {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: var(--sp-2) 0;
 }
 
@@ -552,6 +557,8 @@ async function onCreateFile() {
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--bd);
   border-radius: var(--r-md);
   background: var(--bg2);
@@ -869,6 +876,7 @@ async function onCreateFile() {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
     height: calc(100vh - 160px);
+    height: calc(100dvh - 160px);
   }
 
   .tree-panel {

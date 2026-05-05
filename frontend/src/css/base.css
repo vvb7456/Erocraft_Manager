@@ -154,11 +154,22 @@
             font-size: 100%
         }
 
+        /* ── Mobile UX baseline (see docs/MOBILE_UX_AUDIT.md P0/P1) ── */
+        html, body {
+            /* clip (not hidden) avoids creating a scroll container so descendant
+               position: sticky keeps working. Prevents accidental horizontal
+               scroll caused by overflowing children (long URLs, IPv6, file
+               paths, wings JSON errors) — fixes the "TabSwitcher being dragged"
+               symptom on mobile. */
+            overflow-x: clip;
+        }
+
         body {
             font-family: 'IBM Plex Sans', 'IBM Plex Sans SC', -apple-system, sans-serif;
             background: var(--bg);
             color: var(--t1);
             min-height: 100vh;
+            min-height: 100dvh;
             line-height: 1.5;
             display: flex
         }
@@ -166,7 +177,32 @@
         #app {
             display: flex;
             width: 100%;
-            min-height: 100vh
+            min-height: 100vh;
+            min-height: 100dvh
+        }
+
+        /* Long inline strings (URLs, IPv6, UUIDs, paths, JSON) must break to
+           avoid horizontal overflow on narrow viewports. Editors / consoles
+           that need monospace pre semantics opt out below. */
+        code, pre, kbd, samp {
+            word-break: break-all;
+            overflow-wrap: anywhere;
+        }
+
+        .xterm code,
+        .cm-content,
+        .cm-content code,
+        pre.no-break,
+        code.no-break {
+            word-break: normal;
+            overflow-wrap: normal;
+        }
+
+        /* ── Internal scroll containers: prevent scroll chaining to page (mobile) ── */
+        .xterm-viewport,
+        .cm-scroller {
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
         }
 
         /* ── Material Symbols ── */

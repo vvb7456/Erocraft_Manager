@@ -31,6 +31,7 @@ const { confirm } = useConfirm()
 const reloadServer = inject<() => Promise<void>>('reloadServer')!
 
 const updating = ref(false)
+const switchingVersion = ref(false)
 const reinstalling = ref(false)
 
 const authMode = ref<'basic' | 'multi'>('basic')
@@ -57,20 +58,22 @@ const passwordError = computed(() => {
 })
 const passwordValid = computed(() => !passwordError.value)
 
-// GitHub branches
-const branches = ref<SelectOption[]>([
-  { value: 'release', label: 'release' },
-  { value: 'staging', label: 'staging' },
-])
+// GitHub tags only — release/staging are reachable via the dedicated
+// "更新到最新 release" button, no need to mix them into the version dropdown.
+const branches = ref<SelectOption[]>([])
 const branchesLoading = ref(false)
 
+// gitBranch is intentionally excluded from isDirty: switching version is its
+// own explicit action with a dedicated button, not something the DirtyBar
+// should silently "save" (which would only restart, not actually re-pull code).
 const isDirty = computed(() =>
   authMode.value !== origAuthMode.value
   || username.value !== origUsername.value
   || password.value !== origPassword.value
   || proxyEnabled.value !== origProxyEnabled.value
-  || gitBranch.value !== origGitBranch.value
 )
+
+const versionChanged = computed(() => gitBranch.value !== origGitBranch.value)
 
 watch(isDirty, (v) => emit('update:dirty', v))
 
@@ -101,21 +104,8 @@ watch(() => props.variables, (vars) => {
 async function fetchBranches() {
   branchesLoading.value = true
   try {
-    const [branchRes, tagRes] = await Promise.all([
-      fetch('https://api.github.com/repos/SillyTavern/SillyTavern/branches?per_page=100'),
-      fetch('https://api.github.com/repos/SillyTavern/SillyTavern/tags?per_page=50'),
-    ])
+    const tagRes = await fetch('https://api.github.com/repos/SillyTavern/SillyTavern/tags?per_page=50')
     const opts: SelectOption[] = []
-
-    if (branchRes.ok) {
-      const data = await branchRes.json() as { name: string }[]
-      const mainBranches = ['release', 'staging']
-      for (const name of mainBranches) {
-        if (data.some(b => b.name === name)) {
-          opts.push({ value: name, label: name })
-        }
-      }
-    }
 
     if (tagRes.ok) {
       const tags = await tagRes.json() as { name: string }[]
@@ -124,14 +114,18 @@ async function fetchBranches() {
       }
     }
 
-    if (opts.length) {
-      if (gitBranch.value && !opts.some(o => o.value === gitBranch.value)) {
-        opts.push({ value: gitBranch.value, label: gitBranch.value })
-      }
-      branches.value = opts
+    // Always keep the current value selectable, even if it's release/staging
+    // or a tag that has fallen off the page-1 listing.
+    if (gitBranch.value && !opts.some(o => o.value === gitBranch.value)) {
+      opts.unshift({ value: gitBranch.value, label: gitBranch.value })
     }
+
+    if (opts.length) branches.value = opts
   } catch {
-    // fallback to defaults
+    // fallback: just expose the current value
+    if (gitBranch.value) {
+      branches.value = [{ value: gitBranch.value, label: gitBranch.value }]
+    }
   } finally {
     branchesLoading.value = false
   }
@@ -175,6 +169,29 @@ function discard() {
   gitBranch.value = origGitBranch.value
 }
 
+async function doSwitchVersion() {
+  if (switchingVersion.value || !versionChanged.value) return
+  const ok = await confirm({
+    title: t('serverSettings.switchVersionTitle'),
+    message: t('serverSettings.switchVersionMessage', { version: gitBranch.value }),
+    confirmText: t('serverSettings.switchVersionConfirm'),
+  })
+  if (!ok) return
+  switchingVersion.value = true
+  try {
+    if (!(await save())) return
+    await post(`/api/user/servers/${props.serverId}/reinstall`, { force: false })
+    if (apiError.value) return
+    toast(t('serverSettings.switchVersionStarted'), 'success')
+    await reloadServer()
+    router.push({ name: 'server-console', params: { id: props.serverId } })
+  } catch {
+    toast(t('serverSettings.switchVersionFailed'), 'error')
+  } finally {
+    switchingVersion.value = false
+  }
+}
+
 async function doUpdate() {
   if (updating.value) return
   const ok = await confirm({
@@ -185,7 +202,9 @@ async function doUpdate() {
   if (!ok) return
   updating.value = true
   try {
-    if (isDirty.value && !(await save())) return
+    // "更新到最新 release" 始终拉 release，无论下拉当前选什么。
+    gitBranch.value = 'release'
+    if (!(await save())) return
     await post(`/api/user/servers/${props.serverId}/reinstall`, { force: false })
     if (apiError.value) return
     toast(t('serverSettings.updateStarted'), 'success')
@@ -288,7 +307,7 @@ defineExpose<EggSettingsExpose>({ save, discard })
     </BaseCard>
 
     <BaseCard variant="bg2" class="st-card">
-      <SectionHeader icon="lan" flush>{{ t('serverSettings.networkSection') }}</SectionHeader>
+      <SectionHeader icon="compare_arrows" flush>{{ t('serverSettings.networkSection') }}</SectionHeader>
       <FormField layout="horizontal" keep-horizontal>
         <template #label>
           {{ t('serverSettings.apiProxy') }}
@@ -300,6 +319,8 @@ defineExpose<EggSettingsExpose>({ save, discard })
 
     <BaseCard variant="bg2" class="st-card">
       <SectionHeader icon="update" flush>{{ t('serverSettings.versionSection') }}</SectionHeader>
+      <p class="section-note">{{ t('serverSettings.versionSectionDesc') }}</p>
+
       <FormField layout="horizontal">
         <template #label>
           {{ t('serverSettings.gitBranch') }}
@@ -311,11 +332,34 @@ defineExpose<EggSettingsExpose>({ save, discard })
       <FormField layout="horizontal">
         <template #label>&nbsp;</template>
         <div class="action-row">
-          <BaseButton :loading="updating" :disabled="reinstalling" @click="doUpdate">
+          <BaseButton
+            :loading="switchingVersion"
+            :disabled="!versionChanged || updating"
+            @click="doSwitchVersion"
+          >
+            <MsIcon name="swap_horiz" />
+            {{ versionChanged ? t('serverSettings.switchVersionBtnTo', { version: gitBranch }) : t('serverSettings.switchVersionBtn') }}
+          </BaseButton>
+          <BaseButton
+            :loading="updating"
+            :disabled="switchingVersion"
+            @click="doUpdate"
+          >
             <MsIcon name="update" />
             {{ t('serverSettings.updateBtn') }}
           </BaseButton>
-          <BaseButton variant="danger" :loading="reinstalling" :disabled="updating" @click="doReinstall">
+        </div>
+      </FormField>
+    </BaseCard>
+
+    <BaseCard variant="bg2" class="st-card">
+      <SectionHeader icon="warning" flush>{{ t('serverSettings.reinstallSection') }}</SectionHeader>
+      <p class="section-note section-note--danger">{{ t('serverSettings.reinstallSectionDesc') }}</p>
+
+      <FormField layout="horizontal">
+        <template #label>&nbsp;</template>
+        <div class="action-row">
+          <BaseButton variant="danger" :loading="reinstalling" :disabled="updating || switchingVersion" @click="doReinstall">
             <MsIcon name="delete_forever" />
             {{ t('serverSettings.reinstallBtn') }}
           </BaseButton>
@@ -327,7 +371,6 @@ defineExpose<EggSettingsExpose>({ save, discard })
 
 <style scoped>
 .st-panel {
-  margin-top: var(--sp-4);
   max-width: 760px;
   margin-left: auto;
   margin-right: auto;
@@ -345,6 +388,10 @@ defineExpose<EggSettingsExpose>({ save, discard })
   font-size: .84rem;
   line-height: 1.5;
   color: var(--t2);
+}
+
+.section-note--danger {
+  color: var(--red);
 }
 
 .auth-mode-switch {

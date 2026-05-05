@@ -15,6 +15,8 @@ const props = defineProps<{
   limits: { memory: number; disk: number; cpu: number }
   /** 'desktop' = vertical with labels + bars; 'mobile' = compact grid */
   layout?: 'desktop' | 'mobile'
+  /** Hide the uptime row (parent renders it elsewhere). */
+  hideUptime?: boolean
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
@@ -87,7 +89,7 @@ function formatUptime(ms: number): string {
         <span class="net-down">↓ {{ fmtBytes(networkRx) }}</span>
       </span>
     </div>
-    <div class="stat-row stat-row--inline">
+    <div v-if="!hideUptime" class="stat-row stat-row--inline">
       <span class="stat-label">{{ t('userServers.resources.uptime') }}</span>
       <span class="stat-value">{{ formatUptime(uptimeMs) }}</span>
     </div>

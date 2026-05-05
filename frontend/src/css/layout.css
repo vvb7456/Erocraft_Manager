@@ -7,6 +7,7 @@
             margin-left: clamp(200px, 14vw, 260px);
             flex: 1;
             height: 100vh;
+            height: 100dvh;
             overflow-y: auto;
             transition: margin-left .25s ease
         }

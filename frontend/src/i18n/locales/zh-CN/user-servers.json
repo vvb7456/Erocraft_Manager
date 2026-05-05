@@ -91,6 +91,12 @@
     "clientAndroid": "Android"
   },
   "commandPlaceholder": "输入命令...",
+  "consoleActions": {
+    "copyTitle": "终端操作",
+    "copyAll": "复制全部输出",
+    "copyRecent": "复制最近 50 行",
+    "clear": "清空终端"
+  },
   "consoleFailed": "控制台连接失败",
   "consoleDisconnected": "连接已断开",
   "consoleReconnect": "重新连接",

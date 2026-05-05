@@ -470,6 +470,13 @@ async def reinstall_user_server(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Server is suspended")
 
     if payload.force:
+        # FORCE_REINSTALL=true tells the install script to wipe /home/container.
+        # The flag is reset back to "false" by manager-jobs once Wings finishes
+        # the install (see app.jobs.tasks.force_reinstall_reset). We deliberately
+        # do NOT reset it here in a finally block — Wings starts the install
+        # container asynchronously and pulls env from panel only after the API
+        # call returns, so an immediate reset would race the script and the
+        # wipe would never happen.
         await server_repository.update_startup_variable(
             db,
             server_id=server.id,
@@ -480,27 +487,9 @@ async def reinstall_user_server(
         await db.commit()
 
     try:
-        try:
-            await server_lifecycle.reinstall_server(db, server.id)
-        except LifecycleError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    finally:
-        # Always reset FORCE_REINSTALL — without try/finally a Wings outage
-        # leaves it set to "true" and every subsequent reinstall (even from
-        # the UI's normal "reinstall" path) becomes a forced wipe. (Audit H2.)
-        if payload.force:
-            try:
-                await server_repository.update_startup_variable(
-                    db,
-                    server_id=server.id,
-                    egg_id=server.egg_id,
-                    env_variable="FORCE_REINSTALL",
-                    value="false",
-                )
-                await db.commit()
-            except Exception:  # noqa: BLE001
-                # Reset failure must not mask the original exception. Best-effort.
-                await db.rollback()
+        await server_lifecycle.reinstall_server(db, server.id)
+    except LifecycleError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     await pterodactyl_activity_logger.log_server_activity(
         db,

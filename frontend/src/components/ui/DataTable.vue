@@ -150,6 +150,10 @@ onUnmounted(() => { mql?.removeEventListener('change', onMediaChange) })
 
 .dt-table-wrap {
   overflow-x: auto;
+  /* Contain horizontal overscroll so iOS rubber-band doesn't propagate to
+     the page (relevant only on iPad / wide-mobile where the desktop table
+     view is shown; on phones DataTable switches to the card layout). */
+  overscroll-behavior-x: contain;
 }
 
 .dt-table {

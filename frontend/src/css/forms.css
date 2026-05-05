@@ -110,3 +110,15 @@ input[type="checkbox"]:focus-visible {
     outline: 2px solid var(--ac);
     outline-offset: 1px;
 }
+
+/* ── Mobile: prevent iOS Safari focus auto-zoom (font-size must be ≥16px).
+   See docs/MOBILE_UX_AUDIT.md P1#3. Desktop keeps the compact 13.6px baseline. ── */
+@media (max-width: 768px) {
+    .form-input,
+    .form-textarea,
+    .form-number,
+    .form-input--mono,
+    .form-textarea--mono {
+        font-size: 16px;
+    }
+}

@@ -175,8 +175,7 @@ const clients = computed<ClientLink[]>(() => [
 
 <style scoped>
 .more-panel {
-  margin-top: var(--sp-4);
-  max-width: 640px;
+  max-width: 760px;
   margin-left: auto;
   margin-right: auto;
 }

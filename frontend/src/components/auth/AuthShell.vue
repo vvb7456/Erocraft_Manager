@@ -60,6 +60,7 @@ const footerText = computed(() => {
 <style scoped>
 .auth-page {
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   background: var(--bg);
   padding: var(--sp-4);

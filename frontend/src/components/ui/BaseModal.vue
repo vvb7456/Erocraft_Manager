@@ -254,7 +254,7 @@ const footerClass = computed(() => {
 }
 
 /* Scroll strategies */
-.modal-box--scroll-body { overflow-y: auto; }
+.modal-box--scroll-body { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .modal-box--scroll-body > .modal-body { overflow: visible; }
 .modal-box--scroll-none > .modal-body { overflow: hidden; }
 
@@ -317,6 +317,8 @@ const footerClass = computed(() => {
 .modal-body {
   padding: 12px 16px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   flex: 1;
 }
 

@@ -179,6 +179,7 @@ onMounted(loadPlans)
   max-width: 1320px;
   margin: 0 auto;
   min-height: calc(100vh - 64px);
+  min-height: calc(100dvh - 64px);
   display: flex;
   flex-direction: column;
   justify-content: center;

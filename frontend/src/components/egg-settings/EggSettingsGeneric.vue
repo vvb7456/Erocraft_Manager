@@ -151,7 +151,6 @@ defineExpose<EggSettingsExpose>({ save, discard })
 
 <style scoped>
 .generic-settings {
-  margin-top: var(--sp-4);
   max-width: 760px;
   margin-left: auto;
   margin-right: auto;

@@ -68,14 +68,14 @@ export function useClipboard() {
   async function copy(text: string, options: CopyOptions = {}): Promise<boolean> {
     if (!text) {
       if (!options.silent) {
-        toast(t('clipboard.empty'), 'warning')
+        toast(t('common.clipboard.empty'), 'warning')
       }
       return false
     }
     const ok = (await tryNativeClipboard(text)) || tryLegacyExecCommand(text)
     if (!options.silent) {
       toast(
-        ok ? (options.successMessage ?? t('clipboard.copied')) : (options.failureMessage ?? t('clipboard.failed')),
+        ok ? (options.successMessage ?? t('common.clipboard.copied')) : (options.failureMessage ?? t('common.clipboard.failed')),
         ok ? 'success' : 'error',
       )
     }

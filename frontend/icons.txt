@@ -163,3 +163,5 @@ local_offer
 add
 play_circle
 undo
+compare_arrows
+swap_horiz

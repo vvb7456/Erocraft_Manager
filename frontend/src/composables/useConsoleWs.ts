@@ -421,6 +421,25 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
     term?.clear()
   }
 
+  /** Read terminal scrollback as plain text (for copy actions). */
+  function getTerminalText(opts?: { lastLines?: number }): string {
+    if (!term) return ''
+    const buf = term.buffer.active
+    const total = buf.length
+    const start = opts?.lastLines && opts.lastLines > 0
+      ? Math.max(0, total - opts.lastLines)
+      : 0
+    const lines: string[] = []
+    for (let i = start; i < total; i++) {
+      const line = buf.getLine(i)
+      if (!line) continue
+      lines.push(line.translateToString(true))
+    }
+    // Trim trailing empty lines
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop()
+    return lines.join('\n')
+  }
+
   /** Manual reconnect from user button — reset counters and try again */
   async function manualReconnect() {
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
@@ -458,6 +477,7 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
     fit,
     dispose,
     clearTerminal,
+    getTerminalText,
     manualReconnect,
     /** Fetch a fresh wings token (for upload, etc.) */
     fetchWingsToken,

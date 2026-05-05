@@ -64,6 +64,8 @@ onUnmounted(() => { if (isLocked) { unlockBodyScroll(); isLocked = false } })
   background: var(--bg2);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding-bottom: env(safe-area-inset-bottom);
 }
 

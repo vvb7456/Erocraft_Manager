@@ -297,6 +297,9 @@ defineExpose({ openFile })
 
 .editor-container :deep(.cm-scroller) {
   overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .fade-enter-active,

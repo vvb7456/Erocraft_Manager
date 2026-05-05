@@ -91,6 +91,12 @@
     "clientAndroid": "Android"
   },
   "commandPlaceholder": "Type a command...",
+  "consoleActions": {
+    "copyTitle": "Terminal actions",
+    "copyAll": "Copy all output",
+    "copyRecent": "Copy last 50 lines",
+    "clear": "Clear terminal"
+  },
   "consoleFailed": "Console connection failed",
   "consoleDisconnected": "Connection lost",
   "consoleReconnect": "Reconnect",

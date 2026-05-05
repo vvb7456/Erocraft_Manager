@@ -16,6 +16,8 @@ import ResourceStats from '@/components/server/ResourceStats.vue'
 import ServerAddress from '@/components/server/ServerAddress.vue'
 import { useRenewFlow } from '@/composables/useRenewFlow'
 import CreateOrderModal from '@/components/CreateOrderModal.vue'
+import ActionSheet from '@/components/ui/ActionSheet.vue'
+import { useClipboard } from '@/composables/useClipboard'
 import 'xterm/css/xterm.css'
 
 defineOptions({ name: 'ServerConsolePage' })
@@ -65,6 +67,15 @@ const diskBytes = computed(() => res.value?.diskBytes ?? 0)
 const networkRx = computed(() => res.value?.networkRx ?? 0)
 const networkTx = computed(() => res.value?.networkTx ?? 0)
 const uptimeMs = computed(() => res.value?.uptime ?? 0)
+
+function formatUptimeText(ms: number): string {
+  if (ms <= 0) return '—'
+  const s = Math.floor(ms / 1000)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m ${s % 60}s`
+}
 
 // ── Status display ──
 const statusColor = computed(() =>
@@ -122,8 +133,44 @@ const {
   suspended,
   commandInput,
   connect: connectConsole, sendCommand, handleCommandKey,
-  loadHistory, fit, dispose, clearTerminal, manualReconnect,
+  loadHistory, fit, dispose, clearTerminal, getTerminalText, manualReconnect,
 } = useConsoleWs({ serverId, termEl })
+
+// ── Mobile copy: long-press terminal → ActionSheet ──
+const { copy: copyToClipboard } = useClipboard()
+const copySheetOpen = ref(false)
+let longPressTimer: ReturnType<typeof setTimeout> | null = null
+
+function onTermTouchStart() {
+  if (longPressTimer) clearTimeout(longPressTimer)
+  longPressTimer = setTimeout(() => {
+    // Dismiss soft keyboard before opening the sheet so it isn't covered.
+    const active = document.activeElement as HTMLElement | null
+    if (active && typeof active.blur === 'function') active.blur()
+    copySheetOpen.value = true
+    longPressTimer = null
+  }, 550)
+}
+function cancelLongPress() {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
+}
+
+async function copyAll() {
+  copySheetOpen.value = false
+  const text = getTerminalText()
+  if (!text) return
+  await copyToClipboard(text)
+}
+async function copyRecent() {
+  copySheetOpen.value = false
+  const text = getTerminalText({ lastLines: 50 })
+  if (!text) return
+  await copyToClipboard(text)
+}
+function clearAndClose() {
+  copySheetOpen.value = false
+  clearTerminal()
+}
 
 // ── Resize ──
 let resizeObserver: ResizeObserver | null = null
@@ -180,7 +227,7 @@ onBeforeUnmount(() => {
         />
       </BaseCard>
 
-      <!-- Lifecycle (expiration + renew) -->
+      <!-- Lifecycle (expiration + renew + upgrade) -->
       <BaseCard variant="bg3" class="mobile-card">
         <div class="mobile-lifecycle-card">
           <div class="mobile-lifecycle-card__head">
@@ -192,22 +239,24 @@ onBeforeUnmount(() => {
             </span>
             <span v-else class="lifecycle-value">{{ expirationText }}</span>
           </div>
-          <BaseButton
-            size="sm"
-            :disabled="!canRenew"
-            :loading="renewLoading"
-            :title="canRenew ? '' : t('userServers.renewFlow.noPlan')"
-            @click="onRenew"
-          >
-            <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
-          </BaseButton>
-          <BaseButton
-            size="sm"
-            :disabled="!server?.hasUpgradeOptions"
-            @click="onUpgrade"
-          >
-            <MsIcon name="arrow_upward" size="xs" /> {{ t('userServers.upgrade.button') }}
-          </BaseButton>
+          <div class="mobile-lifecycle-card__actions">
+            <BaseButton
+              size="sm"
+              :disabled="!canRenew"
+              :loading="renewLoading"
+              :title="canRenew ? '' : t('userServers.renewFlow.noPlan')"
+              @click="onRenew"
+            >
+              <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+            </BaseButton>
+            <BaseButton
+              size="sm"
+              :disabled="!server?.hasUpgradeOptions"
+              @click="onUpgrade"
+            >
+              <MsIcon name="arrow_upward" size="xs" /> {{ t('userServers.upgrade.button') }}
+            </BaseButton>
+          </div>
         </div>
       </BaseCard>
 
@@ -272,7 +321,14 @@ onBeforeUnmount(() => {
           <EmptyState icon="power_settings_new" :title="t('userServers.status.offline')" :message="t('userServers.serverOfflineHint')" density="compact" />
         </div>
         <!-- Terminal -->
-        <div ref="termEl" class="terminal-container" />
+        <div
+          ref="termEl"
+          class="terminal-container"
+          @touchstart.passive="onTermTouchStart"
+          @touchend.passive="cancelLongPress"
+          @touchmove.passive="cancelLongPress"
+          @touchcancel.passive="cancelLongPress"
+        />
         <!-- Command input -->
         <div class="command-row">
           <span class="prompt">&gt;</span>
@@ -298,26 +354,31 @@ onBeforeUnmount(() => {
 
       <!-- Lifecycle card -->
       <BaseCard variant="bg3" class="sidebar-card">
-        <div class="sidebar-section-title">
+        <div class="lifecycle-head">
           <MsIcon name="schedule" class="section-icon" />
-          {{ t('userServers.expiration') }}
-        </div>
-        <!-- Expiration info -->
-        <div class="lifecycle-row">
+          <span class="lifecycle-key">{{ t('userServers.expiration') }}：</span>
           <span v-if="server?.expirationDate" class="lifecycle-value">
             {{ server.expirationDate }}
             <span class="lifecycle-remaining" :style="{ color: expirationColor }">（{{ expirationText }}）</span>
           </span>
           <span v-else class="lifecycle-value">{{ expirationText }}</span>
+        </div>
+        <div class="lifecycle-actions">
           <BaseButton
             size="sm"
-            class="lifecycle-renew-btn"
             :disabled="!canRenew"
             :loading="renewLoading"
             :title="canRenew ? '' : t('userServers.renewFlow.noPlan')"
             @click="onRenew"
           >
             <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+          </BaseButton>
+          <BaseButton
+            size="sm"
+            :disabled="!server?.hasUpgradeOptions"
+            @click="onUpgrade"
+          >
+            <MsIcon name="arrow_upward" size="xs" /> {{ t('userServers.upgrade.button') }}
           </BaseButton>
         </div>
       </BaseCard>
@@ -361,10 +422,15 @@ onBeforeUnmount(() => {
           <MsIcon name="info" class="section-icon" />
           {{ t('userServers.serverInfo') }}
         </div>
-        <div class="info-preset">
-          <MsIcon name="widgets" class="info-preset-icon" />
-          <span class="info-preset-label">{{ t('userServers.table.preset') }}</span>
-          <span class="info-preset-value">{{ server?.eggName ?? '—' }}</span>
+        <div class="info-row">
+          <MsIcon name="widgets" class="info-row-icon" />
+          <span class="info-row-label">{{ t('userServers.table.preset') }}</span>
+          <span class="info-row-value">{{ server?.eggName ?? '—' }}</span>
+        </div>
+        <div class="info-row info-row--with-separator">
+          <MsIcon name="timer" class="info-row-icon" />
+          <span class="info-row-label">{{ t('userServers.resources.uptime') }}</span>
+          <span class="info-row-value">{{ formatUptimeText(uptimeMs) }}</span>
         </div>
         <ResourceStats
           v-if="server"
@@ -375,6 +441,7 @@ onBeforeUnmount(() => {
           :network-tx="networkTx"
           :uptime-ms="uptimeMs"
           :limits="server.limits"
+          hide-uptime
         />
       </BaseCard>
     </aside>
@@ -383,10 +450,16 @@ onBeforeUnmount(() => {
     <div class="mobile-bottom">
       <BaseCard variant="bg3" class="mobile-card">
         <!-- Preset -->
-        <div class="mobile-preset">
-          <MsIcon name="widgets" class="section-icon" />
-          <span class="mobile-preset-label">{{ t('userServers.table.preset') }}：</span>
-          <span class="mobile-preset-value">{{ server?.eggName ?? '—' }}</span>
+        <div class="info-row">
+          <MsIcon name="widgets" class="info-row-icon" />
+          <span class="info-row-label">{{ t('userServers.table.preset') }}</span>
+          <span class="info-row-value">{{ server?.eggName ?? '—' }}</span>
+        </div>
+        <!-- Uptime -->
+        <div class="info-row info-row--with-separator">
+          <MsIcon name="timer" class="info-row-icon" />
+          <span class="info-row-label">{{ t('userServers.resources.uptime') }}</span>
+          <span class="info-row-value">{{ formatUptimeText(uptimeMs) }}</span>
         </div>
         <!-- Stats -->
         <ResourceStats
@@ -399,6 +472,7 @@ onBeforeUnmount(() => {
           :uptime-ms="uptimeMs"
           :limits="server.limits"
           layout="mobile"
+          hide-uptime
         />
       </BaseCard>
     </div>
@@ -413,6 +487,19 @@ onBeforeUnmount(() => {
     :target-server-id="server.id"
     :server-name="server.name"
   />
+
+  <!-- Mobile: long-press terminal action sheet -->
+  <ActionSheet v-model="copySheetOpen" :title="t('userServers.consoleActions.copyTitle')">
+    <button @click="copyAll">
+      <MsIcon name="content_copy" size="sm" /> {{ t('userServers.consoleActions.copyAll') }}
+    </button>
+    <button @click="copyRecent">
+      <MsIcon name="history" size="sm" /> {{ t('userServers.consoleActions.copyRecent') }}
+    </button>
+    <button @click="clearAndClose">
+      <MsIcon name="delete_sweep" size="sm" /> {{ t('userServers.consoleActions.clear') }}
+    </button>
+  </ActionSheet>
 </template>
 
 <style scoped>
@@ -446,19 +533,27 @@ onBeforeUnmount(() => {
 /* ── Mobile lifecycle card ── */
 .mobile-lifecycle-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: var(--sp-3);
-  flex-wrap: wrap;
 }
 
 .mobile-lifecycle-card__head {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  flex: 1;
   min-width: 0;
   flex-wrap: wrap;
+}
+
+.mobile-lifecycle-card__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+}
+
+.mobile-lifecycle-card__actions :deep(.base-btn) {
+  width: 100%;
+  justify-content: center;
 }
 
 .mobile-lifecycle-label {
@@ -541,6 +636,26 @@ onBeforeUnmount(() => {
 
 .terminal-container :deep(.xterm-viewport) {
   overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+/* Touch devices: let the viewport (not the canvas) capture vertical drag,
+   so swiping inside the terminal scrolls the terminal — not the page. */
+@media (pointer: coarse) {
+  .terminal-container :deep(.xterm-screen) {
+    pointer-events: none;
+  }
+  .terminal-container :deep(.xterm-viewport) {
+    pointer-events: auto;
+  }
+  /* Disable xterm's hidden input textarea so tapping the terminal does NOT
+     pop up the soft keyboard. Keyboard input is handled by our own
+     `<input class="command-input">` below the terminal. */
+  .terminal-container :deep(.xterm-helper-textarea) {
+    display: none !important;
+  }
 }
 
 .command-row {
@@ -599,56 +714,61 @@ onBeforeUnmount(() => {
   color: var(--t3);
 }
 
-/* ── Server info: preset row ── */
-.info-preset {
+/* ── Server info: rows (preset / uptime) ── */
+.info-row {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+}
+
+.info-row + .info-row {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--bd);
+}
+
+.info-row--with-separator {
   padding-bottom: var(--sp-3);
   margin-bottom: var(--sp-3);
   border-bottom: 1px solid var(--bd);
 }
 
-.info-preset-icon {
+.info-row-icon {
   font-size: 1rem;
   color: var(--t3);
 }
 
-.info-preset-label {
+.info-row-label {
   font-size: var(--text-sm);
   color: var(--t2);
 }
 
-.info-preset-value {
+.info-row-value {
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--t1);
   margin-left: auto;
+  font-family: 'IBM Plex Mono', monospace;
 }
 
-/* ── Mobile preset ── */
-.mobile-preset {
+/* Server info row separator end */
+
+/* ── Lifecycle ── */
+.lifecycle-head {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding-bottom: var(--sp-2);
-  margin-bottom: var(--sp-2);
-  border-bottom: 1px solid var(--bd);
+  flex-wrap: wrap;
 }
 
-.mobile-preset-label {
-  font-size: var(--text-sm);
-  color: var(--t2);
-  white-space: nowrap;
+.lifecycle-key {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.mobile-preset-value {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--t1);
-}
-
-/* ── Lifecycle ── */
 .lifecycle-row {
   display: flex;
   align-items: center;
@@ -671,6 +791,18 @@ onBeforeUnmount(() => {
 
 .lifecycle-renew-btn {
   flex-shrink: 0;
+}
+
+.lifecycle-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.lifecycle-actions :deep(.base-btn) {
+  width: 100%;
+  justify-content: center;
 }
 
 /* ═══ Mobile layout ═══ */

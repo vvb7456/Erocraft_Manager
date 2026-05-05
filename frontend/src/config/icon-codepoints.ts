@@ -36,6 +36,7 @@ export const ICON_CODEPOINTS: Record<string, string> = {
   'cloud_sync': '\ueb5a',
   'cloud_upload': '\ue2c3',
   'code': '\ue86f',
+  'compare_arrows': '\ue915',
   'content_copy': '\ue14d',
   'contrast': '\ueb37',
   'create_new_folder': '\ue2cc',

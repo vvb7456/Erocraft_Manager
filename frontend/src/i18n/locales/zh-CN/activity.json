@@ -24,5 +24,32 @@
   },
   "pagination": {
     "perPage": "条/页"
+  },
+  "server": {
+    "power": {
+      "start": "启动服务器",
+      "stop": "停止服务器",
+      "restart": "重启服务器",
+      "kill": "强制结束"
+    },
+    "console": {
+      "command": "控制台命令"
+    },
+    "file": {
+      "read": "读取文件",
+      "write": "写入文件",
+      "rename": "重命名",
+      "delete": "删除文件",
+      "compress": "压缩",
+      "decompress": "解压",
+      "create-directory": "创建目录",
+      "download": "下载文件",
+      "upload": "上传文件",
+      "uploaded": "上传完成"
+    },
+    "startup": {
+      "edit": "修改启动参数"
+    },
+    "reinstall": "重装服务器"
   }
 }

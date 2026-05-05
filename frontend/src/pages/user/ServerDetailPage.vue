@@ -171,6 +171,25 @@ watch(liveState, (newState, oldState) => {
   }
 })
 
+// While the server is installing, Wings does not push stats over the
+// console WebSocket, so the resourceStore-derived `liveState` watcher
+// above never fires on console-tab. Poll the server detail endpoint
+// directly until panel.servers.status flips back to NULL (= isInstalling
+// becomes false). Mirrors the UserServersPage list-page pattern.
+let installPollTimer: ReturnType<typeof setInterval> | null = null
+watch(isInstalling, (val) => {
+  if (val && !installPollTimer) {
+    installPollTimer = setInterval(loadServer, 5000)
+  } else if (!val && installPollTimer) {
+    clearInterval(installPollTimer)
+    installPollTimer = null
+  }
+}, { immediate: true })
+
+onBeforeUnmount(() => {
+  if (installPollTimer) { clearInterval(installPollTimer); installPollTimer = null }
+})
+
 // Kick to console tab when server enters a state where the active tab is
 // no longer usable (suspended / installing / stale connection).
 watch([stale, isSuspended, isInstalling], ([isStale, isSusp, isInst]) => {
