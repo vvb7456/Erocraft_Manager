@@ -299,7 +299,6 @@ defineExpose({ openFile })
   overflow: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
 }
 
 .fade-enter-active,

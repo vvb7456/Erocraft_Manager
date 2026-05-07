@@ -159,15 +159,22 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
   // ── File list API ──
   async function loadFiles(dir?: string) {
     if (!serverId.value) return
-    if (dir !== undefined) currentPath.value = dir
+    const target = dir !== undefined ? dir : currentPath.value
     selectedFiles.value = new Set()
     searchTerm.value = ''
+    // Clear the previous directory's items immediately so the table doesn't
+    // show stale rows while the new directory is loading.
+    files.value = []
     filesLoading.value = true
     const data = await get<FileEntry[]>(
-      `/api/user/servers/${serverId.value}/files/list?directory=${encodeURIComponent(currentPath.value)}`,
+      `/api/user/servers/${serverId.value}/files/list?directory=${encodeURIComponent(target)}`,
       { silent: true },
     )
     filesLoading.value = false
+    // Commit the new path AND the new items together, so the ".." row (which
+    // is driven by currentPath) and the file rows always appear in sync —
+    // never one before the other.
+    currentPath.value = target
     if (data) files.value = data
   }
 

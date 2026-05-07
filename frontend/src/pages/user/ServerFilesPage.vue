@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, inject, onMounted, computed, watch, type Ref } from 'vue'
+import { ref, inject, onMounted, onBeforeUnmount, computed, watch, nextTick, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFileTree } from '@/composables/useFileTree'
 import { useFileOperations } from '@/composables/useFileOperations'
+import { useVirtualList } from '@/composables/useVirtualList'
 import type { FileEntry } from '@/composables/useFileTree'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -35,6 +36,35 @@ const moveTreeExpanded = ref(false)
 // ── Component refs ──
 const editorRef = ref<InstanceType<typeof FileEditor> | null>(null)
 const contextMenuRef = ref<InstanceType<typeof FileContextMenu> | null>(null)
+const fileListPanelRef = ref<HTMLElement | null>(null)
+const theadRef = ref<HTMLElement | null>(null)
+
+// ── Mobile detection (single source of truth for runtime branches) ──
+const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
+function onWinResize() {
+  isMobile.value = window.innerWidth <= 768
+}
+onMounted(() => window.addEventListener('resize', onWinResize))
+onBeforeUnmount(() => window.removeEventListener('resize', onWinResize))
+
+// ── Virtual scrolling ──
+// Fixed row height — must match CSS so spacer math is exact.
+// Mobile rows are taller because the name cell shows a 2-line layout
+// (filename + meta-hint subtitle) once size/date columns are hidden.
+const ROW_H_DESKTOP = 32
+const ROW_H_MOBILE = 56
+const rowHeight = computed(() => (isMobile.value ? ROW_H_MOBILE : ROW_H_DESKTOP))
+const headerOffset = ref(0)
+function measureHeader() {
+  // The thead is a sticky row INSIDE the same scroll container as the
+  // virtualised tbody. Tell the virtual list to subtract its height when
+  // computing visible range, otherwise the first row is hidden behind it.
+  // The optional ".." parent row is also outside the virtualised slice
+  // so its height counts towards the offset too.
+  const thead = theadRef.value?.offsetHeight ?? 0
+  const parentRow = ops.currentPath.value !== '/' ? rowHeight.value : 0
+  headerOffset.value = thead + parentRow
+}
 
 // ── Column resize ──
 const colWidths = ref([55, 12, 16])
@@ -74,10 +104,38 @@ function refreshTree() {
   tree.refreshTreeAt(ops.currentPath.value)
 }
 
+// ── Virtual list wiring ──
+// ``ops.sortedFiles`` is a Ref<FileEntry[]> from useFileOperations.
+const virtual = useVirtualList<FileEntry>({
+  items: ops.sortedFiles as unknown as Ref<readonly FileEntry[]>,
+  scrollerRef: fileListPanelRef,
+  rowHeight,
+  headerOffset,
+  overscan: 8,
+})
+
 // ── Init ──
 onMounted(async () => {
   await ops.loadFiles()
   tree.loadTreeNode(tree.treeRoot.value)
+  await nextTick()
+  measureHeader()
+  virtual.refresh()
+})
+
+// Re-measure header on viewport changes (mobile rotation, mode switch).
+watch(isMobile, async () => {
+  await nextTick()
+  measureHeader()
+  virtual.refresh()
+})
+
+// Re-measure when navigating in/out of the root (parent-row appears/
+// disappears, changing headerOffset).
+watch(() => ops.currentPath.value, async () => {
+  await nextTick()
+  measureHeader()
+  virtual.refresh()
 })
 
 // ── Move tree picker ──
@@ -127,12 +185,11 @@ function selectTreeNode(node: { path: string }) {
   ops.loadFiles(node.path)
 }
 
-function openEntry(e: MouseEvent, f: FileEntry) {
-  // Mobile: show action menu instead of direct open
-  if (window.innerWidth <= 768) {
-    contextMenuRef.value?.show(e, f)
-    return
-  }
+function openEntry(_e: MouseEvent, f: FileEntry) {
+  // Click always opens the file/folder, both desktop & mobile.
+  // The context menu is reachable via the inline "more" button or via
+  // long-press (which fires the contextmenu event after touch-callout
+  // is suppressed via CSS).
   if (f.directory) {
     navigateTo(ops.currentPath.value.replace(/\/$/, '') + '/' + f.name + '/')
   } else if (ops.isEditable(f)) {
@@ -198,7 +255,7 @@ async function onCreateFile() {
             :placeholder="t('userServers.file.searchPlaceholder')"
             class="file-search-input"
           />
-          <div class="breadcrumbs">
+          <div v-if="!isMobile" class="breadcrumbs">
             <button
               v-for="(crumb, i) in ops.breadcrumbs.value"
               :key="crumb.path"
@@ -241,11 +298,27 @@ async function onCreateFile() {
       </template>
     </SectionToolbar>
 
+    <!-- Mobile-only standalone breadcrumbs row, placed below the toolbar
+         (which itself wraps to "search row + buttons row" on mobile) so
+         the path appears under the action buttons. -->
+    <div
+      v-if="isMobile && !ops.hasSelection.value"
+      class="breadcrumbs breadcrumbs--standalone"
+    >
+      <button
+        v-for="(crumb, i) in ops.breadcrumbs.value"
+        :key="crumb.path"
+        class="breadcrumb"
+        :class="{ active: i === ops.breadcrumbs.value.length - 1 }"
+        @click="navigateTo(crumb.path)"
+      >{{ crumb.label }}</button>
+    </div>
+
     <!-- Right bottom: File list (standalone card) -->
-    <div class="file-list-panel">
+    <div ref="fileListPanelRef" class="file-list-panel">
       <!-- File table (always shown) -->
       <table class="file-table" :style="tableColStyle">
-        <thead>
+        <thead ref="theadRef">
           <tr>
             <th class="col-check">
               <input type="checkbox" :checked="ops.allSelected.value" @change="ops.toggleSelectAll" />
@@ -283,13 +356,17 @@ async function onCreateFile() {
             <td class="col-date"></td>
             <td class="col-actions"></td>
           </tr>
-          <!-- File rows -->
+          <!-- Top spacer for virtual scrolling -->
+          <tr v-if="virtual.offsetTop.value > 0" class="virtual-spacer" :style="{ height: virtual.offsetTop.value + 'px' }" aria-hidden="true">
+            <td colspan="5"></td>
+          </tr>
+          <!-- File rows (virtualised) -->
           <tr
-            v-for="f in ops.sortedFiles.value"
+            v-for="f in virtual.visibleItems.value"
             :key="f.name"
             :class="{ selected: ops.selectedFiles.value.has(f.name) }"
             @click="openEntry($event, f)"
-            @contextmenu="contextMenuRef?.show($event, f)"
+            @contextmenu.prevent="contextMenuRef?.show($event, f)"
           >
             <td class="col-check" @click.stop>
               <input type="checkbox" :checked="ops.selectedFiles.value.has(f.name)" @change="ops.toggleSelect(f.name)" />
@@ -297,7 +374,14 @@ async function onCreateFile() {
             <td class="col-name">
               <span class="file-name-cell">
                 <MsIcon :name="ops.fileIcon(f)" size="sm" class="file-icon" :class="{ 'file-icon--dir': !f.file }" />
-                <span class="file-name-text">{{ f.name }}</span>
+                <span class="file-name-stack">
+                  <span class="file-name-text">{{ f.name }}</span>
+                  <span class="file-meta-mobile">
+                    <span>{{ f.file ? ops.formatSize(f.size) : '\u2014' }}</span>
+                    <span class="meta-sep">·</span>
+                    <span>{{ ops.formatDate(f.modified) }}</span>
+                  </span>
+                </span>
               </span>
             </td>
             <td class="col-size">{{ f.file ? ops.formatSize(f.size) : '\u2014' }}</td>
@@ -316,11 +400,15 @@ async function onCreateFile() {
                 <button class="action-btn action-btn--danger" :title="t('userServers.file.delete')" @click="ops.deleteSingle(f.name, refreshTree)">
                   <MsIcon name="delete" size="sm" />
                 </button>
-                <button class="action-btn" :title="t('userServers.file.moreActions')" @click="contextMenuRef?.show($event, f)">
+                <button class="action-btn action-btn--more" :title="t('userServers.file.moreActions')" @click="contextMenuRef?.show($event, f)">
                   <MsIcon name="more_vert" size="sm" />
                 </button>
               </div>
             </td>
+          </tr>
+          <!-- Bottom spacer for virtual scrolling -->
+          <tr v-if="virtual.offsetBottom.value > 0" class="virtual-spacer" :style="{ height: virtual.offsetBottom.value + 'px' }" aria-hidden="true">
+            <td colspan="5"></td>
           </tr>
         </tbody>
       </table>
@@ -638,9 +726,22 @@ async function onCreateFile() {
   border-bottom: none;
 }
 
+/* Fixed row height — required for virtual scrolling math.
+   Must match ROW_H_DESKTOP (32px) in script. Mobile override at the
+   responsive section below sets it to ROW_H_MOBILE (56px). */
+.file-table tbody tr:not(.virtual-spacer) {
+  height: 32px;
+}
+
 .file-table tbody tr {
   cursor: pointer;
   transition: background .1s;
+  /* Disable iOS text selection / long-press callout on rows so a long-
+     press fires the contextmenu event (which we capture for the action
+     menu) instead of selecting filename text. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .file-table tbody tr:hover td {
@@ -673,6 +774,42 @@ async function onCreateFile() {
   align-items: center;
   gap: var(--sp-2);
   min-width: 0;
+}
+
+/* Two-line name layout. Mobile shows the second line (file-meta-mobile)
+   to compensate for the size/date columns being hidden. Desktop hides
+   the second line and the columns provide the data. */
+.file-name-stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  gap: 0;
+  line-height: 1.25;
+}
+
+.file-meta-mobile {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--t3);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-meta-mobile .meta-sep {
+  opacity: .6;
+}
+
+/* Virtual scroll spacers — invisible rows that occupy the height of all
+   non-rendered rows above/below the visible window. The colspan keeps
+   table column widths stable. */
+.virtual-spacer td {
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
 }
 
 .col-size {
@@ -874,9 +1011,10 @@ async function onCreateFile() {
 @media (max-width: 768px) {
   .files-page {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-    height: calc(100vh - 160px);
-    height: calc(100dvh - 160px);
+    /* 3 rows on mobile: toolbar / breadcrumbs / file list */
+    grid-template-rows: auto auto 1fr;
+    height: calc(100vh - 130px);
+    height: calc(100dvh - 130px);
   }
 
   .tree-panel {
@@ -890,7 +1028,7 @@ async function onCreateFile() {
 
   .file-list-panel {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 3;
   }
 
   /* Toolbar: search full width, buttons equal width on second row */
@@ -900,6 +1038,18 @@ async function onCreateFile() {
 
   .files-toolbar :deep(.section-toolbar-start) {
     width: 100%;
+  }
+
+  .breadcrumbs {
+    width: 100%;
+  }
+
+  /* Mobile standalone breadcrumbs row (rendered below the toolbar). */
+  .breadcrumbs--standalone {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 0 2px;
+    min-height: 28px;
   }
 
   .files-toolbar :deep(.section-toolbar-end) {
@@ -925,17 +1075,57 @@ async function onCreateFile() {
     width: 60px;
   }
 
+  /* Mobile: hide the entire table header. The mobile name cell already
+     shows size/date as a subtitle, and the only remaining row action
+     (the "more" button) doesn't need a column heading. */
+  .file-table thead {
+    display: none;
+  }
+
+  /* Keep the actions column but show only the "more" button, hard-
+     anchored to the right edge of the row. */
   .col-actions {
+    width: 1%;
+    padding-right: var(--sp-2) !important;
+    text-align: right;
+  }
+
+  .col-actions .row-actions {
+    justify-content: flex-end;
+  }
+
+  .row-actions .action-btn:not(.action-btn--more) {
+    display: none;
+  }
+
+  /* Lock horizontal scroll on the file list panel — mobile uses
+     responsive column hiding + subtitle so no row can exceed viewport
+     width. Eliminates iOS rubber-band 2D drag on the list. */
+  .file-list-panel {
+    overflow-x: hidden;
+  }
+
+  /* Show the subtitle line (size · date) under each file name on mobile,
+     since those columns are hidden. */
+  .file-meta-mobile {
+    display: flex;
+  }
+
+  /* Taller rows on mobile for the 2-line name layout — matches
+     ROW_H_MOBILE (56px) in the script. Must stay in sync with the
+     virtual-list rowHeight calculation. */
+  .file-table tbody tr:not(.virtual-spacer) {
+    height: 56px;
+  }
+
+  /* Hide the desktop column-resize affordance on touch viewports. */
+  .col-resize {
     display: none;
   }
 }
 
 @media (max-width: 480px) {
   .col-size {
-    display: none;
-  }
-
-  .breadcrumbs {
     display: none;
   }
 }
