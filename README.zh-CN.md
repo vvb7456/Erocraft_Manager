@@ -1,4 +1,4 @@
-# Erocraft Manager
+# 艾萝工坊运维管理系统
 
 **中文** · [English](README.md)
 
