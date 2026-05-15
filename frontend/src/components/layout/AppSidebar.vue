@@ -58,6 +58,13 @@ function navTo(item: NavItem) {
   if (window.innerWidth <= 768) app.closeMobileSidebar()
 }
 
+// Banner click → home (admin: dashboard, user: my servers)
+function goHome() {
+  const target = isUserLayout.value ? 'user-servers' : 'dashboard'
+  if (route.name !== target) router.push({ name: target })
+  if (window.innerWidth <= 768) app.closeMobileSidebar()
+}
+
 async function doLogout() {
   await fetch('/api/logout', { method: 'POST' })
   app.clearSessionUser()
@@ -76,9 +83,12 @@ function openSupport() {
   <nav class="sidebar" :class="{ collapsed: app.sidebarCollapsed, 'mobile-open': app.mobileSidebarOpen }">
     <button class="sidebar-toggle" :title="t('common.sidebar.toggle')" @click="app.toggleSidebar()">◀</button>
 
-    <div
+    <button
+      type="button"
       class="sidebar-logo"
       :class="{ 'sidebar-logo--banner-only': !!app.sidebarBannerUrl, 'sidebar-logo--text-only': !app.sidebarBannerUrl }"
+      :title="t('nav.home') || ''"
+      @click="goHome"
     >
       <template v-if="app.sidebarBannerUrl">
         <img class="logo-banner" :src="app.sidebarBannerUrl" :alt="app.displayName" />
@@ -86,7 +96,7 @@ function openSupport() {
       <template v-else>
         <span class="logo-text">{{ app.displayName }}</span>
       </template>
-    </div>
+    </button>
 
     <div class="sidebar-nav">
       <!-- ═══ User layout: flat nav ═══ -->
@@ -229,17 +239,31 @@ function openSupport() {
   width: 56px;
 }
 
-/* ── Logo ── */
+/* ── Logo (clickable banner → home) ── */
 .sidebar-logo {
   padding: 0 16px;
   min-height: 64px;
+  width: 100%;
+  border: none;
   border-bottom: 1px solid var(--bd);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   white-space: nowrap;
   overflow: hidden;
+  transition: background 0.15s ease;
+}
+.sidebar-logo:hover {
+  background: var(--bg3);
+}
+.sidebar-logo:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: -2px;
 }
 
 .sidebar-logo--banner-only {

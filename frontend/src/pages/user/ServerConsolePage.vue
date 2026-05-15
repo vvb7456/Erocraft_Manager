@@ -424,8 +424,8 @@ onBeforeUnmount(() => {
         </div>
         <div class="info-row">
           <MsIcon name="widgets" class="info-row-icon" />
-          <span class="info-row-label">{{ t('userServers.table.preset') }}</span>
-          <span class="info-row-value">{{ server?.eggName ?? '—' }}</span>
+          <span class="info-row-label">{{ t('userServers.table.plan') }}</span>
+          <span class="info-row-value">{{ server?.planName ?? server?.eggName ?? '—' }}</span>
         </div>
         <div class="info-row info-row--with-separator">
           <MsIcon name="timer" class="info-row-icon" />
@@ -449,11 +449,11 @@ onBeforeUnmount(() => {
     <!-- ═══ Mobile bottom: Resource stats ═══ -->
     <div class="mobile-bottom">
       <BaseCard variant="bg3" class="mobile-card">
-        <!-- Preset -->
+        <!-- Plan -->
         <div class="info-row">
           <MsIcon name="widgets" class="info-row-icon" />
-          <span class="info-row-label">{{ t('userServers.table.preset') }}</span>
-          <span class="info-row-value">{{ server?.eggName ?? '—' }}</span>
+          <span class="info-row-label">{{ t('userServers.table.plan') }}</span>
+          <span class="info-row-value">{{ server?.planName ?? server?.eggName ?? '—' }}</span>
         </div>
         <!-- Uptime -->
         <div class="info-row info-row--with-separator">

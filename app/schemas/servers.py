@@ -43,6 +43,7 @@ class CreateServerRequest(BaseModel):
     databases: int | None = None
     backups: int | None = None
     allocations: int | None = None
+    plan_id: int | None = None
 
 
 class RenewServerRequest(BaseModel):

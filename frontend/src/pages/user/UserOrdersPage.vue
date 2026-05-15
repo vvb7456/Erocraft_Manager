@@ -258,9 +258,9 @@ onBeforeUnmount(() => {
         <FilterInput
           v-model="searchTerm"
           :placeholder="t('billing.orders.searchPlaceholder')"
-          class="filter-input"
+          class="filter-input tb-search"
         />
-        <span class="support-hint">
+        <span class="support-hint tb-help">
           {{ t('billing.orders.supportHint') }}
           <a href="#" class="support-link" @click.prevent="supportOpen = true">
             {{ t('billing.orders.supportLink') }}
@@ -268,13 +268,15 @@ onBeforeUnmount(() => {
         </span>
       </template>
       <template #end>
-        <BaseSelect
-          v-model="statusFilter"
-          :options="statusOptions"
-          :prefix="t('billing.orders.filter.label') + ': '"
-          size="sm"
-          fit
-        />
+        <div class="tb-select-group">
+          <BaseSelect
+            v-model="statusFilter"
+            :options="statusOptions"
+            :prefix="t('billing.orders.filter.label') + ': '"
+            size="sm"
+            fit
+          />
+        </div>
       </template>
     </SectionToolbar>
 

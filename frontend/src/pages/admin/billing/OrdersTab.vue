@@ -211,21 +211,20 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
       <FilterInput
         v-model="searchTerm"
         :placeholder="t('billing.admin.orders.searchPlaceholder')"
-        class="orders-filter-input"
+        class="orders-filter-input tb-search"
       />
-      <span class="toolbar-count">
+      <span class="toolbar-count tb-status">
         {{ t('billing.admin.orders.totalCount', { n: totalCount }) }}
       </span>
     </template>
     <template #end>
-      <div class="toolbar-end-row">
+      <div class="tb-select-group">
         <BaseSelect
           v-model="statusFilter"
           :options="statusOptions"
           :prefix="t('billing.admin.orders.filterStatusPrefix') + ': '"
           size="sm"
           fit
-          class="toolbar-half"
         />
         <BaseSelect
           v-model="kindFilter"
@@ -233,7 +232,6 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
           :prefix="t('billing.admin.orders.filterKindPrefix') + ': '"
           size="sm"
           fit
-          class="toolbar-half"
         />
       </div>
     </template>
@@ -354,20 +352,6 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
 </template>
 
 <style scoped>
-/* ── Toolbar ── */
-.toolbar-count {
-  font-size: .82rem;
-  color: var(--t3);
-  white-space: nowrap;
-  margin-left: var(--sp-2);
-}
-
-.toolbar-end-row {
-  display: flex;
-  gap: var(--sp-2);
-  align-items: center;
-}
-
 .action-group {
   display: flex;
   gap: var(--sp-2);

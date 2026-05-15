@@ -239,26 +239,28 @@ function openMobileAction(plan: AdminPlan) {
         <FilterInput
           v-model="searchTerm"
           :placeholder="t('billing.admin.plans.searchPlaceholder')"
+          class="tb-search"
           @update:modelValue="page = 1"
         />
-        <span class="toolbar-status">
+        <span class="toolbar-status tb-status">
           {{ t('billing.admin.plans.totalCount', { n: filteredPlans.length }) }}
         </span>
       </template>
       <template #end>
-        <div class="toolbar-end-row">
-          <BaseButton size="sm" variant="primary" class="toolbar-half" @click="openCreate">
-            <MsIcon name="add" size="xs" /> {{ t('billing.admin.plans.create') }}
-          </BaseButton>
+        <div class="tb-select-group">
           <BaseSelect
             v-model="statusFilter"
             :options="statusOptions"
             :prefix="t('billing.admin.plans.statusFilterLabel') + ': '"
             size="sm"
             fit
-            class="toolbar-half"
             @update:modelValue="page = 1"
           />
+        </div>
+        <div class="tb-btn-group">
+          <BaseButton size="sm" variant="primary" @click="openCreate">
+            <MsIcon name="add" size="xs" /> {{ t('billing.admin.plans.create') }}
+          </BaseButton>
         </div>
       </template>
     </SectionToolbar>
@@ -382,12 +384,6 @@ function openMobileAction(plan: AdminPlan) {
 </template>
 
 <style scoped>
-.toolbar-status {
-  font-size: .82rem;
-  color: var(--t3);
-  white-space: nowrap;
-}
-
 /* Column widths use percentages (total 100%). */
 :deep(.col-id)      { width: 4%;  color: var(--t3); }
 :deep(.col-code)    { width: 11%; }

@@ -35,7 +35,7 @@
   },
   "table": {
     "name": "Server Name",
-    "preset": "Preset",
+    "plan": "Plan",
     "status": "Status",
     "expiry": "Expiration",
     "actions": "Actions"
@@ -164,6 +164,8 @@
     "newName": "New name",
     "moveTo": "Move to:",
     "selected": "{n} selected",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
     "tooLarge": "File too large (> 5MB), please download and edit locally",
     "dragHint": "Drop files here to upload",
     "singleFileOnly": "Only one file at a time",

@@ -144,26 +144,28 @@ const statusOptions = ['success', 'failed', 'partial', 'info']
           <FilterInput
             v-model="filterActor"
             :placeholder="t('logs.filter.actorPlaceholder')"
-            class="logs-filter-input"
+            class="logs-filter-input tb-search"
           />
-          <span class="toolbar-status">{{ t('logs.total', { n: totalCount }) }}</span>
+          <span class="toolbar-status tb-status">{{ t('logs.total', { n: totalCount }) }}</span>
         </div>
       </template>
       <template #end>
-        <BaseSelect
-          v-model="filterCategory"
-          :options="[{ value: '', label: t('logs.filter.all') }, ...categoryOptions.map(c => ({ value: c, label: categoryLabel(c) }))]"
-          :prefix="t('logs.filter.category') + ': '"
-          size="sm"
-          fit
-        />
-        <BaseSelect
-          v-model="filterStatus"
-          :options="[{ value: '', label: t('logs.filter.all') }, ...statusOptions.map(s => ({ value: s, label: t(`logs.status_label.${s}`) }))]"
-          :prefix="t('logs.filter.status') + ': '"
-          size="sm"
-          fit
-        />
+        <div class="tb-select-group">
+          <BaseSelect
+            v-model="filterCategory"
+            :options="[{ value: '', label: t('logs.filter.all') }, ...categoryOptions.map(c => ({ value: c, label: categoryLabel(c) }))]"
+            :prefix="t('logs.filter.category') + ': '"
+            size="sm"
+            fit
+          />
+          <BaseSelect
+            v-model="filterStatus"
+            :options="[{ value: '', label: t('logs.filter.all') }, ...statusOptions.map(s => ({ value: s, label: t(`logs.status_label.${s}`) }))]"
+            :prefix="t('logs.filter.status') + ': '"
+            size="sm"
+            fit
+          />
+        </div>
       </template>
     </SectionToolbar>
 
@@ -233,12 +235,6 @@ const statusOptions = ['success', 'failed', 'partial', 'info']
 
 .logs-filter-input {
   width: min(320px, 72vw);
-}
-
-.toolbar-status {
-  color: var(--t3);
-  font-size: var(--text-sm);
-  white-space: nowrap;
 }
 
 .details-text {

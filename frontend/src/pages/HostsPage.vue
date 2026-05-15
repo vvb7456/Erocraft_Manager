@@ -232,22 +232,14 @@ function handleMobile(action: 'open') {
         <FilterInput
           v-model="searchTerm"
           :placeholder="t('hosts.toolbar.search')"
-          class="hosts-filter-input"
+          class="hosts-filter-input tb-search"
         />
-        <div class="summary" role="status">
+        <div class="summary tb-status" role="status">
           <span>{{ t('hosts.summary.total', { n: summary.total }) }}</span>
         </div>
       </template>
       <template #end>
-        <div class="toolbar-end-row">
-          <BaseButton size="sm" @click="openGlobalDefaults">
-            <MsIcon name="tune" size="xs" />
-            {{ t('hosts.toolbar.globalDefaults') }}
-          </BaseButton>
-          <BaseButton size="sm" variant="primary" @click="openCreate">
-            <MsIcon name="add" size="xs" />
-            {{ t('hosts.toolbar.create') }}
-          </BaseButton>
+        <div class="tb-select-group">
           <BaseSelect
             v-model="filterKind"
             :options="kindOptions"
@@ -262,6 +254,16 @@ function handleMobile(action: 'open') {
             size="sm"
             fit
           />
+        </div>
+        <div class="tb-btn-group">
+          <BaseButton size="sm" @click="openGlobalDefaults">
+            <MsIcon name="tune" size="xs" />
+            {{ t('hosts.toolbar.globalDefaults') }}
+          </BaseButton>
+          <BaseButton size="sm" variant="primary" @click="openCreate">
+            <MsIcon name="add" size="xs" />
+            {{ t('hosts.toolbar.create') }}
+          </BaseButton>
         </div>
       </template>
     </SectionToolbar>
@@ -368,13 +370,6 @@ function handleMobile(action: 'open') {
   gap: var(--sp-2);
   color: var(--t3);
   font-size: var(--text-sm);
-  flex-wrap: wrap;
-}
-
-.toolbar-end-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
   flex-wrap: wrap;
 }
 

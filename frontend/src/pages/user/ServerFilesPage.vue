@@ -244,10 +244,17 @@ async function onCreateFile() {
     <SectionToolbar class="files-toolbar">
       <template #start>
         <template v-if="ops.hasSelection.value">
-          <button class="clear-selection-btn" @click="ops.clearSelection">
+          <button class="clear-selection-btn" :title="t('common.btn.cancel')" @click="ops.clearSelection">
             <MsIcon name="close" size="sm" />
           </button>
           <span class="selection-count">{{ t('userServers.file.selected', { n: ops.selectedFiles.value.size }) }}</span>
+          <button
+            class="clear-selection-btn"
+            :title="ops.allSelected.value ? t('userServers.file.deselectAll') : t('userServers.file.selectAll')"
+            @click="ops.toggleSelectAll"
+          >
+            <MsIcon :name="ops.allSelected.value ? 'deselect' : 'select_all'" size="sm" />
+          </button>
         </template>
         <template v-else>
           <FilterInput

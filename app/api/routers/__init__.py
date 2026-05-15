@@ -16,6 +16,7 @@ from app.api.routers.admin_hosts_tunnel import router as admin_hosts_tunnel_rout
 from app.api.routers.admin_server_detail import router as admin_server_detail_router
 from app.api.routers.billing_webhook import router as billing_webhook_router
 from app.api.routers.email_templates import router as email_templates_router
+from app.api.routers.integrations import router as integrations_router
 from app.api.routers.logs import router as logs_router
 from app.api.routers.monitoring import router as monitoring_router
 from app.api.routers.public import router as public_router
@@ -48,6 +49,7 @@ api_router.include_router(admin_hosts_tunnel_router)
 api_router.include_router(admin_server_detail_router)
 api_router.include_router(billing_webhook_router)
 api_router.include_router(email_templates_router)
+api_router.include_router(integrations_router)
 api_router.include_router(logs_router)
 api_router.include_router(monitoring_router)
 api_router.include_router(public_router)

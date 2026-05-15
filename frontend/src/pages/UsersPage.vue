@@ -353,22 +353,24 @@ const mobileSortOpen = ref(false)
         <FilterInput
           v-model="searchTerm"
           :placeholder="t('users.search_placeholder')"
-          class="users-filter-input"
+          class="users-filter-input tb-search"
         />
-        <div class="batch-controls">
+        <div class="batch-controls tb-batch">
           <BaseSelect v-model="batchActionType" :options="batchActionOptions" :placeholder="t('users.batch.select_action')" size="sm" fit :disabled="selectedIds.size === 0" />
           <BaseButton size="sm" :disabled="selectedIds.size === 0 || !batchActionType" @click="executeBatchAction">
             <MsIcon name="play_arrow" size="xs" /> {{ t('users.batch.execute') }}
           </BaseButton>
-          <span v-if="selectedIds.size > 0" class="toolbar-status">{{ t('users.batch.selected', { n: selectedIds.size }) }}</span>
+          <span v-if="selectedIds.size > 0" class="toolbar-status tb-status">{{ t('users.batch.selected', { n: selectedIds.size }) }}</span>
         </div>
       </template>
       <template #end>
-        <div class="toolbar-end-row">
-          <BaseButton size="sm" variant="primary" class="toolbar-half" @click="openCreate">
+        <div class="tb-select-group">
+          <BaseSelect v-model="filterServer" :options="serverFilterOptions" :prefix="t('users.filter.label') + ': '" size="sm" fit />
+        </div>
+        <div class="tb-btn-group">
+          <BaseButton size="sm" variant="primary" @click="openCreate">
             <MsIcon name="person_add" size="xs" /> {{ t('users.action.create') }}
           </BaseButton>
-          <BaseSelect v-model="filterServer" :options="serverFilterOptions" :prefix="t('users.filter.label') + ': '" size="sm" fit class="toolbar-half" />
         </div>
       </template>
     </SectionToolbar>
@@ -560,11 +562,6 @@ const mobileSortOpen = ref(false)
 .col-check { width: 36px; text-align: center !important; }
 .col-id { width: 56px; }
 
-.toolbar-status {
-  font-size: .82rem;
-  color: var(--t3);
-  white-space: nowrap;
-}
 .col-username { width: 14%; }
 .col-email { width: 22%; }
 .col-count { width: 64px; text-align: center !important; }

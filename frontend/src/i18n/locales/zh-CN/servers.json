@@ -92,6 +92,10 @@
   },
   "create": {
     "title": "创建服务器",
+    "plan": "套餐（可选）",
+    "plan_placeholder": "选择套餐以自动填充以下字段…",
+    "plan_hint": "选择套餐后预设、节点、资源、启动、环境变量均会同步为套餐配置，可手动调整。",
+    "plan_clear": "不使用套餐",
     "section_image": "预设 & 镜像",
     "section_resources": "资源配置",
     "section_env": "环境变量",

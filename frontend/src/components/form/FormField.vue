@@ -67,6 +67,7 @@ export default { components: { FieldLabel } }
 .form-field {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 /* Default density — main page forms */
@@ -98,6 +99,7 @@ export default { components: { FieldLabel } }
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 /* Single block-level controls fill the row */
 .form-field__control > :only-child {

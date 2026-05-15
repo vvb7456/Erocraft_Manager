@@ -520,23 +520,25 @@ function openMobileRenew(s: ServerItem) {
         <FilterInput
           v-model="searchTerm"
           :placeholder="t('servers.search_placeholder')"
-          class="servers-filter-input"
+          class="servers-filter-input tb-search"
           @update:modelValue="page = 1"
         />
-        <div class="batch-controls">
+        <div class="batch-controls tb-batch">
           <BaseSelect v-model="batchActionType" :options="batchActionOptions" :placeholder="t('servers.batch.select_action')" size="sm" fit :disabled="selectedIds.size === 0" />
           <BaseButton size="sm" :disabled="selectedIds.size === 0 || !batchActionType" @click="executeBatchAction">
             <MsIcon name="play_arrow" size="xs" /> {{ t('servers.batch.execute') }}
           </BaseButton>
-          <span v-if="selectedIds.size > 0" class="toolbar-status">{{ t('servers.batch.selected', { n: selectedIds.size }) }}</span>
+          <span v-if="selectedIds.size > 0" class="toolbar-status tb-status">{{ t('servers.batch.selected', { n: selectedIds.size }) }}</span>
         </div>
       </template>
       <template #end>
-        <div class="toolbar-end-row">
-          <BaseButton size="sm" variant="primary" class="toolbar-half" @click="createModalOpen = true">
+        <div class="tb-select-group">
+          <BaseSelect v-model="filterStatus" :options="statusOptions" :prefix="t('servers.filter.label') + ': '" size="sm" fit @update:modelValue="page = 1" />
+        </div>
+        <div class="tb-btn-group">
+          <BaseButton size="sm" variant="primary" @click="createModalOpen = true">
             <MsIcon name="add" size="xs" /> {{ t('servers.action.create') }}
           </BaseButton>
-          <BaseSelect v-model="filterStatus" :options="statusOptions" :prefix="t('servers.filter.label') + ': '" size="sm" fit class="toolbar-half" @update:modelValue="page = 1" />
         </div>
       </template>
     </SectionToolbar>
@@ -737,11 +739,6 @@ function openMobileRenew(s: ServerItem) {
 .col-check { width: 36px; text-align: center !important; }
 .col-id { width: 48px; color: var(--t3); font-size: .82rem; }
 
-.toolbar-status {
-  font-size: .82rem;
-  color: var(--t3);
-  white-space: nowrap;
-}
 .col-name { width: 18%; }
 .col-plan { width: 12%; color: var(--t2); font-size: .85rem; }
 .col-egg { width: 12%; color: var(--t2); font-size: .85rem; }

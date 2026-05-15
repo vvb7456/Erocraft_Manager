@@ -32,6 +32,7 @@ const createLoading = ref(false)
 const createForm = ref({
   user_id: '' as string | number,
   server_name: '',
+  plan_id: '' as string | number,
   nest_id: '' as string | number,
   egg_id: '' as string | number,
   docker_image: '',
@@ -57,7 +58,27 @@ const allocationList = ref<{ id: number; ip: string; port: number }[]>([])
 const eggVariables = ref<{ name: string; env_variable: string; default_value: string; description: string; rules: string }[]>([])
 const serverNamePrefix = ref('')
 
+interface PlanOption {
+  id: number
+  display_name: string
+  is_active: boolean
+  nest_id: number
+  egg_id: number
+  node_id: number
+  cpu: number
+  memory_mb: number
+  disk_mb: number
+  database_limit: number
+  backup_limit: number
+  allocation_limit: number
+  docker_image: string
+  startup_command: string
+  env_defaults: Record<string, string>
+}
+const planList = ref<PlanOption[]>([])
+
 const userOptions = computed(() => userList.value.map(u => ({ value: u.id, label: `${u.username} (${u.email})` })))
+const planOptions = computed(() => planList.value.map(p => ({ value: p.id, label: p.display_name })))
 const nestOptions = computed(() => nestList.value.map(n => ({ value: n.id, label: n.name })))
 const eggOptions = computed(() => eggList.value.map(e => ({ value: e.id, label: e.name })))
 const nodeOptions = computed(() => nodeList.value.map(n => ({ value: n.id, label: n.name })))
@@ -132,6 +153,61 @@ watch(() => createForm.value.user_id, (userId) => {
   }
 })
 
+// Plan selection → cascade values into the form. egg_id needs the eggList
+// to be loaded for the chosen nest first, so we wait for the nest watcher to
+// finish and then assign egg_id (which itself triggers the egg watcher to
+// load variables — we override env_defaults afterwards).
+async function applyPlan(plan: PlanOption) {
+  createForm.value.docker_image = plan.docker_image
+  createForm.value.startup_command = plan.startup_command
+  createForm.value.cpu = plan.cpu
+  createForm.value.memory = plan.memory_mb
+  createForm.value.disk = plan.disk_mb
+  createForm.value.databases = plan.database_limit
+  createForm.value.backups = plan.backup_limit
+  createForm.value.allocations = plan.allocation_limit
+  createForm.value.node_id = plan.node_id
+  createForm.value.nest_id = plan.nest_id
+  // Wait for egg list to populate, then pick egg.
+  const seq = ++planEggWaitSeq
+  const waitForEggs = (tries: number) => {
+    if (seq !== planEggWaitSeq) return
+    if (eggList.value.some(e => e.id === plan.egg_id)) {
+      createForm.value.egg_id = plan.egg_id
+      // Restore startup/docker/env after the egg watcher completes its own
+      // overrides (it runs after egg_id assignment + variable fetch).
+      const seq2 = ++planEnvWaitSeq
+      const restore = (tries2: number) => {
+        if (seq2 !== planEnvWaitSeq) return
+        if (eggVariables.value.length > 0 || tries2 > 30) {
+          createForm.value.docker_image = plan.docker_image
+          createForm.value.startup_command = plan.startup_command
+          const env: Record<string, string> = { ...createForm.value.environment }
+          for (const [k, v] of Object.entries(plan.env_defaults || {})) {
+            env[k] = String(v)
+          }
+          createForm.value.environment = env
+          return
+        }
+        setTimeout(() => restore(tries2 + 1), 100)
+      }
+      setTimeout(() => restore(0), 150)
+      return
+    }
+    if (tries > 50) return
+    setTimeout(() => waitForEggs(tries + 1), 100)
+  }
+  setTimeout(() => waitForEggs(0), 50)
+}
+
+let planEggWaitSeq = 0
+let planEnvWaitSeq = 0
+watch(() => createForm.value.plan_id, (planId) => {
+  if (!planId) return
+  const plan = planList.value.find(p => p.id === planId)
+  if (plan) applyPlan(plan)
+})
+
 // Open modal → reset & load dropdown data
 watch(() => props.modelValue, async (open) => {
   if (!open) return
@@ -139,6 +215,7 @@ watch(() => props.modelValue, async (open) => {
   createForm.value = {
     user_id: '',
     server_name: '',
+    plan_id: '',
     nest_id: '',
     egg_id: '',
     docker_image: '',
@@ -159,15 +236,23 @@ watch(() => props.modelValue, async (open) => {
   eggVariables.value = []
 
   // Load dropdown data in parallel
-  const [usersData, nestsData, nodesData, defaultsData] = await Promise.all([
+  const [usersData, nestsData, nodesData, defaultsData, plansData] = await Promise.all([
     get<{ users: any[] }>('/api/admin/resources/users'),
     get<{ nests: any[] }>('/api/admin/resources/nests'),
     get<{ nodes: any[] }>('/api/admin/resources/nodes'),
     get<Record<string, any>>('/api/admin/resources/server-defaults'),
+    get<PlanOption[]>('/api/admin/billing/plans?include_inactive=false'),
   ])
   if (usersData) userList.value = usersData.users
   if (nestsData) nestList.value = nestsData.nests
   if (nodesData) nodeList.value = nodesData.nodes
+  if (plansData) {
+    planList.value = (plansData as PlanOption[]).filter(p => p.is_active !== false)
+    // 默认选中第一个套餐（会触发 watcher 自动套用）
+    if (planList.value.length > 0 && !createForm.value.plan_id) {
+      createForm.value.plan_id = planList.value[0].id
+    }
+  }
   if (defaultsData) {
     createForm.value.cpu = defaultsData.cpu
     createForm.value.memory = defaultsData.memory
@@ -221,6 +306,7 @@ async function doCreateServer() {
     backups: f.backups,
     allocations: f.allocations,
     expiration_days: f.expiration_days,
+    plan_id: f.plan_id ? Number(f.plan_id) : null,
   })
   createLoading.value = false
   if (res) {
@@ -238,11 +324,23 @@ function close() {
 <template>
   <BaseModal :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)" :title="t('servers.create.title')" icon="add" size="xl" scroll="body">
     <div class="create-form">
-      <!-- Basic Info -->
-      <div class="create-row create-row--3">
+      <!-- Plan + Owner -->
+      <div class="create-row">
+        <FormField :label="t('servers.create.plan')" density="compact" class="create-col">
+          <BaseSelect
+            v-model="createForm.plan_id"
+            :options="planOptions"
+            :placeholder="t('servers.create.plan_placeholder')"
+            searchable
+          />
+        </FormField>
         <FormField :label="t('servers.create.user')" required density="compact" class="create-col">
           <BaseSelect v-model="createForm.user_id" :options="userOptions" :placeholder="t('servers.create.user_placeholder')" searchable />
         </FormField>
+      </div>
+
+      <!-- Name + Expiration -->
+      <div class="create-row">
         <FormField :label="t('servers.create.server_name')" required density="compact" class="create-col">
           <BaseInput v-model="createForm.server_name" :placeholder="t('servers.create.server_name_placeholder')" />
         </FormField>
@@ -327,13 +425,27 @@ function close() {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+  min-width: 0;
 }
 .create-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 var(--sp-3);
+  min-width: 0;
 }
 .create-row--3 {
   grid-template-columns: 1fr 1fr 1fr;
+}
+/* Lock each grid cell to its track width — prevent intrinsic content (long
+   select option labels) from pushing the sibling column. */
+.create-row > .create-col,
+.create-row--3 > .create-col {
+  min-width: 0;
+}
+@media (max-width: 768px) {
+  .create-row,
+  .create-row--3 {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

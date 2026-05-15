@@ -35,7 +35,7 @@
   },
   "table": {
     "name": "服务器名称",
-    "preset": "预设",
+    "plan": "套餐",
     "status": "状态",
     "expiry": "到期时间",
     "actions": "操作"
@@ -164,6 +164,8 @@
     "newName": "新名称",
     "moveTo": "移动到：",
     "selected": "已选择 {n} 项",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
     "tooLarge": "文件过大（> 5MB），请下载后本地编辑",
     "dragHint": "拖放文件到此处上传",
     "singleFileOnly": "每次只能上传一个文件",

@@ -24,7 +24,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
-const { put, post, error: apiError } = useApiFetch()
+const { get, put, post, error: apiError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 
@@ -104,15 +104,10 @@ watch(() => props.variables, (vars) => {
 async function fetchBranches() {
   branchesLoading.value = true
   try {
-    const tagRes = await fetch('https://api.github.com/repos/SillyTavern/SillyTavern/tags?per_page=50')
-    const opts: SelectOption[] = []
-
-    if (tagRes.ok) {
-      const tags = await tagRes.json() as { name: string }[]
-      for (const tag of tags) {
-        opts.push({ value: tag.name, label: tag.name })
-      }
-    }
+    // Proxied through our backend (1-hour cache) to avoid GitHub's
+    // unauthenticated 60-req/hour-per-IP limit hitting end users.
+    const data = await get<{ tags: string[]; stale: boolean }>('/api/integrations/sillytavern/tags')
+    const opts: SelectOption[] = (data?.tags ?? []).map(name => ({ value: name, label: name }))
 
     // Always keep the current value selectable, even if it's release/staging
     // or a tag that has fallen off the page-1 listing.

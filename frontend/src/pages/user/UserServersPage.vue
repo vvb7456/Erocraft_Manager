@@ -427,17 +427,17 @@ function openMobileAction(s: Server) {
     <!-- Toolbar -->
     <SectionToolbar>
       <template #start>
-        <FilterInput v-model="searchTerm" :placeholder="t('userServers.searchPlaceholder')" class="filter-input" @update:modelValue="selectedIds = new Set()" />
-        <div class="batch-controls">
+        <FilterInput v-model="searchTerm" :placeholder="t('userServers.searchPlaceholder')" class="filter-input tb-search" @update:modelValue="selectedIds = new Set()" />
+        <div class="batch-controls tb-batch">
           <BaseSelect v-model="batchActionType" :options="batchActionOptions" :placeholder="t('userServers.batch.selectAction')" size="sm" fit :disabled="selectedIds.size === 0" />
           <BaseButton size="sm" :disabled="selectedIds.size === 0 || !batchActionType" @click="executeBatchAction">
             <MsIcon name="play_arrow" size="xs" /> {{ t('userServers.batch.execute') }}
           </BaseButton>
-          <span v-if="selectedIds.size > 0" class="toolbar-status">{{ t('userServers.batch.selected', { n: selectedIds.size }) }}</span>
+          <span v-if="selectedIds.size > 0" class="toolbar-status tb-status">{{ t('userServers.batch.selected', { n: selectedIds.size }) }}</span>
         </div>
       </template>
       <template #end>
-        <div v-if="canShowAllServers" class="scope-switch">
+        <div v-if="canShowAllServers" class="scope-switch tb-btn-group">
           <span class="scope-switch__label">{{ t('userServers.scope.all') }}</span>
           <ToggleSwitch v-model="showAllServers" size="sm" />
         </div>
@@ -476,7 +476,7 @@ function openMobileAction(s: Server) {
         </th>
         <th class="col-dot"></th>
         <th class="col-name">{{ t('userServers.table.name') }}</th>
-        <th class="col-preset">{{ t('userServers.table.preset') }}</th>
+        <th class="col-plan">{{ t('userServers.table.plan') }}</th>
         <th class="col-status">{{ t('userServers.table.status') }}</th>
         <th class="col-cpu">CPU</th>
         <th class="col-mem">{{ t('userServers.resources.memory') }}</th>
@@ -497,7 +497,7 @@ function openMobileAction(s: Server) {
         <td class="col-name">
           <a class="server-link" href="#" @click.prevent="goToDetail(s)">{{ s.name }}</a>
         </td>
-        <td class="col-preset">{{ s.eggName }}</td>
+        <td class="col-plan">{{ s.planName || s.eggName }}</td>
         <td class="col-status" :style="{ color: statusBadgeColor(s), fontWeight: s.isSuspended || s.isInstalling ? 600 : undefined }">{{ t(`userServers.status.${displayState(s)}`) }}</td>
         <td class="col-cpu mono">{{ cpuText(s) }}</td>
         <td class="col-mem mono">
@@ -549,8 +549,8 @@ function openMobileAction(s: Server) {
           </div>
           <div class="mobile-server-card__meta">
             <MsIcon name="widgets" size="sm" class="mobile-server-card__meta-icon" />
-            <span class="mobile-server-card__meta-label">{{ t('userServers.table.preset') }}：</span>
-            <span class="mobile-server-card__meta-value">{{ s.eggName }}</span>
+            <span class="mobile-server-card__meta-label">{{ t('userServers.table.plan') }}：</span>
+            <span class="mobile-server-card__meta-value">{{ s.planName || s.eggName }}</span>
           </div>
           <div class="mobile-server-card__expiry">
             <MsIcon name="schedule" size="sm" class="mobile-server-card__expiry-icon" />
@@ -660,12 +660,6 @@ function openMobileAction(s: Server) {
   max-width: 280px;
 }
 
-.toolbar-status {
-  font-size: .82rem;
-  color: var(--t3);
-  white-space: nowrap;
-}
-
 .scope-switch {
   display: inline-flex;
   align-items: center;
@@ -682,7 +676,7 @@ function openMobileAction(s: Server) {
 .col-check { width: 1%; text-align: center !important; vertical-align: middle; }
 .col-dot { width: 1%; text-align: center !important; vertical-align: middle; }
 .col-name { width: 13%; }
-.col-preset { width: 8%; color: var(--t2); }
+.col-plan { width: 8%; color: var(--t2); }
 .col-status { width: 7%; }
 .col-cpu { width: 8%; }
 .col-mem { width: 8%; }

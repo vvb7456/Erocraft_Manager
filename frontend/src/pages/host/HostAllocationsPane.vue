@@ -276,20 +276,29 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
         <FilterInput
           v-model="searchTerm"
           :placeholder="t('hosts.allocations.search.placeholder')"
-          class="alloc-filter-input"
+          class="alloc-filter-input tb-search"
           @update:modelValue="page = 1"
         />
-        <div class="summary" role="status">
+        <div class="summary tb-status" role="status">
           {{ t('hosts.allocations.summaryFiltered', { n: total }) }}
         </div>
       </template>
       <template #end>
-        <div class="toolbar-end-row">
+        <div class="tb-select-group">
+          <BaseSelect
+            v-model="filterAssigned"
+            :options="filterOptions"
+            :prefix="t('hosts.allocations.filter.label') + ': '"
+            size="sm"
+            fit
+            @update:modelValue="page = 1"
+          />
+        </div>
+        <div class="tb-btn-group">
           <BaseButton
             v-if="selectedIds.size > 0"
             size="sm"
             variant="danger"
-            class="toolbar-half"
             @click="bulkDelete"
           >
             <MsIcon name="delete" size="xs" />
@@ -298,21 +307,11 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
           <BaseButton
             size="sm"
             variant="primary"
-            class="toolbar-half"
             @click="createOpen = true"
           >
             <MsIcon name="add" size="xs" />
             {{ t('hosts.allocations.actions.create') }}
           </BaseButton>
-          <BaseSelect
-            v-model="filterAssigned"
-            :options="filterOptions"
-            :prefix="t('hosts.allocations.filter.label') + ': '"
-            size="sm"
-            fit
-            class="toolbar-half"
-            @update:modelValue="page = 1"
-          />
         </div>
       </template>
     </SectionToolbar>
@@ -473,21 +472,14 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
   }
 }
 
-@media (max-width: 768px) {
-  .toolbar-half {
-    flex: 1;
-    min-width: 0;
-  }
-}
-
 .summary {
   font-size: var(--text-sm);
   color: var(--t2);
   white-space: nowrap;
 }
 
-/* SectionToolbar provides batch-controls / toolbar-end-row / toolbar-status
-   :slotted styles globally; no need to redefine here. */
+/* SectionToolbar provides .tb-search / .tb-select-group / .tb-btn-group /
+   .tb-status / .tb-help / .tb-batch :slotted styles globally; no need to redefine here. */
 
 /* ── Table cells ── */
 .col-check { width: 36px; text-align: center !important; padding-right: 0 !important; }

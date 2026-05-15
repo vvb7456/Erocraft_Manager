@@ -304,6 +304,17 @@ async def create_server(
 
     try:
         await _set_meta_expiration(db, server_id, expiration_date)
+        # Bind plan if requested (after meta row exists).
+        if payload.plan_id is not None:
+            plan_obj = await db.get(BillingPlan, payload.plan_id)
+            if plan_obj is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"套餐 {payload.plan_id} 不存在",
+                )
+            meta = await db.get(ServerMeta, server_id)
+            if meta is not None:
+                meta.plan_id = payload.plan_id
         await db.commit()
     except Exception as exc:
         await db.rollback()

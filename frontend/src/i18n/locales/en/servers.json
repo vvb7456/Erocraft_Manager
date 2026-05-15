@@ -92,6 +92,10 @@
   },
   "create": {
     "title": "Create Server",
+    "plan": "Plan (optional)",
+    "plan_placeholder": "Select a plan to auto-fill the fields below…",
+    "plan_hint": "Selecting a plan auto-fills egg, node, resources, startup and env vars; you can still tweak any field manually.",
+    "plan_clear": "No plan",
     "section_image": "Preset & Image",
     "section_resources": "Resources",
     "section_env": "Environment Variables",

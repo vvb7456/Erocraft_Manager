@@ -184,16 +184,18 @@ function getPropsText(log: ActivityLogItem): string {
   <div class="activity-page">
     <SectionToolbar>
       <template #start>
-        <span class="toolbar-count">{{ t('activity.total', { n: total }) }}</span>
+        <span class="toolbar-count tb-status">{{ t('activity.total', { n: total }) }}</span>
       </template>
       <template #end>
-        <BaseSelect
-          v-model="eventFilter"
-          :options="filterOptions"
-          :prefix="t('activity.filter.label') + ': '"
-          size="sm"
-          fit
-        />
+        <div class="tb-select-group">
+          <BaseSelect
+            v-model="eventFilter"
+            :options="filterOptions"
+            :prefix="t('activity.filter.label') + ': '"
+            size="sm"
+            fit
+          />
+        </div>
       </template>
     </SectionToolbar>
 
@@ -258,11 +260,6 @@ function getPropsText(log: ActivityLogItem): string {
 .activity-page {
   display: flex;
   flex-direction: column;
-}
-
-.toolbar-count {
-  font-size: var(--text-sm);
-  color: var(--t3);
 }
 
 /* ── Event cell ── */
