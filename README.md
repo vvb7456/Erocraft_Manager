@@ -1,8 +1,10 @@
 # Erocraft Manager
 
-> Server rental management platform whose only runtime dependency is Wings. Adds an end-user UI for console / files / billing / registration / renewal, plus an admin console for servers, users, hosts, certificates, alerting and billing.
->
-> Language: **English** | [中文](README.zh-CN.md)
+[中文](README.zh-CN.md) · **English**
+
+![Preview](preview.png)
+
+Server rental management platform whose only runtime dependency is Wings. Adds an end-user UI for console / files / billing / registration / renewal, plus an admin console for servers, users, hosts, certificates, alerting and billing.
 
 ---
 
