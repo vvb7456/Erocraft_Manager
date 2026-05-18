@@ -19,6 +19,7 @@ import CardTap from '@/components/ui/CardTap.vue'
 import CardKV from '@/components/ui/CardKV.vue'
 import type { AcmeCertificate, AcmeStatus, CertificateDeployment, ManagedCertificate } from '@/types/certificate'
 import type { HostDetail } from '@/types/host'
+import { classifyHostStatus } from '@/utils/heartbeat'
 
 defineOptions({ name: 'CertificatesPage' })
 
@@ -102,8 +103,11 @@ function statStatus(kind: 'ok' | 'warning' | 'error' | 'disabled' | 'unknown'): 
 }
 
 function hostAgentStatus(host: HostDetail | null): 'running' | 'error' | 'stopped' {
-  if (!host || !host.enabled) return 'stopped'
-  return host.inbound_reachable ? 'running' : 'error'
+  if (!host) return 'stopped'
+  const key = classifyHostStatus(host.enabled, host.last_seen_at)
+  if (key === 'online') return 'running'
+  if (key === 'offline') return 'error'
+  return 'stopped'
 }
 
 function deploymentPath(dep: CertificateDeployment): string {
@@ -386,7 +390,7 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
           <td class="col-agent">
             <span class="status-cell">
               <StatusDot :status="hostAgentStatus(row.host)" size="sm" />
-              {{ row.host?.enabled === false ? t('certificates.agent.disabled') : row.host?.inbound_reachable ? t('certificates.agent.online') : t('certificates.agent.offline') }}
+              {{ row.host?.enabled === false ? t('certificates.agent.disabled') : hostAgentStatus(row.host) === 'running' ? t('certificates.agent.online') : t('certificates.agent.offline') }}
             </span>
           </td>
           <td class="col-sync">

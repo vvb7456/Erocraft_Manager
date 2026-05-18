@@ -10,11 +10,9 @@ export interface HostDetail {
   pterodactyl_node_id: number | null
   extra_metadata: Record<string, unknown> | null
   enabled: boolean
-  inbound_reachable: boolean
   last_seen_at: string | null
-  last_status_at: string | null
   created_at: string | null
   updated_at: string | null
 }
 
-export type HostStatusKey = 'online' | 'offline' | 'disabled' | 'unconfigured'
+export type { HostStatusKey } from '../utils/heartbeat'

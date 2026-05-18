@@ -54,9 +54,7 @@ class HostOut(BaseModel):
     pterodactyl_node_id: int | None
     extra_metadata: dict | None
     enabled: bool
-    inbound_reachable: bool
     last_seen_at: str | None
-    last_status_at: str | None
     created_at: str | None
     updated_at: str | None
 
@@ -71,9 +69,7 @@ def _serialize(host) -> HostOut:
         pterodactyl_node_id=host.pterodactyl_node_id,
         extra_metadata=host.extra_metadata,
         enabled=host.enabled,
-        inbound_reachable=host.inbound_reachable,
         last_seen_at=host.last_seen_at.isoformat() if host.last_seen_at else None,
-        last_status_at=host.last_status_at.isoformat() if host.last_status_at else None,
         created_at=host.created_at.isoformat() if host.created_at else None,
         updated_at=host.updated_at.isoformat() if host.updated_at else None,
     )

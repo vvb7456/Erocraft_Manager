@@ -1,12 +1,12 @@
-"""Squashed baseline for all manager_* tables.
+"""Clean baseline for all manager_* tables.
 
-Replaces the previous migration chain (0001 baseline → 0012 billing).
-This single revision creates every ``manager_*`` table in the schema as
-it exists at the time of squash, captured directly from the dev panel
-database via ``SHOW CREATE TABLE``.
-
-Existing databases that were already migrated to ``0012`` should be
-``alembic stamp``-ed to this revision in place; no DDL changes.
+Replaces every previous migration (squashed 0001–0012 baseline +
+``server_install_notify``). This single revision creates each
+``manager_*`` table in its current, final shape. Project hasn't shipped
+yet, so we squash freely; existing dev databases are migrated via a
+manual ``ALTER TABLE manager_hosts DROP COLUMN inbound_reachable,
+DROP COLUMN last_status_at;`` plus ``UPDATE alembic_version SET
+version_num='20260507_baseline'``.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from __future__ import annotations
 from alembic import op
 
 
-revision = "20260429_baseline"
+revision = "20260507_baseline"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -33,9 +33,7 @@ CREATE TABLE `manager_hosts` (
   `pterodactyl_node_id` int(10) unsigned DEFAULT NULL,
   `extra_metadata` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`extra_metadata`)),
   `enabled` tinyint(1) NOT NULL DEFAULT 1,
-  `inbound_reachable` tinyint(1) NOT NULL DEFAULT 1,
   `last_seen_at` datetime DEFAULT NULL,
-  `last_status_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
@@ -280,6 +278,7 @@ CREATE TABLE `manager_server_meta` (
   `server_id` int(10) unsigned NOT NULL,
   `expiration_date` date DEFAULT NULL,
   `plan_id` bigint(20) DEFAULT NULL,
+  `install_notified_at` datetime DEFAULT NULL,
   PRIMARY KEY (`server_id`),
   KEY `idx_server_meta_plan` (`plan_id`),
   CONSTRAINT `manager_server_meta_ibfk_1` FOREIGN KEY (`server_id`) REFERENCES `servers` (`id`) ON DELETE CASCADE

@@ -50,7 +50,6 @@ class ManagerHostSummary(CamelModel):
     name: str
     agent_url: str = Field(alias="agentUrl")
     enabled: bool
-    inbound_reachable: bool = Field(alias="inboundReachable")
 
 
 class ServerAllocationSummary(CamelModel):

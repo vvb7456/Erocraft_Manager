@@ -195,7 +195,6 @@ async def get_server_detail(db: AsyncSession, server_id: int) -> AdminServerDeta
                 name=manager_host.name,
                 agent_url=manager_host.agent_url,
                 enabled=bool(manager_host.enabled),
-                inbound_reachable=bool(manager_host.inbound_reachable),
             )
             if manager_host
             else None

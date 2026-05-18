@@ -40,7 +40,6 @@ export interface ManagerHostSummary {
   name: string
   agentUrl: string
   enabled: boolean
-  inboundReachable: boolean
 }
 
 export interface ServerAllocationSummary {

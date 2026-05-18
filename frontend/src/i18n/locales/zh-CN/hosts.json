@@ -32,6 +32,7 @@
   },
   "status": {
     "online": "在线",
+    "warning": "心跳延迟",
     "offline": "离线",
     "disabled": "已禁用",
     "unconfigured": "未配置"
@@ -161,7 +162,7 @@
     "activeAlerts": "活跃告警",
     "noActiveAlerts": "暂无活跃告警",
     "noMetrics": "还未采集到指标数据",
-    "noMetricsNonWings": "非 wings_node 主机暂不采集系统指标，仅展示心跳与 inbound 状态。",
+    "noMetricsNonWings": "非 wings_node 主机暂不采集系统指标，仅展示心跳状态。",
     "yes": "是",
     "no": "否",
     "fields": {

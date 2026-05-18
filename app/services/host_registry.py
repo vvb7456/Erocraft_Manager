@@ -258,8 +258,6 @@ async def create_host(
         pterodactyl_node_id=pterodactyl_node_id,
         extra_metadata=extra_metadata,
         enabled=enabled,
-        # ``inbound_reachable`` defaults to True at the column level; the
-        # /probe endpoint is the canonical way to flip it after creation.
     )
     db.add(host)
     await db.commit()
@@ -277,7 +275,6 @@ async def update_host(
     agent_token: str | None = None,
     extra_metadata: dict[str, Any] | None = None,
     enabled: bool | None = None,
-    inbound_reachable: bool | None = None,
 ) -> ManagerHost:
     """Patch the mutable fields of a host.
 
@@ -303,8 +300,6 @@ async def update_host(
         host.extra_metadata = extra_metadata
     if enabled is not None:
         host.enabled = enabled
-    if inbound_reachable is not None:
-        host.inbound_reachable = inbound_reachable
     await db.commit()
     await db.refresh(host)
     return host
@@ -390,27 +385,19 @@ async def upsert_wings_node_credentials(
 
 
 async def probe(db: AsyncSession, host: ManagerHost, *, timeout: float = 5.0) -> dict[str, Any]:
-    """Call ``GET {agent_url}/v1/status`` and update the cached reachability.
+    """Call ``GET {agent_url}/v1/status`` and return the live result.
 
-    On success: sets ``inbound_reachable=True`` and ``last_status_at=now()``,
-    returns the agent's status payload as a dict.
-    On failure: sets ``inbound_reachable=False``, raises :class:`AgentNotConfigured`
-    when creds are bad, or returns ``{"ok": False, "error": "..."}`` for
-    transport / HTTP errors (the row is still updated so the UI can display
-    "unreachable").
+    Pure side-effect-free probe: returns the agent's status payload on
+    success, or ``{"ok": False, "error": "..."}`` on transport/HTTP
+    errors. Raises :class:`AgentNotConfigured` when creds are bad.
+
+    Persistent online/offline state is derived from ``last_seen_at``
+    (updated by the metrics scheduler), so this call deliberately does
+    not touch the database.
     """
-    try:
-        endpoint = _validated_endpoint(host)
-        token = _decrypt_token(host)
-    except AgentNotConfigured:
-        # Persist the unreachable flag so the UI doesn't keep showing a
-        # stale green dot for a host whose agent_url / token went bad.
-        if host.inbound_reachable:
-            host.inbound_reachable = False
-            await db.commit()
-        raise
-
-    return await _probe_with_credentials(db, host, endpoint, token, timeout=timeout)
+    endpoint = _validated_endpoint(host)
+    token = _decrypt_token(host)
+    return await _do_probe(endpoint, token, timeout)
 
 
 async def probe_credentials(
@@ -448,24 +435,6 @@ async def _do_probe(endpoint: str, token: str, timeout: float) -> dict[str, Any]
         "response": resp.json() if resp.content else {},
         "latency_ms": latency_ms,
     }
-
-
-async def _probe_with_credentials(
-    db: AsyncSession,
-    host: ManagerHost,
-    endpoint: str,
-    token: str,
-    *,
-    timeout: float,
-) -> dict[str, Any]:
-    result = await _do_probe(endpoint, token, timeout)
-    if result.get("ok"):
-        host.inbound_reachable = True
-        host.last_status_at = _utc_now()
-    else:
-        host.inbound_reachable = False
-    await db.commit()
-    return result
 
 
 async def mark_seen(db: AsyncSession, host: ManagerHost) -> None:

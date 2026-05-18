@@ -335,7 +335,7 @@ async def admin_host_snapshot(
 
     Shape is tailored for the HostDetailPage overview tab's ECharts
     panel (see design doc §3.2). Non-wings hosts get a minimal
-    payload — last_seen_at + inbound_reachable — since they have no
+    payload — last_seen_at only — since they have no
     HostMetrics rows.
     """
     from app.services import host_registry
@@ -350,9 +350,7 @@ async def admin_host_snapshot(
         "name": host.name,
         "kind": host.kind,
         "enabled": host.enabled,
-        "inboundReachable": host.inbound_reachable,
         "lastSeenAt": host.last_seen_at.isoformat() if host.last_seen_at else None,
-        "lastStatusAt": host.last_status_at.isoformat() if host.last_status_at else None,
     }
 
     metrics_row = (

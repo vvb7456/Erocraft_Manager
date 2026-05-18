@@ -71,9 +71,7 @@ interface SnapshotResponse {
   name: string
   kind: string
   enabled: boolean
-  inboundReachable: boolean
   lastSeenAt: string | null
-  lastStatusAt: string | null
   metrics: SnapshotMetrics | null
   probes: Array<{ name: string; ok: boolean; ts: string }>
 }
@@ -286,9 +284,6 @@ const loadOption = computed(() => {
       </Badge>
       <Badge v-if="isWings && metrics" :color="metrics.wingsOnline ? 'var(--green)' : 'var(--red)'" size="sm">
         wings {{ metrics.wingsOnline ? 'OK' : 'down' }}
-      </Badge>
-      <Badge :color="snap?.inboundReachable ? 'var(--green)' : 'var(--red)'" size="sm">
-        inbound {{ snap?.inboundReachable ? 'OK' : 'down' }}
       </Badge>
       <Badge v-if="isWings && metrics?.wingsVersion" color="var(--blue)" size="sm">
         wings {{ metrics.wingsVersion }}

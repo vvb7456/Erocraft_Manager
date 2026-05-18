@@ -32,6 +32,7 @@
   },
   "status": {
     "online": "Online",
+    "warning": "Heartbeat delayed",
     "offline": "Offline",
     "disabled": "Disabled",
     "unconfigured": "Unconfigured"
@@ -161,7 +162,7 @@
     "activeAlerts": "Active alerts",
     "noActiveAlerts": "No active alerts",
     "noMetrics": "No metrics collected yet",
-    "noMetricsNonWings": "Metrics collection for non wings_node hosts is not enabled; only heartbeat and inbound status are shown.",
+    "noMetricsNonWings": "Metrics collection for non wings_node hosts is not enabled; only heartbeat status is shown.",
     "yes": "Yes",
     "no": "No",
     "fields": {

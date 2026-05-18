@@ -98,9 +98,7 @@ class ManagerHost(Base):
         "extra_metadata", JSON, nullable=True,
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    inbound_reachable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    last_status_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=_utc_now, onupdate=_utc_now,

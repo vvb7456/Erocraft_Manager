@@ -21,6 +21,7 @@ import CardKV from '@/components/ui/CardKV.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
 import GlobalDefaultsModal from '@/components/hosts/GlobalDefaultsModal.vue'
 import HostCreateModal from '@/components/hosts/HostCreateModal.vue'
+import { classifyHostStatus } from '@/utils/heartbeat'
 
 defineOptions({ name: 'HostsPage' })
 
@@ -43,14 +44,12 @@ interface HostItem {
   pterodactyl_node_id: number | null
   extra_metadata: Record<string, unknown> | null
   enabled: boolean
-  inbound_reachable: boolean
   last_seen_at: string | null
-  last_status_at: string | null
   created_at: string | null
   updated_at: string | null
 }
 
-type StatusKey = 'online' | 'offline' | 'disabled' | 'unconfigured'
+type StatusKey = 'online' | 'warning' | 'offline' | 'disabled' | 'unconfigured'
 
 // ── State ──
 const rawHosts = ref<HostItem[]>([])
@@ -84,18 +83,13 @@ onBeforeUnmount(() => {
 
 // ── Helpers ──
 function classifyStatus(h: HostItem): StatusKey {
-  if (!h.enabled) return 'disabled'
-  // "unconfigured" in the design doc means agent_token missing; the list API
-  // never exposes the ciphertext, so we proxy via inbound_reachable=false
-  // AND last_seen_at=null — a brand-new row that has never spoken back yet.
-  if (!h.inbound_reachable && !h.last_seen_at) return 'unconfigured'
-  if (!h.inbound_reachable) return 'offline'
-  return 'online'
+  return classifyHostStatus(h.enabled, h.last_seen_at)
 }
 
 function statusDotKey(s: StatusKey): 'running' | 'error' | 'stopped' {
   if (s === 'online') return 'running'
   if (s === 'offline') return 'error'
+  if (s === 'warning') return 'stopped'
   return 'stopped'
 }
 
@@ -128,6 +122,7 @@ const kindOptions = computed(() => [
 const statusOptions = computed(() => [
   { value: 'all', label: t('hosts.toolbar.all') },
   { value: 'online', label: t('hosts.status.online') },
+  { value: 'warning', label: t('hosts.status.warning') },
   { value: 'offline', label: t('hosts.status.offline') },
   { value: 'disabled', label: t('hosts.status.disabled') },
   { value: 'unconfigured', label: t('hosts.status.unconfigured') },

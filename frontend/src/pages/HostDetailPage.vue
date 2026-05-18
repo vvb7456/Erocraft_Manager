@@ -13,6 +13,7 @@ import StatusDot from '@/components/ui/StatusDot.vue'
 import TabSwitcher from '@/components/ui/TabSwitcher.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import type { HostDetail, HostStatusKey } from '@/types/host'
+import { classifyHostStatus } from '@/utils/heartbeat'
 
 defineOptions({ name: 'HostDetailPage' })
 
@@ -24,17 +25,14 @@ const { get } = useApiFetch()
 const hostId = computed(() => Number(route.params.id))
 const host = ref<HostDetail | null>(null)
 const loading = ref(false)
-const statusLive = ref<Pick<HostDetail, 'enabled' | 'inbound_reachable' | 'last_seen_at'> | null>(null)
+const statusLive = ref<Pick<HostDetail, 'enabled' | 'last_seen_at'> | null>(null)
 
 provide('hostDetail', host)
 provide('hostId', hostId)
 
-function classifyStatus(h: Pick<HostDetail, 'enabled' | 'inbound_reachable' | 'last_seen_at'> | null): HostStatusKey {
+function classifyStatus(h: Pick<HostDetail, 'enabled' | 'last_seen_at'> | null): HostStatusKey {
   if (!h) return 'offline'
-  if (!h.enabled) return 'disabled'
-  if (!h.inbound_reachable && !h.last_seen_at) return 'unconfigured'
-  if (!h.inbound_reachable) return 'offline'
-  return 'online'
+  return classifyHostStatus(h.enabled, h.last_seen_at)
 }
 
 function statusDotKey(s: HostStatusKey): 'running' | 'error' | 'stopped' {
@@ -59,7 +57,6 @@ async function loadHost(silent = false) {
       host.value = data
       statusLive.value = {
         enabled: data.enabled,
-        inbound_reachable: data.inbound_reachable,
         last_seen_at: data.last_seen_at,
       }
     }
@@ -74,7 +71,6 @@ async function refreshHostStatus() {
   if (!data) return
   statusLive.value = {
     enabled: data.enabled,
-    inbound_reachable: data.inbound_reachable,
     last_seen_at: data.last_seen_at,
   }
 }
