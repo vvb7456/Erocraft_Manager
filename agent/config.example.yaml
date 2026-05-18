@@ -12,6 +12,15 @@ agent:
   token: "REPLACE_WITH_SECURE_NODE_TOKEN"     # Bearer token; Manager stores encrypted copy
   # allow_ips: ["203.0.113.7"]                 # optional source-IP allowlist
 
+  # Optional: serve HTTPS directly from the agent (uvicorn). When set, the
+  # agent listens TLS on `bind` and no fronting reverse-proxy is needed.
+  # The cert/key are read at startup; after renewal, restart the service
+  # (typically via a cert_install_target with reload_cmd=
+  # "systemctl restart erocraft-agent" pointing at the same paths).
+  # tls:
+  #   cert_path: /etc/ssl/erocraft/agent-fullchain.pem
+  #   key_path: /etc/ssl/erocraft/agent-privkey.pem
+
 # Only role=wings_node reads this section. generic_host / synology_dsm can omit it.
 wings:
   config_path: /etc/pterodactyl/config.yml

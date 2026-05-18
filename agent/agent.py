@@ -74,6 +74,22 @@ def main() -> None:
     _self_check(cfg, config_path)
 
     app = create_app(cfg, config_path)
+
+    ssl_kwargs = {}
+    if cfg.agent.tls is not None:
+        cert_p = Path(cfg.agent.tls.cert_path)
+        key_p = Path(cfg.agent.tls.key_path)
+        for label, p in (("cert_path", cert_p), ("key_path", key_p)):
+            if not p.is_file():
+                logging.getLogger("agent.startup").error(
+                    "agent.tls.%s not found: %s", label, p
+                )
+                sys.exit(2)
+        ssl_kwargs = {"ssl_certfile": str(cert_p), "ssl_keyfile": str(key_p)}
+        logging.getLogger("agent.startup").info(
+            "TLS enabled: cert=%s key=%s", cert_p, key_p
+        )
+
     uvicorn.run(
         app,
         host=cfg.agent.host,
@@ -81,6 +97,7 @@ def main() -> None:
         loop="asyncio",
         log_level=cfg.logging.level.lower(),
         access_log=False,
+        **ssl_kwargs,
     )
 
 

@@ -201,11 +201,33 @@ class ManagerSection(BaseModel):
     node_id: Optional[int] = None
 
 
+class TLSSection(BaseModel):
+    """Optional TLS for the agent's own HTTP listener.
+
+    When both files are provided, uvicorn will serve HTTPS on `bind`.
+    The cert/key are read once at startup; renewing them requires a systemd
+    restart (typically driven by a cert_install_target with reload_cmd=
+    `systemctl restart erocraft-agent`).
+    """
+
+    cert_path: str
+    key_path: str
+
+    @field_validator("cert_path", "key_path")
+    @classmethod
+    def _required(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("cert_path/key_path must not be empty")
+        return v
+
+
 class AgentSection(BaseModel):
     role: AgentRole = "wings_node"
     bind: str = "0.0.0.0:48765"
     token: str
     allow_ips: List[str] = Field(default_factory=list)
+    tls: Optional[TLSSection] = None
 
     @field_validator("bind")
     @classmethod
