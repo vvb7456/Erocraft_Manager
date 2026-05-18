@@ -13,6 +13,7 @@ class ServerListItem(BaseModel):
     name: str
     ownerId: int | None
     ownerUsername: str | None
+    ownerEmail: str | None = None
     eggName: str | None
     expirationDate: str | None
     daysLeft: int | None

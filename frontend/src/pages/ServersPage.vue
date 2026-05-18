@@ -40,6 +40,7 @@ interface ServerItem {
   name: string
   ownerId: number | null
   ownerUsername: string | null
+  ownerEmail: string | null
   eggName: string | null
   expirationDate: string | null
   daysLeft: number | null
@@ -141,13 +142,15 @@ onMounted(async () => {
 const filtered = computed(() => {
   let list = rawServers.value
 
-  // Text search
+  // Text search — name / owner username / owner email / server id / uuid (full or prefix)
   const q = searchTerm.value.toLowerCase().trim()
   if (q) {
     list = list.filter(s =>
       s.name.toLowerCase().includes(q) ||
       (s.ownerUsername || '').toLowerCase().includes(q) ||
-      String(s.pteroId).includes(q),
+      (s.ownerEmail || '').toLowerCase().includes(q) ||
+      String(s.pteroId).includes(q) ||
+      (s.uuid || '').toLowerCase().includes(q),
     )
   }
 

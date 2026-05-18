@@ -240,6 +240,7 @@ async def list_servers(
                 name=server.name,
                 ownerId=server.owner_id,
                 ownerUsername=server.owner.username if server.owner else None,
+                ownerEmail=server.owner.email if server.owner else None,
                 eggName=egg_names.get(server.egg_id),
                 expirationDate=expiration_date.isoformat() if expiration_date else None,
                 daysLeft=days_left,

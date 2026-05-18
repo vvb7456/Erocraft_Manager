@@ -32,6 +32,7 @@ interface ServerDetail {
   limits: { memory: number; disk: number; cpu: number }
   expirationDate: string | null; daysLeft: number | null
   planId: number | null
+  planName: string | null
   hasUpgradeOptions: boolean
   tunnel: { status: string; hostname: string; customSubdomain: string | null; lastError: string | null } | null
   hostTunnelReady: boolean

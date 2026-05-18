@@ -1,6 +1,6 @@
 {
   "title": "Server List",
-  "search_placeholder": "Search server name or owner…",
+  "search_placeholder": "Search name / owner / email / ID / UUID…",
   "filter": {
     "label": "Status",
     "all": "All",
