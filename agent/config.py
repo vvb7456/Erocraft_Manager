@@ -49,7 +49,6 @@ agent.yaml schema:
 
 from __future__ import annotations
 
-import os
 import secrets
 from typing import List, Literal, Optional, Union
 from typing_extensions import Annotated
@@ -59,49 +58,137 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
+from .utils.atomic import atomic_write_text
+
 AgentRole = Literal["wings_node", "generic_host", "synology_dsm"]
 _AGENT_TOKEN_BYTES = 32
+#: Mode forced on any config file we've written a token into. The token is a
+#: bearer credential — keep it owner-read-only regardless of the user's umask
+#: or the source file's permissions (SSH / GPG / systemd-creds all do this).
+_CONFIG_SECRET_MODE = 0o600
 
 
 def _generate_agent_token() -> str:
     return secrets.token_urlsafe(_AGENT_TOKEN_BYTES)
 
 
-def bootstrap_agent_token(path: str | Path) -> Optional[str]:
-    """Ensure ``agent.token`` exists in config file.
+def _replace_token_in_yaml_text(text: str, new_token: str) -> str:
+    """Surgically replace the value of ``token:`` under the top-level
+    ``agent:`` block.
 
-    If token is missing/empty, generate one, write it back to disk, and return
-    the plaintext token so startup logs can display it once for operator copy.
+    Preserves every other line verbatim — comments, ordering, indentation,
+    other fields, blank lines — because operators hand-edit this file and
+    a full ``yaml.safe_dump`` round-trip would silently delete their
+    annotations. Only the matched ``token:`` line is rewritten.
+
+    Raises :class:`ValueError` if no ``token:`` line is found directly under
+    the ``agent:`` block. Pydantic validation requires ``agent.token`` so
+    operators always have a line to seed (even if its value is empty).
+    """
+    lines = text.splitlines(keepends=True)
+    in_agent = False
+    block_indent: int | None = None
+
+    for i, line in enumerate(lines):
+        stripped_newline = line.rstrip("\r\n")
+        if not stripped_newline.strip():
+            continue
+        leading = len(stripped_newline) - len(stripped_newline.lstrip())
+        content = stripped_newline.lstrip()
+
+        # Top-level key — switch contexts. Comments at column 0 don't count.
+        if leading == 0:
+            if content.startswith("#"):
+                continue
+            key = content.split(":", 1)[0].strip()
+            in_agent = key == "agent"
+            block_indent = None
+            continue
+
+        if not in_agent or content.startswith("#"):
+            continue
+
+        # First indented line under `agent:` establishes the child indent.
+        if block_indent is None:
+            block_indent = leading
+        if leading != block_indent:
+            continue
+
+        key = content.split(":", 1)[0].strip()
+        if key != "token":
+            continue
+
+        # Preserve trailing line comment, if any. Our generated token is
+        # base64url (no ``#``), so a naive partition is safe for our value.
+        after_colon = content.split(":", 1)[1] if ":" in content else ""
+        comment_suffix = ""
+        if "#" in after_colon:
+            _, _, comment_part = after_colon.partition("#")
+            comment_suffix = "  #" + comment_part
+
+        if line.endswith("\r\n"):
+            newline = "\r\n"
+        elif line.endswith("\n"):
+            newline = "\n"
+        else:
+            newline = ""
+
+        lines[i] = f'{" " * leading}token: "{new_token}"{comment_suffix}{newline}'
+        return "".join(lines)
+
+    raise ValueError("agent.token line not found in config file")
+
+
+def bootstrap_agent_token(path: str | Path) -> Optional[str]:
+    """Ensure ``agent.token`` exists in the config file.
+
+    If the token is missing/empty, generate one and write it back **without
+    rewriting the rest of the YAML** (preserves comments and field order).
+    After writing, the file mode is forced to ``0o600`` because it now
+    contains a bearer credential.
+
+    Returns the plaintext token if one was generated (so startup logs can
+    display it once for operator copy), or ``None`` if a token was already
+    present.
     """
     p = Path(path)
-    try:
-        mode = p.stat().st_mode & 0o777
-    except OSError:
-        mode = 0o600
+    text = p.read_text(encoding="utf-8")
 
-    with p.open("r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
-    if not isinstance(raw, dict):
-        raw = {}
-
-    agent_raw = raw.get("agent")
-    if not isinstance(agent_raw, dict):
-        agent_raw = {}
-        raw["agent"] = agent_raw
-
-    current = agent_raw.get("token")
-    if isinstance(current, str) and current.strip():
-        return None
+    # Parse once to decide whether bootstrap is needed; safe_load tolerates
+    # ``token:`` / ``token: ""`` / missing key all as falsy.
+    parsed = yaml.safe_load(text) or {}
+    agent_raw = parsed.get("agent") if isinstance(parsed, dict) else None
+    if isinstance(agent_raw, dict):
+        current = agent_raw.get("token")
+        if isinstance(current, str) and current.strip():
+            # Token already set; still tighten mode in case the file was
+            # created world-readable (common after `cp` with default umask).
+            _enforce_secret_mode(p)
+            return None
 
     token = _generate_agent_token()
-    agent_raw["token"] = token
-
-    tmp = p.with_suffix(p.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(raw, f, sort_keys=False, allow_unicode=False)
-    os.chmod(tmp, mode)
-    os.replace(tmp, p)
+    updated = _replace_token_in_yaml_text(text, token)
+    atomic_write_text(p, updated, mode=_CONFIG_SECRET_MODE)
     return token
+
+
+def _enforce_secret_mode(p: Path) -> None:
+    """Tighten an existing file to ``0600`` if it's currently broader.
+
+    Idempotent and silent — we never widen permissions.
+    """
+    import os
+    import stat as stat_mod
+
+    try:
+        current = stat_mod.S_IMODE(p.stat().st_mode)
+    except OSError:
+        return
+    if current & ~_CONFIG_SECRET_MODE:
+        try:
+            os.chmod(p, _CONFIG_SECRET_MODE)
+        except OSError:
+            pass
 
 
 class ManagerSection(BaseModel):

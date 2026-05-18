@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives.asymmetric.types import PrivateKeyTypes
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 from ..config import CertInstallTargetFile, CertInstallTargetDSM
+from ..utils.atomic import atomic_write_bytes
 from . import wings, wings_config, wings_service
 
 
@@ -418,15 +419,8 @@ def _backup(path: Path) -> str | None:
 
 
 def _atomic_write(path: Path, data: bytes, *, mode: int) -> dict[str, Any]:
-    path.parent.mkdir(parents=True, exist_ok=True)
     backup_path = _backup(path)
-    tmp = path.with_name(f".{path.name}.tmp.{os.getpid()}")
-    with tmp.open("wb") as f:
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
-    os.chmod(tmp, mode)
-    os.replace(tmp, path)
+    atomic_write_bytes(path, data, mode=mode)
     return {
         "path": str(path),
         "backup": backup_path,

@@ -36,6 +36,12 @@ from .schemas import (
 log = logging.getLogger("agent.http")
 
 _LOG_STREAM_LIMIT = 4
+#: How long to wait between log chunks before sending an SSE keepalive
+#: comment. Without this, an idle ``journalctl -f`` would block in
+#: ``readline()`` forever, preventing the per-iteration
+#: ``request.is_disconnected()`` check from running — leaking the
+#: subprocess + the guard counter when the client walks away.
+_LOG_KEEPALIVE_SEC = 15.0
 
 
 class _LogStreamGuard:
@@ -169,16 +175,38 @@ def _register_wings_routes(app: FastAPI, cfg: AgentConfig, auth: Any) -> None:
         await log_guard.acquire()
 
         async def event_source():
+            log_iter = None
             try:
                 yield b"retry: 5000\n\n"
-                async for chunk in wings_service_collector.stream_logs(
+                log_iter = wings_service_collector.stream_logs(
                     cfg.wings.service_name, lines=lines
-                ):
+                ).__aiter__()
+                while True:
                     if await request.is_disconnected():
+                        break
+                    try:
+                        chunk = await asyncio.wait_for(
+                            log_iter.__anext__(), timeout=_LOG_KEEPALIVE_SEC
+                        )
+                    except asyncio.TimeoutError:
+                        # No log line in the window — emit an SSE comment frame
+                        # so intermediaries (and our own loop) get a chance to
+                        # notice a closed peer. SSE comments start with ":".
+                        yield b": keepalive\n\n"
+                        continue
+                    except StopAsyncIteration:
                         break
                     text = chunk.decode("utf-8", "replace").rstrip("\n")
                     yield f"data: {text}\n\n".encode("utf-8")
             finally:
+                # Closing the async generator triggers GeneratorExit at the
+                # current await inside stream_logs, which runs its finally
+                # block and kills the journalctl subprocess.
+                if log_iter is not None:
+                    try:
+                        await log_iter.aclose()
+                    except Exception:
+                        pass
                 await log_guard.release()
 
         return StreamingResponse(

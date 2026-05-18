@@ -31,6 +31,8 @@ from typing import Any
 
 import yaml
 
+from ..utils.atomic import atomic_write_text
+
 log = logging.getLogger("agent.cloudflared_service")
 
 CLOUDFLARED_BIN = "/usr/bin/cloudflared"
@@ -201,21 +203,14 @@ async def write_config_minimal(
         return {"written": False}
 
     if creds_changed:
-        _atomic_write(creds_path, creds_json, mode=0o600)
+        atomic_write_text(creds_path, creds_json, mode=0o600)
     if config_changed:
-        _atomic_write(CONFIG_PATH, yaml_text, mode=0o600)
+        atomic_write_text(CONFIG_PATH, yaml_text, mode=0o600)
     return {
         "written": True,
         "creds_changed": creds_changed,
         "config_changed": config_changed,
     }
-
-
-def _atomic_write(path: Path, content: str, *, mode: int) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(content)
-    os.chmod(tmp, mode)
-    os.replace(tmp, path)
 
 
 # ---------------------------------------------------------------------------
