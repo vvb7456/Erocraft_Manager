@@ -666,12 +666,14 @@ async def send_test_email(
             if k in _TEST_EMAIL_OVERRIDE_KEYS and v not in (None, ""):
                 cfg[k] = v
     site_url = await get_site_url(db)
+    store = get_settings_store()
+    brand_name = str(await store.get(db, "BRAND_NAME", SETTINGS_SPECS["BRAND_NAME"].default_value()))
     async with EmailClient(cfg, site_url, db=db, actor=actor, log_category="settings") as client:
         return await client.send(
             recipient_email=recipient_email,
-            subject="[Erocraft Manager] SMTP 配置测试邮件",
+            subject=f"[{brand_name}] SMTP 配置测试邮件",
             main_content_raw=(
-                "这是一封来自 Erocraft Manager 的 SMTP 配置测试邮件。\n"
+                f"这是一封来自 {brand_name} 的 SMTP 配置测试邮件。\n"
                 "如果您收到了这封邮件，说明当前 SMTP 配置工作正常。"
             ),
             greeting="您好！",
