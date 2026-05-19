@@ -41,7 +41,7 @@ CREATE TABLE `manager_hosts` (
   KEY `idx_kind` (`kind`),
   KEY `idx_enabled` (`enabled`),
   CONSTRAINT `manager_hosts_ibfk_1` FOREIGN KEY (`pterodactyl_node_id`) REFERENCES `nodes` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -64,7 +64,7 @@ CREATE TABLE `manager_certificates` (
   PRIMARY KEY (`id`),
   KEY `idx_manager_cert_enabled` (`enabled`),
   KEY `idx_manager_cert_source_path` (`source_path`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -91,7 +91,7 @@ CREATE TABLE `manager_cert_deployments` (
   KEY `idx_manager_cert_deploy_status` (`status`),
   CONSTRAINT `manager_cert_deployments_ibfk_1` FOREIGN KEY (`certificate_id`) REFERENCES `manager_certificates` (`id`) ON DELETE CASCADE,
   CONSTRAINT `manager_cert_deployments_ibfk_2` FOREIGN KEY (`host_id`) REFERENCES `manager_hosts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -109,7 +109,7 @@ CREATE TABLE `manager_host_alerts` (
   PRIMARY KEY (`id`),
   KEY `idx_ha_host_active` (`host_id`,`resolved_at`),
   KEY `idx_ha_created` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -129,7 +129,7 @@ CREATE TABLE `manager_host_alert_rules` (
   UNIQUE KEY `uk_host_type` (`host_id`,`alert_type`),
   KEY `idx_host_alert_host` (`host_id`),
   CONSTRAINT `manager_host_alert_rules_ibfk_1` FOREIGN KEY (`host_id`) REFERENCES `manager_hosts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -145,7 +145,7 @@ CREATE TABLE `manager_host_alert_settings` (
   `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`host_id`),
   CONSTRAINT `manager_host_alert_settings_ibfk_1` FOREIGN KEY (`host_id`) REFERENCES `manager_hosts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -184,7 +184,7 @@ CREATE TABLE `manager_host_metrics` (
   PRIMARY KEY (`id`),
   KEY `idx_hm_host_ts` (`host_id`,`ts`),
   KEY `idx_hm_ts` (`ts`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -202,7 +202,7 @@ CREATE TABLE `manager_host_probes` (
   KEY `idx_hp_ts` (`ts`),
   KEY `idx_hp_probe_ts` (`probe_name`,`ts`),
   KEY `idx_hp_host_ts` (`host_id`,`ts`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -226,7 +226,7 @@ CREATE TABLE `manager_host_tunnels` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_host_tunnel_host` (`host_id`),
   CONSTRAINT `manager_host_tunnels_ibfk_1` FOREIGN KEY (`host_id`) REFERENCES `manager_hosts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -252,7 +252,7 @@ CREATE TABLE `manager_server_tunnels` (
   KEY `ix_server_tunnel_status` (`status`),
   KEY `ix_server_tunnel_host_tunnel` (`host_tunnel_id`),
   CONSTRAINT `manager_server_tunnels_ibfk_1` FOREIGN KEY (`host_tunnel_id`) REFERENCES `manager_host_tunnels` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -269,7 +269,7 @@ CREATE TABLE `manager_orphan_resources` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_orphan_resource` (`resource_type`,`cf_resource_id`),
   KEY `ix_orphan_type` (`resource_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -282,7 +282,7 @@ CREATE TABLE `manager_server_meta` (
   PRIMARY KEY (`server_id`),
   KEY `idx_server_meta_plan` (`plan_id`),
   CONSTRAINT `manager_server_meta_ibfk_1` FOREIGN KEY (`server_id`) REFERENCES `servers` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -299,7 +299,7 @@ CREATE TABLE `manager_activity_logs` (
   KEY `idx_timestamp` (`timestamp`),
   KEY `idx_actor` (`actor`),
   KEY `idx_category` (`category`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -313,7 +313,7 @@ CREATE TABLE `manager_email_changes` (
   `confirmed_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_email_change_user_id` (`user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -324,7 +324,7 @@ CREATE TABLE `manager_email_templates` (
   `body` text NOT NULL,
   `updated_at` datetime DEFAULT current_timestamp(),
   PRIMARY KEY (`template_key`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -337,7 +337,7 @@ CREATE TABLE `manager_password_resets` (
   `used_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_pw_reset_user_id` (`user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -357,7 +357,7 @@ CREATE TABLE `manager_pending_registrations` (
   UNIQUE KEY `uq_pr_lookup_hash` (`lookup_hash`),
   KEY `idx_pr_email` (`email`),
   KEY `idx_pr_username` (`username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -372,7 +372,7 @@ CREATE TABLE `manager_system_settings` (
   `updated_at` datetime DEFAULT current_timestamp(),
   PRIMARY KEY (`key`),
   KEY `idx_category` (`category`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -415,7 +415,7 @@ CREATE TABLE `manager_billing_plans` (
   CONSTRAINT `chk_billing_plans_memory_pos` CHECK (`memory_mb` > 0),
   CONSTRAINT `chk_billing_plans_disk_pos` CHECK (`disk_mb` > 0),
   CONSTRAINT `chk_billing_plans_alloc_pos` CHECK (`allocation_limit` > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -463,7 +463,7 @@ CREATE TABLE `manager_billing_orders` (
   CONSTRAINT `chk_billing_orders_period_count_pos` CHECK (`period_count` > 0),
   CONSTRAINT `chk_billing_orders_total_fen_pos` CHECK (`total_fen` > 0),
   CONSTRAINT `chk_billing_orders_total_days_pos` CHECK (`total_days` >= 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -491,7 +491,7 @@ CREATE TABLE `manager_billing_invoices` (
   KEY `idx_billing_invoices_status_due` (`status`,`due_at`),
   CONSTRAINT `fk_billing_invoices_order` FOREIGN KEY (`order_id`) REFERENCES `manager_billing_orders` (`id`) ON DELETE CASCADE,
   CONSTRAINT `chk_billing_invoices_total_pos` CHECK (`total_fen` > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -513,7 +513,7 @@ CREATE TABLE `manager_billing_invoice_items` (
   KEY `idx_billing_invoice_items_ref` (`ref_type`,`ref_id`),
   CONSTRAINT `fk_billing_invoice_items_invoice` FOREIGN KEY (`invoice_id`) REFERENCES `manager_billing_invoices` (`id`) ON DELETE CASCADE,
   CONSTRAINT `chk_billing_invoice_items_qty_pos` CHECK (`quantity` > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -536,7 +536,7 @@ CREATE TABLE `manager_billing_invoice_transactions` (
   CONSTRAINT `fk_billing_invoice_tx_invoice` FOREIGN KEY (`invoice_id`) REFERENCES `manager_billing_invoices` (`id`) ON DELETE CASCADE,
   CONSTRAINT `chk_billing_invoice_tx_amount_pos` CHECK (`amount_fen` > 0),
   CONSTRAINT `chk_billing_invoice_tx_refunded` CHECK (`refunded_fen` >= 0 and `refunded_fen` <= `amount_fen`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -564,7 +564,7 @@ CREATE TABLE `manager_billing_refunds` (
   CONSTRAINT `fk_billing_refunds_order` FOREIGN KEY (`order_id`) REFERENCES `manager_billing_orders` (`id`),
   CONSTRAINT `fk_billing_refunds_tx` FOREIGN KEY (`transaction_id`) REFERENCES `manager_billing_invoice_transactions` (`id`),
   CONSTRAINT `chk_billing_refunds_amount_pos` CHECK (`amount_fen` > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -581,7 +581,7 @@ CREATE TABLE `manager_billing_order_effects` (
   PRIMARY KEY (`order_id`),
   KEY `idx_billing_order_effects_server` (`server_id`),
   CONSTRAINT `fk_billing_order_effects_order` FOREIGN KEY (`order_id`) REFERENCES `manager_billing_orders` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -602,7 +602,7 @@ CREATE TABLE `manager_billing_payment_events` (
   KEY `idx_billing_payment_events_invoice` (`invoice_id`),
   KEY `idx_billing_payment_events_gateway_tx` (`gateway_code`,`transaction_id`),
   KEY `idx_billing_payment_events_received` (`received_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
     op.execute(
@@ -623,7 +623,7 @@ CREATE TABLE `manager_billing_incidents` (
   PRIMARY KEY (`id`),
   KEY `idx_billing_incidents_status_kind` (`status`,`kind`),
   KEY `idx_billing_incidents_order` (`order_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
 
