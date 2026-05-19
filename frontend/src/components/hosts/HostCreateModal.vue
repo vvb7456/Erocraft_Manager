@@ -209,8 +209,8 @@ function onTokenCopied() {
           teleport
           :disabled="!isWings"
           :options="nodeOptions"
-          :modelValue="form.pterodactyl_node_id == null ? '' : String(form.pterodactyl_node_id)"
-          @update:modelValue="(v: any) => form.pterodactyl_node_id = v === '' ? null : Number(v)"
+          :modelValue="form.pterodactyl_node_id ?? ''"
+          @update:modelValue="(v: any) => form.pterodactyl_node_id = (v === '' || v == null) ? null : Number(v)"
         />
       </FormField>
 
