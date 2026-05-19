@@ -467,6 +467,7 @@ class EmailClient:
         db: AsyncSession | None = None,
         actor: str = "system",
         log_category: str = "email",
+        audit_source: str | None = None,
     ) -> None:
         self._brand_name = str(cfg.get("BRAND_NAME", "Erocraft Manager"))
         self._sender_email = str(cfg.get("SENDER_EMAIL", ""))
@@ -482,6 +483,7 @@ class EmailClient:
         self._db = db
         self._actor = actor
         self._log_category = log_category
+        self._audit_source = audit_source
         self._server: smtplib.SMTP | None = None
 
     # ── Connection management ──
@@ -598,17 +600,20 @@ class EmailClient:
         """
         if self._db is None:
             return
+        params: dict[str, Any] = {
+            "recipient": recipient,
+            "subject": subject,
+            "error": err or "",
+        }
+        if self._audit_source:
+            params["source"] = self._audit_source
         await log_manager_activity(
             self._db,
             actor=self._actor,
             category=self._log_category,
             status="success" if ok else "fail",
             detail_key="email_sent" if ok else "email_failed",
-            detail_params={
-                "recipient": recipient,
-                "subject": subject,
-                "error": err or "",
-            },
+            detail_params=params,
         )
 
 

@@ -87,6 +87,7 @@
     "automated_reminder_failed": "执行{type}任务时发生意外错误: {error}",
     "install_notify.run": "安装完成通知扫描：扫描 {scanned} 台，发送 {sent} 封，跳过 {skipped} 台。",
     "install_notify.no_email": "服务器 #{server_id} 的所有者 #{owner_id} 没有邮箱地址，跳过安装完成通知。",
+    "force_reinstall_reset.cleared": "已清除 {count} 台服务器的强制重装标记。",
     "host.create.probe_failed": "创建主机时探测失败: {error}",
     "host.create.ok": "主机已创建: {name} ({kind})",
     "host.probe.ok": "主机探测成功。",

@@ -968,15 +968,16 @@ async def cert_source_changed_webhook(
         scan = await scan_certificate_source(db, cert)
         results.append(scan)
         dispatch_results.extend(
-            await dispatch_certificate(db, cert, actor="webhook", statuses=())
+            await dispatch_certificate(db, cert, actor="system", statuses=())
         )
     await log_manager_activity(
         db,
-        actor="webhook",
+        actor="system",
         category="certificate",
         status="success",
         detail_key="cert.source_changed",
         detail_params={
+            "source": "acme_webhook",
             "source_path": normalized_path,
             "certificate_count": len(certs),
             "dispatch_count": len(dispatch_results),

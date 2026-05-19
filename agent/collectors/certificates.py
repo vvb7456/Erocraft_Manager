@@ -200,7 +200,19 @@ async def _run_synowebapi(
         f"version={version}",
     ]
     for key, value in (params or {}).items():
-        args.append(f"{key}={json.dumps(value)}")
+        # synowebapi --exec parses raw key=value tokens; json.dumps wraps
+        # strings in literal quotes, which DSM 7.x then takes verbatim
+        # (file paths become unfindable, "id" never matches an existing
+        # certificate, "as_default" is no longer the boolean DSM expects).
+        # DSM still returns success=true having done nothing, so the
+        # caller wrongly believes the import succeeded. Encode booleans as
+        # lowercase tokens, complex types as JSON, scalars as-is.
+        if isinstance(value, bool):
+            args.append(f"{key}={'true' if value else 'false'}")
+        elif isinstance(value, (dict, list)):
+            args.append(f"{key}={json.dumps(value)}")
+        else:
+            args.append(f"{key}={value}")
 
     proc = await asyncio.create_subprocess_exec(
         *args,
@@ -585,6 +597,21 @@ async def _install_synology_target(
             dsm_status = _synology_status_from_item(refreshed_item)
     except CertificateError:
         dsm_status = None
+
+    # Verify-after-write: DSM's webapi has historically returned success=true
+    # even when the import silently dropped our payload (see json.dumps bug
+    # in _run_synowebapi). Read the installed leaf back from the DSM archive
+    # and refuse to report success unless its fingerprint matches the source
+    # we just pushed. This guarantees manager never sees a fake "synced".
+    expected_fp = _fingerprint(cert)
+    archive_summary = _synology_archive_cert_summary(dsm_cert_id)
+    archive_fp = (archive_summary or {}).get("fingerprint_sha256")
+    if archive_fp != expected_fp:
+        raise CertificateError(
+            "DSM import reported success but archive leaf fingerprint "
+            f"differs (expected {expected_fp}, found {archive_fp or 'none'}). "
+            "Cert was NOT installed."
+        )
 
     return {
         "cert_id": cert_id,

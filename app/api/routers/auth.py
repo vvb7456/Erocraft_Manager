@@ -46,13 +46,16 @@ async def login(
                 request=request,
             )
             await db.commit()
+        # When the user doesn't exist, fall back to ``system`` (the attempted
+        # username is preserved in detail_params for forensics). When the user
+        # exists but the password is wrong, attribute the failure to them.
         await log_manager_activity(
             db,
-            actor=username or "unknown",
+            actor=user.username if user else "system",
             category="auth",
             status="failure",
             detail_key="login_failed",
-            detail_params={"username": username or "unknown"},
+            detail_params={"username": username},
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="auth.invalid_credentials")
 

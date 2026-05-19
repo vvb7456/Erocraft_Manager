@@ -132,8 +132,9 @@ async def run_install_notify_scan() -> None:
         sent_count = 0
         skipped_count = 0
         async with EmailClient(
-            cfg, site_url, db=db, actor="job:server_install_notify",
+            cfg, site_url, db=db, actor="system",
             log_category="automation",
+            audit_source="server_install_notify",
         ) as client:
             for index, row in enumerate(rows):
                 server_id = int(row["server_id"])

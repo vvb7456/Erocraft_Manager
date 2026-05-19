@@ -62,7 +62,7 @@ async def run_force_reinstall_reset() -> None:
             await log_manager_activity(
                 db,
                 actor="system",
-                category="lifecycle",
+                category="automation",
                 status="success",
                 detail_key="force_reinstall_reset.cleared",
                 detail_params={"count": int(n)},

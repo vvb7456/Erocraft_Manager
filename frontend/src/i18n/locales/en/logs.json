@@ -87,6 +87,7 @@
     "automated_reminder_failed": "{type} task failed unexpectedly: {error}",
     "install_notify.run": "Install-complete notification scan: scanned {scanned}, sent {sent}, skipped {skipped}.",
     "install_notify.no_email": "Server #{server_id} owner #{owner_id} has no email; skipping install-complete notification.",
+    "force_reinstall_reset.cleared": "Cleared force-reinstall flag on {count} server(s).",
     "host.create.probe_failed": "Create host failed during probe: {error}",
     "host.create.ok": "Host created: {name} ({kind})",
     "host.probe.ok": "Host probe succeeded.",

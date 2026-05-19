@@ -39,6 +39,8 @@
       "read": "Read file",
       "write": "Write file",
       "rename": "Rename",
+      "copy": "Copy file",
+      "pull": "Pull remote file",
       "delete": "Delete file",
       "compress": "Compress",
       "decompress": "Decompress",
@@ -47,9 +49,24 @@
       "upload": "Upload file",
       "uploaded": "Upload complete"
     },
+    "sftp": {
+      "write": "SFTP write file",
+      "create": "SFTP create file",
+      "create-directory": "SFTP create directory",
+      "delete": "SFTP delete",
+      "rename": "SFTP rename",
+      "denied": "SFTP access denied"
+    },
     "startup": {
       "edit": "Edit startup variable"
     },
     "reinstall": "Reinstall server"
+  },
+  "auth": {
+    "fail": "Login failed",
+    "success": "Login succeeded"
+  },
+  "event": {
+    "password-reset": "Reset password"
   }
 }

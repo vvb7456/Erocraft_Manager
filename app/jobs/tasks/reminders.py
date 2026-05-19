@@ -119,8 +119,9 @@ async def run_reminder_task(reminder_type: str) -> None:
             cfg = await get_smtp_config(db)
             site_url = await get_site_url(db)
             async with EmailClient(
-                cfg, site_url, db=db, actor=f"job:{reminder_type}_reminder",
+                cfg, site_url, db=db, actor="system",
                 log_category="automation",
+                audit_source=f"{reminder_type}_reminder",
             ) as client:
                 if reminder_type == "expiry":
                     sent_count = await _send_expiry_reminders(
