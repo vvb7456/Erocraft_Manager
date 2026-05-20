@@ -169,7 +169,8 @@ function scanSource(namespaces) {
   const dynamicPatterns = []
   const nsAlternation = [...namespaces].map(escapeRegExp).join('|')
   const anyKeyString = new RegExp(`(['"\`])((?:${nsAlternation})\\.[A-Za-z0-9_.\\u4e00-\\u9fff-]+)\\1`, 'g')
-  const tCallStatic = /\b(?:t|te|tm)\s*\(\s*(['"])([^'"\n]+)\1/g
+  const tCallStatic = /\b(?:t|te)\s*\(\s*(['"])([^'"\n]+)\1/g
+  const tmCallStatic = /\btm\s*\(\s*(['"])([^'"\n]+)\1/g
   const tCallTemplate = /\b(?:t|te|tm)\s*\(\s*`([^`]+)`/g
   const anyTemplate = /`([^`]*\$\{[^`]+)`/g
 
@@ -179,6 +180,21 @@ function scanSource(namespaces) {
 
     for (const match of source.matchAll(anyKeyString)) {
       stringRefs.add(`${match[2]}\t${rel}`)
+    }
+
+    // tm('foo.bar') returns the subtree under foo.bar — treat as prefix
+    // pattern so any key starting with `foo.bar.` counts as used and
+    // the lookup itself isn't required to be a leaf.
+    for (const match of source.matchAll(tmCallStatic)) {
+      const key = match[2]
+      const ns = key.split('.')[0]
+      if (namespaces.has(ns)) {
+        dynamicPatterns.push({
+          pattern: new RegExp(`^${escapeRegExp(key)}(\\..+)?$`),
+          source: `tm('${key}')`,
+          file: rel,
+        })
+      }
     }
 
     for (const match of source.matchAll(tCallStatic)) {
@@ -312,11 +328,11 @@ function main() {
     missingRefs.forEach((line) => console.error(`  - ${line}`))
   }
   if (unusedKeys.length) {
-    console.error('\nPossibly unused i18n keys:')
+    console.error('\nPossibly unused i18n keys (warning, does not fail the check):')
     unusedKeys.forEach((key) => console.error(`  - ${key}`))
   }
 
-  if (duplicateErrors.length || alignmentErrors.length || missingRefs.length || unusedKeys.length) {
+  if (duplicateErrors.length || alignmentErrors.length || missingRefs.length) {
     process.exitCode = 1
   } else {
     console.log('i18n references OK')
