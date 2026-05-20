@@ -11,6 +11,7 @@ class VersionResponse(BaseModel):
     systemName: str
     bannerUrl: str
     icpRecord: str
+    tutorialUrl: str
     timezone: str
 
 

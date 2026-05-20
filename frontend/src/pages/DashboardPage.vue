@@ -695,10 +695,15 @@ onUnmounted(() => {
 /* ── Hosts grid ── */
 .host-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  /* Desktop: fixed 2-column layout (cards arrange 2×2, 2×3, …).
+     ``min-width: 0`` on the grid + ``minmax(0, 1fr)`` on each track keeps
+     long hostnames/FQDNs from forcing horizontal overflow inside the
+     narrower ``.row-a`` column. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-3);
   flex: 1;
   align-content: start;
+  min-width: 0;
 }
 
 /* ── Alerts ── */

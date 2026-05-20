@@ -33,6 +33,8 @@ function translateApiText(value: unknown): string {
 }
 
 async function handleSubmit() {
+  // Reentrancy guard — see RegisterPage.vue handleSubmit for rationale.
+  if (loading.value) return
   error.value = ''
   success.value = ''
 

@@ -42,7 +42,6 @@ router = APIRouter(tags=["public"])
 
 TOKEN_EXPIRY_MINUTES = 30
 REGISTER_TOKEN_EXPIRY_MINUTES = 30
-REGISTER_RATE_LIMIT_SECONDS = 60
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{3,32}$")
 FORGOT_PASSWORD_GENERIC_MESSAGE = "如果该邮箱已注册，您将收到密码重置链接。"
 
@@ -364,19 +363,44 @@ async def register(
     if pending_user.scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, detail="register.username_taken")
 
-    # Rate-limit per email (any state)
-    last_pending = (
+    # ── Serialize concurrent POST /register for the same email ──
+    # Two requests can race here (e.g. a double-submitted form). The
+    # idx_pr_email index lets InnoDB take a next-key gap lock on the
+    # ``email`` column even when no row matches, so a second concurrent
+    # request blocks on this SELECT...FOR UPDATE until the first commits
+    # or rolls back. Without this, both branches read "no pending",
+    # both insert, and both send a verification email — producing the
+    # duplicate-second register_request entries seen in audit logs.
+    now = datetime.now(UTC).replace(tzinfo=None)
+    token_alive_after = now - timedelta(minutes=REGISTER_TOKEN_EXPIRY_MINUTES)
+    pending_rows = (
         await db.execute(
             select(ManagerPendingRegistration)
             .where(ManagerPendingRegistration.email == email)
-            .order_by(ManagerPendingRegistration.created_at.desc())
-            .limit(1)
+            .order_by(ManagerPendingRegistration.id.desc())
+            .with_for_update()
         )
-    ).scalar_one_or_none()
-    if last_pending and last_pending.created_at:
-        elapsed = (datetime.now(UTC).replace(tzinfo=None) - last_pending.created_at).total_seconds()
-        if elapsed < REGISTER_RATE_LIMIT_SECONDS:
-            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="register.rate_limited")
+    ).scalars().all()
+
+    # ── Refuse to re-send while the previous verification link is live ──
+    # The link itself (30 min TTL) is the only bound we need on email
+    # frequency: while it's valid, the user can finish registration with
+    # the email already in their inbox, so emitting a second one is
+    # both spam and a vector for mail-bomb abuse.
+    active_pending = next(
+        (
+            row for row in pending_rows
+            if row.used_at is None
+            and row.created_at is not None
+            and row.created_at > token_alive_after
+        ),
+        None,
+    )
+    if active_pending:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="register.verification_pending",
+        )
 
     # Bake a $2y$ bcrypt hash up-front so we don't have to keep the plaintext.
     # Run off the event loop because bcrypt(rounds=10) takes ~70ms.
@@ -391,14 +415,16 @@ async def register(
     lookup_hash = compute_lookup_hash(raw_token)
 
     # Invalidate any prior unused pending rows for this email so the link
-    # in the latest email is the only one that works.
+    # in the latest email is the only one that works. (At this point any
+    # surviving rows are already past the token TTL window; this is a
+    # housekeeping mark.)
     await db.execute(
         update(ManagerPendingRegistration)
         .where(
             ManagerPendingRegistration.email == email,
             ManagerPendingRegistration.used_at.is_(None),
         )
-        .values(used_at=datetime.now(UTC).replace(tzinfo=None))
+        .values(used_at=now)
     )
 
     pending = ManagerPendingRegistration(

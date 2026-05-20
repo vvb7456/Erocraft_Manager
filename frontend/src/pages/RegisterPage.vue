@@ -101,6 +101,15 @@ function queueRedirect() {
 }
 
 async function handleSubmit() {
+  // Reentrancy guard. The submit handler can be triggered twice in the
+  // same tick when the user hits Enter inside the form: once via the
+  // browser's native form submission, and again via any explicit
+  // ``@keyup.enter`` handler. Without this check, both calls reach the
+  // `await fetch(...)` line before ``loading`` has had a chance to
+  // disable the button, and two POST /api/register requests go out
+  // concurrently — producing duplicate verification emails and
+  // racing the backend's per-email uniqueness checks.
+  if (loading.value) return
   error.value = ''
   if (!username.value || !email.value || !password.value || !confirmPassword.value) {
     error.value = t('register.error.empty')
@@ -189,7 +198,6 @@ async function handleSubmit() {
           :placeholder="t('register.confirmPassword_placeholder')"
           :is-password="true"
           autocomplete="new-password"
-          @keyup.enter="handleSubmit"
         />
       </FormField>
     </template>

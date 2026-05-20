@@ -77,6 +77,17 @@ function openSupport() {
   supportOpen.value = true
   if (window.innerWidth <= 768) app.closeMobileSidebar()
 }
+
+// ── External tutorial link ──
+// URL is configured by admins in Settings → Appearance. The link opens in
+// a new tab with ``noopener,noreferrer`` to prevent the opened page from
+// gaining ``window.opener`` access back into the app (reverse-tabnabbing).
+function openTutorial() {
+  const url = app.tutorialUrl?.trim()
+  if (!url) return
+  window.open(url, '_blank', 'noopener,noreferrer')
+  if (window.innerWidth <= 768) app.closeMobileSidebar()
+}
 </script>
 
 <template>
@@ -126,6 +137,15 @@ function openSupport() {
         >
           <span class="icon"><MsIcon name="receipt_long" size="md" /></span>
           <span class="nav-label">{{ t('nav.orders') }}</span>
+        </button>
+
+        <button
+          v-if="app.tutorialUrl"
+          class="nav-item"
+          @click="openTutorial"
+        >
+          <span class="icon"><MsIcon name="menu_book" size="md" /></span>
+          <span class="nav-label">{{ t('nav.tutorial') }}</span>
         </button>
       </template>
 

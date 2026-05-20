@@ -46,6 +46,8 @@ function translateApiText(value: unknown): string {
 }
 
 async function handleLogin() {
+  // Reentrancy guard — see RegisterPage.vue handleSubmit for rationale.
+  if (loading.value) return
   error.value = ''
   if (!username.value || !password.value) {
     error.value = t('login.error.empty')
@@ -105,7 +107,6 @@ async function handleLogin() {
         :placeholder="t('login.password_placeholder')"
         :is-password="true"
         autocomplete="current-password"
-        @keyup.enter="handleLogin"
       />
     </FormField>
 

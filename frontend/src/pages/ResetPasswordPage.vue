@@ -74,6 +74,8 @@ function queueRedirect() {
 }
 
 async function handleSubmit() {
+  // Reentrancy guard — see RegisterPage.vue handleSubmit for rationale.
+  if (loading.value) return
   error.value = ''
 
   if (linkError.value) {
@@ -165,7 +167,6 @@ onBeforeUnmount(() => {
           :placeholder="t('resetPassword.confirmPassword_placeholder')"
           :is-password="true"
           autocomplete="new-password"
-          @keyup.enter="handleSubmit"
         />
       </FormField>
     </template>

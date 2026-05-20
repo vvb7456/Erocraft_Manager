@@ -154,6 +154,7 @@ SETTINGS_SPECS: dict[str, SettingSpec] = _register({
     ),
     "UI_BANNER_URL": SettingSpec("UI_BANNER_URL", "branding", lambda: _env_str("UI_BANNER_URL", ""), _normalize_str),
     "UI_ICP_RECORD": SettingSpec("UI_ICP_RECORD", "branding", lambda: _env_str("UI_ICP_RECORD", ""), _normalize_str),
+    "UI_TUTORIAL_URL": SettingSpec("UI_TUTORIAL_URL", "branding", lambda: _env_str("UI_TUTORIAL_URL", ""), _normalize_str),
     "BRAND_NAME": SettingSpec(
         "BRAND_NAME",
         "branding",

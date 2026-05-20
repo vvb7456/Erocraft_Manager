@@ -96,6 +96,7 @@ export const ICON_CODEPOINTS: Record<string, string> = {
   'mark_email_read': '\uf18c',
   'memory': '\ue322',
   'menu': '\ue5d2',
+  'menu_book': '\uea19',
   'monitoring': '\uf190',
   'more_horiz': '\ue5d3',
   'more_vert': '\ue5d4',

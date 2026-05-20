@@ -20,6 +20,7 @@ export const useAppStore = defineStore('app', () => {
   const systemName = ref('')
   const bannerUrl = ref('')
   const icpRecord = ref('')
+  const tutorialUrl = ref('')
   const timezone = ref('Asia/Shanghai')
   const sessionUser = ref<SessionUser | null>(null)
   const sessionUserFetchedAt = ref(0)
@@ -110,6 +111,7 @@ export const useAppStore = defineStore('app', () => {
         systemName.value = data.systemName || ''
         bannerUrl.value = data.bannerUrl || ''
         icpRecord.value = data.icpRecord || ''
+        tutorialUrl.value = data.tutorialUrl || ''
         timezone.value = data.timezone || 'Asia/Shanghai'
         document.title = brandName.value
       }
@@ -130,6 +132,7 @@ export const useAppStore = defineStore('app', () => {
     authBannerUrl,
     sidebarBannerUrl,
     icpRecord,
+    tutorialUrl,
     timezone,
     sessionUser,
     toggleSidebar,

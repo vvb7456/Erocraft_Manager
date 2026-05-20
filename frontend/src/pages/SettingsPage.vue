@@ -213,6 +213,7 @@ function validateAll(): ValidationError[] {
   const urlFields: [string, string][] = [
     ['SITE_URL', 'settings.branding.siteUrl'],
     ['UI_BANNER_URL', 'settings.branding.bannerUrl'],
+    ['UI_TUTORIAL_URL', 'settings.branding.tutorialUrl'],
   ]
   for (const [key, labelKey] of urlFields) {
     const v = String(settings.value[key] || '').trim()
@@ -400,6 +401,13 @@ async function onTabChange(next: string) {
               </FormField>
               <FormField :label="t('settings.branding.icpRecord')" layout="horizontal">
                 <BaseInput :modelValue="getStr('UI_ICP_RECORD')" @update:modelValue="setStr('UI_ICP_RECORD', $event)" />
+              </FormField>
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.branding.tutorialUrl') }}
+                  <HelpTip :text="t('settings.branding.tutorialUrl_tip')" />
+                </template>
+                <BaseInput :modelValue="getStr('UI_TUTORIAL_URL')" @update:modelValue="setStr('UI_TUTORIAL_URL', $event)" placeholder="https://" />
               </FormField>
               <FormField layout="horizontal">
                 <template #label>

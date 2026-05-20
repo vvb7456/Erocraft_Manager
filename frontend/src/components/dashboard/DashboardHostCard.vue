@@ -40,10 +40,13 @@ const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
 
 /* ── Kind config ── */
-const KIND_META: Record<string, { icon: string; color: string; labelKey: string }> = {
-  wings_node: { icon: 'deployed_code', color: 'var(--ac)', labelKey: 'hosts.kind.wings_node' },
-  generic_linux: { icon: 'terminal', color: 'var(--blue)', labelKey: 'hosts.kind.generic_linux' },
-  synology_dsm: { icon: 'storage', color: 'var(--amber)', labelKey: 'hosts.kind.synology_dsm' },
+// Local short labels for the dashboard card. We intentionally do not reuse
+// hosts.kind.* (which renders "Wings 主机" / "Wings host") so the badge fits
+// in tight 1-column layouts on narrow screens.
+const KIND_META: Record<string, { icon: string; color: string; label: string }> = {
+  wings_node: { icon: 'deployed_code', color: 'var(--ac)', label: 'Wings' },
+  generic_linux: { icon: 'terminal', color: 'var(--blue)', label: 'Linux' },
+  synology_dsm: { icon: 'storage', color: 'var(--amber)', label: 'Synology' },
 }
 const kindMeta = computed(() => KIND_META[props.host.kind] ?? KIND_META.generic_linux)
 const isWings = computed(() => props.host.kind === 'wings_node')
@@ -114,19 +117,18 @@ function onUnpin(e: Event) {
     <!-- Header -->
     <div class="head">
       <div class="head-l">
+        <span class="name" :title="host.name">{{ host.name }}</span>
         <span class="kind" :style="{ color: kindMeta.color, borderColor: kindMeta.color }">
           <MsIcon :name="kindMeta.icon" size="sm" />
-          <span class="kind-label">{{ t(kindMeta.labelKey) }}</span>
+          <span class="kind-label">{{ kindMeta.label }}</span>
         </span>
-        <span class="name">{{ host.name }}</span>
-        <span class="fqdn">{{ host.fqdn }}</span>
+        <span class="fqdn" :title="host.fqdn">{{ host.fqdn }}</span>
       </div>
       <div class="head-r">
         <span v-if="host.activeAlerts > 0" class="alerts">
           <MsIcon name="warning" size="sm" />
           {{ host.activeAlerts }}
         </span>
-        <span class="status-dot" :class="`s-${cardStatus}`" />
         <button
           v-if="removable"
           class="unpin"
@@ -262,6 +264,8 @@ function onUnpin(e: Event) {
   font-size: var(--text-xs);
   font-weight: 600;
   background: color-mix(in srgb, currentColor 8%, transparent);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .kind-label { letter-spacing: 0.02em; }
 .name {
@@ -272,6 +276,7 @@ function onUnpin(e: Event) {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  flex: 0 1 auto;
 }
 .fqdn {
   font-family: var(--font-mono);
@@ -300,16 +305,9 @@ function onUnpin(e: Event) {
   font-size: var(--text-xs);
   font-weight: 700;
 }
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
-}
-.s-online { background: var(--green); color: var(--green); }
-.s-stale { background: var(--amber); color: var(--amber); }
-.s-offline { background: var(--red); color: var(--red); }
+/* status-dot removed — liveness is already conveyed by the heartbeat
+   counter in the card footer (foot-cell--right) plus the card-level
+   stale/offline border styling, so a separate dot was redundant. */
 
 .unpin {
   width: 22px;

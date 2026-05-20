@@ -42,6 +42,7 @@ async def version(
     )
     banner_url = await settings_store.get(db, "UI_BANNER_URL", "")
     icp_record = await settings_store.get(db, "UI_ICP_RECORD", "")
+    tutorial_url = await settings_store.get(db, "UI_TUTORIAL_URL", "")
     timezone_name = await settings_store.get(db, "TIMEZONE", app_settings.default_timezone)
     return VersionResponse(
         version=app_settings.app_version,
@@ -49,6 +50,7 @@ async def version(
         systemName=str(system_name),
         bannerUrl=str(banner_url),
         icpRecord=str(icp_record),
+        tutorialUrl=str(tutorial_url),
         timezone=str(timezone_name),
     )
 
