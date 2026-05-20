@@ -1,0 +1,137 @@
+{
+  "title": "Settings",
+  "save": "Save Settings",
+  "saved": "Settings saved",
+  "unsavedHint": "You have unsaved changes",
+  "discardBtn": "Discard",
+  "unsavedTitle": "Unsaved changes",
+  "unsavedMessage": "You have unsaved settings on this page. Save them?",
+  "unsavedSave": "Save & leave",
+  "unsavedDiscard": "Discard & leave",
+  "unsavedStay": "Stay on page",
+  "unsavedHasErrors": "There are validation errors. Go back to fix them, or discard all changes.",
+  "validate": {
+    "header": "{n} item(s) need to be fixed before saving",
+    "invalidUrl": "Must start with http:// or https://",
+    "invalidEmail": "Invalid email address"
+  },
+  "smtp": {
+    "title": "SMTP Email",
+    "desc": "Configure SMTP server for sending notification emails.",
+    "host": "SMTP Host",
+    "port": "Port",
+    "password": "Password",
+    "sender": "Sender Email",
+    "ssl": "Enable SSL",
+    "delay": "Send delay (sec)",
+    "testRecipient": "Test recipient",
+    "testHint": "Send a test email using current (including unsaved) SMTP values.",
+    "testPlaceholder": "name{'@'}example.com",
+    "sendTest": "Send test email",
+    "testOk": "Test email sent",
+    "testFail": "Send failed: {err}",
+    "testInvalid": "Please enter a valid email address"
+  },
+  "branding": {
+    "title": "Appearance",
+    "desc": "Customize system name, branding, and page elements.",
+    "brandName": "Brand Name",
+    "systemName": "System Name",
+    "siteUrl": "Site URL",
+    "bannerUrl": "Banner URL",
+    "icpRecord": "ICP Record",
+    "tutorialUrl": "Tutorial Link",
+    "tutorialUrl_tip": "When set, a “Tutorials” entry appears in the user sidebar and opens this URL in a new tab. Leave empty to hide.",
+    "allowRegistration": "Allow public registration",
+    "allowRegistration_tip": "When disabled, the sign-up button is hidden and only admins can create users.",
+    "support": {
+      "title": "Support Contact Info",
+      "desc": "Configure contact info shown in the support modal. Empty fields are hidden.",
+      "email": "Support Email",
+      "qqGroup": "QQ Group",
+      "qq": "Support QQ",
+      "wechat": "WeChat",
+      "footerNote": "Footer Note",
+      "footerNote_tip": "Displayed below the contact list. Use for business hours or any custom note. Leave empty to hide."
+    }
+  },
+  "payment": {
+    "title": "Payment",
+    "gateways": {
+      "title": "Payment Gateways",
+      "desc": "Enable the payment methods you want to offer.",
+      "enabled": "Enabled Gateways",
+      "hupijiao": "Hupijiao (Alipay)"
+    },
+    "credentials": {
+      "title": "Gateway Credentials",
+      "desc": "Configure the AppID and AppSecret. Changes take effect immediately.",
+      "displayName": "Display Name",
+      "appid": "AppID",
+      "appsecret": "AppSecret"
+    },
+    "urls": {
+      "title": "URL Configuration",
+      "desc": "Configure Referer and gateway endpoints. Notify/return URLs are auto-derived from the system Site URL (Appearance settings)."
+    },
+    "referer": "Referer",
+    "referer_tip": "Referer header sent with payment requests, usually your site root URL.",
+    "gatewayEndpoints": "Gateway Endpoints",
+    "gatewayEndpoints_tip": "Comma-separated fallback endpoints tried in order.",
+    "quotas": {
+      "title": "Order Quotas & Policy",
+      "desc": "Configure order timeout and per-user limits."
+    },
+    "payTimeout": "QR Code Validity (min)",
+    "payTimeout_tip": "QR code validity is capped at 5 minutes. Keeping it at 5 is recommended.",
+    "refundStuckHours": "Refund Stuck Alert (hours)",
+    "refundStuckHours_tip": "Refunds pending longer than this become manual incidents."
+  },
+  "defaults": {
+    "title": "Server Defaults",
+    "desc": "Default resources and presets when creating new servers.",
+    "nest": "Nest",
+    "egg": "Egg",
+    "node": "Node",
+    "cpu": "CPU (%)",
+    "memory": "Memory (MB)",
+    "disk": "Disk (MB)",
+    "databases": "Databases",
+    "backups": "Backups",
+    "allocations": "Extra Ports",
+    "dockerImage": "Docker Image",
+    "serverNamePrefix": "Server Name Prefix",
+    "serverNamePrefix_placeholder": "e.g. mc, ark, game"
+  },
+  "automation": {
+    "title": "Automation",
+    "time": {
+      "title": "Timezone & Schedule Basis",
+      "desc": "Set the timezone used by automation jobs; all schedule times are interpreted in this timezone."
+    },
+    "timezone": "Timezone",
+    "suspend": {
+      "title": "Auto Suspend",
+      "desc": "Automatically suspend servers after expiration",
+      "enabled": "Enable Auto Suspend",
+      "runHour": "Run Hour",
+      "runMinute": "Run Minute"
+    },
+    "delete": {
+      "title": "Auto Delete",
+      "desc": "Automatically delete servers after being suspended for a certain number of days",
+      "enabled": "Enable Auto Delete",
+      "days": "Days After Suspend"
+    },
+    "email": {
+      "title": "Expiration Email Reminder",
+      "desc": "Automatically send reminder emails before server expiration",
+      "enabled": "Enable Email Reminder",
+      "runHour": "Send Hour",
+      "runMinute": "Send Minute"
+    }
+  },
+  "account": {
+    "title": "Account Settings"
+  }
+}

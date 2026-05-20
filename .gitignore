@@ -1,6 +1,6 @@
 # 敏感配置（服务器上手动管理）
 .env
-settings.json
+/settings.json
 frontend/output.*
 frontend/logs/
 

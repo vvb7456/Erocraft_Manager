@@ -1,0 +1,137 @@
+{
+  "title": "设置",
+  "save": "保存设置",
+  "saved": "设置已保存",
+  "unsavedHint": "有未保存的更改",
+  "discardBtn": "丢弃",
+  "unsavedTitle": "未保存的更改",
+  "unsavedMessage": "当前页面有未保存的设置，是否保存？",
+  "unsavedSave": "保存并离开",
+  "unsavedDiscard": "丢弃并离开",
+  "unsavedStay": "留在本页",
+  "unsavedHasErrors": "存在校验错误，无法保存。请返回修正，或丢弃全部更改。",
+  "validate": {
+    "header": "有 {n} 项需要修正才能保存",
+    "invalidUrl": "必须以 http:// 或 https:// 开头",
+    "invalidEmail": "邮箱格式不正确"
+  },
+  "smtp": {
+    "title": "SMTP 邮件",
+    "desc": "配置发送通知邮件所用的 SMTP 服务器信息。",
+    "host": "SMTP 主机",
+    "port": "端口",
+    "password": "密码",
+    "sender": "发件人邮箱",
+    "ssl": "启用 SSL",
+    "delay": "发送延迟（秒）",
+    "testRecipient": "测试收件人",
+    "testHint": "使用当前（含未保存的）SMTP 参数发送一封测试邮件。",
+    "testPlaceholder": "name{'@'}example.com",
+    "sendTest": "发测试邮件",
+    "testOk": "测试邮件已发送",
+    "testFail": "发送失败：{err}",
+    "testInvalid": "请输入有效的邮箱地址"
+  },
+  "branding": {
+    "title": "外观",
+    "desc": "自定义系统名称、品牌与页面元素。",
+    "brandName": "品牌名称",
+    "systemName": "系统名称",
+    "siteUrl": "系统地址",
+    "bannerUrl": "Banner URL",
+    "icpRecord": "ICP 备案号",
+    "tutorialUrl": "使用教程链接",
+    "tutorialUrl_tip": "填写后用户侧侧边栏会出现「使用教程」入口，点击新标签页打开该链接。留空则隐藏。",
+    "allowRegistration": "允许公开注册",
+    "allowRegistration_tip": "关闭后登录页隐藏注册按钮，用户仅能由管理员创建。",
+    "support": {
+      "title": "客服联系方式",
+      "desc": "配置联系客服弹窗中展示的信息，留空的字段不会显示。",
+      "email": "客服邮箱",
+      "qqGroup": "QQ 群号",
+      "qq": "客服 QQ",
+      "wechat": "微信号",
+      "footerNote": "附加说明",
+      "footerNote_tip": "会显示在联系方式下方，可用于注明工作时间、说明文字等，留空则不显示。"
+    }
+  },
+  "payment": {
+    "title": "支付设置",
+    "gateways": {
+      "title": "支付网关",
+      "desc": "启用你要开放的支付方式。",
+      "enabled": "启用网关",
+      "hupijiao": "虎皮椒支付"
+    },
+    "credentials": {
+      "title": "网关凭据",
+      "desc": "配置网关的应用 ID 与密钥。保存后立即生效。",
+      "displayName": "前端展示名称",
+      "appid": "AppID",
+      "appsecret": "AppSecret"
+    },
+    "urls": {
+      "title": "URL 配置",
+      "desc": "配置 Referer 与备用接口地址。支付回调/跳转地址由系统根据「外观 - 系统地址」自动拼接。"
+    },
+    "referer": "Referer",
+    "referer_tip": "发起支付请求时携带的 Referer，通常为站点根 URL。",
+    "gatewayEndpoints": "网关接口地址",
+    "gatewayEndpoints_tip": "逗号分隔的备用接口，依次尝试直到成功。",
+    "quotas": {
+      "title": "订单与配额",
+      "desc": "配置订单超时策略与用户配额。"
+    },
+    "payTimeout": "二维码有效期 (分钟)",
+    "payTimeout_tip": "支付 QR 码有效期上限为 5 分钟，建议保持 5。",
+    "refundStuckHours": "退款超时告警 (小时)",
+    "refundStuckHours_tip": "退款处于 pending 状态超过此时限后进入人工介入列表。"
+  },
+  "defaults": {
+    "title": "服务器默认配置",
+    "desc": "创建服务器时的默认资源和预设参数。",
+    "nest": "预设组 (Nest)",
+    "egg": "预设 (Egg)",
+    "node": "节点",
+    "cpu": "CPU (%)",
+    "memory": "内存 (MB)",
+    "disk": "磁盘 (MB)",
+    "databases": "数据库数量",
+    "backups": "备份数量",
+    "allocations": "额外端口",
+    "dockerImage": "Docker 镜像",
+    "serverNamePrefix": "服务器名称前缀",
+    "serverNamePrefix_placeholder": "如: mc、ark、game"
+  },
+  "automation": {
+    "title": "自动化",
+    "time": {
+      "title": "时区与调度基准",
+      "desc": "设置自动化任务使用的时区，所有计划时间均按该时区解释。"
+    },
+    "timezone": "时区",
+    "suspend": {
+      "title": "自动暂停",
+      "desc": "到期后自动暂停服务器",
+      "enabled": "启用自动暂停",
+      "runHour": "执行时间 (时)",
+      "runMinute": "执行时间 (分)"
+    },
+    "delete": {
+      "title": "自动删除",
+      "desc": "暂停超过指定天数后自动删除服务器",
+      "enabled": "启用自动删除",
+      "days": "暂停后删除天数"
+    },
+    "email": {
+      "title": "到期邮件提醒",
+      "desc": "在服务器到期前自动发送提醒邮件",
+      "enabled": "启用邮件提醒",
+      "runHour": "发送时间 (时)",
+      "runMinute": "发送时间 (分)"
+    }
+  },
+  "account": {
+    "title": "账户设置"
+  }
+}
