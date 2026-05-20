@@ -32,8 +32,9 @@ tests/
 # Claude Code
 CLAUDE.md
 
-# 编辑器 / Copilot
-.github/
+# 编辑器 / Copilot（仅忽略 copilot 配置；放行 workflows）
+.github/*
+!.github/workflows/
 .continue/
 .vscode/
 
