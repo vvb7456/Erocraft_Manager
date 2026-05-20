@@ -19,25 +19,27 @@ TAG=$(resolve_tag "$TAG_INPUT")
 PREV=$(readlink "$ROOT/current" 2>/dev/null | xargs -r basename || true)
 echo "→ agent: 部署 $TAG（当前 ${PREV:-<none>}） → $ROOT"
 
-mkdir -p "$ROOT/releases/$TAG"
-if [[ -n "$(ls -A "$ROOT/releases/$TAG" 2>/dev/null)" ]]; then
+mkdir -p "$ROOT/releases/$TAG/agent"
+if [[ -n "$(ls -A "$ROOT/releases/$TAG/agent" 2>/dev/null)" ]]; then
   echo "  $TAG 已存在，跳过下载"
 else
   TMP=$(mktemp)
   trap 'rm -f "$TMP"' EXIT
   gh_download "^agent-.*\\.tar\\.gz$" "$TAG" "$TMP"
-  tar -xzf "$TMP" -C "$ROOT/releases/$TAG"
+  # tarball 内是 agent 包的内容（agent.py / collectors/ ...），
+  # 解压到 releases/$TAG/agent/ 形成 Python 包目录
+  tar -xzf "$TMP" -C "$ROOT/releases/$TAG/agent"
   rm -f "$TMP"
   trap - EXIT
 fi
 
-# 软链共享资源
+# 软链共享资源（venv/agent.yaml/config.yaml 放在 release 目录顶层，与 agent/ 同级）
 ln -sfn "$ROOT/venv" "$ROOT/releases/$TAG/venv"
 [[ -e "$ROOT/agent.yaml" ]]  && ln -sfn "$ROOT/agent.yaml"  "$ROOT/releases/$TAG/agent.yaml"
 [[ -e "$ROOT/config.yaml" ]] && ln -sfn "$ROOT/config.yaml" "$ROOT/releases/$TAG/config.yaml"
 
 # 安装依赖
-"$ROOT/venv/bin/pip" install -q -r "$ROOT/releases/$TAG/requirements.txt"
+"$ROOT/venv/bin/pip" install -q -r "$ROOT/releases/$TAG/agent/requirements.txt"
 
 atomic_switch "$ROOT/releases" "$TAG" "$ROOT/current"
 systemctl restart erocraft-agent
