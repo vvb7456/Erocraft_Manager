@@ -35,8 +35,9 @@ resolve_tag() {
       curl -fsSL "$GITHUB_API/repos/$REPO/releases/latest" | jq -r .tag_name
       ;;
     main)
-      curl -fsSL "$GITHUB_API/repos/$REPO/releases?per_page=20" \
-        | jq -r '[.[] | select(.tag_name | startswith("main-"))][0].tag_name'
+      curl -fsSL "$GITHUB_API/repos/$REPO/releases?per_page=30" \
+        | jq -r '[.[] | select(.tag_name | startswith("main-"))]
+                  | sort_by(.created_at) | reverse | .[0].tag_name'
       ;;
     *)
       echo "$input"
