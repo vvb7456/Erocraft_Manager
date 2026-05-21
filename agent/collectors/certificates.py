@@ -200,15 +200,18 @@ async def _run_synowebapi(
         f"version={version}",
     ]
     for key, value in (params or {}).items():
-        # synowebapi --exec parses raw key=value tokens; json.dumps wraps
-        # strings in literal quotes, which DSM 7.x then takes verbatim
-        # (file paths become unfindable, "id" never matches an existing
-        # certificate, "as_default" is no longer the boolean DSM expects).
-        # DSM still returns success=true having done nothing, so the
-        # caller wrongly believes the import succeeded. Encode booleans as
-        # lowercase tokens, complex types as JSON, scalars as-is.
+        # synowebapi --exec parses every value as a JSON token. Bools must be
+        # bare `true`/`false`, numbers bare, but STRINGS must be JSON-quoted
+        # or DSM mis-parses anything that begins with a digit (e.g. a cert
+        # id like "0lcb8Q" gets coerced to numeric 0 and never matches any
+        # existing certificate). Paths and descriptions still work when
+        # JSON-quoted (DSM accepts string values for those fields).
         if isinstance(value, bool):
             args.append(f"{key}={'true' if value else 'false'}")
+        elif isinstance(value, (int, float)):
+            args.append(f"{key}={value}")
+        elif isinstance(value, str):
+            args.append(f"{key}={json.dumps(value)}")
         elif isinstance(value, (dict, list)):
             args.append(f"{key}={json.dumps(value)}")
         else:
@@ -575,9 +578,14 @@ async def _install_synology_target(
             "id": dsm_cert_id,
             "desc": target.synology.certificate_desc,
         }
-        if target.synology.as_default:
-            # DSM 7.2.1 import expects this as a form-style string, not JSON bool.
-            params["as_default"] = "true"
+        # NOTE: do NOT pass `as_default` here. On DSM 7.2.1 (build 69057+)
+        # SYNO.Core.Certificate.import returns error code 5511 whenever the
+        # `as_default` key is present, regardless of its encoding (bool,
+        # string, int). Because this agent only re-imports existing certs
+        # (create_if_missing=false), DSM preserves whatever default-flag
+        # the cert already had, so omitting the parameter is safe. The
+        # `target.synology.as_default` config field is retained for forward
+        # compatibility but currently has no effect during re-import.
 
         response = await _run_synowebapi(
             api="SYNO.Core.Certificate",
