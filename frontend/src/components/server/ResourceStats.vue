@@ -21,6 +21,13 @@ const props = defineProps<{
 
 const { t } = useI18n({ useScope: 'global' })
 
+function cpuBarPercent(): number {
+  // Scale CPU bar by allocated limit (which may exceed 100% on multi-core).
+  // If unlimited, fall back to clamping the raw absolute % to 100.
+  if (!props.limits.cpu) return Math.min(100, Math.max(0, props.cpuPercent || 0))
+  return Math.max(0, Math.min(100, (props.cpuPercent / props.limits.cpu) * 100))
+}
+
 function memPercent(): number {
   if (!props.limits.memory) return 0
   return Math.min(100, (props.memoryBytes / (props.limits.memory * 1024 * 1024)) * 100)
@@ -66,7 +73,7 @@ function formatUptime(ms: number): string {
         <span class="stat-label">{{ t('userServers.resources.cpu') }}</span>
         <span class="stat-value">{{ cpuPercent.toFixed(1) }}% <span class="stat-limit">/ {{ cpuLimit() }}</span></span>
       </div>
-      <UsageBar :percent="cpuPercent" />
+      <UsageBar :percent="cpuBarPercent()" />
     </div>
     <div class="stat-row">
       <div class="stat-header">
@@ -102,7 +109,7 @@ function formatUptime(ms: number): string {
         <span class="mobile-stat-label">CPU</span>
         <span class="mobile-stat-value">{{ cpuPercent.toFixed(1) }}% / {{ cpuLimit() }}</span>
       </div>
-      <UsageBar :percent="cpuPercent" class="mobile-stat-bar" />
+      <UsageBar :percent="cpuBarPercent()" class="mobile-stat-bar" />
     </div>
     <div class="mobile-stat">
       <div class="stat-header" style="margin-top: auto">

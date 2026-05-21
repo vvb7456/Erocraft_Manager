@@ -259,7 +259,13 @@ function cpuText(s: Server): string {
 }
 
 function cpuPercent(s: Server): number {
-  return Math.max(0, Math.min(100, resourceStore.resources[s.id]?.cpu ?? 0))
+  // Bar percentage = used / allocated. CPU allocation may exceed 100% on
+  // multi-core servers (e.g. 400 = 4 cores), so we must NOT cap the raw
+  // absolute reading at 100 like the bar's 0-100 scale would suggest.
+  const used = resourceStore.resources[s.id]?.cpu ?? 0
+  const limit = s.limits.cpu
+  if (!limit) return Math.max(0, Math.min(100, used))
+  return Math.max(0, Math.min(100, (used / limit) * 100))
 }
 
 function memPercent(s: Server): number {
