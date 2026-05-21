@@ -16,8 +16,39 @@ TAG_INPUT="${1:-main}"
 ROOT="${MANAGER_ROOT:-/opt/erocraft_manager}"
 BACKUP_DIR="${BACKUP_DIR:-/backup}"
 # 数据库备份模式: docker | host | skip
-DB_BACKUP_MODE="${DB_BACKUP_MODE:-docker}"
+# 生产环境 panel DB 跑在主机上，默认使用 host
+DB_BACKUP_MODE="${DB_BACKUP_MODE:-host}"
 DB_CONTAINER="${DB_CONTAINER:-pterodactyl-database-1}"
+# host 模式凭证来源（按优先级）：
+#   1) 显式环境变量 DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME
+#   2) DB_DEFAULTS_FILE  —— MySQL [client] 段配置文件
+#   3) DB_ENV_FILE       —— manager 自己的 .env（默认 $ROOT/.env），从中读取同名键
+# 凭证全部缺失时直接报错，不再交互式 prompt 挂起。
+DB_ENV_FILE="${DB_ENV_FILE:-$ROOT/.env}"
+DB_DEFAULTS_FILE="${DB_DEFAULTS_FILE:-}"
+
+_read_env_var() {
+  # 从 dotenv 风格文件中读取指定键的值（不展开变量，仅取最后一次定义）
+  local file="$1" key="$2"
+  [[ -r "$file" ]] || return 1
+  local line
+  line=$(grep -E "^[[:space:]]*${key}=" "$file" | tail -n1) || return 1
+  [[ -z "$line" ]] && return 1
+  local val="${line#*=}"
+  # 去掉前后引号
+  val="${val%\"}"; val="${val#\"}"
+  val="${val%\'}"; val="${val#\'}"
+  printf '%s' "$val"
+}
+
+if [[ "$DB_BACKUP_MODE" == "host" && -z "${DB_PASSWORD:-}" && -z "$DB_DEFAULTS_FILE" && -r "$DB_ENV_FILE" ]]; then
+  DB_HOST="${DB_HOST:-$(_read_env_var "$DB_ENV_FILE" DB_HOST || true)}"
+  DB_PORT="${DB_PORT:-$(_read_env_var "$DB_ENV_FILE" DB_PORT || true)}"
+  DB_USER="${DB_USER:-$(_read_env_var "$DB_ENV_FILE" DB_USER || true)}"
+  DB_PASSWORD="${DB_PASSWORD:-$(_read_env_var "$DB_ENV_FILE" DB_PASSWORD || true)}"
+  DB_NAME="${DB_NAME:-$(_read_env_var "$DB_ENV_FILE" DB_NAME || true)}"
+fi
+
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
 DB_USER="${DB_USER:-root}"
@@ -50,8 +81,20 @@ else
       docker exec "$DB_CONTAINER" mysqldump -u root --single-transaction --routines "$DB_NAME" | gzip > "$BACKUP"
       ;;
     host)
-      mysqldump -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" \
-        --single-transaction --routines "$DB_NAME" 2>/dev/null | gzip > "$BACKUP"
+      # 优先使用 defaults-file（含 [client] user/password），其次走 MYSQL_PWD 环境变量
+      # 避免 `-p""` 在密码缺失时让 mysqldump 交互式 prompt 而把 SSH 会话挂死
+      if [[ -n "$DB_DEFAULTS_FILE" ]]; then
+        [[ -r "$DB_DEFAULTS_FILE" ]] || { echo "❌ DB_DEFAULTS_FILE 不可读: $DB_DEFAULTS_FILE" >&2; exit 1; }
+        mysqldump --defaults-file="$DB_DEFAULTS_FILE" \
+          -h"$DB_HOST" -P"$DB_PORT" \
+          --single-transaction --routines "$DB_NAME" | gzip > "$BACKUP"
+      elif [[ -n "$DB_PASSWORD" ]]; then
+        MYSQL_PWD="$DB_PASSWORD" mysqldump -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" \
+          --single-transaction --routines "$DB_NAME" | gzip > "$BACKUP"
+      else
+        echo "❌ host 模式需要 DB_PASSWORD 或 DB_DEFAULTS_FILE（避免 mysqldump 交互式挂起）；如需跳过请显式 DB_BACKUP_MODE=skip" >&2
+        exit 1
+      fi
       ;;
     *)
       echo "❌ 未知 DB_BACKUP_MODE: $DB_BACKUP_MODE（docker|host|skip）" >&2; exit 1
