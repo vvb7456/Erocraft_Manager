@@ -74,12 +74,18 @@ def _serialize_server(
 ) -> UserServerItem:
     expiration_date = server.expiration_date
     days_left = (expiration_date - today).days if expiration_date is not None else None
-    allocation_ip = server.allocation.ip_alias or server.allocation.ip if server.allocation else None
+    allocation_alias = server.allocation.ip_alias if server.allocation else None
+    allocation_raw_ip = server.allocation.ip if server.allocation else None
+    allocation_ip = allocation_alias or allocation_raw_ip
     allocation_port = server.allocation.port if server.allocation else None
     node_fqdn = server.node.fqdn if server.node else None
     node_name = server.node.name if server.node else None
     node_sftp_port = server.node.daemon_sftp if server.node else None
-    address = f"{node_fqdn}:{allocation_port}" if node_fqdn and allocation_port is not None else None
+    # Prefer the per-allocation alias (set in Hosts → Allocations) over the
+    # node-wide FQDN, since admins may map specific ports to dedicated
+    # hostnames (e.g. mc.example.com:25565 instead of node.example.com:25565).
+    address_host = allocation_alias or node_fqdn or allocation_raw_ip
+    address = f"{address_host}:{allocation_port}" if address_host and allocation_port is not None else None
 
     return UserServerItem(
         id=server.id,
