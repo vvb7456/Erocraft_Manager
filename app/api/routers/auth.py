@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
+from app.api.routers.public import REGISTER_TOKEN_EXPIRY_MINUTES
 from app.core.security import SESSION_USER_ID_KEY
 from app.core.rate_limit import limiter
+from app.core.time import utc_naive_now
+from app.db.models.manager import ManagerPendingRegistration
 from app.db.models.pterodactyl import PteroUser
 from app.db.repositories.users import user_repository
 from app.schemas.auth import LoginRequest, LoginResponse, LogoutResponse, MeResponse
@@ -32,6 +38,46 @@ async def login(
 
     user = await user_repository.get_by_username_or_email(db, username)
     if not user or not user.check_password(password):
+        # If the user can't be found at all, check whether they're just
+        # awaiting email verification. Pending registrations live in
+        # ``manager_pending_registrations`` and only become real ``PteroUser``
+        # rows after the verification link is clicked, so a freshly-registered
+        # but unverified user would otherwise be told "invalid credentials".
+        if not user:
+            pending = (
+                await db.execute(
+                    select(ManagerPendingRegistration)
+                    .where(
+                        ManagerPendingRegistration.used_at.is_(None),
+                        or_(
+                            ManagerPendingRegistration.email == username.lower(),
+                            ManagerPendingRegistration.username == username,
+                        ),
+                    )
+                    .order_by(ManagerPendingRegistration.created_at.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if pending is not None and pending.created_at is not None:
+                if utc_naive_now() - pending.created_at <= timedelta(
+                    minutes=REGISTER_TOKEN_EXPIRY_MINUTES
+                ):
+                    await log_manager_activity(
+                        db,
+                        actor="system",
+                        category="auth",
+                        status="info",
+                        detail_key="login.email_not_verified",
+                        detail_params={
+                            "username": username,
+                            "email": pending.email,
+                        },
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="auth.email_not_verified",
+                    )
+
         if user:
             await pterodactyl_activity_logger.log_account_activity(
                 db,

@@ -26,6 +26,7 @@ _VALID_CATEGORIES: frozenset[str] = frozenset(
         "email",
         "tunnel",
         "billing",
+        "monitoring",
         "other",
     }
 )

@@ -23,6 +23,18 @@
     "partial": "部分成功",
     "info": "信息"
   },
+  "severity": {
+    "critical": "严重",
+    "warning": "警告",
+    "info": "提示"
+  },
+  "duration": {
+    "seconds": "{n} 秒",
+    "minutes": "{n} 分钟",
+    "minutesSeconds": "{m} 分 {s} 秒",
+    "hours": "{n} 小时",
+    "hoursMinutes": "{h} 小时 {m} 分"
+  },
   "category": {
     "auth": "身份验证",
     "server": "服务器",
@@ -34,6 +46,7 @@
     "email": "邮件",
     "tunnel": "隧道",
     "billing": "计费",
+    "monitoring": "监控告警",
     "other": "其他"
   },
   "reminderType": {
@@ -46,6 +59,7 @@
   },
   "detail": {
     "login_failed": "尝试使用 {username} 登录失败。",
+    "login.email_not_verified": "{username}（{email}）尝试登录，但邮箱尚未完成验证。",
     "login_success": "用户 {username} 成功登录。",
     "logout": "用户 {username} 退出登录。",
     "create_server": "管理员 {actor} 创建了服务器 {server_name} (ID: {server_id})。",
@@ -102,6 +116,8 @@
     "node.wings.restart": "主机 #{host_id} 的 Wings 已重启。",
     "global_defaults.update": "全局默认值已更新。",
     "monitoring_settings_change": "监控设置已更新。",
+    "monitoring.alert.fired": "主机 「{host_name}」（#{host_id}）触发「{alert_type}」告警（级别：{severity}）。消息：{message}",
+    "monitoring.alert.resolved": "主机 「{host_name}」（#{host_id}）的「{alert_type}」告警已恢复（持续 {duration_human}）。",
     "user_language_changed": "用户语言已切换为 {language}。",
     "register_request": "收到注册请求: {username} ({email})。",
     "register_verified": "注册验证成功: {username}。",

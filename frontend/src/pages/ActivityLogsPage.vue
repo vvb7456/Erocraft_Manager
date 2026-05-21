@@ -93,6 +93,24 @@ function actorLabel(actor: string): string {
   return actor
 }
 
+function formatDurationSeconds(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) sec = 0
+  sec = Math.round(sec)
+  if (sec < 60) return t('logs.duration.seconds', { n: sec })
+  if (sec < 3600) {
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    return s > 0
+      ? t('logs.duration.minutesSeconds', { m, s })
+      : t('logs.duration.minutes', { n: m })
+  }
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  return m > 0
+    ? t('logs.duration.hoursMinutes', { h, m })
+    : t('logs.duration.hours', { n: h })
+}
+
 function categoryLabel(category: string): string {
   const key = `logs.category.${category}`
   return te(key) ? t(key) : category
@@ -113,6 +131,17 @@ function detailLabel(log: LogItem): string {
   }
   if (typeof params.language === 'string') {
     params.language = t(`logs.language.${params.language}`, params.language)
+  }
+  if (typeof params.alert_type === 'string') {
+    const k = `hosts.alerting.types.${params.alert_type}`
+    if (te(k)) params.alert_type = t(k)
+  }
+  if (typeof params.severity === 'string') {
+    const k = `logs.severity.${params.severity}`
+    if (te(k)) params.severity = t(k)
+  }
+  if (typeof params.duration_seconds === 'number') {
+    params.duration_human = formatDurationSeconds(params.duration_seconds)
   }
 
   // detail_key usually contains dots (e.g. "node.wings_config.update").

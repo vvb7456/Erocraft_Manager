@@ -83,7 +83,8 @@
     "network": "Network error. Please try again later",
     "auth": {
       "credentials_required": "Please enter your username and password",
-      "invalid_credentials": "Invalid username or password"
+      "invalid_credentials": "Invalid username or password",
+      "email_not_verified": "This email has not been verified yet. Please check your inbox for the registration email and click the link to finish signing up."
     },
     "account": {
       "password_required": "Please enter a new password",

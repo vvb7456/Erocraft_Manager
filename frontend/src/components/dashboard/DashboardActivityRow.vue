@@ -40,6 +40,24 @@ const categoryLabel = computed(() => {
   return te(key) ? t(key) : cat
 })
 
+function formatDurationSeconds(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) sec = 0
+  sec = Math.round(sec)
+  if (sec < 60) return t('logs.duration.seconds', { n: sec })
+  if (sec < 3600) {
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    return s > 0
+      ? t('logs.duration.minutesSeconds', { m, s })
+      : t('logs.duration.minutes', { n: m })
+  }
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  return m > 0
+    ? t('logs.duration.hoursMinutes', { h, m })
+    : t('logs.duration.hours', { n: h })
+}
+
 const statusMeta = computed(() => {
   switch (props.status) {
     case 'success': return { icon: 'check_circle', color: 'var(--green)' }
@@ -65,6 +83,17 @@ const detailText = computed(() => {
   }
   if (typeof params.language === 'string') {
     params.language = t(`logs.language.${params.language}`, params.language)
+  }
+  if (typeof params.alert_type === 'string') {
+    const k = `hosts.alerting.types.${params.alert_type}`
+    if (te(k)) params.alert_type = t(k)
+  }
+  if (typeof params.severity === 'string') {
+    const k = `logs.severity.${params.severity}`
+    if (te(k)) params.severity = t(k)
+  }
+  if (typeof params.duration_seconds === 'number') {
+    params.duration_human = formatDurationSeconds(params.duration_seconds)
   }
 
   const detailMap = tm('logs.detail') as Record<string, unknown>

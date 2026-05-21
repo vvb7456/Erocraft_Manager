@@ -23,6 +23,18 @@
     "partial": "Partial",
     "info": "Info"
   },
+  "severity": {
+    "critical": "Critical",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "duration": {
+    "seconds": "{n}s",
+    "minutes": "{n} min",
+    "minutesSeconds": "{m} min {s}s",
+    "hours": "{n}h",
+    "hoursMinutes": "{h}h {m}min"
+  },
   "category": {
     "auth": "Authentication",
     "server": "Server",
@@ -34,6 +46,7 @@
     "email": "Email",
     "tunnel": "Tunnel",
     "billing": "Billing",
+    "monitoring": "Monitoring",
     "other": "Other"
   },
   "reminderType": {
@@ -46,6 +59,7 @@
   },
   "detail": {
     "login_failed": "Failed login attempt for {username}.",
+    "login.email_not_verified": "{username} ({email}) tried to log in but the email is not yet verified.",
     "login_success": "User {username} logged in.",
     "logout": "User {username} logged out.",
     "create_server": "Administrator {actor} created server {server_name} (ID: {server_id}).",
@@ -102,6 +116,8 @@
     "node.wings.restart": "Wings restarted for host #{host_id}.",
     "global_defaults.update": "Global defaults updated.",
     "monitoring_settings_change": "Monitoring settings updated.",
+    "monitoring.alert.fired": "Host “{host_name}” (#{host_id}) raised a {severity} “{alert_type}” alert. Message: {message}",
+    "monitoring.alert.resolved": "Host “{host_name}” (#{host_id}) “{alert_type}” alert resolved after {duration_human}.",
     "user_language_changed": "User language changed to {language}.",
     "register_request": "Registration requested for {username} ({email}).",
     "register_verified": "Registration verified for {username}.",

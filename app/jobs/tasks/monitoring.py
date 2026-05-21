@@ -16,6 +16,7 @@ Per-host alert configuration lives in ``manager_host_alert_settings`` +
 
 
 import asyncio
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -29,7 +30,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import alert_defaults
 from app.core.settings_store import get_settings_store
 from app.core.time import utc_naive_now
-from app.db.models.manager import HostAlertRule, HostAlertSettings, ManagerHost
+from app.db.models.manager import (
+    HostAlertRule,
+    HostAlertSettings,
+    ManagerActivityLog,
+    ManagerHost,
+)
 from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
 from app.db.session import get_session_factory
 from app.services import agent_client, host_registry
@@ -42,6 +48,16 @@ MONITORING_JOB_ID = "monitoring_collect"
 RETRY_BASE_DELAY = 3
 RETRY_MAX_ATTEMPTS = 5
 RETRY_BACKOFF_FACTOR = 2
+
+# Agent /v1/metrics pull retry policy.
+# Total worst case = 5 + 2 + 5 + 4 + 5 = 21 s, well within the 60 s cycle.
+# Tighter than _probe_wings_public on purpose: a single missed pull must NOT
+# fire an "agent offline" alert (see audit 2026-05-22), but we also must not
+# delay a real-outage notification past the cycle window.
+AGENT_PULL_TIMEOUT = 5.0
+AGENT_PULL_ATTEMPTS = 3  # 1 initial + 2 retries
+AGENT_PULL_RETRY_BASE_DELAY = 2.0
+AGENT_PULL_RETRY_BACKOFF_FACTOR = 2.0
 
 
 # ---------------------------------------------------------------------------
@@ -435,6 +451,51 @@ async def _check_sustained_above(
     return (above / len(rows)) >= 0.8
 
 
+_SEVERITY_TO_AUDIT_STATUS = {"critical": "failed", "warning": "partial", "info": "info"}
+
+
+def _audit_alert_event(
+    db: AsyncSession,
+    *,
+    alert_obj: HostAlert,
+    kind: str,  # 'fired' | 'resolved'
+    host_name: str,
+    duration_seconds: int | None = None,
+) -> None:
+    """Persist a `monitoring.alert.{fired,resolved}` row in `manager_activity_logs`.
+
+    Uses the caller's session so the audit row is committed atomically with the
+    rest of the monitoring cycle (no separate transaction, no early commit).
+    """
+    if kind == "resolved":
+        status = "success"
+    else:
+        status = _SEVERITY_TO_AUDIT_STATUS.get(alert_obj.severity, "info")
+
+    params: dict[str, Any] = {
+        "alert_type": alert_obj.alert_type,
+        "severity": alert_obj.severity,
+        "host_id": alert_obj.host_id,
+        "host_name": host_name,
+        "message": alert_obj.message or "",
+        "fired_at": alert_obj.created_at.isoformat() if alert_obj.created_at else None,
+    }
+    if kind == "resolved":
+        params["resolved_at"] = alert_obj.resolved_at.isoformat() if alert_obj.resolved_at else None
+        if duration_seconds is not None:
+            params["duration_seconds"] = duration_seconds
+
+    db.add(
+        ManagerActivityLog(
+            actor="system",
+            category="monitoring",
+            status=status,
+            detail_key=f"monitoring.alert.{kind}",
+            detail_params=json.dumps(params, ensure_ascii=False, default=str),
+        )
+    )
+
+
 async def _raise_or_skip(
     db: AsyncSession, host_id: int | None, alert_type: str, severity: str, message: str, now: datetime,
     *,
@@ -465,6 +526,8 @@ async def _raise_or_skip(
     db.add(alert)
     await db.flush()
 
+    _audit_alert_event(db, alert_obj=alert, kind="fired", host_name=host_name)
+
     if config is not None:
         await _maybe_notify(
             db, config,
@@ -492,6 +555,13 @@ async def _auto_resolve(
 
     for row in open_rows:
         row.resolved_at = now
+        duration = None
+        if row.created_at is not None:
+            duration = max(0, int((now - row.created_at).total_seconds()))
+        _audit_alert_event(
+            db, alert_obj=row, kind="resolved",
+            host_name=host_name, duration_seconds=duration,
+        )
 
     if config is not None and config.notify_resolve:
         for row in open_rows:
@@ -657,16 +727,42 @@ async def run_monitoring_collect() -> None:
 
         async def _pull(host: ManagerHost, endpoint: str, token: str) -> tuple[int, dict | None]:
             url = f"{endpoint}/v1/metrics"
-            try:
-                async with httpx.AsyncClient(timeout=10.0, verify=True, trust_env=False) as client:
-                    resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
-                if resp.status_code >= 400:
-                    logger.warning("agent pull host %d -> HTTP %d", host.id, resp.status_code)
-                    return host.id, None
-                return host.id, resp.json()
-            except httpx.HTTPError as exc:
-                logger.warning("agent pull host %d transport: %s", host.id, exc)
-                return host.id, None
+            headers = {"Authorization": f"Bearer {token}"}
+            last_err: str | None = None
+            delay = AGENT_PULL_RETRY_BASE_DELAY
+            for attempt in range(1, AGENT_PULL_ATTEMPTS + 1):
+                try:
+                    async with httpx.AsyncClient(
+                        timeout=AGENT_PULL_TIMEOUT, verify=True, trust_env=False
+                    ) as client:
+                        resp = await client.get(url, headers=headers)
+                    if resp.status_code >= 400:
+                        last_err = f"HTTP {resp.status_code}"
+                        logger.warning(
+                            "agent pull host %d -> HTTP %d (attempt %d/%d)",
+                            host.id, resp.status_code, attempt, AGENT_PULL_ATTEMPTS,
+                        )
+                    else:
+                        if attempt > 1:
+                            logger.info(
+                                "agent pull host %d recovered on retry #%d",
+                                host.id, attempt - 1,
+                            )
+                        return host.id, resp.json()
+                except httpx.HTTPError as exc:
+                    last_err = str(exc) or exc.__class__.__name__
+                    logger.warning(
+                        "agent pull host %d transport: %s (attempt %d/%d)",
+                        host.id, last_err, attempt, AGENT_PULL_ATTEMPTS,
+                    )
+                if attempt < AGENT_PULL_ATTEMPTS:
+                    await asyncio.sleep(delay)
+                    delay *= AGENT_PULL_RETRY_BACKOFF_FACTOR
+            logger.warning(
+                "agent pull host %d failed after %d attempts: %s",
+                host.id, AGENT_PULL_ATTEMPTS, last_err,
+            )
+            return host.id, None
 
         async def _collect(host: ManagerHost, endpoint: str, token: str) -> tuple[int, dict | None, dict | None]:
             public_task = None
