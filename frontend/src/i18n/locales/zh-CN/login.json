@@ -1,13 +1,13 @@
 {
-  "username": "用户名",
-  "username_placeholder": "输入用户名",
+  "username": "用户名 / 邮箱",
+  "username_placeholder": "输入用户名或注册邮箱",
   "password": "密码",
   "password_placeholder": "输入密码",
   "forgot": "忘记密码？",
   "register": "还没有账号？立即注册",
   "submit": "登录",
   "error": {
-    "empty": "请输入用户名和密码",
+    "empty": "请输入用户名/邮箱和密码",
     "invalid": "用户名或密码错误",
     "network": "网络连接失败"
   }

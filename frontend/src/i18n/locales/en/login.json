@@ -1,11 +1,11 @@
 {
-  "username": "Username",
-  "username_placeholder": "Enter username",
+  "username": "Username / Email",
+  "username_placeholder": "Username or registered email",
   "password": "Password",
   "password_placeholder": "Enter password",
   "forgot": "Forgot Password?",  "register": "Don't have an account? Sign up",  "submit": "Sign In",
   "error": {
-    "empty": "Please enter username and password",
+    "empty": "Please enter username/email and password",
     "invalid": "Invalid username or password",
     "network": "Network connection failed"
   }
