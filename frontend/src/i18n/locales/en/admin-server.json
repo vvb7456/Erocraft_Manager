@@ -213,12 +213,10 @@
       "warning": "Server data is not retained after deletion. Force delete is only for broken remote states where a normal delete cannot complete.",
       "action": "Delete server",
       "forceAction": "Force delete server",
-      "modalTitle": "Delete server",
-      "forceModalTitle": "Force delete server",
-      "confirmMessage": "Type the server name to confirm deletion: {name}",
-      "forceConfirmMessage": "You are about to force delete. Type the server name and acknowledge the risk to continue: {name}",
-      "inputLabel": "Enter server name {name}",
-      "forceAcknowledge": "I understand panel records will still be removed if Wings deletion fails"
+      "confirmTitle": "Delete server",
+      "forceConfirmTitle": "Force delete server",
+      "confirmMessage": "Delete server {name}? This action cannot be undone.",
+      "forceConfirmMessage": "About to force delete server {name}. Panel records will be removed even if Wings deletion fails. Please confirm the risk."
     }
   }
 }

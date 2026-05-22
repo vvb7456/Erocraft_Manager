@@ -213,12 +213,10 @@
       "warning": "删除后不保留该服务器数据。强制删除仅用于远端异常、常规删除无法完成的场景。",
       "action": "删除服务器",
       "forceAction": "强制删除服务器",
-      "modalTitle": "删除服务器",
-      "forceModalTitle": "强制删除服务器",
-      "confirmMessage": "输入服务器名称以确认删除：{name}",
-      "forceConfirmMessage": "你正在执行强制删除。输入服务器名称并确认风险后继续：{name}",
-      "inputLabel": "请输入服务器名称 {name}",
-      "forceAcknowledge": "我确认当 Wings 删除失败时仍继续移除面板记录"
+      "confirmTitle": "删除服务器",
+      "forceConfirmTitle": "强制删除服务器",
+      "confirmMessage": "确定要删除服务器 {name} 吗？此操作不可撤销。",
+      "forceConfirmMessage": "即将强制删除服务器 {name}。即使 Wings 删除失败也会移除面板记录，请确认风险。"
     }
   }
 }

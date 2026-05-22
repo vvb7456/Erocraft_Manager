@@ -8,11 +8,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import BaseModal from '@/components/ui/BaseModal.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
-import FormField from '@/components/form/FormField.vue'
-import BaseInput from '@/components/form/BaseInput.vue'
-import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import PlanChangeModal from '@/components/servers/PlanChangeModal.vue'
 import type { AdminServerDetailResponse } from '@/types/adminServer'
@@ -30,10 +26,6 @@ const serverId = inject<Ref<number | null>>('adminServerId')!
 const reload = inject<() => Promise<void>>('reloadAdminServer', async () => {})
 
 const renewDate = ref('')
-const deleteModalOpen = ref(false)
-const deleteConfirmName = ref('')
-const deleteForce = ref(false)
-const deleteAcknowledge = ref(false)
 const deleteSubmitting = ref(false)
 
 const server = computed(() => detail.value?.server ?? null)
@@ -96,10 +88,6 @@ const expirationColor = computed(() => {
   return 'var(--green)'
 })
 
-const canSubmitDelete = computed(() => {
-  return deleteConfirmName.value.trim() === serverName.value && (!deleteForce.value || deleteAcknowledge.value)
-})
-
 async function doToggleSuspend() {
   if (!server.value || !serverId.value) return
   const suspended = isSuspended.value
@@ -147,21 +135,30 @@ async function doReinstall() {
 }
 
 function openDeleteModal(force = false) {
-  deleteConfirmName.value = ''
-  deleteAcknowledge.value = false
-  deleteForce.value = force
-  deleteModalOpen.value = true
+  void confirmDelete(force)
 }
 
-async function doDelete() {
-  if (!server.value || !serverId.value || !canSubmitDelete.value) return
+async function confirmDelete(force: boolean) {
+  if (!server.value || !serverId.value) return
+  const ok = await confirm({
+    title: force
+      ? t('adminServer.lifecycle.delete.forceConfirmTitle')
+      : t('adminServer.lifecycle.delete.confirmTitle'),
+    message: force
+      ? t('adminServer.lifecycle.delete.forceConfirmMessage', { name: serverName.value })
+      : t('adminServer.lifecycle.delete.confirmMessage', { name: serverName.value }),
+    confirmText: force
+      ? t('adminServer.lifecycle.delete.forceAction')
+      : t('adminServer.lifecycle.delete.action'),
+    variant: 'danger',
+  })
+  if (!ok) return
   deleteSubmitting.value = true
   try {
-    const query = deleteForce.value ? '?force=true' : ''
+    const query = force ? '?force=true' : ''
     const res = await del<{ message: string }>(`/api/admin/servers/${serverId.value}${query}`)
     if (!res) return
-    toast(res.message, deleteForce.value ? 'warning' : 'success')
-    deleteModalOpen.value = false
+    toast(res.message, force ? 'warning' : 'success')
     router.push({ name: 'servers' })
   } finally {
     deleteSubmitting.value = false
@@ -283,26 +280,6 @@ async function onPlanModalConfirmed(planId: number | null) {
       </div>
     </BaseCard>
 
-    <BaseModal v-model="deleteModalOpen" :title="deleteForce ? t('adminServer.lifecycle.delete.forceModalTitle') : t('adminServer.lifecycle.delete.modalTitle')" icon="warning" size="sm" tone="danger">
-      <div class="delete-modal">
-        <p class="delete-message">
-          {{ deleteForce ? t('adminServer.lifecycle.delete.forceConfirmMessage', { name: serverName }) : t('adminServer.lifecycle.delete.confirmMessage', { name: serverName }) }}
-        </p>
-        <FormField :label="t('adminServer.lifecycle.delete.inputLabel', { name: serverName })" layout="vertical">
-          <BaseInput v-model="deleteConfirmName" :placeholder="serverName" />
-        </FormField>
-        <FormField v-if="deleteForce" :label="t('adminServer.lifecycle.delete.forceAcknowledge')" layout="horizontal">
-          <ToggleSwitch v-model="deleteAcknowledge" size="sm" />
-        </FormField>
-      </div>
-      <template #footer>
-        <BaseButton @click="deleteModalOpen = false">{{ t('common.btn.cancel') }}</BaseButton>
-        <BaseButton variant="danger" :disabled="!canSubmitDelete" :loading="deleteSubmitting" @click="doDelete">
-          {{ deleteForce ? t('adminServer.lifecycle.delete.forceAction') : t('adminServer.lifecycle.delete.action') }}
-        </BaseButton>
-      </template>
-    </BaseModal>
-
     <PlanChangeModal
       v-model="planModalOpen"
       :server-name="serverName"
@@ -415,18 +392,6 @@ async function onPlanModalConfirmed(planId: number | null) {
 .plan-current__value--none {
   color: var(--t3);
   font-weight: 400;
-}
-
-.delete-modal {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-
-.delete-message {
-  margin: 0;
-  color: var(--t1);
-  line-height: 1.6;
 }
 
 @media (max-width: 768px) {
