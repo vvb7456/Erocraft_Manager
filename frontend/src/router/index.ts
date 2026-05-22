@@ -283,4 +283,47 @@ router.beforeEach(async (to) => {
   return true
 })
 
+/**
+ * Handle stale chunk errors after a new frontend release is deployed.
+ *
+ * After an atomic deploy, the previously loaded `main-*.js` references
+ * lazy-loaded chunks by their old hash (e.g. `CertificatesPage-su0P1jZw.js`).
+ * Those filenames no longer exist in the new release directory; nginx's SPA
+ * fallback then returns `index.html` with `Content-Type: text/html`, which the
+ * browser refuses to execute as a module ("Failed to fetch dynamically
+ * imported module" / "Expected a JavaScript-or-Wasm module script but the
+ * server responded with a MIME type of text/html").
+ *
+ * Reload the page so the freshly fetched `index.html` pulls in the new
+ * `main-*.js` and the matching chunk hashes. The hash route is preserved
+ * across reload, so the user lands on the same destination automatically.
+ *
+ * We guard against reload loops with a sessionStorage marker that is cleared
+ * once a navigation succeeds.
+ */
+const CHUNK_RELOAD_KEY = 'erocraft:chunk-reload-at'
+const CHUNK_ERROR_RE = /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Failed to load module script/i
+
+router.onError((err) => {
+  const msg = String((err as Error)?.message ?? err ?? '')
+  if (!CHUNK_ERROR_RE.test(msg)) return
+  try {
+    const last = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) || '0')
+    // Prevent reload storm: if we already reloaded within the last 10s, give up.
+    if (Date.now() - last < 10_000) return
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()))
+  } catch {
+    /* sessionStorage unavailable — fall through and reload anyway */
+  }
+  window.location.reload()
+})
+
+router.afterEach(() => {
+  try {
+    sessionStorage.removeItem(CHUNK_RELOAD_KEY)
+  } catch {
+    /* ignore */
+  }
+})
+
 export default router
