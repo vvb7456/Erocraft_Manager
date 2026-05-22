@@ -4,7 +4,13 @@
 
 REPO="${EROCRAFT_REPO:-vvb7456/Erocraft_Manager}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
-GITHUB_API="https://api.github.com"
+
+# 当 GitHub 直连受限时，可改走镜像站：
+#   GITHUB_API          — releases JSON API 入口（默认 api.github.com）
+#   GITHUB_DL_PREFIX    — 拼接在最终下载 URL 之前的前缀（如 https://ghfast.top/）
+# 例：export GITHUB_API=https://api.kkgithub.com GITHUB_DL_PREFIX=https://ghfast.top/
+GITHUB_API="${GITHUB_API:-https://api.github.com}"
+GITHUB_DL_PREFIX="${GITHUB_DL_PREFIX:-}"
 
 # 用法: gh_download <name-regex> <tag> <dest-file>
 gh_download() {
@@ -20,6 +26,9 @@ gh_download() {
     echo "❌ asset matching /$pattern/ not found in release $tag" >&2
     return 1
   fi
+
+  # 通过镜像前缀加速 release 下载（ghfast / ghproxy / gh-proxy 等同款代理）。
+  [[ -n "$GITHUB_DL_PREFIX" ]] && url="${GITHUB_DL_PREFIX%/}/${url}"
 
   curl -fsSL "${auth[@]}" -o "$dest" "$url"
 }
