@@ -72,6 +72,11 @@ async function save(): Promise<boolean> {
     toast(t('adminServer.settings.owner.warning', { msg: body.warning }), 'warning')
   }
   await reload()
+  // The detail watcher skips re-sync while isDirty is true to avoid
+  // stomping unsaved edits, so we must reset the baseline explicitly
+  // after a successful save — otherwise DirtyBar stays visible and the
+  // leave-guard prompt fires.
+  syncFromDetail()
   return true
 }
 

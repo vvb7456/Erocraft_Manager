@@ -137,6 +137,12 @@ async function save(): Promise<boolean> {
     if (!res) return false
     toast(t('hosts.setting.saved'), 'success')
     await reloadHost()
+    // The host watcher skips re-sync while isDirty is true to avoid
+    // stomping unsaved edits, so we must reset the baseline explicitly
+    // after a successful save — otherwise DirtyBar stays visible and the
+    // leave-guard prompt fires.
+    syncFromHost()
+    newToken.value = null
     return true
   } finally {
     submitting.value = false
