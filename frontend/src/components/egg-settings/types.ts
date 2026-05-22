@@ -27,4 +27,12 @@ export interface EggSettingsExpose {
   save(): Promise<boolean>
   /** Discard unsaved changes, revert to last-saved state. */
   discard(): void
+  /**
+   * Optional list of short, already-localised validation error labels.
+   * The parent feeds this directly into the DirtyBar `errors` prop, which
+   * (a) disables the Save button and (b) renders the strings as chips.
+   * Vue template refs auto-unwrap the underlying ComputedRef/Ref, so the
+   * declared type here is plain `string[]`.
+   */
+  validationErrors?: string[]
 }

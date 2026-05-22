@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
 from app.api.deps.ownership import get_owned_server
-from app.config.egg_credentials import required_credential_vars
+from app.config.egg_credentials import required_credential_vars, validate_startup_variable
 from app.core.runtime_settings import AUTOMATION_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.time import local_today
@@ -436,7 +436,18 @@ async def update_user_server_startup(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     batch = str(uuid.uuid4()) if len(payload.variables) > 1 else None
+    egg_name = server.egg.name if server.egg else None
     for env_var, value in payload.variables.items():
+        err = validate_startup_variable(egg_name, env_var, value)
+        if err:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "server.startup_variable_invalid",
+                    "variable": env_var,
+                    "message": err,
+                },
+            )
         result = await server_repository.update_startup_variable(
             db,
             server_id=server.id,

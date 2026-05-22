@@ -102,6 +102,19 @@ const canSave = computed(() => {
   return true
 })
 
+// Localised validation error labels surfaced through the DirtyBar. Empty
+// when dirty=false so the bar is hidden anyway.
+const validationErrors = computed<string[]>(() => {
+  if (!isDirty.value) return []
+  const list: string[] = []
+  if (draftEnabled.value && subdomainEmpty.value) {
+    list.push(t('userServers.network.subdomainRequired'))
+  } else if (draftEnabled.value && !subdomainValid.value) {
+    list.push(t('userServers.network.subdomainInvalid'))
+  }
+  return list
+})
+
 const statusBadge = computed(() => {
   const s = tunnel.value?.status
   if (!s) return null
@@ -356,6 +369,7 @@ useDirtyFormSection(
     <DirtyBar
       :dirty="dirtyForm.isDirty.value"
       :saving="dirtyForm.saving.value"
+      :errors="validationErrors"
       @save="handleSaveClick"
       @discard="dirtyForm.discard"
     />

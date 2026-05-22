@@ -24,7 +24,6 @@ import { useToast } from '@/composables/useToast'
 import { provideDirtyForm } from '@/composables/useDirtyForm'
 import DirtyBar from '@/components/ui/DirtyBar.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
-import MsIcon from '@/components/ui/MsIcon.vue'
 import SectionDetails from './settings/SectionDetails.vue'
 import SectionOwner from './settings/SectionOwner.vue'
 import SectionBuild from './settings/SectionBuild.vue'
@@ -82,22 +81,14 @@ async function onSave() {
     <DirtyBar
       :dirty="dirtyForm.isDirty.value"
       :saving="dirtyForm.saving.value"
+      :errors="validationErrors"
+      :errors-label="validationErrors.length > 0 ? t('adminServer.settings.invalidHint', { n: validationErrors.length }) : undefined"
       :hint="t('adminServer.settings.unsavedHint')"
       :save-text="t('adminServer.settings.saveBtn')"
       :discard-text="t('adminServer.settings.discardBtn')"
       @save="onSave"
       @discard="dirtyForm.discard"
-    >
-      <template v-if="validationErrors.length > 0" #hint>
-        <span class="va-hint">
-          <MsIcon name="error" size="sm" />
-          {{ t('adminServer.settings.invalidHint', { n: validationErrors.length }) }}
-        </span>
-      </template>
-      <template v-if="validationErrors.length > 0" #extra>
-        <span v-for="(e, i) in validationErrors" :key="i" class="va-chip">{{ e }}</span>
-      </template>
-    </DirtyBar>
+    />
   </div>
 </template>
 
@@ -111,7 +102,4 @@ async function onSave() {
 .settings-panel > * + * {
   margin-top: var(--sp-5);
 }
-.va-hint { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--red); font-size: var(--text-sm); font-weight: 500; }
-.va-chip { font-size: var(--text-xs); color: var(--t2); white-space: nowrap; }
-.va-chip + .va-chip::before { content: ' · '; color: var(--t3); }
 </style>

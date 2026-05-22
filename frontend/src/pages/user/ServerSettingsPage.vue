@@ -136,6 +136,7 @@ async function onBarSave() {
   <DirtyBar
     :dirty="dirtyForm.isDirty.value"
     :saving="dirtyForm.saving.value"
+    :errors="childRef?.validationErrors ?? []"
     :hint="t('serverSettings.unsavedHint')"
     :save-text="t('serverSettings.saveBtn')"
     :discard-text="t('serverSettings.discardBtn')"

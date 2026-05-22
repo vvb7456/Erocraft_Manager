@@ -16,7 +16,6 @@ import SecretInput from '@/components/ui/SecretInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import HelpTip from '@/components/ui/HelpTip.vue'
-import MsIcon from '@/components/ui/MsIcon.vue'
 import FormField from '@/components/form/FormField.vue'
 import Badge from '@/components/ui/Badge.vue'
 import DirtyBar from '@/components/ui/DirtyBar.vue'
@@ -614,23 +613,18 @@ async function onTabChange(next: string) {
     </template>
   </div>
 
-  <!-- Floating dirty bar: appears whenever there are unsaved changes
-       on any non-account tab. When validation fails, the bar switches
-       to error-list mode (stack layout) — the user must either fix the
-       issues or discard. No ambiguous save button in that state. -->
+  <!-- Floating dirty bar: appears whenever there are unsaved changes on any
+       non-account tab. DirtyBar itself renders the red hint and disables
+       Save when `errors` is non-empty; we override #extra to make each chip
+       clickable so the user can jump to the offending tab. -->
   <DirtyBar
     :dirty="dirtyForm.isDirty.value"
     :saving="saveLoading"
+    :errors="errors.map(e => `${tabLabel(e.tab)}: ${e.label}`)"
     confirm-before-unload
     @save="saveAll"
     @discard="discardChanges"
   >
-    <template v-if="hasErrors" #hint>
-      <span class="db-err-hint">
-        <MsIcon name="error" />
-        {{ t('settings.validate.header', { n: errors.length }) }}
-      </span>
-    </template>
     <template v-if="hasErrors" #extra>
       <span
         v-for="(e, i) in errors" :key="i"
@@ -685,8 +679,7 @@ async function onTabChange(next: string) {
   margin-right: auto;
 }
 
-/* Validation error chips in DirtyBar */
-.db-err-hint { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--red); font-size: var(--text-sm); font-weight: 500; }
+/* Validation error chips in DirtyBar (clickable tab-switcher) */
 .db-err-chip {
   display: inline-flex; align-items: center; gap: var(--sp-1);
   font-size: var(--text-xs); cursor: pointer; white-space: nowrap;

@@ -58,6 +58,22 @@ const passwordError = computed(() => {
 })
 const passwordValid = computed(() => !passwordError.value)
 
+// Username validation (basic auth mode only). Requiring at least one letter
+// avoids YAML type-coercion in /home/container/config.yaml: a purely numeric
+// username like `123456` is parsed as integer by Wings' yaml writer, and ST's
+// strict `===` compare against the string from the HTTP Basic header always
+// fails -> infinite 401 loop.
+const usernameError = computed(() => {
+  if (isMultiUser.value) return ''
+  const u = username.value
+  if (!u) return t('serverSettings.usernameRequired')
+  if (/\s/.test(u)) return t('serverSettings.usernameNoSpaces')
+  if (u.includes(':')) return t('serverSettings.usernameNoColon')
+  if (!/[a-zA-Z]/.test(u)) return t('serverSettings.usernameNeedLetter')
+  return ''
+})
+const usernameValid = computed(() => !usernameError.value)
+
 // GitHub tags only — release/staging are reachable via the dedicated
 // "更新到最新 release" button, no need to mix them into the version dropdown.
 const branches = ref<SelectOption[]>([])
@@ -130,6 +146,10 @@ onMounted(fetchBranches)
 
 /** Save startup variables (no confirmation / no restart). Returns true on success. */
 async function save(): Promise<boolean> {
+  if (!usernameValid.value) {
+    toast(usernameError.value, 'warning')
+    return false
+  }
   if (!passwordValid.value) {
     toast(passwordError.value, 'warning')
     return false
@@ -236,7 +256,16 @@ async function doReinstall() {
   }
 }
 
-defineExpose<EggSettingsExpose>({ save, discard })
+// Short, already-localised error labels for the parent DirtyBar. Reactive;
+// auto-unwraps to string[] when accessed via a template ref.
+const validationErrors = computed<string[]>(() =>
+  [usernameError.value, passwordError.value].filter((s): s is string => !!s),
+)
+
+// Drop the generic on defineExpose: the EggSettingsExpose contract declares
+// `validationErrors?: string[]` (Vue template refs auto-unwrap), but we pass
+// the underlying ComputedRef here so reactivity survives the boundary.
+defineExpose({ save, discard, validationErrors })
 </script>
 
 <template>
@@ -273,7 +302,11 @@ defineExpose<EggSettingsExpose>({ save, discard })
         </template>
       </FormField>
 
-      <FormField :label="t('serverSettings.username')" layout="horizontal">
+      <FormField
+        :label="t('serverSettings.username')"
+        layout="horizontal"
+        :error="!isMultiUser && username ? usernameError : ''"
+      >
         <BaseInput
           v-if="!isMultiUser"
           v-model="username"
