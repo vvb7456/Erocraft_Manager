@@ -502,6 +502,14 @@ async def _raise_or_skip(
     config: HostAlertConfig | None = None,
     host_name: str = "",
 ) -> None:
+    # Per-host rule gate: if this alert type is disabled, do not create a new
+    # row, and clear any open rows so the UI matches the admin's intent.
+    # Notifications for the implicit resolution are suppressed (config=None)
+    # because the disable itself is the resolution.
+    if config is not None and not config.type_enabled(alert_type):
+        await _auto_resolve(db, host_id, alert_type, now, config=None, host_name=host_name)
+        return
+
     existing = await db.execute(
         select(HostAlert).where(
             HostAlert.host_id == host_id,
