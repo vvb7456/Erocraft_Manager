@@ -884,7 +884,4 @@ onUnmounted(() => {
   .host-grid { grid-template-columns: 1fr; }
   .trends-grid { grid-template-columns: 1fr; }
 }
-@media (max-width: 560px) {
-  .kpi-row { grid-template-columns: 1fr; }
-}
 </style>
