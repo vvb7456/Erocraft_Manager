@@ -203,7 +203,9 @@ const totalHostCount = computed(() => monitoring.value?.nodes?.length ?? 0)
 const totalsForKpi = computed(() => {
   const d = data.value?.statusDistribution
   if (!d) return null
-  return { normal: d.normal, expiringSoon: d.expiring_soon, expired: d.expired }
+  // 「正常服务器」= 未过期且用户可操作（排除 expired 与 suspended）
+  // suspended 与到期分桶重叠，无法准确减去；当前后端未提供剖分。
+  return { normalOperable: d.normal + d.expiring_soon + d.permanent }
 })
 
 /* ── Donut option ── */
@@ -354,9 +356,7 @@ onUnmounted(() => {
           :label="t('dashboard.kpi.servers')"
           :value="data.totalServers"
           :sub-items="totalsForKpi ? [
-            { label: t('dashboard.status.normal'), value: totalsForKpi.normal, tone: 'green' },
-            { label: t('dashboard.status.expiringSoon'), value: totalsForKpi.expiringSoon, tone: totalsForKpi.expiringSoon > 0 ? 'amber' : 'default' },
-            { label: t('dashboard.status.expired'), value: totalsForKpi.expired, tone: totalsForKpi.expired > 0 ? 'red' : 'default' },
+            { label: t('dashboard.status.normal'), value: totalsForKpi.normalOperable, tone: 'green' },
           ] : []"
         />
         <KpiTile

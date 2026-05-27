@@ -166,7 +166,7 @@ const serverStats = computed(() => {
   const list = rawServers.value
   return {
     total: list.length,
-    normal: list.filter(s => !s.isSuspended && (s.statusLabel === 'normal' || s.statusLabel === 'permanent')).length,
+    normal: list.filter(s => !s.isSuspended && (s.statusLabel === 'normal' || s.statusLabel === 'expiring_soon' || s.statusLabel === 'permanent')).length,
     expiring: list.filter(s => s.statusLabel === 'expiring_soon').length,
     suspended: list.filter(s => s.isSuspended).length,
   }
