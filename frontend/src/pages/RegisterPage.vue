@@ -244,19 +244,21 @@ async function handleSubmit() {
       </FormField>
 
       <FormField :label="t('billing.register.inviteCodeLabel')">
+        <template #label-right>
+          <span v-if="inviteState !== 'idle'" class="invite-hint" :class="`invite-${inviteState}`">
+            <Spinner v-if="inviteState === 'checking'" size="sm" />
+            <MsIcon v-else-if="inviteState === 'valid'" name="check_circle" size="sm" />
+            <MsIcon v-else name="error" size="sm" />
+            <span v-if="inviteState === 'valid'">{{ t('billing.register.inviteValid') }}</span>
+            <span v-else-if="inviteState === 'invalid'">{{ t('billing.register.inviteInvalid') }}</span>
+          </span>
+        </template>
         <BaseInput
           v-model="inviteCode"
           :placeholder="t('billing.register.inviteCodePlaceholder')"
           autocomplete="off"
           @input="inviteCode = inviteCode.toUpperCase()"
         />
-        <div v-if="inviteState !== 'idle'" class="invite-hint" :class="`invite-${inviteState}`">
-          <Spinner v-if="inviteState === 'checking'" size="sm" />
-          <MsIcon v-else-if="inviteState === 'valid'" name="check_circle" size="sm" />
-          <MsIcon v-else name="error" size="sm" />
-          <span v-if="inviteState === 'valid'">{{ t('billing.register.inviteValid') }}</span>
-          <span v-else-if="inviteState === 'invalid'">{{ t('billing.register.inviteInvalid') }}</span>
-        </div>
       </FormField>
     </template>
 
@@ -306,10 +308,9 @@ async function handleSubmit() {
 }
 
 .invite-hint {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
-  margin-top: var(--sp-1);
   font-size: .78rem;
   color: var(--t3);
 }
