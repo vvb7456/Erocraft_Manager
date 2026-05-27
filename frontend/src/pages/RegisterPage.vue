@@ -112,12 +112,12 @@ watch(inviteCode, (value) => {
   inviteTimer = setTimeout(async () => {
     inviteAbort = new AbortController()
     try {
-      const res = await fetch(`/api/public/invite/${encodeURIComponent(code)}/info`, {
+      const res = await fetch(`/api/public/invite/check?code=${encodeURIComponent(code)}`, {
         signal: inviteAbort.signal,
       })
-      // The probe endpoint replies 200 for valid codes and 404 for
-      // unknown ones; treat any non-2xx as invalid.
-      inviteState.value = res.ok ? 'valid' : 'invalid'
+      if (!res.ok) { inviteState.value = 'invalid'; return }
+      const data = await res.json().catch(() => null) as { valid?: boolean } | null
+      inviteState.value = data?.valid ? 'valid' : 'invalid'
     } catch (err) {
       if ((err as DOMException)?.name === 'AbortError') return
       inviteState.value = 'invalid'
@@ -306,7 +306,7 @@ async function handleSubmit() {
 }
 
 .invite-hint {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--sp-1);
   margin-top: var(--sp-1);
