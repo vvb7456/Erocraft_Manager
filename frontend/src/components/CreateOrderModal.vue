@@ -624,7 +624,7 @@ function onCancel() {
           />
           <p v-else class="coupon-empty">
             {{ t('billing.coupons.applyEmpty') }}
-            <RouterLink class="coupon-invite-link" :to="{ path: '/orders', query: { tab: 'invite' } }">
+            <RouterLink class="coupon-invite-link" :to="{ name: 'user-promotions' }">
               {{ t('billing.coupons.inviteEntry') }} — {{ t('billing.coupons.inviteEntryLink') }}
             </RouterLink>
           </p>

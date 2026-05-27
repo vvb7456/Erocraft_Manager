@@ -17,6 +17,7 @@
     "copy": "复制",
     "show": "显示",
     "hide": "隐藏",
+    "collapse": "收起",
     "logout": "登出"
   },
   "sidebar": {

@@ -161,6 +161,14 @@ onMounted(loadPlans)
           />
         </div>
       </section>
+      <div class="plans-page__support">
+        <span class="support-hint">
+          {{ t('billing.plans.supportHint') }}
+          <a href="#" class="support-link" @click.prevent="supportOpen = true">
+            {{ t('billing.plans.supportLink') }}
+          </a>
+        </span>
+      </div>
     </template>
 
     <CreateOrderModal
@@ -195,6 +203,30 @@ onMounted(loadPlans)
 
 .plans-page__group + .plans-page__group {
   margin-top: var(--sp-8);
+}
+
+.plans-page__support {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--sp-5);
+}
+
+.support-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--text-sm);
+  color: var(--t2);
+}
+
+.support-link {
+  color: var(--ac);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.support-link:hover {
+  text-decoration: underline;
 }
 
 .plans-grid {

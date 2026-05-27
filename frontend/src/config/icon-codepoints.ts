@@ -129,6 +129,7 @@ export const ICON_CODEPOINTS: Record<string, string> = {
   'push_pin': '\uf10d',
   'qr_code_2': '\ue00a',
   'receipt_long': '\uef6e',
+  'redeem': '\ue8f6',
   'refresh': '\ue5d5',
   'restart_alt': '\uf053',
   'rule': '\uf1c2',

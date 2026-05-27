@@ -11,7 +11,9 @@
     "resCpu": "{n} vCPU",
     "resMemory": "{n} GB RAM",
     "resDisk": "{n} GB Storage",
-    "buyNow": "Buy now"
+    "buyNow": "Buy now",
+    "supportHint": "Need help?",
+    "supportLink": "Contact support"
   },
   "cashier": {
     "title": "Confirm Order",
@@ -533,8 +535,7 @@
     "daysLeft": "{days} d left",
     "copyCode": "Copy code",
     "statusFilterLabel": "Status",
-    "totalCount": "{n} coupons",
-    "tabs": {
+    "totalCount": "{n} coupons",    "showAll": "Show all {n}",    "tabs": {
       "unused": "Available",
       "used": "Used",
       "expired": "Expired"

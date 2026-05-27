@@ -17,6 +17,7 @@
     "copy": "Copy",
     "show": "Show",
     "hide": "Hide",
+    "collapse": "Collapse",
     "logout": "Logout"
   },
   "sidebar": {

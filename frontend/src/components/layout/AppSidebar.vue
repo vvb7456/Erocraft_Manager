@@ -140,6 +140,15 @@ function openTutorial() {
         </button>
 
         <button
+          class="nav-item"
+          :class="{ active: currentPage === 'user-promotions' }"
+          @click="navTo({ page: 'user-promotions', icon: 'redeem', labelKey: 'nav.promotions' })"
+        >
+          <span class="icon"><MsIcon name="redeem" size="md" /></span>
+          <span class="nav-label">{{ t('nav.promotions') }}</span>
+        </button>
+
+        <button
           v-if="app.tutorialUrl"
           class="nav-item"
           @click="openTutorial"

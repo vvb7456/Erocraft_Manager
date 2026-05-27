@@ -11,7 +11,9 @@
     "resCpu": "{n} 核 CPU",
     "resMemory": "{n} GB 内存",
     "resDisk": "{n} GB 存储",
-    "buyNow": "立即购买"
+    "buyNow": "立即购买",
+    "supportHint": "需要帮助？",
+    "supportLink": "联系客服"
   },
   "cashier": {
     "title": "确认订单",
@@ -534,6 +536,7 @@
     "copyCode": "复制代码",
     "statusFilterLabel": "状态",
     "totalCount": "共 {n} 张",
+    "showAll": "查看全部 {n} 张",
     "tabs": {
       "unused": "未使用",
       "used": "已使用",

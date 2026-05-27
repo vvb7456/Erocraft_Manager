@@ -678,6 +678,18 @@ function openMobileAction(s: Server) {
   white-space: nowrap;
 }
 
+@media (max-width: 768px) {
+  .scope-switch {
+    justify-content: space-between;
+    width: 100%;
+  }
+  /* SectionToolbar 移动端会让 .tb-btn-group > * 平分行宽，
+     此处取消该行为，让 label 自适应、Switch 贴右。 */
+  .scope-switch > * {
+    flex: 0 0 auto;
+  }
+}
+
 /* ── Table columns ── */
 .col-check { width: 1%; text-align: center !important; vertical-align: middle; }
 .col-dot { width: 1%; text-align: center !important; vertical-align: middle; }
