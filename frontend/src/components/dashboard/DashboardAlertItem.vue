@@ -6,12 +6,16 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 defineOptions({ name: 'DashboardAlertItem' })
 
 const props = defineProps<{
+  id?: number
   alertType: string
   severity: string
   message?: string | null
   hostName?: string | null
   createdAt: string
+  resolving?: boolean
 }>()
+
+const emit = defineEmits<{ (e: 'resolve'): void }>()
 
 const { t, te } = useI18n({ useScope: 'global' })
 
@@ -47,6 +51,17 @@ const severityClass = computed(() => `sev-${props.severity}`)
         <span v-if="message" class="msg" :title="message">{{ message }}</span>
       </div>
     </div>
+    <button
+      v-if="id != null"
+      type="button"
+      class="resolve-btn"
+      :disabled="resolving"
+      :title="t('dashboard.alerts.resolve')"
+      :aria-label="t('dashboard.alerts.resolve')"
+      @click.stop="emit('resolve')"
+    >
+      <MsIcon name="close" size="xs" />
+    </button>
   </div>
 </template>
 
@@ -120,5 +135,29 @@ const severityClass = computed(() => `sev-${props.severity}`)
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
+}
+.resolve-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--t3);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  align-self: center;
+}
+.resolve-btn:hover:not(:disabled) {
+  background: var(--bg4);
+  color: var(--red);
+  border-color: var(--bd);
+}
+.resolve-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

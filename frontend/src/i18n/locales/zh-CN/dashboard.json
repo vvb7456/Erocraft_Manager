@@ -24,7 +24,7 @@
   "section": {
     "infrastructure": "基础设施",
     "alerts": "实时告警",
-    "expiring": "即将到期 (14 天内)",
+    "expiring": "即将到期 (7 天内)",
     "activity": "近期活动",
     "trends": "集群趋势"
   },
@@ -33,9 +33,15 @@
   },
   "empty": {
     "alerts": "一切正常",
-    "expiring": "近 14 天无到期实例",
+    "expiring": "近 7 天无到期实例",
     "activity": "暂无活动记录",
     "trends": "暂无趋势数据"
+  },
+  "alerts": {
+    "resolve": "清除该告警",
+    "confirmTitle": "清除告警",
+    "confirmMessage": "是否清除该告警？",
+    "resolveFailed": "清除告警失败"
   },
   "host": {
     "add": "添加主机",

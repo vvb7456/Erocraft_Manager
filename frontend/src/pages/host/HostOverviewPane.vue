@@ -10,17 +10,21 @@
 import { computed, inject, onBeforeUnmount, onMounted, type Ref, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
+import { useConfirm } from '@/composables/useConfirm'
+import { useToast } from '@/composables/useToast'
 import BaseCard from '@/components/ui/BaseCard.vue'
-import AlertBanner from '@/components/ui/AlertBanner.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import HostStatusPanel from '@/components/hosts/HostStatusPanel.vue'
+import DashboardAlertItem from '@/components/dashboard/DashboardAlertItem.vue'
 import type { HostDetail } from '@/types/host'
 
 defineOptions({ name: 'HostOverviewPane' })
 
 const { t, locale } = useI18n({ useScope: 'global' })
 const host = inject<Ref<HostDetail | null>>('hostDetail')!
-const { get } = useApiFetch()
+const { get, post } = useApiFetch()
+const { confirm } = useConfirm()
+const { toast } = useToast()
 
 interface AlertItem {
   id: number
@@ -53,10 +57,25 @@ const activeAlerts = computed(() => {
   return alerts.value.filter(a => a.hostId === hid)
 })
 
-function severityTone(s: string): 'info' | 'warning' | 'danger' {
-  if (s === 'critical') return 'danger'
-  if (s === 'warning') return 'warning'
-  return 'info'
+const resolvingAlertIds = ref<Set<number>>(new Set())
+async function handleResolveAlert(alertId: number) {
+  const ok = await confirm({
+    title: t('dashboard.alerts.confirmTitle'),
+    message: t('dashboard.alerts.confirmMessage'),
+    variant: 'danger',
+  })
+  if (!ok) return
+  resolvingAlertIds.value.add(alertId)
+  try {
+    const res = await post(`/api/admin/monitoring/alerts/${alertId}/resolve`)
+    if (res !== null) {
+      alerts.value = alerts.value.filter(a => a.id !== alertId)
+    } else {
+      toast(t('dashboard.alerts.resolveFailed'), 'error')
+    }
+  } finally {
+    resolvingAlertIds.value.delete(alertId)
+  }
 }
 
 function fmtDate(iso: string | null): string {
@@ -122,16 +141,17 @@ const enabledLabel = computed(() => {
     <BaseCard variant="bg2">
       <h3 class="section-title">{{ t('hosts.overview.activeAlerts') }}</h3>
       <div v-if="activeAlerts.length" class="alert-stack">
-        <AlertBanner
+        <DashboardAlertItem
           v-for="a in activeAlerts"
           :key="a.id"
-          :tone="severityTone(a.severity)"
-          dense
-        >
-          <strong>{{ a.alertType }}</strong>
-          <span v-if="a.message"> — {{ a.message }}</span>
-          <span class="alert-ts"> · {{ fmtDate(a.createdAt) }}</span>
-        </AlertBanner>
+          :id="a.id"
+          :alert-type="a.alertType"
+          :severity="a.severity"
+          :message="a.message"
+          :created-at="a.createdAt"
+          :resolving="resolvingAlertIds.has(a.id)"
+          @resolve="handleResolveAlert(a.id)"
+        />
       </div>
       <EmptyState
         v-else
@@ -203,11 +223,6 @@ const enabledLabel = computed(() => {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-}
-.alert-ts {
-  color: var(--t3);
-  font-size: var(--text-xs);
-  margin-left: var(--sp-1);
 }
 
 @media (max-width: 720px) {

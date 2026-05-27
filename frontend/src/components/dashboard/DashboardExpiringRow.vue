@@ -40,7 +40,7 @@ function navigate() {
 <template>
   <div class="exp-row" role="button" tabindex="0" @click="navigate" @keyup.enter="navigate">
     <span class="days" :class="`tone-${tone}`">
-      <span class="num">{{ daysLeft }}</span><span class="unit">{{ t('dashboard.expiring.daysUnit') }}</span>
+      <span class="num">{{ Math.max(daysLeft, 0) }}</span><span class="unit">{{ t('dashboard.expiring.daysUnit') }}</span>
     </span>
     <span class="name" :title="name">{{ name }}</span>
     <span v-if="expiresShort" class="exp-date" :title="expiresAt || ''">
@@ -138,5 +138,10 @@ function navigate() {
   color: var(--red);
   font-weight: 600;
   flex-shrink: 0;
+}
+
+/* 移动端隐藏节点信息，避免折行或溢出 */
+@media (max-width: 768px) {
+  .exp-row .node { display: none; }
 }
 </style>

@@ -2,6 +2,8 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
+import { useConfirm } from '@/composables/useConfirm'
+import { useToast } from '@/composables/useToast'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { PieChart } from 'echarts/charts'
@@ -34,6 +36,8 @@ const MAX_PINNED = 4
 const PIN_STORAGE_KEY = 'erocraft.dashboard.pinnedHostIds'
 
 const { t } = useI18n({ useScope: 'global' })
+const { confirm } = useConfirm()
+const { toast } = useToast()
 const dashboardApi = useApiFetch()
 const monitoringApi = useApiFetch()
 const alertsApi = useApiFetch()
@@ -295,6 +299,27 @@ async function loadActivity() {
   if (!alive) return
   if (res?.logs) activity.value = res.logs
 }
+
+const resolvingAlertIds = ref<Set<number>>(new Set())
+async function handleResolveAlert(alertId: number) {
+  const ok = await confirm({
+    title: t('dashboard.alerts.confirmTitle'),
+    message: t('dashboard.alerts.confirmMessage'),
+    variant: 'danger',
+  })
+  if (!ok) return
+  resolvingAlertIds.value.add(alertId)
+  try {
+    const res = await alertsApi.post(`/api/admin/monitoring/alerts/${alertId}/resolve`)
+    if (res !== null) {
+      alerts.value = alerts.value.filter(a => a.id !== alertId)
+    } else {
+      toast(t('dashboard.alerts.resolveFailed'), 'error')
+    }
+  } finally {
+    resolvingAlertIds.value.delete(alertId)
+  }
+}
 async function refreshLive() {
   await Promise.all([loadDashboard(), loadMonitoring(), loadAlerts(), loadActivity()])
 }
@@ -519,11 +544,14 @@ onUnmounted(() => {
               <DashboardAlertItem
                 v-for="a in alerts"
                 :key="a.id"
+                :id="a.id"
                 :alert-type="a.alertType"
                 :severity="a.severity"
                 :message="a.message"
                 :host-name="a.hostId ? hostsByName[a.hostId] : null"
                 :created-at="a.createdAt"
+                :resolving="resolvingAlertIds.has(a.id)"
+                @resolve="handleResolveAlert(a.id)"
               />
             </div>
             <div v-else class="empty-inline empty-inline--ok">

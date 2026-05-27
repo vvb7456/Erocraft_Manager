@@ -24,7 +24,7 @@
   "section": {
     "infrastructure": "Infrastructure",
     "alerts": "Active Alerts",
-    "expiring": "Expiring within 14 days",
+    "expiring": "Expiring within 7 days",
     "activity": "Recent Activity",
     "trends": "Cluster Trends"
   },
@@ -33,9 +33,15 @@
   },
   "empty": {
     "alerts": "All systems normal",
-    "expiring": "No expirations in the next 14 days",
+    "expiring": "No expirations in the next 7 days",
     "activity": "No recent activity",
     "trends": "No trend data"
+  },
+  "alerts": {
+    "resolve": "Clear this alert",
+    "confirmTitle": "Clear alert",
+    "confirmMessage": "Clear this alert?",
+    "resolveFailed": "Failed to clear alert"
   },
   "host": {
     "add": "Add host",
