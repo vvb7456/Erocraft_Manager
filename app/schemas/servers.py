@@ -48,7 +48,10 @@ class CreateServerRequest(BaseModel):
 
 
 class RenewServerRequest(BaseModel):
-    date: str
+    # `date` may be null/None to clear the expiration date (i.e. set the
+    # server to “permanent”). Existing callers continue to pass a
+    # YYYY-MM-DD string for the extend / renew flow.
+    date: str | None = None
 
 
 class UpdateServerRequest(BaseModel):

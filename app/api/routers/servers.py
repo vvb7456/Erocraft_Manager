@@ -117,7 +117,7 @@ async def _apply_plan_change(
     return old_plan, new_plan
 
 
-async def _set_meta_expiration(db: AsyncSession, server_id: int, expiration_date: date) -> None:
+async def _set_meta_expiration(db: AsyncSession, server_id: int, expiration_date: date | None) -> None:
     values = {"server_id": server_id, "expiration_date": expiration_date}
     dialect_name = (await db.connection()).dialect.name
 
@@ -151,7 +151,7 @@ async def _persist_expiration_after_remote(
     db: AsyncSession,
     *,
     server_id: int,
-    new_date: date,
+    new_date: date | None,
     old_date: date | None,
     resuspend_on_failure: bool = False,
 ) -> None:
@@ -371,16 +371,24 @@ async def renew_server(
     server_name = server.name
     was_suspended = server.is_suspended
     old_expiration_date = server.expiration_date
-    try:
-        new_date = date.fromisoformat(payload.date)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="日期格式无效，请使用 YYYY-MM-DD") from exc
+
+    raw_date = payload.date.strip() if isinstance(payload.date, str) else payload.date
+    new_date: date | None
+    if not raw_date:
+        # Clear expiration → server becomes "permanent". Do not auto-unsuspend
+        # (suspended-for-other-reasons must remain suspended; admin decides).
+        new_date = None
+    else:
+        try:
+            new_date = date.fromisoformat(raw_date)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="日期格式无效，请使用 YYYY-MM-DD") from exc
 
     await db.commit()
     try:
         await server_lifecycle.update_server_expiration_description(db, server_id, new_date)
         await db.commit()
-        if was_suspended:
+        if new_date is not None and was_suspended:
             await server_lifecycle.unsuspend_server(db, server_id)
     except LifecycleError as exc:
         await db.rollback()
@@ -391,8 +399,19 @@ async def renew_server(
         server_id=server_id,
         new_date=new_date,
         old_date=old_expiration_date,
-        resuspend_on_failure=was_suspended,
+        resuspend_on_failure=(new_date is not None and was_suspended),
     )
+    if new_date is None:
+        await log_manager_activity(
+            db,
+            actor=actor_username,
+            category="server",
+            status="success",
+            detail_key="set_server_permanent",
+            detail_params={"actor": actor_username, "server_name": server_name, "server_id": server_id},
+        )
+        return MessageResponse(message=f"已将 {server_name} 设为永久")
+
     await log_manager_activity(
         db,
         actor=actor_username,

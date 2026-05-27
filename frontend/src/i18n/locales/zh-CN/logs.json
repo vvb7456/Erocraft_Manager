@@ -64,6 +64,7 @@
     "logout": "用户 {username} 退出登录。",
     "create_server": "管理员 {actor} 创建了服务器 {server_name} (ID: {server_id})。",
     "renew_server": "管理员 {actor} 将服务器 {server_name} (ID: {server_id}) 续期到 {date}。",
+    "set_server_permanent": "管理员 {actor} 将服务器 {server_name} (ID: {server_id}) 设为永久。",
     "set_expiry": "管理员 {actor} 将服务器 {server_name} (ID: {server_id}) 日期设为 {date}。",
     "suspend_server": "管理员 {actor} 冻结了服务器 {server_name} (ID: {server_id})。",
     "unsuspend_server": "管理员 {actor} 解冻了服务器 {server_name} (ID: {server_id})。",

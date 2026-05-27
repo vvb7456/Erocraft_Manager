@@ -189,7 +189,10 @@
       "currentExpiration": "Expiration:",
       "targetDate": "Target date",
       "quickDays": "+{n} days",
-      "action": "Renew server"
+      "action": "Renew server",
+      "clearAction": "Set to permanent",
+      "clearConfirmTitle": "Set to permanent",
+      "clearConfirmMessage": "Target date is empty. Set server {name} to permanent (clear expiration date)?"
     },
     "expiration": {
       "expired": "{date} (expired)",

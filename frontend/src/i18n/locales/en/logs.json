@@ -64,6 +64,7 @@
     "logout": "User {username} logged out.",
     "create_server": "Administrator {actor} created server {server_name} (ID: {server_id}).",
     "renew_server": "Administrator {actor} renewed server {server_name} (ID: {server_id}) to {date}.",
+    "set_server_permanent": "Administrator {actor} set server {server_name} (ID: {server_id}) to permanent.",
     "set_expiry": "Administrator {actor} set server {server_name} (ID: {server_id}) expiration to {date}.",
     "suspend_server": "Administrator {actor} suspended server {server_name} (ID: {server_id}).",
     "unsuspend_server": "Administrator {actor} unsuspended server {server_name} (ID: {server_id}).",

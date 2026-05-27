@@ -111,8 +111,21 @@ async function doToggleSuspend() {
 }
 
 async function doRenew() {
-  if (!server.value || !serverId.value || !renewDate.value) return
-  const res = await post<{ message: string }>(`/api/admin/servers/${serverId.value}/renew`, { date: renewDate.value })
+  if (!server.value || !serverId.value) return
+  const trimmed = renewDate.value?.trim() ?? ''
+  if (!trimmed) {
+    const ok = await confirm({
+      title: t('adminServer.lifecycle.renew.clearConfirmTitle'),
+      message: t('adminServer.lifecycle.renew.clearConfirmMessage', { name: server.value.name }),
+      confirmText: t('adminServer.lifecycle.renew.clearAction'),
+      variant: 'danger',
+    })
+    if (!ok) return
+  }
+  const res = await post<{ message: string }>(
+    `/api/admin/servers/${serverId.value}/renew`,
+    { date: trimmed || null },
+  )
   if (!res) return
   toast(res.message, 'success')
   await reload()

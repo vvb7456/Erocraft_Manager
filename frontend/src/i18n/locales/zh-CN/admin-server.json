@@ -189,7 +189,10 @@
       "currentExpiration": "到期时间：",
       "targetDate": "目标日期",
       "quickDays": "+{n}天",
-      "action": "续期服务器"
+      "action": "续期服务器",
+      "clearAction": "设为永久",
+      "clearConfirmTitle": "设为永久",
+      "clearConfirmMessage": "目标日期为空，确认将服务器 {name} 设为永久（清除到期时间）吗？"
     },
     "expiration": {
       "expired": "{date}（已过期）",
