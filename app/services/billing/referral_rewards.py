@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.runtime_settings import BILLING_SPECS
 from app.core.settings_store import get_settings_store
+from app.services.audit import log_manager_activity
 from app.core.time import utc_naive_now
 from app.db.models.billing import BillingOrder, Coupon, CouponTemplate
 from app.db.models.manager import UserReferral
@@ -140,7 +141,6 @@ async def _try_grant_inner(
         # the lighter-weight operator inbox we already use for similar
         # config-drift signals).
         try:
-            from app.services.audit import log_manager_activity
             await log_manager_activity(
                 db,
                 actor="system",
@@ -208,7 +208,6 @@ async def _try_grant_inner(
     # Surface to ops via activity log so reward issuance is auditable
     # alongside the manual grant/revoke entries.
     try:
-        from app.services.audit import log_manager_activity
         await log_manager_activity(
             db,
             actor="system",

@@ -266,6 +266,15 @@ const statusOptions = ['success', 'failed', 'partial', 'info']
   width: min(320px, 72vw);
 }
 
+@media (max-width: 768px) {
+  .toolbar-start-row {
+    width: 100%;
+  }
+  .logs-filter-input {
+    width: 100%;
+  }
+}
+
 .details-text {
   word-break: break-all;
   color: var(--t2);

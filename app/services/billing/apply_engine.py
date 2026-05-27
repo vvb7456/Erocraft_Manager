@@ -236,24 +236,18 @@ async def apply_paid_order(
             logger.exception(
                 "apply_engine: coupon mark_used failed for order %s", order_id
             )
-            try:
-                from app.services.audit import log_manager_activity
-                await log_manager_activity(
-                    db,
-                    actor="system",
-                    category="billing",
-                    status="failed",
-                    detail_key="billing.coupon.mark_used_failed",
-                    detail_params={
-                        "order_id": order_id,
-                        "coupon_id": order.coupon_id,
-                        "error": str(exc)[:200],
-                    },
-                )
-            except Exception:
-                logger.exception(
-                    "apply_engine: activity log for coupon mark_used_failed failed"
-                )
+            await log_manager_activity(
+                db,
+                actor="system",
+                category="billing",
+                status="failed",
+                detail_key="billing.coupon.mark_used_failed",
+                detail_params={
+                    "order_id": order_id,
+                    "coupon_id": order.coupon_id,
+                    "error": str(exc)[:200],
+                },
+            )
     try:
         from app.services.billing import referral_rewards
 
@@ -263,23 +257,17 @@ async def apply_paid_order(
         logger.exception(
             "apply_engine: referral grant failed for order %s", order_id
         )
-        try:
-            from app.services.audit import log_manager_activity
-            await log_manager_activity(
-                db,
-                actor="system",
-                category="billing",
-                status="failed",
-                detail_key="billing.referral.grant_failed",
-                detail_params={
-                    "order_id": order_id,
-                    "error": str(exc)[:200],
-                },
-            )
-        except Exception:
-            logger.exception(
-                "apply_engine: activity log for referral grant_failed failed"
-            )
+        await log_manager_activity(
+            db,
+            actor="system",
+            category="billing",
+            status="failed",
+            detail_key="billing.referral.grant_failed",
+            detail_params={
+                "order_id": order_id,
+                "error": str(exc)[:200],
+            },
+        )
     return ApplyResult.APPLIED
 
 
