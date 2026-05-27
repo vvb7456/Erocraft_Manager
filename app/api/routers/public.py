@@ -427,7 +427,7 @@ async def register(
     normalized_code: str | None = None
     raw_invite = (payload.invite_code or "").strip().upper() or None
     if raw_invite:
-        candidate_id = await invite_svc.get_by_code(db, raw_invite)
+        candidate_id = await invite_svc.resolve_active_inviter(db, raw_invite)
         if candidate_id is not None:
             inviter_user_id = candidate_id
             normalized_code = raw_invite
@@ -734,7 +734,7 @@ async def check_invite_code(
         return InviteCheckResponse(valid=False)
     from app.services.user import invite_codes as invite_svc
 
-    user_id = await invite_svc.get_by_code(db, normalized)
+    user_id = await invite_svc.resolve_active_inviter(db, normalized)
     if not user_id:
         return InviteCheckResponse(valid=False)
     user = await user_repository.get_by_id(db, user_id)

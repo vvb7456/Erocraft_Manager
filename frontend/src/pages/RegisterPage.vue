@@ -112,7 +112,7 @@ watch(inviteCode, (value) => {
   inviteTimer = setTimeout(async () => {
     inviteAbort = new AbortController()
     try {
-      const res = await fetch(`/api/public/invite/check?code=${encodeURIComponent(code)}`, {
+      const res = await fetch(`/api/invite/check?code=${encodeURIComponent(code)}`, {
         signal: inviteAbort.signal,
       })
       if (!res.ok) { inviteState.value = 'invalid'; return }
