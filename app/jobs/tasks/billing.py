@@ -417,3 +417,4 @@ async def run_placeholder_leak_monitor() -> None:
                 "order_status_set": ["closed", "cancelled"],
             },
         )
+

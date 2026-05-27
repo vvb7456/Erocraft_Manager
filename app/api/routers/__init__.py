@@ -7,6 +7,8 @@ from app.api.routers.admin_billing_settings import router as admin_billing_setti
 from app.api.routers.admin_billing_plans import router as admin_billing_plans_router
 from app.api.routers.admin_billing_orders import router as admin_billing_orders_router
 from app.api.routers.admin_billing_incidents import router as admin_billing_incidents_router
+from app.api.routers.admin_billing_coupon_templates import router as admin_billing_coupon_templates_router
+from app.api.routers.admin_billing_coupons import router as admin_billing_coupons_router
 from app.api.routers.admin_certificates import router as admin_certificates_router
 from app.api.routers.admin_global_defaults import router as admin_global_defaults_router
 from app.api.routers.admin_hosts import router as admin_hosts_router
@@ -28,6 +30,8 @@ from app.api.routers.user_account import router as user_account_router
 from app.api.routers.user_billing import router as user_billing_router
 from app.api.routers.user_billing_invoices import router as user_billing_invoices_router
 from app.api.routers.user_billing_plans import router as user_billing_plans_router
+from app.api.routers.user_coupons import router as user_coupons_router
+from app.api.routers.user_invite import router as user_invite_router
 from app.api.routers.user_files import router as user_files_router
 from app.api.routers.user_payment_gateways import router as user_payment_gateways_router
 from app.api.routers.user_servers import router as user_servers_router
@@ -40,6 +44,8 @@ api_router.include_router(admin_billing_settings_router)
 api_router.include_router(admin_billing_plans_router)
 api_router.include_router(admin_billing_orders_router)
 api_router.include_router(admin_billing_incidents_router)
+api_router.include_router(admin_billing_coupon_templates_router)
+api_router.include_router(admin_billing_coupons_router)
 api_router.include_router(admin_certificates_router)
 api_router.include_router(admin_global_defaults_router)
 api_router.include_router(admin_hosts_router)
@@ -61,6 +67,8 @@ api_router.include_router(user_account_router)
 api_router.include_router(user_billing_router)
 api_router.include_router(user_billing_invoices_router)
 api_router.include_router(user_billing_plans_router)
+api_router.include_router(user_coupons_router)
+api_router.include_router(user_invite_router)
 api_router.include_router(user_files_router)
 api_router.include_router(user_payment_gateways_router)
 api_router.include_router(user_servers_router)

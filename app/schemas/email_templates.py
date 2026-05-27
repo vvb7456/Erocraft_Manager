@@ -15,6 +15,7 @@ TemplateTypeLiteral = Literal[
     "alertFired", "alertResolved",
     "orderPaid", "orderApplyFailed", "orderApplyAlert", "orderRefunded",
     "serverInstalled",
+    "referralInviterRewarded", "referralInviteeRewarded",
 ]
 
 
@@ -50,6 +51,8 @@ class EmailTemplatesResponse(BaseModel):
     orderApplyAlert: EmailTemplatePayload
     orderRefunded: EmailTemplatePayload
     serverInstalled: EmailTemplatePayload
+    referralInviterRewarded: EmailTemplatePayload
+    referralInviteeRewarded: EmailTemplatePayload
 
 
 class SaveEmailTemplateRequest(BaseModel):

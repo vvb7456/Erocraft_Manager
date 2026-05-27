@@ -131,6 +131,30 @@
       "runMinute": "发送时间 (分)"
     }
   },
+  "marketing": {
+    "title": "营销",
+    "referral": {
+      "title": "邀请奖励",
+      "desc": "被邀请人完成首笔合格订单后，向双方各发放一张优惠券。",
+      "enabled": "启用邀请奖励",
+      "enabledHint": "关闭后邀请关系仍会被记录，但不再自动发券。",
+      "inviterTemplate": "邀请人奖励优惠券",
+      "inviteeTemplate": "被邀请人奖励优惠券",
+      "inviterTemplateHint": "发放给邀请人（你的现有用户）的优惠券模板。仅显示已激活的模板，可在“计费 · 优惠券模板”页面创建或编辑。",
+      "inviteeTemplateHint": "发放给被邀请人（新注册用户）的优惠券模板。仅显示已激活的模板，可在“计费 · 优惠券模板”页面创建或编辑。",
+      "templatePlaceholder": "请选择优惠券模板",
+      "minFen": "起起金额（元）",
+      "minFenHint": "需要实付不低于此金额的订单才会触发奖励。设为 0.01 则任何已付款订单均可；提高可过滤小额订单，防止套利。",
+      "qualifyingKinds": "合格订单类型",
+      "qualifyingKindsHint": "仅以下类型的订单会触发奖励。取消某项则该类型订单不参与。",
+      "qualifyingKindsPlaceholder": "选择合格订单类型",
+      "kindOption": {
+        "new_purchase": "新购买",
+        "renew": "续费",
+        "upgrade": "升级"
+      }
+    }
+  },
   "account": {
     "title": "账户设置"
   }

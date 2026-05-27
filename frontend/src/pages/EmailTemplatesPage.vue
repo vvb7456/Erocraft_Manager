@@ -22,7 +22,7 @@ type TemplateKey =
   | 'bulk' | 'reminder' | 'preDelete' | 'createUser' | 'passwordReset'
   | 'emailChange' | 'registerVerify' | 'alertFired' | 'alertResolved'
   | 'orderPaid' | 'orderApplyFailed' | 'orderApplyAlert' | 'orderRefunded'
-  | 'serverInstalled'
+  | 'serverInstalled' | 'referralInviterRewarded' | 'referralInviteeRewarded'
 
 interface TemplateData { subject: string; body: string }
 
@@ -30,7 +30,7 @@ const KEYS: TemplateKey[] = [
   'bulk', 'reminder', 'preDelete', 'createUser', 'passwordReset',
   'emailChange', 'registerVerify', 'alertFired', 'alertResolved',
   'orderPaid', 'orderApplyFailed', 'orderApplyAlert', 'orderRefunded',
-  'serverInstalled',
+  'serverInstalled', 'referralInviterRewarded', 'referralInviteeRewarded',
 ]
 
 const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
@@ -48,6 +48,8 @@ const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
   orderApplyAlert: ['brand_name', 'order_no', 'username', 'email', 'plan_name', 'total_yuan', 'currency_code', 'apply_retry_count', 'apply_error'],
   orderRefunded: ['brand_name', 'order_no', 'refund_no', 'refund_amount_yuan', 'currency_code', 'refund_reason', 'refunded_at'],
   serverInstalled: ['brand_name', 'username', 'server_name', 'server_id', 'server_uuid', 'installed_at'],
+  referralInviterRewarded: ['brand_name', 'username', 'invitee_username', 'coupon_code', 'coupon_name', 'discount_yuan', 'min_order_yuan', 'min_order_text', 'expires_at'],
+  referralInviteeRewarded: ['brand_name', 'username', 'coupon_code', 'coupon_name', 'discount_yuan', 'min_order_yuan', 'min_order_text', 'expires_at'],
 }
 
 const { t } = useI18n({ useScope: 'global' })

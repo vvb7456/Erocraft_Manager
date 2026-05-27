@@ -292,6 +292,7 @@ class ManagerPendingRegistration(Base):
         Index("idx_pr_email", "email"),
         Index("idx_pr_username", "username"),
         Index("uq_pr_lookup_hash", "lookup_hash", unique=True),
+        Index("idx_pr_inviter", "inviter_user_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -302,8 +303,77 @@ class ManagerPendingRegistration(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     lookup_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     token: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Captured at /register time when the URL or form carried a valid
+    # invite code. ``invite_code`` stores the literal 8-char string so we
+    # can write a referral row at verify-time even if the inviter rotated
+    # / disabled their code in between (rare). ``inviter_user_id`` is the
+    # resolved user.id snapshot taken at /register; if NULL, no referral
+    # is recorded on verify.
+    inviter_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    invite_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class UserInviteCode(Base):
+    """One invite code per user — lazy-generated on first dashboard view.
+
+    The same code is reused forever; ``disabled_at`` lets admins kill a
+    code without removing it (so audit history stays intact). See
+    ``docs/REFERRAL_AND_COUPON_DESIGN.md`` §4.1.
+    """
+
+    __tablename__ = "manager_user_invite_codes"
+    __table_args__ = (
+        UniqueConstraint("code", name="uk_invite_code"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+    )
+    code: Mapped[str] = mapped_column(String(8), nullable=False)
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
+
+
+class UserReferral(Base):
+    """Inviter→invitee binding + reward-grant audit row.
+
+    Lifecycle: ``registered`` (created on /register/verify) → ``rewarded``
+    (set when ``referral_rewards.try_grant_for_order`` writes the two
+    coupons + ``qualifying_order_id``) → ``revoked`` (admin only). The
+    UNIQUE on ``invitee_user_id`` makes each new account belong to at
+    most one inviter forever.
+    """
+
+    __tablename__ = "manager_user_referrals"
+    __table_args__ = (
+        UniqueConstraint("invitee_user_id", name="uk_referral_invitee"),
+        Index("idx_referral_inviter_status", "inviter_user_id", "status"),
+        Index("idx_referral_qualifying_order", "qualifying_order_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    inviter_user_id: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )
+    invitee_user_id: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )
+    invite_code: Mapped[str] = mapped_column(String(8), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="registered")
+    qualifying_order_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    rewarded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    inviter_coupon_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    invitee_coupon_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    revoke_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utc_now, onupdate=_utc_now
+    )
 
 
 class ManagerEmailTemplate(Base):

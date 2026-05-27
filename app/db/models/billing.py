@@ -58,6 +58,13 @@ INCIDENT_KIND_VALUES = (
     "placeholder_cleanup_failed",
 )
 INCIDENT_STATUS_VALUES = ("open", "investigating", "resolved", "wontfix")
+COUPON_SOURCE_VALUES = (
+    "referral_inviter",
+    "referral_invitee",
+    "admin_grant",
+    "promo",
+)
+COUPON_STATUS_VALUES = ("unused", "reserved", "used", "revoked")
 
 
 class BillingPlan(Base):
@@ -137,6 +144,18 @@ class BillingOrder(Base):
     reserved_allocation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reserved_additional_allocations: Mapped[list[int] | None] = mapped_column(
         JSON, nullable=True
+    )
+    # v3 coupon: snapshot of the discount applied (so price stays
+    # reproducible across cancel/refund). ``coupon_id`` is NULL until the
+    # user picks one; set when create_order reserves the coupon. The
+    # discount is locked at order creation, never recomputed.
+    coupon_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("manager_billing_coupons.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    coupon_discount_fen: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
     )
     status: Mapped[str] = mapped_column(
         Enum(*ORDER_STATUS_VALUES, name="billing_order_status"),
@@ -335,3 +354,92 @@ class BillingIncident(Base):
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolved_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class CouponTemplate(Base):
+    """Admin-defined coupon recipe. See ``REFERRAL_AND_COUPON_DESIGN.md`` §4.2.
+
+    Templates define the *rules*; instances (``Coupon``) carry a *snapshot*
+    of the rules at issuance so future template edits don't retroactively
+    change already-issued coupons (invariant C1).
+    """
+
+    __tablename__ = "manager_billing_coupon_templates"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    discount_fen: Mapped[int] = mapped_column(Integer, nullable=False)
+    min_order_fen: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    valid_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    # NULL = applies to all plans / all kinds. Otherwise a JSON array of
+    # plan ids / order kinds (``new_purchase`` / ``renew`` / ``upgrade``).
+    applicable_plan_ids: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
+    applicable_order_kinds: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_naive_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_naive_now, onupdate=utc_naive_now
+    )
+
+
+class Coupon(Base):
+    """Issued coupon instance — snapshot-immutable per invariant C1.
+
+    State machine: ``unused`` → ``reserved`` → ``used`` (terminal) /
+    ``revoked`` (terminal). Coupons released from ``reserved`` (order
+    cancel / fail) always revert to ``unused``; expiry is a derived
+    fact (``status == 'unused' AND expires_at <= now``), not a stored
+    state — there is no scheduled job to materialize it.
+    """
+
+    __tablename__ = "manager_billing_coupons"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(CHAR(16), nullable=False, unique=True)
+    template_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("manager_billing_coupon_templates.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(
+        Enum(*COUPON_SOURCE_VALUES, name="billing_coupon_source"), nullable=False
+    )
+    # Free-form back-reference: for referral grants this is the referral row id;
+    # for admin_grant it's the admin user id; for promo it's NULL.
+    source_ref_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    status: Mapped[str] = mapped_column(
+        Enum(*COUPON_STATUS_VALUES, name="billing_coupon_status"),
+        nullable=False,
+        default="unused",
+    )
+    # Snapshot copy of template values — frozen at issuance.
+    discount_fen: Mapped[int] = mapped_column(Integer, nullable=False)
+    min_order_fen: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    applicable_plan_ids: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
+    applicable_order_kinds: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_naive_now
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    reserved_order_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reserved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    used_order_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Captured at apply-time: how much we actually subtracted (may differ
+    # from snapshot ``discount_fen`` if the order subtotal was < discount).
+    actual_discount_fen: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    revoke_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_naive_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_naive_now, onupdate=utc_naive_now
+    )

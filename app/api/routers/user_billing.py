@@ -114,6 +114,7 @@ def _serialize_order(
     *,
     transaction_id: str | None = None,
     target_server_name: str | None = None,
+    coupon_code: str | None = None,
 ) -> OrderOut:
     snap = order.plan_snapshot or {}
     return OrderOut(
@@ -140,7 +141,44 @@ def _serialize_order(
         closed_at=to_iso_z(order.closed_at) if order.closed_at else None,
         cancelled_at=to_iso_z(order.cancelled_at) if order.cancelled_at else None,
         invoice=serialize_invoice(invoice, transaction_id=transaction_id),
+        coupon_id=order.coupon_id,
+        coupon_code=coupon_code,
+        coupon_discount_fen=(
+            order.coupon_discount_fen if order.coupon_id else None
+        ),
     )
+
+
+async def _resolve_coupon_code(db: AsyncSession, coupon_id: int | None) -> str | None:
+    """Look up the public-facing ``EC-XXXX`` coupon code for one order.
+
+    Returns ``None`` when the order never had a coupon, when the coupon
+    was hard-deleted (ON DELETE SET NULL on ``orders.coupon_id``), or
+    when the lookup fails for any reason — the order view degrades
+    gracefully without the coupon row.
+    """
+    if not coupon_id:
+        return None
+    from app.db.models.billing import Coupon  # local import: avoid cycle
+
+    row = await db.get(Coupon, coupon_id)
+    return row.code if row else None
+
+
+async def _bulk_resolve_coupon_codes(
+    db: AsyncSession, coupon_ids: list[int]
+) -> dict[int, str]:
+    """Bulk variant of :func:`_resolve_coupon_code` for the list view."""
+    if not coupon_ids:
+        return {}
+    from sqlalchemy import select
+
+    from app.db.models.billing import Coupon
+
+    rows = await db.execute(
+        select(Coupon.id, Coupon.code).where(Coupon.id.in_(set(coupon_ids)))
+    )
+    return {cid: code for cid, code in rows.all()}
 
 
 # --------------------------------------------------------------------------- #
@@ -180,7 +218,10 @@ async def create_order_endpoint(
     except OrderError as exc:
         raise _http_for(exc) from exc
     invoice = await orders_service.get_invoice_for_order(db, order.id)
-    return CreateOrderResponse(order=_serialize_order(order, invoice))
+    coupon_code = await _resolve_coupon_code(db, order.coupon_id)
+    return CreateOrderResponse(
+        order=_serialize_order(order, invoice, coupon_code=coupon_code)
+    )
 
 
 @router.get("", response_model=list[OrderOut])
@@ -218,6 +259,9 @@ async def list_orders_endpoint(
         )
         for inv_id, tx_id in tx_rows.all():
             tx_by_invoice.setdefault(inv_id, tx_id)
+    coupon_codes = await _bulk_resolve_coupon_codes(
+        db, [o.coupon_id for o in rows if o.coupon_id]
+    )
     return [
         _serialize_order(
             o,
@@ -227,6 +271,7 @@ async def list_orders_endpoint(
                 if o.id in invoices_by_order
                 else None
             ),
+            coupon_code=coupon_codes.get(o.coupon_id) if o.coupon_id else None,
         )
         for o in rows
     ]
@@ -245,8 +290,10 @@ async def get_order_endpoint(
     invoice = await orders_service.get_invoice_for_order(db, order.id)
     tx_id = await _latest_transaction_id(db, invoice.id) if invoice else None
     server_name = await _resolve_target_server_name(db, order.target_server_id)
+    coupon_code = await _resolve_coupon_code(db, order.coupon_id)
     return _serialize_order(
-        order, invoice, transaction_id=tx_id, target_server_name=server_name
+        order, invoice, transaction_id=tx_id,
+        target_server_name=server_name, coupon_code=coupon_code,
     )
 
 
@@ -262,4 +309,7 @@ async def cancel_order_endpoint(
         raise _http_for(exc) from exc
     invoice = await orders_service.get_invoice_for_order(db, order.id)
     tx_id = await _latest_transaction_id(db, invoice.id) if invoice else None
-    return _serialize_order(order, invoice, transaction_id=tx_id)
+    coupon_code = await _resolve_coupon_code(db, order.coupon_id)
+    return _serialize_order(
+        order, invoice, transaction_id=tx_id, coupon_code=coupon_code
+    )

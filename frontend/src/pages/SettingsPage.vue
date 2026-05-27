@@ -42,6 +42,7 @@ const tabs = computed<TabItem[]>(() => [
   { key: 'branding',   label: t('settings.branding.title'), icon: 'palette' },
   { key: 'defaults',   label: t('settings.defaults.title'), icon: 'tune' },
   { key: 'automation', label: t('settings.automation.title'), icon: 'schedule' },
+  { key: 'marketing',  label: t('settings.marketing.title'), icon: 'campaign' },
 ])
 
 // ── State ──
@@ -132,6 +133,43 @@ const nestOptions = computed(() => nestList.value.map((n: any) => ({ value: n.id
 const eggOptions = computed(() => eggList.value.map((e: any) => ({ value: e.id, label: `${e.name} (#${e.id})` })))
 const nodeOptions = computed(() => nodeList.value.map((n: any) => ({ value: n.id, label: `${n.name} (#${n.id})` })))
 
+// Coupon templates — populated for the marketing tab so referral template
+// pickers don't ask the operator to type raw codes.
+interface CouponTemplateLite {
+  id: number
+  code: string
+  name: string
+  discount_fen: number
+  valid_days: number
+  is_active: boolean
+}
+const couponTemplates = ref<CouponTemplateLite[]>([])
+const couponTemplateOptions = computed(() =>
+  couponTemplates.value
+    .filter(tpl => tpl.is_active)
+    .map(tpl => ({
+      value: tpl.code,
+      label: `${tpl.name} · ¥${(tpl.discount_fen / 100).toFixed(2)} · ${tpl.valid_days}d`,
+    }))
+)
+
+// Order-kind multi-select options (matches BillingOrder.kind enum subset that
+// can qualify a referral reward).
+const QUALIFYING_KIND_KEYS = ['new_purchase', 'renew', 'upgrade'] as const
+const qualifyingKindOptions = computed(() =>
+  QUALIFYING_KIND_KEYS.map(k => ({
+    value: k,
+    label: t(`settings.marketing.referral.kindOption.${k}`),
+  }))
+)
+
+/** Read REFERRAL_QUALIFYING_KINDS as a string[] (backend returns a JSON list). */
+function getBillingKinds(): string[] {
+  const raw = billingSettings.value['REFERRAL_QUALIFYING_KINDS']
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean)
+  return ['new_purchase', 'renew', 'upgrade']
+}
+
 watch(() => getNum('DEFAULT_NEST_ID'), async (nestId) => {
   if (!nestId) { eggList.value = []; return }
   const data = await get<{ eggs: any[] }>(`/api/admin/resources/nests/${nestId}/eggs`)
@@ -140,18 +178,20 @@ watch(() => getNum('DEFAULT_NEST_ID'), async (nestId) => {
 
 // ── Fetch ──
 onMounted(async () => {
-  const [settingsData, autoData, billingData, nestsRes, nodesRes] = await Promise.all([
+  const [settingsData, autoData, billingData, nestsRes, nodesRes, tplRes] = await Promise.all([
     get<Record<string, any>>('/api/admin/settings'),
     get<Record<string, any>>('/api/admin/automation'),
     get<Record<string, any>>('/api/admin/billing/settings'),
     get<{ nests: any[] }>('/api/admin/resources/nests'),
     get<{ nodes: any[] }>('/api/admin/resources/nodes'),
+    get<CouponTemplateLite[]>('/api/admin/billing/coupon-templates'),
   ])
   if (settingsData) settings.value = settingsData
   if (autoData) Object.assign(automation.value, autoData)
   if (billingData) billingSettings.value = billingData
   if (nestsRes) nestList.value = nestsRes.nests
   if (nodesRes) nodeList.value = nodesRes.nodes
+  if (tplRes) couponTemplates.value = tplRes
   const nestId = getNum('DEFAULT_NEST_ID')
   if (nestId) {
     const data = await get<{ eggs: any[] }>(`/api/admin/resources/nests/${nestId}/eggs`)
@@ -605,6 +645,76 @@ async function onTabChange(next: string) {
               </FormField>
               <FormField :label="t('settings.automation.email.runMinute')" layout="horizontal">
                 <NumberInput v-model="automation.AUTOMATION_EMAIL_RUN_MINUTE" :min="0" :max="59" />
+              </FormField>
+            </BaseCard>
+          </template>
+
+          <template v-else-if="activeTab === 'marketing'">
+            <BaseCard variant="bg2" class="settings-card">
+              <SectionHeader icon="group_add" flush>{{ t('settings.marketing.referral.title') }}</SectionHeader>
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.marketing.referral.enabled') }}
+                  <HelpTip :text="t('settings.marketing.referral.enabledHint')" />
+                </template>
+                <ToggleSwitch
+                  :modelValue="getBillingBool('REFERRAL_REWARD_ENABLED')"
+                  size="sm"
+                  @update:modelValue="setBillingBool('REFERRAL_REWARD_ENABLED', $event)"
+                />
+              </FormField>
+
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.marketing.referral.inviterTemplate') }}
+                  <HelpTip :text="t('settings.marketing.referral.inviterTemplateHint')" />
+                </template>
+                <BaseSelect
+                  :modelValue="getBillingStr('REFERRAL_INVITER_TEMPLATE_CODE')"
+                  :options="couponTemplateOptions"
+                  :placeholder="t('settings.marketing.referral.templatePlaceholder')"
+                  @update:modelValue="setBillingStr('REFERRAL_INVITER_TEMPLATE_CODE', String($event))"
+                />
+              </FormField>
+
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.marketing.referral.inviteeTemplate') }}
+                  <HelpTip :text="t('settings.marketing.referral.inviteeTemplateHint')" />
+                </template>
+                <BaseSelect
+                  :modelValue="getBillingStr('REFERRAL_INVITEE_TEMPLATE_CODE')"
+                  :options="couponTemplateOptions"
+                  :placeholder="t('settings.marketing.referral.templatePlaceholder')"
+                  @update:modelValue="setBillingStr('REFERRAL_INVITEE_TEMPLATE_CODE', String($event))"
+                />
+              </FormField>
+
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.marketing.referral.minFen') }}
+                  <HelpTip :text="t('settings.marketing.referral.minFenHint')" />
+                </template>
+                <NumberInput
+                  :modelValue="getBillingNum('REFERRAL_QUALIFYING_MIN_FEN', 1) / 100"
+                  :min="0.01"
+                  :step="0.01"
+                  @update:modelValue="setBillingNum('REFERRAL_QUALIFYING_MIN_FEN', Math.max(1, Math.round(Number($event) * 100)))"
+                />
+              </FormField>
+
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.marketing.referral.qualifyingKinds') }}
+                  <HelpTip :text="t('settings.marketing.referral.qualifyingKindsHint')" />
+                </template>
+                <BaseSelect
+                  :modelValue="getBillingKinds()"
+                  :options="qualifyingKindOptions"
+                  multiple
+                  :placeholder="t('settings.marketing.referral.qualifyingKindsPlaceholder')"
+                  @update:modelValue="billingSettings[`REFERRAL_QUALIFYING_KINDS`] = Array.isArray($event) ? $event.map(String) : [String($event)]"
+                />
               </FormField>
             </BaseCard>
           </template>

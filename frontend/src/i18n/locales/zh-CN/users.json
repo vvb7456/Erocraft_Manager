@@ -13,6 +13,7 @@
     "email": "邮箱",
     "server_count": "服务器",
     "created_at": "创建时间",
+    "inviter": "邀请人",
     "role": "角色",
     "actions": "操作"
   },

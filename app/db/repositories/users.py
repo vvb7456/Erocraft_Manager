@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
+from app.db.models.manager import UserReferral
 from app.db.models.pterodactyl import PteroServer, PteroUser
 
 
@@ -39,14 +41,29 @@ class UserRepository:
     async def list_for_admin(
         self,
         db: AsyncSession,
-    ) -> list[tuple[PteroUser, int]]:
+    ) -> list[tuple[PteroUser, int, int | None, str | None]]:
+        Inviter = aliased(PteroUser)
         result = await db.execute(
-            select(PteroUser, func.count(PteroServer.id))
+            select(
+                PteroUser,
+                func.count(PteroServer.id),
+                UserReferral.inviter_user_id,
+                Inviter.username,
+            )
             .outerjoin(PteroServer, PteroServer.owner_id == PteroUser.id)
-            .group_by(PteroUser.id)
+            .outerjoin(
+                UserReferral,
+                (UserReferral.invitee_user_id == PteroUser.id)
+                & (UserReferral.status != "revoked"),
+            )
+            .outerjoin(Inviter, Inviter.id == UserReferral.inviter_user_id)
+            .group_by(PteroUser.id, UserReferral.inviter_user_id, Inviter.username)
             .order_by(PteroUser.id.asc())
         )
-        return [(user, int(server_count or 0)) for user, server_count in result.all()]
+        return [
+            (user, int(server_count or 0), inviter_id, inviter_username)
+            for user, server_count, inviter_id, inviter_username in result.all()
+        ]
 
     async def list_by_ids(
         self,

@@ -115,6 +115,10 @@ EMAIL_TEMPLATE_API_TO_INTERNAL = {
     "orderApplyAlert": "order_apply_alert",
     "orderRefunded": "order_refunded",
     "serverInstalled": "server_installed",
+    "referral_inviter_rewarded": "referral_inviter_rewarded",
+    "referral_invitee_rewarded": "referral_invitee_rewarded",
+    "referralInviterRewarded": "referral_inviter_rewarded",
+    "referralInviteeRewarded": "referral_invitee_rewarded",
 }
 
 EMAIL_TEMPLATE_INTERNAL_KEYS = (
@@ -132,6 +136,8 @@ EMAIL_TEMPLATE_INTERNAL_KEYS = (
     "order_apply_alert",
     "order_refunded",
     "server_installed",
+    "referral_inviter_rewarded",
+    "referral_invitee_rewarded",
 )
 
 _TEMPLATE_FILES = {
@@ -149,6 +155,8 @@ _TEMPLATE_FILES = {
     "order_apply_alert": _PROJECT_ROOT / "templates" / "order_apply_alert_template.json",
     "order_refunded": _PROJECT_ROOT / "templates" / "order_refunded_template.json",
     "server_installed": _PROJECT_ROOT / "templates" / "server_installed_template.json",
+    "referral_inviter_rewarded": _PROJECT_ROOT / "templates" / "referral_inviter_rewarded_template.json",
+    "referral_invitee_rewarded": _PROJECT_ROOT / "templates" / "referral_invitee_rewarded_template.json",
 }
 
 _PREVIEW_DUMMY_VALUES: dict[str, str] = {
@@ -190,6 +198,14 @@ _PREVIEW_DUMMY_VALUES: dict[str, str] = {
     "apply_error": "node has no available allocation",
     "apply_retry_count": "3",
     "installed_at": "2026-05-04 08:58:42 UTC",
+    # Referral coupon preview values
+    "invitee_username": "new_friend",
+    "coupon_code": "WELCOME-AB12CD34",
+    "coupon_name": "新人欢迎券",
+    "discount_yuan": "10.00",
+    "min_order_yuan": "30.00",
+    "min_order_text": "订单满 ¥30.00 可用",
+    "expires_at": "2026-06-30",
 }
 
 _PREVIEW_ACTIONS: dict[str, tuple[str, str]] = {
@@ -207,6 +223,8 @@ _PREVIEW_ACTIONS: dict[str, tuple[str, str]] = {
     "order_apply_alert": ("查看订单", "/#/admin/billing/orders"),
     "order_refunded": ("查看订单", "/#/account"),
     "server_installed": ("进入控制台", "/#/servers/12345/console"),
+    "referral_inviter_rewarded": ("查看我的优惠券", "/#/account"),
+    "referral_invitee_rewarded": ("查看我的优惠券", "/#/account"),
 }
 
 

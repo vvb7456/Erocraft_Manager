@@ -41,6 +41,8 @@ interface UserItem {
   server_count: number
   created_at: string | null
   language?: string | null
+  inviter_user_id?: number | null
+  inviter_username?: string | null
 }
 
 interface BatchUsersResult {
@@ -407,6 +409,7 @@ const mobileSortOpen = ref(false)
           {{ t('users.table.created_at') }}
           <MsIcon v-if="sortBy === 'created_at'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
         </th>
+        <th class="col-inviter">{{ t('users.table.inviter') }}</th>
         <th class="col-role">{{ t('users.table.role') }}</th>
         <th class="col-actions">{{ t('users.table.actions') }}</th>
       </template>
@@ -422,6 +425,10 @@ const mobileSortOpen = ref(false)
           <span v-else class="count-zero">0</span>
         </td>
         <td class="col-created">{{ u.created_at ? new Date(u.created_at).toLocaleDateString() : '-' }}</td>
+        <td class="col-inviter">
+          <span v-if="u.inviter_username" :title="`#${u.inviter_user_id}`">{{ u.inviter_username }}</span>
+          <span v-else class="count-zero">—</span>
+        </td>
         <td class="col-role">
           <Badge :color="u.root_admin ? 'var(--amber)' : undefined">
             {{ u.root_admin ? t('users.role.admin') : t('users.role.user') }}
@@ -454,6 +461,7 @@ const mobileSortOpen = ref(false)
               <span :class="u.server_count > 0 ? '' : 'count-zero'">{{ u.server_count }}</span>
             </CardKV>
             <CardKV :label="t('users.table.created_at')">{{ u.created_at ? new Date(u.created_at).toLocaleDateString() : '-' }}</CardKV>
+            <CardKV v-if="u.inviter_username" :label="t('users.table.inviter')">{{ u.inviter_username }}</CardKV>
           </div>
         </CardTap>
       </template>
@@ -563,9 +571,10 @@ const mobileSortOpen = ref(false)
 .col-id { width: 56px; }
 
 .col-username { width: 14%; }
-.col-email { width: 22%; }
+.col-email { width: 18%; }
 .col-count { width: 64px; text-align: center !important; }
-.col-created { width: 12%; }
+.col-created { width: 10%; }
+.col-inviter { width: 10%; }
 .col-role { width: 80px; }
 .col-actions { width: 160px; }
 

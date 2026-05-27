@@ -131,6 +131,30 @@
       "runMinute": "Send Minute"
     }
   },
+  "marketing": {
+    "title": "Marketing",
+    "referral": {
+      "title": "Referral Rewards",
+      "desc": "Grant a coupon to both inviter and invitee after the invitee's first qualifying paid order.",
+      "enabled": "Enable referral rewards",
+      "enabledHint": "When off, referrals are still recorded but no coupons are auto-granted.",
+      "inviterTemplate": "Inviter reward coupon",
+      "inviteeTemplate": "Invitee reward coupon",
+      "inviterTemplateHint": "Coupon template granted to the inviter (an existing user). Only active templates are listed; create or edit them under Billing · Coupon Templates.",
+      "inviteeTemplateHint": "Coupon template granted to the invitee (the newly registered user). Only active templates are listed; create or edit them under Billing · Coupon Templates.",
+      "templatePlaceholder": "Pick a coupon template",
+      "minFen": "Minimum qualifying amount (¥)",
+      "minFenHint": "Rewards are only granted when the order's paid amount is at least this much. Set 0.01 to allow any paid order; raise to filter tiny orders and prevent abuse.",
+      "qualifyingKinds": "Qualifying order kinds",
+      "qualifyingKindsHint": "Only orders of the selected kinds trigger rewards. Deselect to exclude that order kind.",
+      "qualifyingKindsPlaceholder": "Select qualifying order kinds",
+      "kindOption": {
+        "new_purchase": "New purchase",
+        "renew": "Renewal",
+        "upgrade": "Upgrade"
+      }
+    }
+  },
   "account": {
     "title": "Account Settings"
   }

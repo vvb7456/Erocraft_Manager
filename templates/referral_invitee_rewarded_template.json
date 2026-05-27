@@ -1,0 +1,4 @@
+{
+    "subject": "【{{brand_name}}】新人欢迎券已到账",
+    "body": "欢迎加入！作为通过好友邀请注册的新用户，您获得了一张专属欢迎券，下单或续费时即可使用。\n\n奖励：{{coupon_name}}（面额 ¥{{discount_yuan}}）\n券码：{{coupon_code}}\n有效期至：{{expires_at}}\n使用门槛：{{min_order_text}}"
+}

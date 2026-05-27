@@ -36,6 +36,10 @@ class CreateOrderRequest(_Forbid):
     target_server_id: int | None = Field(default=None, gt=0)
     period_count: int = Field(default=1, ge=1, le=24)
     gateway_code: str = Field(min_length=1, max_length=32)
+    # Optional coupon code applied at order placement. See
+    # ``REFERRAL_AND_COUPON_DESIGN.md`` §6. Empty/whitespace is treated as
+    # absent so the frontend can ship a value-less ``<select>`` cleanly.
+    coupon_code: str | None = Field(default=None, max_length=32)
 
     @model_validator(mode="after")
     def _check_kind_fields(self) -> "CreateOrderRequest":
@@ -100,6 +104,9 @@ class OrderOut(BaseModel):
     closed_at: str | None
     cancelled_at: str | None
     invoice: OrderInvoiceOut | None
+    coupon_id: int | None = None
+    coupon_code: str | None = None
+    coupon_discount_fen: int | None = None
 
 
 class CreateOrderResponse(BaseModel):

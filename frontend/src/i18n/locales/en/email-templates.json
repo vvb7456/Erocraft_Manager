@@ -54,6 +54,12 @@
   "serverInstalled": {
     "title": "Server Installed"
   },
+  "referralInviterRewarded": {
+    "title": "Referral Reward (Inviter)"
+  },
+  "referralInviteeRewarded": {
+    "title": "Welcome Coupon (Invitee)"
+  },
   "var": {
     "brand_name": "Brand Name",
     "username": "Username",
@@ -93,6 +99,13 @@
     "refunded_at": "Refunded At",
     "apply_error": "Apply Error",
     "apply_retry_count": "Apply Retry Count",
-    "installed_at": "Installed At"
+    "installed_at": "Installed At",
+    "invitee_username": "Invitee Username",
+    "coupon_code": "Coupon Code",
+    "coupon_name": "Coupon Name",
+    "discount_yuan": "Discount (Yuan)",
+    "min_order_yuan": "Min Order (Yuan)",
+    "min_order_text": "Min Order Description",
+    "expires_at": "Expires At"
   }
 }

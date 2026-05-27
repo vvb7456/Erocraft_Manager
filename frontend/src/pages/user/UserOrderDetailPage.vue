@@ -64,6 +64,9 @@ interface Order {
   closed_at: string | null
   cancelled_at: string | null
   invoice: OrderInvoice | null
+  coupon_id: number | null
+  coupon_code: string | null
+  coupon_discount_fen: number | null
 }
 
 const { t } = useI18n({ useScope: 'global' })
@@ -333,6 +336,13 @@ onMounted(loadOrder)
             </span>
             <span class="t-value mono">−¥{{ fenToYuan(discountAmountFen) }}</span>
           </div>
+          <div v-if="order.coupon_id && order.coupon_discount_fen" class="bill-totals-row">
+            <span class="t-label">
+              {{ t('billing.coupons.applyHint') }}
+              <span v-if="order.coupon_code" class="t-label-sub mono">({{ order.coupon_code }})</span>
+            </span>
+            <span class="t-value mono">−¥{{ fenToYuan(order.coupon_discount_fen) }}</span>
+          </div>
           <div class="bill-totals-row bill-totals-row--strong">
             <span class="t-label">{{ t('billing.orderDetail.totals.amount') }}</span>
             <span class="t-value mono">¥{{ fenToYuan(order.total_fen) }}</span>
@@ -538,6 +548,12 @@ onMounted(loadOrder)
 .bill-totals-row--strong .t-label,
 .bill-totals-row--strong .t-value {
   color: var(--t1);
+}
+
+.t-label-sub {
+  color: var(--t3);
+  font-size: .85em;
+  margin-left: var(--sp-1);
 }
 
 /* Meta extra */

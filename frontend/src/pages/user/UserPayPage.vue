@@ -339,6 +339,13 @@ function fenToYuan(fen: number | null | undefined): string {
           <dt>{{ t('billing.pay.summaryDuration') }}</dt>
           <dd>{{ t('billing.pay.summaryDays', { days: order.total_days }) }}</dd>
         </div>
+        <div v-if="order.coupon_id && order.coupon_discount_fen" class="summary-row">
+          <dt>{{ t('billing.coupons.applyHint') }}</dt>
+          <dd>
+            <span v-if="order.coupon_code" class="mono">{{ order.coupon_code }}</span>
+            <span class="discount-amount mono">−¥{{ fenToYuan(order.coupon_discount_fen) }}</span>
+          </dd>
+        </div>
         <div class="summary-row">
           <dt>{{ t('billing.pay.summaryOrderNo') }}</dt>
           <dd class="order-no-cell">
@@ -567,6 +574,10 @@ function fenToYuan(fen: number | null | undefined): string {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
+}
+.discount-amount {
+  color: var(--green);
+  margin-left: var(--sp-2);
 }
 .copy-btn {
   background: transparent;

@@ -301,6 +301,8 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=72)
     first_name: str = Field(default="", max_length=255)
     last_name: str = Field(default="", max_length=255)
+    # 8-char invite code from the referring user, optional.
+    invite_code: str | None = Field(default=None, max_length=8)
 
 
 class VerifyRegisterRequest(BaseModel):
@@ -414,6 +416,22 @@ async def register(
     token_hash = await hash_token_async(raw_token)
     lookup_hash = compute_lookup_hash(raw_token)
 
+    # Resolve optional invite code → inviter user id. Bad codes are
+    # silently ignored here (no UX leak about whether a code is valid —
+    # the dedicated /api/invite/check endpoint is the documented probe).
+    # Per design doc §6.2 we do NOT block self-invite (same email
+    # registering with the inviter's own code) — the abuse vector is
+    # already gated by requiring real payment on the qualifying order.
+    from app.services.user import invite_codes as invite_svc
+    inviter_user_id: int | None = None
+    normalized_code: str | None = None
+    raw_invite = (payload.invite_code or "").strip().upper() or None
+    if raw_invite:
+        candidate_id = await invite_svc.get_by_code(db, raw_invite)
+        if candidate_id is not None:
+            inviter_user_id = candidate_id
+            normalized_code = raw_invite
+
     # Invalidate any prior unused pending rows for this email so the link
     # in the latest email is the only one that works. (At this point any
     # surviving rows are already past the token TTL window; this is a
@@ -435,6 +453,8 @@ async def register(
         password_hash=raw_hash,
         token=token_hash,
         lookup_hash=lookup_hash,
+        inviter_user_id=inviter_user_id,
+        invite_code=normalized_code,
     )
     db.add(pending)
     await db.flush()
@@ -582,6 +602,100 @@ async def verify_registration(
         detail_params={"username": created.username, "email": created.email},
     )
 
+    # ── Referral row creation (registered state) ──
+    # If this pending row had an inviter, persist the link now and
+    # immediately issue the invitee's welcome coupon so it can be used
+    # on the *first* paid order (otherwise the new-user discount has no
+    # practical value). The inviter reward is still deferred to the
+    # invitee's first qualifying paid order (anti-abuse). We dedupe on
+    # invitee_user_id (uk_ur_invitee) so a re-verify is a no-op.
+    if pending.inviter_user_id and pending.invite_code:
+        try:
+            from app.db.models.manager import UserReferral
+            from app.core.time import utc_naive_now as _now
+            from app.services.billing import coupons as coupon_service
+            from app.db.models.billing import CouponTemplate
+            from sqlalchemy import select as _select
+
+            referral = UserReferral(
+                inviter_user_id=int(pending.inviter_user_id),
+                invitee_user_id=int(created.id),
+                invite_code=pending.invite_code,
+                status="registered",
+                created_at=_now(),
+            )
+            db.add(referral)
+            await db.flush()
+
+            # Issue the invitee welcome coupon now (only if the feature
+            # is enabled and the template resolves). A missing template
+            # is logged but does not block registration — the grant path
+            # at first-order time will retry issuance.
+            store = get_settings_store()
+            enabled = bool(
+                await store.get(
+                    db,
+                    "REFERRAL_REWARD_ENABLED",
+                    SETTINGS_SPECS["REFERRAL_REWARD_ENABLED"].default_value(),
+                )
+            )
+            invitee_coupon = None
+            if enabled:
+                invitee_code = str(
+                    await store.get(
+                        db,
+                        "REFERRAL_INVITEE_TEMPLATE_CODE",
+                        SETTINGS_SPECS["REFERRAL_INVITEE_TEMPLATE_CODE"].default_value(),
+                    )
+                )
+                tpl = (
+                    await db.execute(
+                        _select(CouponTemplate).where(
+                            CouponTemplate.code == invitee_code,
+                            CouponTemplate.is_active.is_(True),
+                        )
+                    )
+                ).scalar_one_or_none()
+                if tpl is None:
+                    logger.warning(
+                        "register_verify: invitee template %s missing; "
+                        "deferring coupon issuance to first-order grant",
+                        invitee_code,
+                    )
+                else:
+                    invitee_coupon = await coupon_service.issue_from_template(
+                        db,
+                        user_id=int(created.id),
+                        template=tpl,
+                        source="referral_invitee",
+                        source_ref_id=referral.id,
+                        commit=False,
+                    )
+                    referral.invitee_coupon_id = invitee_coupon.id
+            await db.commit()
+        except Exception:  # noqa: BLE001
+            await db.rollback()
+            logger.exception(
+                "register_verify: failed to create UserReferral for invitee=%s",
+                created.id,
+            )
+            invitee_coupon = None
+
+        # Best-effort welcome-coupon email (outside critical tx).
+        if invitee_coupon is not None:
+            try:
+                from app.services.billing.referral_rewards import (
+                    send_invitee_welcome_email,
+                )
+                await send_invitee_welcome_email(
+                    db, invitee_user_id=int(created.id), coupon=invitee_coupon
+                )
+            except Exception:
+                logger.exception(
+                    "register_verify: invitee welcome email failed (user=%s)",
+                    created.id,
+                )
+
     # Auto-login: set the session cookie so the user lands directly on the
     # app instead of being asked to log in immediately after verifying.
     request.session.clear()
@@ -593,3 +707,37 @@ async def verify_registration(
         username=created.username,
         is_admin=False,
     )
+
+
+# ── Invite code probe ──
+
+class InviteCheckResponse(BaseModel):
+    valid: bool
+    inviter_username: str | None = None
+
+
+@router.get("/invite/check", response_model=InviteCheckResponse)
+@limiter.limit("30/minute")
+async def check_invite_code(
+    request: Request,
+    code: str,
+    db: AsyncSession = Depends(get_db),
+) -> InviteCheckResponse:
+    """Lightweight probe used by the register page.
+
+    Returns ``valid=False`` for any malformed or unknown code; never
+    reveals user-identifying information beyond the username string
+    (which the inviter has already shared with the invitee anyway).
+    """
+    normalized = (code or "").strip().upper()
+    if not normalized or len(normalized) != 8:
+        return InviteCheckResponse(valid=False)
+    from app.services.user import invite_codes as invite_svc
+
+    user_id = await invite_svc.get_by_code(db, normalized)
+    if not user_id:
+        return InviteCheckResponse(valid=False)
+    user = await user_repository.get_by_id(db, user_id)
+    if user is None:
+        return InviteCheckResponse(valid=False)
+    return InviteCheckResponse(valid=True, inviter_username=user.username)

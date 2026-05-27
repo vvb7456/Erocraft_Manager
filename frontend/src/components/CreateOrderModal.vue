@@ -36,6 +36,7 @@ import { useToast } from '@/composables/useToast'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseSelect from '@/components/form/BaseSelect.vue'
 import Badge from '@/components/ui/Badge.vue'
 import ChipSelect, { type ChipOption } from '@/components/ui/ChipSelect.vue'
 import Spinner from '@/components/ui/Spinner.vue'
@@ -85,6 +86,18 @@ interface UpgradeOptionsResponse {
 }
 interface OrderCreated {
   order: { id: number }
+}
+interface UsableCoupon {
+  id: number
+  code: string
+  template_name: string | null
+  discount_fen: number
+  min_order_fen: number
+  expires_at: string
+}
+interface CouponListPayload {
+  items: UsableCoupon[]
+  total: number
 }
 
 type CashierMode = 'new_purchase' | 'renew' | 'upgrade'
@@ -261,6 +274,100 @@ const selectedGatewayMeta = computed<PaymentGateway | null>(() =>
   gateways.value.find((g) => g.code === selectedGateway.value) ?? null,
 )
 
+// ── Coupons ──
+//
+// The picker is populated from the user coupon list filtered by the
+// current order context (kind/plan/subtotal). The backend already
+// strips out non-applicable coupons via ``_is_applicable``, so we just
+// render whatever comes back. We re-fetch whenever the modal opens or
+// the underlying subtotal changes (period switch, upgrade target
+// switch), because the ``min_order_fen`` rule can toggle a coupon in
+// and out of "usable" status.
+const usableCoupons = ref<UsableCoupon[]>([])
+const couponsLoading = ref(false)
+const selectedCouponCode = ref<string>('')
+
+const couponOrderKind = computed<'new_purchase' | 'renew' | 'upgrade'>(() => {
+  if (isUpgrade.value) return 'upgrade'
+  if (isRenew.value) return 'renew'
+  return 'new_purchase'
+})
+
+const couponSubtotalFen = computed(() => {
+  // Mirror the C4 floor: ``min_order_fen`` is evaluated against the
+  // post-period-discount subtotal in services/billing/coupons.py.
+  if (isUpgrade.value) return selectedUpgradeOption.value?.diffFen ?? 0
+  return finalPriceFen.value
+})
+
+const couponPlanId = computed<number | null>(() => {
+  // Upgrade options expose ``planCode`` only; without an id we leave
+  // this null and rely on the strict per-coupon ``_is_applicable``
+  // check on the server side.
+  if (isUpgrade.value) return null
+  return props.plan?.id ?? null
+})
+
+async function loadUsableCoupons() {
+  if (couponSubtotalFen.value <= 0) {
+    usableCoupons.value = []
+    selectedCouponCode.value = ''
+    return
+  }
+  couponsLoading.value = true
+  const params = new URLSearchParams({
+    order_kind: couponOrderKind.value,
+    subtotal_fen: String(couponSubtotalFen.value),
+  })
+  if (couponPlanId.value != null) params.set('plan_id', String(couponPlanId.value))
+  const data = await get<CouponListPayload>(
+    `/api/user/coupons?${params.toString()}`,
+    { silent: true },
+  )
+  couponsLoading.value = false
+  usableCoupons.value = data?.items ?? []
+  // If the previously selected coupon is no longer applicable (e.g.
+  // user shrank the period and the new subtotal falls below
+  // ``min_order_fen``), drop the selection silently.
+  if (selectedCouponCode.value
+    && !usableCoupons.value.some((c) => c.code === selectedCouponCode.value)) {
+    selectedCouponCode.value = ''
+  }
+}
+
+const selectedCoupon = computed<UsableCoupon | null>(() =>
+  usableCoupons.value.find((c) => c.code === selectedCouponCode.value) ?? null,
+)
+
+const couponDiscountFen = computed<number>(() => {
+  if (!selectedCoupon.value) return 0
+  return Math.min(selectedCoupon.value.discount_fen, couponSubtotalFen.value)
+})
+
+const finalPriceAfterCouponFen = computed<number>(() =>
+  Math.max(0, couponSubtotalFen.value - couponDiscountFen.value),
+)
+
+const couponSelectOptions = computed(() => ([
+  { value: '', label: t('billing.coupons.applyNone') },
+  ...usableCoupons.value.map((c) => ({
+    value: c.code,
+    label: `${c.template_name || c.code} (-¥${(c.discount_fen / 100).toFixed(2)})`,
+  })),
+]))
+
+// Refresh the usable-coupon list whenever the order context changes.
+// Triggers: opening the modal, switching the period, picking a
+// different upgrade target. We don't watch ``couponPlanId`` directly
+// because it only changes alongside ``props.plan?.id``.
+watch(
+  () => [props.modelValue, couponSubtotalFen.value, couponOrderKind.value, couponPlanId.value],
+  ([open]) => {
+    if (open) loadUsableCoupons()
+  },
+  { immediate: true },
+)
+
 // ── Submit ──
 const submitting = ref(false)
 
@@ -305,6 +412,13 @@ async function onConfirm() {
         period_count: selectedPeriod.value.count,
         gateway_code: selectedGateway.value,
       }
+    }
+    if (selectedCouponCode.value) {
+      // The backend accepts ``coupon_code`` (uppercased EC-XXXX form).
+      // It runs a fresh applicability check inside the order
+      // transaction, so if the coupon flipped to non-usable between
+      // load and submit the order will fail cleanly with a 4xx.
+      body.coupon_code = selectedCouponCode.value
     }
     const res = await post<OrderCreated>('/api/user/orders', body)
     if (res?.order?.id) {
@@ -497,6 +611,26 @@ function onCancel() {
         </div>
       </section>
 
+      <!-- Coupon picker -->
+      <section class="section">
+        <div class="section__title">{{ t('billing.coupons.applyHint') }}</div>
+        <div v-if="couponsLoading" class="gateway-loading"><Spinner /></div>
+        <template v-else>
+          <BaseSelect
+            v-if="usableCoupons.length > 0"
+            v-model="selectedCouponCode"
+            :options="couponSelectOptions"
+            :placeholder="t('billing.coupons.applyPlaceholder')"
+          />
+          <p v-else class="coupon-empty">
+            {{ t('billing.coupons.applyEmpty') }}
+            <RouterLink class="coupon-invite-link" :to="{ path: '/orders', query: { tab: 'invite' } }">
+              {{ t('billing.coupons.inviteEntry') }} — {{ t('billing.coupons.inviteEntryLink') }}
+            </RouterLink>
+          </p>
+        </template>
+      </section>
+
       <!-- Cost breakdown -->
       <BaseCard variant="bg3" radius="md" class="summary-card">
         <div class="summary-row">
@@ -514,11 +648,19 @@ function onCancel() {
             -¥{{ fenToYuan(savedFen) }}
           </span>
         </div>
+        <div v-if="selectedCoupon" class="summary-row">
+          <span class="summary-label">
+            {{ t('billing.coupons.applyHint') }} ({{ selectedCoupon.code }})
+          </span>
+          <span class="summary-value mono summary-value--minus">
+            -¥{{ fenToYuan(couponDiscountFen) }}
+          </span>
+        </div>
         <div class="summary-divider" />
         <div class="summary-row summary-row--total">
           <span class="summary-label">{{ t('billing.cashier.summaryTotal') }}</span>
           <span class="summary-value mono summary-value--total">
-            ¥{{ fenToYuan(finalPriceFen) }}
+            ¥{{ fenToYuan(selectedCoupon ? finalPriceAfterCouponFen : finalPriceFen) }}
           </span>
         </div>
         <div class="summary-duration">
@@ -765,6 +907,29 @@ function onCancel() {
   color: var(--ac);
   display: inline-flex;
   align-items: center;
+}
+
+/* ── Coupon picker ── */
+.coupon-empty {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-in);
+  border: 1px dashed var(--bd);
+  border-radius: var(--r-md);
+  color: var(--t3);
+  font-size: .82rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.coupon-invite-link {
+  color: var(--ac);
+  text-decoration: none;
+}
+.coupon-invite-link:hover {
+  color: var(--ac2);
+  text-decoration: underline;
 }
 
 /* ── Summary card ── */

@@ -19,6 +19,8 @@ class UserListItem(BaseModel):
     created_at: str | None
     updated_at: str | None
     server_count: int
+    inviter_user_id: int | None = None
+    inviter_username: str | None = None
 
 
 class UsersListResponse(BaseModel):

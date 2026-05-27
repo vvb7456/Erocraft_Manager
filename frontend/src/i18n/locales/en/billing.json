@@ -1,4 +1,5 @@
 {
+  "pageTitle": "Billing",
   "plans": {
     "pageTitle": "Buy a Server",
     "uncategorised": "Other plans",
@@ -35,6 +36,7 @@
   },
   "orders": {
     "pageTitle": "My Orders",
+    "tab": "Orders",
     "searchPlaceholder": "Search order no / plan name / invoice no",
     "empty": "No orders",
     "payNow": "Pay",
@@ -416,6 +418,179 @@
       },
       "statusFilterLabel": "Status",
       "perPageLabel": "/page"
+    },
+    "tabCouponTemplates": "Coupon Templates",
+    "tabCoupons": "Issued Coupons",
+    "couponTemplates": {
+      "tab": "Coupon Templates",
+      "pageTitle": "Coupon Templates",
+      "create": "New Template",
+      "createTitle": "New Coupon Template",
+      "edit": "Edit",
+      "editTitle": "Edit Template {code}",
+      "delete": "Delete",
+      "deleteConfirm": "Delete template {code}? Already-issued coupons are unaffected.",
+      "deleteOk": "Template deleted",
+      "deleteBuiltin": "Built-in templates cannot be deleted",
+      "deleteConflict": "Template is referenced and cannot be deleted (deactivate instead)",
+      "saveOk": "Template saved",
+      "searchPlaceholder": "Search code / name…",
+      "filterAll": "All",
+      "filterActive": "Active",
+      "filterInactive": "Inactive",
+      "statusFilterLabel": "Status",
+      "statusActive": "Active",
+      "statusInactive": "Inactive",
+      "builtin": "Built-in",
+      "totalCount": "{n} templates",
+      "empty": "No templates yet. Click \"New Template\" to start.",
+      "emptySearch": "No templates match \"{q}\"",
+      "perPageLabel": "/page",
+      "minOrderShort": "Min ¥{amount}",
+      "dayUnit": "days",
+      "scopeAll": "All orders",
+      "col": {
+        "status": "Status",
+        "code": "Code",
+        "name": "Name",
+        "discount": "Discount",
+        "scope": "Scope",
+        "validDays": "Valid Days",
+        "actions": "Actions"
+      },
+      "field": {
+        "code": "Code",
+        "codeLocked": "Cannot be changed after creation",
+        "codeHint": "Unique identifier, e.g. WELCOME10",
+        "name": "Name",
+        "description": "Description",
+        "discountYuan": "Discount (¥)",
+        "minOrderYuan": "Minimum order (¥)",
+        "minOrderHint": "0 = no minimum",
+        "validDays": "Valid Days",
+        "applicablePlanIds": "Applicable plans",
+        "applicablePlanIdsHint": "Leave empty to allow all plans",
+        "allPlans": "All plans",
+        "applicableOrderKinds": "Applicable order kinds",
+        "applicableOrderKindsHint": "Leave empty to allow all kinds",
+        "allKinds": "All",
+        "isActive": "Active"
+      }
+    },
+    "coupons": {
+      "tab": "Issued Coupons",
+      "grant": "Grant",
+      "grantTitle": "Manually grant coupon",
+      "grantUserId": "User",
+      "grantUserPlaceholder": "Select user",
+      "grantTemplate": "Coupon template",
+      "grantTemplatePlaceholder": "Select template",
+      "grantOk": "Coupon granted",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoke coupon {code}? It will become unusable immediately.",
+      "revokeOk": "Revoked",
+      "totalCount": "{n} coupons",
+      "empty": "No coupons",
+      "codePlaceholder": "Code (EC-XXXX)",
+      "userIdPlaceholder": "User ID",
+      "filterAllStatus": "All statuses",
+      "filterAllTemplate": "All templates",
+      "statusFilterLabel": "Status",
+      "templateFilterLabel": "Template",
+      "col": {
+        "code": "Code",
+        "template": "Template",
+        "user": "User",
+        "status": "Status",
+        "discount": "Discount",
+        "issuedAt": "Issued",
+        "expiresAt": "Expires",
+        "actions": "Actions"
+      },
+      "status": {
+        "unused": "Available",
+        "reserved": "Reserved",
+        "used": "Used",
+        "expired": "Expired",
+        "revoked": "Revoked"
+      },
+      "source": {
+        "admin_grant": "Manual grant",
+        "promo": "Promotion",
+        "referral_inviter": "Referral reward (inviter)",
+        "referral_invitee": "Referral reward (invitee)"
+      }
     }
+  },
+  "coupons": {
+    "tab": "Coupons",
+    "code": "Code",
+    "rule": "Requirement",
+    "expiry": "Expires",
+    "usedAt": "Used at",
+    "noThreshold": "No threshold",
+    "minOrder": "Order ≥ ¥{amount}",
+    "daysLeft": "{days} d left",
+    "copyCode": "Copy code",
+    "statusFilterLabel": "Status",
+    "totalCount": "{n} coupons",
+    "tabs": {
+      "unused": "Available",
+      "used": "Used",
+      "expired": "Expired"
+    },
+    "empty": {
+      "unused": "No available coupons",
+      "used": "No used coupons yet",
+      "expired": "No expired coupons"
+    },
+    "applyHint": "Coupon",
+    "applyPlaceholder": "Choose a coupon",
+    "applyNone": "No coupon",
+    "applyEmpty": "No coupon applicable to this order",
+    "applySelected": "Selected: {name} (-¥{amount})",
+    "inviteEntry": "💡 Invite friends to earn coupons",
+    "inviteEntryLink": "View invite",
+    "kinds": {
+      "newPurchase": "New purchase",
+      "renew": "Renew",
+      "upgrade": "Upgrade"
+    }
+  },
+  "invite": {
+    "tab": "Invite friends",
+    "yourCode": "Your invite code",
+    "shareLink": "Invite link",
+    "rulesBody": "When a friend signs up through your link and pays their first order, both of you receive a coupon.",
+    "banner": {
+      "enabledHeadline": "Invite friends, both of you save",
+      "enabledDetail": "When a friend signs up through your invite link and completes an order of at least {minOrder}, you automatically receive a {inviterAmount} coupon (valid for {inviterDays} days) and your friend gets a {inviteeAmount} coupon (valid for {inviteeDays} days). Coupons apply automatically to your next purchase, renewal, or upgrade.",
+      "disabledHeadline": "Invite is on, rewards not configured",
+      "disabledDetail": "The administrator hasn’t enabled invite rewards yet, or the reward coupon templates are missing. You can still share your link — rewards will apply to future invites once the admin turns them on."
+    },
+    "history": "Referral history",
+    "empty": "No referrals yet",
+    "stats": {
+      "total": "Total",
+      "rewarded": "Rewarded",
+      "pending": "Pending first order"
+    },
+    "table": {
+      "invitee": "Invitee",
+      "registeredAt": "Registered at",
+      "status": "Status",
+      "rewardedAt": "Rewarded at"
+    },
+    "referralStatus": {
+      "registered": "Awaiting first order",
+      "rewarded": "Rewarded",
+      "revoked": "Revoked"
+    }
+  },
+  "register": {
+    "inviteCodeLabel": "Invite code (optional)",
+    "inviteCodePlaceholder": "Enter an invite code if you have one",
+    "inviteValid": "Invite code is valid",
+    "inviteInvalid": "Invalid invite code"
   }
 }

@@ -51,6 +51,9 @@ export interface OrderDetail {
   applied_at: string | null
   closed_at: string | null
   invoice: OrderInvoice | null
+  coupon_id: number | null
+  coupon_code: string | null
+  coupon_discount_fen: number | null
 }
 
 const TERMINAL_STATUSES = new Set([

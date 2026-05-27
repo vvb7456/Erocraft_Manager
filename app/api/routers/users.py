@@ -154,8 +154,10 @@ async def list_users(
                 created_at=user.created_at.isoformat() if user.created_at else None,
                 updated_at=user.updated_at.isoformat() if user.updated_at else None,
                 server_count=server_count,
+                inviter_user_id=inviter_id,
+                inviter_username=inviter_username,
             )
-            for user, server_count in rows
+            for user, server_count, inviter_id, inviter_username in rows
         ]
     )
 

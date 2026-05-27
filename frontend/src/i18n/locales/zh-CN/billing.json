@@ -1,4 +1,5 @@
 {
+  "pageTitle": "账单",
   "plans": {
     "pageTitle": "购买服务器",
     "uncategorised": "其他套餐",
@@ -35,6 +36,7 @@
   },
   "orders": {
     "pageTitle": "我的订单",
+    "tab": "订单",
     "searchPlaceholder": "搜索订单号 / 套餐名 / 发票号",
     "empty": "暂无订单",
     "payNow": "去付款",
@@ -416,6 +418,179 @@
       },
       "statusFilterLabel": "状态",
       "perPageLabel": "条/页"
+    },
+    "tabCouponTemplates": "优惠券模板",
+    "tabCoupons": "已发券",
+    "couponTemplates": {
+      "tab": "优惠券模板",
+      "pageTitle": "优惠券模板",
+      "create": "新建模板",
+      "createTitle": "新建优惠券模板",
+      "edit": "编辑",
+      "editTitle": "编辑模板 {code}",
+      "delete": "删除",
+      "deleteConfirm": "确定删除模板 {code}？已发出的券不受影响。",
+      "deleteOk": "模板已删除",
+      "deleteBuiltin": "内置模板不可删除",
+      "deleteConflict": "该模板被引用，无法删除（可改为停用）",
+      "saveOk": "模板已保存",
+      "searchPlaceholder": "搜索代码 / 名称…",
+      "filterAll": "全部",
+      "filterActive": "启用中",
+      "filterInactive": "已停用",
+      "statusFilterLabel": "状态",
+      "statusActive": "启用中",
+      "statusInactive": "已停用",
+      "builtin": "内置",
+      "totalCount": "共 {n} 个模板",
+      "empty": "还没有任何模板，点击右上角“新建模板”开始",
+      "emptySearch": "没有匹配 “{q}” 的模板",
+      "perPageLabel": "条/页",
+      "minOrderShort": "满 ¥{amount}",
+      "dayUnit": "天",
+      "scopeAll": "全部订单",
+      "col": {
+        "status": "状态",
+        "code": "代码",
+        "name": "名称",
+        "discount": "面额",
+        "scope": "适用范围",
+        "validDays": "有效期",
+        "actions": "操作"
+      },
+      "field": {
+        "code": "代码 (code)",
+        "codeLocked": "创建后不可修改",
+        "codeHint": "唯一标识，例如 WELCOME10",
+        "name": "名称",
+        "description": "说明",
+        "discountYuan": "面额（元）",
+        "minOrderYuan": "最低订单金额（元）",
+        "minOrderHint": "0 表示无门槛",
+        "validDays": "有效天数",
+        "applicablePlanIds": "适用套餐",
+        "applicablePlanIdsHint": "留空表示所有套餐",
+        "allPlans": "全部套餐",
+        "applicableOrderKinds": "适用订单类型",
+        "applicableOrderKindsHint": "留空表示所有类型",
+        "allKinds": "全部",
+        "isActive": "启用"
+      }
+    },
+    "coupons": {
+      "tab": "已发券",
+      "grant": "手动发券",
+      "grantTitle": "手动发券",
+      "grantUserId": "用户",
+      "grantUserPlaceholder": "选择用户",
+      "grantTemplate": "优惠券模板",
+      "grantTemplatePlaceholder": "选择模板",
+      "grantOk": "已发券",
+      "revoke": "撤销",
+      "revokeConfirm": "确定撤销优惠券 {code}？该券将立即不可使用。",
+      "revokeOk": "已撤销",
+      "totalCount": "共 {n} 张",
+      "empty": "暂无优惠券",
+      "codePlaceholder": "代码搜索（EC-XXXX）",
+      "userIdPlaceholder": "用户 ID",
+      "filterAllStatus": "全部状态",
+      "filterAllTemplate": "全部模板",
+      "statusFilterLabel": "状态",
+      "templateFilterLabel": "模板",
+      "col": {
+        "code": "代码",
+        "template": "模板",
+        "user": "用户",
+        "status": "状态",
+        "discount": "面额",
+        "issuedAt": "发放时间",
+        "expiresAt": "到期时间",
+        "actions": "操作"
+      },
+      "status": {
+        "unused": "未使用",
+        "reserved": "占用中",
+        "used": "已使用",
+        "expired": "已过期",
+        "revoked": "已撤销"
+      },
+      "source": {
+        "admin_grant": "手动发放",
+        "promo": "活动赠送",
+        "referral_inviter": "邀请奖励（邀请人）",
+        "referral_invitee": "邀请奖励（被邀请）"
+      }
     }
+  },
+  "coupons": {
+    "tab": "优惠券",
+    "code": "代码",
+    "rule": "使用门槛",
+    "expiry": "有效期至",
+    "usedAt": "使用时间",
+    "noThreshold": "无门槛",
+    "minOrder": "订单满 ¥{amount}",
+    "daysLeft": "剩 {days} 天",
+    "copyCode": "复制代码",
+    "statusFilterLabel": "状态",
+    "totalCount": "共 {n} 张",
+    "tabs": {
+      "unused": "未使用",
+      "used": "已使用",
+      "expired": "已过期"
+    },
+    "empty": {
+      "unused": "暂无可用优惠券",
+      "used": "暂无已使用记录",
+      "expired": "暂无已过期券"
+    },
+    "applyHint": "优惠券",
+    "applyPlaceholder": "选择一张可用优惠券",
+    "applyNone": "不使用优惠券",
+    "applyEmpty": "本次订单暂无可用优惠券",
+    "applySelected": "已选：{name}（-¥{amount}）",
+    "inviteEntry": "💡 邀请新用户即可获得优惠券",
+    "inviteEntryLink": "查看邀请",
+    "kinds": {
+      "newPurchase": "新购",
+      "renew": "续费",
+      "upgrade": "升级"
+    }
+  },
+  "invite": {
+    "tab": "邀请好友",
+    "yourCode": "你的专属邀请码",
+    "shareLink": "邀请链接",
+    "rulesBody": "朋友通过你的邀请链接注册并完成首次订单，你和朋友各获得一张优惠券。",
+    "banner": {
+      "enabledHeadline": "邀请好友，双方共赢",
+      "enabledDetail": "好友通过你的邀请链接注册，并完成一笔实付金额不低于 {minOrder} 的订单后，你将自动获得一张面额 {inviterAmount} 的优惠券（{inviterDays} 天内有效），好友也会获得一张面额 {inviteeAmount} 的优惠券（{inviteeDays} 天内有效）。优惠券可在下次购买、续费或升级套餐时直接抵扣。",
+      "disabledHeadline": "邀请功能已开启，奖励暂未配置",
+      "disabledDetail": "管理员尚未启用邀请奖励，或奖励优惠券模板未配置。你仍然可以分享邀请链接，奖励将在管理员开启后对未来的新邀请生效。"
+    },
+    "history": "邀请记录",
+    "empty": "还没有人通过你的邀请注册",
+    "stats": {
+      "total": "总邀请",
+      "rewarded": "已奖励",
+      "pending": "待首单"
+    },
+    "table": {
+      "invitee": "被邀请人",
+      "registeredAt": "注册时间",
+      "status": "状态",
+      "rewardedAt": "奖励时间"
+    },
+    "referralStatus": {
+      "registered": "等待首单",
+      "rewarded": "已奖励",
+      "revoked": "已撤销"
+    }
+  },
+  "register": {
+    "inviteCodeLabel": "邀请码（选填）",
+    "inviteCodePlaceholder": "如有邀请码请在此填写",
+    "inviteValid": "邀请码有效",
+    "inviteInvalid": "邀请码无效"
   }
 }

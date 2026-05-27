@@ -214,6 +214,72 @@ async def apply_paid_order(
         await notify.notify_order_paid(order_id)
     except Exception:  # noqa: BLE001 - email is best-effort
         logger.exception("notify_order_paid failed for order %s", order_id)
+
+    # ── Stage 4b: coupon consumption + referral reward (best-effort) ──────
+    # Both are downstream of a successful apply and must NEVER reverse
+    # the order state. Failures are logged but swallowed.
+    try:
+        await db.refresh(order)
+    except Exception:
+        logger.exception("apply_engine: refresh order %s failed", order_id)
+    if order.coupon_id is not None:
+        try:
+            from app.services.billing import coupons as coupon_svc
+
+            await coupon_svc.mark_used_for_order(
+                db,
+                order_id=order_id,
+                actual_discount_fen=order.coupon_discount_fen or 0,
+            )
+        except Exception as exc:  # noqa: BLE001
+            await db.rollback()
+            logger.exception(
+                "apply_engine: coupon mark_used failed for order %s", order_id
+            )
+            try:
+                from app.services.audit import log_manager_activity
+                await log_manager_activity(
+                    db,
+                    actor="system",
+                    category="billing",
+                    status="failed",
+                    detail_key="billing.coupon.mark_used_failed",
+                    detail_params={
+                        "order_id": order_id,
+                        "coupon_id": order.coupon_id,
+                        "error": str(exc)[:200],
+                    },
+                )
+            except Exception:
+                logger.exception(
+                    "apply_engine: activity log for coupon mark_used_failed failed"
+                )
+    try:
+        from app.services.billing import referral_rewards
+
+        await referral_rewards.try_grant_for_order(db, order)
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        logger.exception(
+            "apply_engine: referral grant failed for order %s", order_id
+        )
+        try:
+            from app.services.audit import log_manager_activity
+            await log_manager_activity(
+                db,
+                actor="system",
+                category="billing",
+                status="failed",
+                detail_key="billing.referral.grant_failed",
+                detail_params={
+                    "order_id": order_id,
+                    "error": str(exc)[:200],
+                },
+            )
+        except Exception:
+            logger.exception(
+                "apply_engine: activity log for referral grant_failed failed"
+            )
     return ApplyResult.APPLIED
 
 
@@ -540,6 +606,20 @@ async def _record_failure_and_release(
             logger.exception(
                 "notify apply_failed/alert failed for order %s", order.id
             )
+        # Release reserved coupon — the order is dead, the user keeps the
+        # coupon. Best-effort, swallow errors so we don't mask the
+        # underlying apply failure.
+        if order.coupon_id is not None:
+            try:
+                from app.services.billing import coupons as coupon_svc
+
+                await coupon_svc.release_for_order(db, order_id=order.id)
+            except Exception:
+                await db.rollback()
+                logger.exception(
+                    "apply_engine: coupon release on permanent failure "
+                    "failed for order %s", order.id,
+                )
         return ApplyResult.PERMANENT_FAILURE
     # First retry failure (apply_retry_count == 1) → admin alert per §14.
     if (row.apply_retry_count or 0) == 1:
@@ -599,4 +679,17 @@ async def _terminate_apply(
         detail_key="billing.order.apply_terminated",
         detail_params={"order_id": order.id, "reason": reason},
     )
+    # Release coupon on terminate too — same rationale as the retry-
+    # exhausted path above.
+    if order.coupon_id is not None:
+        try:
+            from app.services.billing import coupons as coupon_svc
+
+            await coupon_svc.release_for_order(db, order_id=order.id)
+        except Exception:
+            await db.rollback()
+            logger.exception(
+                "apply_engine: coupon release on terminate failed for order %s",
+                order.id,
+            )
     return ApplyResult.PERMANENT_FAILURE

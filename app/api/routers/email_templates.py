@@ -55,6 +55,8 @@ async def get_email_templates(
         orderApplyAlert=_payload("order_apply_alert"),
         orderRefunded=_payload("order_refunded"),
         serverInstalled=_payload("server_installed"),
+        referralInviterRewarded=_payload("referral_inviter_rewarded"),
+        referralInviteeRewarded=_payload("referral_invitee_rewarded"),
     )
 
 

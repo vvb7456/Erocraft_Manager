@@ -317,6 +317,40 @@ async def create_order(
             "price_fen": old_plan.price_fen,
             "days": old_plan.days,
         }
+
+    # ── 2b) Coupon resolution (pre-flight only — actual reserve happens in
+    # the order tx below so we share atomicity with the IntegrityError
+    # guard). See ``REFERRAL_AND_COUPON_DESIGN.md`` §6.
+    from app.services.billing import coupons as coupon_svc
+    raw_code = (payload.coupon_code or "").strip()
+    coupon_code_norm: str | None = raw_code.upper() if raw_code else None
+    coupon_discount_fen = 0
+    if coupon_code_norm:
+        preview = await coupon_svc.get_by_code_for_user(
+            db, user.id, coupon_code_norm
+        )
+        if preview is None:
+            raise InvalidOrderRequest("优惠券不存在或不属于你")
+        ok, reason = coupon_svc._is_applicable(
+            preview,
+            order_kind=payload.kind,
+            plan_id=plan.id,
+            subtotal_fen=total_fen,
+            now=utc_naive_now(),
+        )
+        if not ok:
+            raise InvalidOrderRequest(coupon_svc._reason_to_msg(reason))
+        # Invariant C4: discount can never push the total below 0.
+        coupon_discount_fen = min(preview.discount_fen, total_fen)
+        snapshot["coupon"] = {
+            "id": preview.id,
+            "code": preview.code,
+            "template_id": preview.template_id,
+            "discount_fen": preview.discount_fen,
+            "applied_fen": coupon_discount_fen,
+        }
+
+    payable_total_fen = total_fen - coupon_discount_fen
     timeout_min = await _runtime_int(db, "BILLING_ORDER_PAY_TIMEOUT_MIN")
 
     # ── 4) Transaction: order + invoice + item (+ placeholder server) ─────
@@ -334,8 +368,11 @@ async def create_order(
             kind=payload.kind,
             period_count=period["count"],
             discount_pct=Decimal(str(period["discount_pct"])),
-            total_fen=total_fen,
+            total_fen=payable_total_fen,
             total_days=total_days,
+            coupon_discount_fen=(
+                coupon_discount_fen if coupon_code_norm else None
+            ),
             target_server_id=(
                 payload.target_server_id if payload.kind in ("renew", "upgrade") else None
             ),
@@ -345,6 +382,25 @@ async def create_order(
         )
         db.add(order)
         await db.flush()
+
+        # Atomically claim coupon inside the same tx so a concurrent order
+        # can't grab the same coupon. The reserve helper raises
+        # CouponNotUsable / CouponNotApplicable which we translate.
+        if coupon_code_norm:
+            try:
+                reserved = await coupon_svc.reserve_for_order(
+                    db,
+                    user_id=user.id,
+                    coupon_code=coupon_code_norm,
+                    order_id=order.id,
+                    order_kind=payload.kind,
+                    plan_id=plan.id,
+                    subtotal_fen=total_fen,
+                )
+            except coupon_svc.CouponError as exc:
+                await db.rollback()
+                raise InvalidOrderRequest(str(exc)) from exc
+            order.coupon_id = reserved.id
 
         if payload.kind == "new_purchase":
             placeholder_server_id = await _create_placeholder_server(
@@ -358,29 +414,40 @@ async def create_order(
             order_id=order.id,
             user_id=user.id,
             status="pending",
-            total_fen=total_fen,
+            total_fen=payable_total_fen,
             currency_code=plan.currency_code,
             due_at=now + timedelta(minutes=timeout_min),
         )
         db.add(invoice)
         await db.flush()
 
+        item_desc = (
+            f"{plan.display_name} ({total_days}天 = "
+            f"{plan.days}天 × {period['count']})"
+        )
+        if coupon_code_norm:
+            item_desc += f" - 优惠券 {coupon_code_norm} 抵扣 ¥{coupon_discount_fen / 100:.2f}"
+
         db.add(
             BillingInvoiceItem(
                 invoice_id=invoice.id,
                 ref_type="order",
                 ref_id=order.id,
-                description=(
-                    f"{plan.display_name} ({total_days}天 = "
-                    f"{plan.days}天 × {period['count']})"
-                ),
-                price_fen=total_fen,
+                description=item_desc,
+                price_fen=payable_total_fen,
                 quantity=1,
                 meta={
                     "plan_code": plan.code,
                     "days_per_period": plan.days,
                     "period_count": period["count"],
                     "discount_pct": period["discount_pct"],
+                    **(
+                        {
+                            "coupon_code": coupon_code_norm,
+                            "coupon_discount_fen": coupon_discount_fen,
+                            "subtotal_fen_before_coupon": total_fen,
+                        } if coupon_code_norm else {}
+                    ),
                 },
             )
         )
@@ -587,6 +654,15 @@ async def _rollback_failed_order(
                 payload={"phase": "create_order_rollback"},
             )
 
+    # Release any coupon that was reserved before order delete fires the
+    # FK cascade — we want the coupon back to ``unused`` not orphaned.
+    try:
+        from app.services.billing import coupons as coupon_svc
+        await coupon_svc.release_for_order(db, order_id=order_id)
+    except Exception:
+        await db.rollback()
+        logger.exception("rollback: coupon release failed for order %s", order_id)
+
     try:
         await db.execute(delete(BillingOrder).where(BillingOrder.id == order_id))
         await db.commit()
@@ -769,6 +845,17 @@ async def cancel_order(
             )
         )
         await db.commit()
+
+        # Release coupon back to ``unused`` so the user can use it on
+        # their next order. Idempotent w.r.t. reservation state.
+        try:
+            from app.services.billing import coupons as coupon_svc
+            await coupon_svc.release_for_order(db, order_id=order_id)
+        except Exception:
+            await db.rollback()
+            logger.exception(
+                "cancel_order: coupon release failed for order %s", order_id
+            )
 
         # ── 4) Cleanup placeholder (outside tx, Wings-404-idempotent)
         order_kind = await db.scalar(

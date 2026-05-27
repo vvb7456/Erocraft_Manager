@@ -68,6 +68,21 @@ const router = createRouter({
       component: () => import('@/pages/user/UserOrdersPage.vue'),
       meta: { layout: 'user' },
     },
+    // Aliases for direct email / bookmark links to the coupons + invite
+    // tabs. The page itself rewrites the URL to /orders?tab=… on mount so
+    // the address bar stays consistent.
+    {
+      path: '/coupons',
+      name: 'user-coupons',
+      component: () => import('@/pages/user/UserOrdersPage.vue'),
+      meta: { layout: 'user' },
+    },
+    {
+      path: '/invite',
+      name: 'user-invite',
+      component: () => import('@/pages/user/UserOrdersPage.vue'),
+      meta: { layout: 'user' },
+    },
     {
       path: '/orders/:id',
       name: 'user-order-detail',

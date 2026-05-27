@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AuthForm from '@/components/auth/AuthForm.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -14,12 +14,21 @@ import Spinner from '@/components/ui/Spinner.vue'
 defineOptions({ name: 'RegisterPage' })
 
 const router = useRouter()
+const route = useRoute()
 const { t, te } = useI18n({ useScope: 'global' })
 
 const username = ref('')
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
+const inviteCode = ref('')
+// Debounced probe state for the invite code field. We don't want to fire
+// a request on every keystroke, and we don't want to surface "invalid"
+// while the user is still typing — only after a short idle window. The
+// ``inviteState`` value mirrors the visual hint shown beneath the field.
+const inviteState = ref<'idle' | 'checking' | 'valid' | 'invalid'>('idle')
+let inviteTimer: ReturnType<typeof setTimeout> | null = null
+let inviteAbort: AbortController | null = null
 const loading = ref(false)
 const error = ref('')
 const success = ref('')
@@ -78,6 +87,11 @@ watch([username, email, password, confirmPassword], () => {
 })
 
 onMounted(async () => {
+  // Prefill the invite code from the URL so links of the form
+  // `/#/register?invite=ABCD` work without any user effort. The probe is
+  // triggered automatically by the watcher below.
+  const fromQuery = String(route.query.invite || '').trim().toUpperCase()
+  if (fromQuery) inviteCode.value = fromQuery
   try {
     const res = await fetch('/api/public/branding')
     if (res.ok) {
@@ -89,8 +103,32 @@ onMounted(async () => {
   } catch { /* ignore */ }
 })
 
+watch(inviteCode, (value) => {
+  if (inviteTimer) { clearTimeout(inviteTimer); inviteTimer = null }
+  if (inviteAbort) { inviteAbort.abort(); inviteAbort = null }
+  const code = value.trim().toUpperCase()
+  if (!code) { inviteState.value = 'idle'; return }
+  inviteState.value = 'checking'
+  inviteTimer = setTimeout(async () => {
+    inviteAbort = new AbortController()
+    try {
+      const res = await fetch(`/api/public/invite/${encodeURIComponent(code)}/info`, {
+        signal: inviteAbort.signal,
+      })
+      // The probe endpoint replies 200 for valid codes and 404 for
+      // unknown ones; treat any non-2xx as invalid.
+      inviteState.value = res.ok ? 'valid' : 'invalid'
+    } catch (err) {
+      if ((err as DOMException)?.name === 'AbortError') return
+      inviteState.value = 'invalid'
+    }
+  }, 350)
+})
+
 onBeforeUnmount(() => {
   if (redirectTimer) clearTimeout(redirectTimer)
+  if (inviteTimer) clearTimeout(inviteTimer)
+  if (inviteAbort) inviteAbort.abort()
 })
 
 function queueRedirect() {
@@ -129,6 +167,10 @@ async function handleSubmit() {
         email: email.value.trim(),
         username: username.value.trim(),
         password: password.value,
+        // Only include the invite code when the user actually filled
+        // one in. The backend treats missing and empty the same, but
+        // omitting the field keeps the request payload tidy in logs.
+        ...(inviteCode.value.trim() ? { invite_code: inviteCode.value.trim().toUpperCase() } : {}),
       }),
     })
     let data: { message?: string; detail?: string; error?: string } | null = null
@@ -200,6 +242,22 @@ async function handleSubmit() {
           autocomplete="new-password"
         />
       </FormField>
+
+      <FormField :label="t('billing.register.inviteCodeLabel')">
+        <BaseInput
+          v-model="inviteCode"
+          :placeholder="t('billing.register.inviteCodePlaceholder')"
+          autocomplete="off"
+          @input="inviteCode = inviteCode.toUpperCase()"
+        />
+        <div v-if="inviteState !== 'idle'" class="invite-hint" :class="`invite-${inviteState}`">
+          <Spinner v-if="inviteState === 'checking'" size="sm" />
+          <MsIcon v-else-if="inviteState === 'valid'" name="check_circle" size="sm" />
+          <MsIcon v-else name="error" size="sm" />
+          <span v-if="inviteState === 'valid'">{{ t('billing.register.inviteValid') }}</span>
+          <span v-else-if="inviteState === 'invalid'">{{ t('billing.register.inviteInvalid') }}</span>
+        </div>
+      </FormField>
     </template>
 
     <p v-if="success" class="register-hint">{{ t('register.redirecting') }}</p>
@@ -245,5 +303,22 @@ async function handleSubmit() {
   font-size: .78rem;
   text-align: center;
   margin-top: calc(var(--sp-2) * -1);
+}
+
+.invite-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+  font-size: .78rem;
+  color: var(--t3);
+}
+
+.invite-hint.invite-valid {
+  color: var(--green);
+}
+
+.invite-hint.invite-invalid {
+  color: var(--red);
 }
 </style>

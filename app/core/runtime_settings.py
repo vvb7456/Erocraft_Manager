@@ -98,6 +98,36 @@ def _enum_normalizer(allowed: tuple[str, ...], default: str) -> Callable[[Any], 
     return normalize
 
 
+# REFERRAL_QUALIFYING_KINDS is stored as a JSON list. Env-var overrides come
+# in as CSV strings (env vars can't carry JSON cleanly), so the env reader
+# parses those; the normalize path expects a list/tuple from the API.
+_QUALIFYING_KIND_VALUES = ("new_purchase", "renew", "upgrade")
+
+
+def _env_kinds_list(name: str, default: list[str]) -> list[str]:
+    get_settings()
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return list(default)
+    return _normalize_kinds_list([s.strip() for s in raw.split(",")])
+
+
+def _normalize_kinds_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        items = [str(s).strip() for s in value]
+    else:
+        items = [str(value).strip()]
+    seen: set[str] = set()
+    out: list[str] = []
+    for it in items:
+        if it and it in _QUALIFYING_KIND_VALUES and it not in seen:
+            seen.add(it)
+            out.append(it)
+    return out
+
+
 @dataclass(frozen=True, slots=True)
 class SettingSpec:
     key: str
@@ -426,6 +456,50 @@ BILLING_SPECS: dict[str, SettingSpec] = _register({
         "BILLING_REFUND_STUCK_HOURS", "billing",
         lambda: _env_int("BILLING_REFUND_STUCK_HOURS", 24),
         _int_clamper(1, 168, 24),
+    ),
+    # ---- Referral / coupon system (docs/REFERRAL_AND_COUPON_DESIGN.md) ----
+    # Master switch — when False, the invite link still works (capturing
+    # inviter_user_id on register) but no coupons are issued when the
+    # invitee places their first qualifying order. Lets us flip the
+    # incentive on/off without losing audit history.
+    "REFERRAL_REWARD_ENABLED": SettingSpec(
+        "REFERRAL_REWARD_ENABLED", "billing",
+        lambda: _env_bool("REFERRAL_REWARD_ENABLED", False),
+        _normalize_bool,
+    ),
+    # Template codes (not ids) so the system survives template re-seeds.
+    # The referral_rewards service resolves codes → templates at grant
+    # time. Defaults match the built-in seed in 20260524_coupons migration.
+    "REFERRAL_INVITER_TEMPLATE_CODE": SettingSpec(
+        "REFERRAL_INVITER_TEMPLATE_CODE", "billing",
+        lambda: _env_str("REFERRAL_INVITER_TEMPLATE_CODE", "REFERRAL_INVITER"),
+        _normalize_str,
+    ),
+    "REFERRAL_INVITEE_TEMPLATE_CODE": SettingSpec(
+        "REFERRAL_INVITEE_TEMPLATE_CODE", "billing",
+        lambda: _env_str("REFERRAL_INVITEE_TEMPLATE_CODE", "REFERRAL_INVITEE"),
+        _normalize_str,
+    ),
+    # Minimum order subtotal (in fen) the invitee must pay to qualify as
+    # the "first qualifying order" that triggers paired coupon issuance.
+    # Default 1 fen = "any paid order qualifies". Raise this to filter
+    # out throwaway tiny orders if abuse becomes an issue.
+    "REFERRAL_QUALIFYING_MIN_FEN": SettingSpec(
+        "REFERRAL_QUALIFYING_MIN_FEN", "billing",
+        lambda: _env_int("REFERRAL_QUALIFYING_MIN_FEN", 1),
+        _int_clamper(1, 1_000_000, 1),
+    ),
+    # JSON list of order ``kind`` values that trigger paired-coupon
+    # issuance. Default mirrors the doc: any first-paid order counts.
+    # Set to a narrower list (e.g. ``["new_purchase"]``) to restrict
+    # rewards to first-time purchases only. Stored as a JSON list under
+    # the hood (settings_store handles ser/de via value_type=json).
+    "REFERRAL_QUALIFYING_KINDS": SettingSpec(
+        "REFERRAL_QUALIFYING_KINDS", "billing",
+        lambda: _env_kinds_list(
+            "REFERRAL_QUALIFYING_KINDS", ["new_purchase", "renew", "upgrade"]
+        ),
+        _normalize_kinds_list,
     ),
 })
 

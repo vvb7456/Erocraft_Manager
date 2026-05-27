@@ -1,0 +1,4 @@
+{
+    "subject": "【{{brand_name}}】您邀请的好友已下单，奖励券已到账",
+    "body": "您邀请的好友 {{invitee_username}} 已完成首次订单，感谢您的推广！\n\n奖励：{{coupon_name}}（面额 ¥{{discount_yuan}}）\n券码：{{coupon_code}}\n有效期至：{{expires_at}}\n使用门槛：{{min_order_text}}\n\n请在下单或续费时选择此券抵扣。"
+}
