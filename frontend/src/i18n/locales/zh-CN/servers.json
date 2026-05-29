@@ -8,7 +8,7 @@
     "expiring_soon": "即将到期",
     "expired": "已到期",
     "permanent": "永久",
-    "suspended": "已暂停"
+    "suspended": "已冻结"
   },
   "table": {
     "id": "ID",

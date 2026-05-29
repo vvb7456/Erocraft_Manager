@@ -75,7 +75,7 @@
     },
     "server": {
       "offline": "服务器当前处于关闭状态",
-      "suspended": "服务器已被暂停",
+      "suspended": "服务器已被冻结",
       "installing": "服务器正在安装中，请稍后",
       "invalid_power_action": "无效的电源操作",
       "power_conflict": "另一个电源操作正在进行中",
