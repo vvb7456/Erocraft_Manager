@@ -13,6 +13,7 @@ from app.db.models.manager import (
     ManagerPasswordReset,
     ManagerPendingRegistration,
 )
+from app.db.models.monitoring import HostMetrics, HostProbeResult
 from app.db.session import get_session_factory
 
 logger = logging.getLogger(__name__)
@@ -23,11 +24,20 @@ CLEANUP_JOB_ID = "manager_token_cleanup"
 # for audit then drop. Old rows accumulate as "used" or "expired" otherwise.
 TOKEN_RETENTION = timedelta(hours=24)
 
+# Monitoring time-series: the admin UI only exposes windows up to 7d
+# (see app/api/routers/monitoring.py::_WINDOW_TO_SECONDS). Keep 14d of
+# raw 1-minute samples as buffer for ad-hoc SQL debugging, then drop.
+# At 5 hosts × 1/min daily cleanup removes ~7200 rows — single-shot
+# DELETE is fast enough.
+METRICS_RETENTION = timedelta(days=14)
+
 
 async def run_token_cleanup() -> None:
-    """Delete stale registration / password-reset / email-change rows."""
+    """Delete stale registration / password-reset / email-change rows
+    plus monitoring time-series older than the retention window."""
     session_factory = get_session_factory()
     cutoff = utc_naive_now() - TOKEN_RETENTION
+    metrics_cutoff = utc_naive_now() - METRICS_RETENTION
     async with session_factory() as db:
         try:
             res_reg = await db.execute(
@@ -55,3 +65,26 @@ async def run_token_cleanup() -> None:
         except Exception:
             await db.rollback()
             logger.exception("token cleanup failed")
+
+        try:
+            res_hm = await db.execute(
+                delete(HostMetrics)
+                .where(HostMetrics.ts < metrics_cutoff)
+                .execution_options(synchronize_session=False)
+            )
+            res_hp = await db.execute(
+                delete(HostProbeResult)
+                .where(HostProbeResult.ts < metrics_cutoff)
+                .execution_options(synchronize_session=False)
+            )
+            await db.commit()
+            logger.info(
+                "monitoring cleanup: deleted %s host_metrics, %s host_probes (cutoff=%s)",
+                res_hm.rowcount,
+                res_hp.rowcount,
+                metrics_cutoff.isoformat(),
+            )
+        except Exception:
+            await db.rollback()
+            logger.exception("monitoring cleanup failed")
+
