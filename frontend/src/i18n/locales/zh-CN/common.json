@@ -28,6 +28,9 @@
     "switch_en": "Switch to English"
   },
   "theme_toggle": "切换主题",
+  "pagination": {
+    "jump": "跳转页面（1–{n}）"
+  },
   "no_matches": "无匹配项",
   "search_hint": "搜索…",
   "empty": "暂无数据",

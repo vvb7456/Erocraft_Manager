@@ -11,11 +11,13 @@
     "permanent": "永久"
   },
   "chart": {
-    "title": "服务器状态分布"
+    "title": "服务器状态分布",
+    "viewServers": "查看该状态服务器"
   },
   "kpi": {
     "servers": "实例",
     "users": "用户",
+    "usersWithServers": "持有实例",
     "hosts": "主机",
     "certs": "证书将到期",
     "certTotal": "证书总数",

@@ -27,8 +27,9 @@
     "switch_zh": "Switch to Chinese",
     "switch_en": "Switch to English"
   },
-  "theme_toggle": "Toggle Theme",
-  "no_matches": "No matches",
+  "theme_toggle": "Toggle Theme",  "pagination": {
+    "jump": "Jump to page (1–{n})"
+  },  "no_matches": "No matches",
   "search_hint": "Search…",
   "empty": "No data",
   "filter_hint": "Filter…",

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
@@ -57,6 +58,7 @@ interface ExpiringServer {
 interface CertSummary { total: number; expiringSoon: number; expired: number }
 interface DashboardData {
   totalUsers: number
+  usersWithServers: number
   totalServers: number
   normalCount: number
   statusDistribution: {
@@ -249,11 +251,11 @@ const donutOption = computed(() => {
         itemStyle: { shadowBlur: 12, shadowColor: 'rgba(20,184,166,0.35)' },
       },
       data: [
-        { name: t('dashboard.status.normal'), value: d.normal, itemStyle: { color: tk.green } },
-        { name: t('dashboard.status.expiringSoon'), value: d.expiring_soon, itemStyle: { color: tk.amber } },
-        { name: t('dashboard.status.expired'), value: d.expired, itemStyle: { color: tk.red } },
-        { name: t('dashboard.status.suspended'), value: d.suspended, itemStyle: { color: tk.t3 } },
-        { name: t('dashboard.status.permanent'), value: d.permanent ?? 0, itemStyle: { color: tk.blue } },
+        { name: t('dashboard.status.normal'), value: d.normal, key: 'normal', itemStyle: { color: tk.green } },
+        { name: t('dashboard.status.expiringSoon'), value: d.expiring_soon, key: 'expiring_soon', itemStyle: { color: tk.amber } },
+        { name: t('dashboard.status.expired'), value: d.expired, key: 'expired', itemStyle: { color: tk.red } },
+        { name: t('dashboard.status.suspended'), value: d.suspended, key: 'suspended', itemStyle: { color: tk.t3 } },
+        { name: t('dashboard.status.permanent'), value: d.permanent ?? 0, key: 'permanent', itemStyle: { color: tk.blue } },
       ].filter(s => s.value > 0),
     }],
   }
@@ -264,13 +266,23 @@ const legendItems = computed(() => {
   const total = data.value.totalServers || 1
   const tk = tokens.value
   return [
-    { label: t('dashboard.status.normal'), count: d.normal, color: tk.green },
-    { label: t('dashboard.status.expiringSoon'), count: d.expiring_soon, color: tk.amber },
-    { label: t('dashboard.status.expired'), count: d.expired, color: tk.red },
-    { label: t('dashboard.status.suspended'), count: d.suspended, color: tk.t3 },
-    { label: t('dashboard.status.permanent'), count: d.permanent ?? 0, color: tk.blue },
+    { key: 'normal', label: t('dashboard.status.normal'), count: d.normal, color: tk.green },
+    { key: 'expiring_soon', label: t('dashboard.status.expiringSoon'), count: d.expiring_soon, color: tk.amber },
+    { key: 'expired', label: t('dashboard.status.expired'), count: d.expired, color: tk.red },
+    { key: 'suspended', label: t('dashboard.status.suspended'), count: d.suspended, color: tk.t3 },
+    { key: 'permanent', label: t('dashboard.status.permanent'), count: d.permanent ?? 0, color: tk.blue },
   ].map(s => ({ ...s, pct: Math.round((s.count / total) * 100) }))
 })
+
+const router = useRouter()
+function gotoStatus(key: string) {
+  router.push({ name: 'servers', query: { status: key } })
+}
+function onDonutClick(params: { data?: unknown }) {
+  const d = params?.data as { key?: string } | null | undefined
+  const k = d && typeof d === 'object' ? d.key : undefined
+  if (k) gotoStatus(k)
+}
 
 /* ── Loaders ── */
 let alive = true
@@ -388,6 +400,9 @@ onUnmounted(() => {
           icon="group"
           :label="t('dashboard.kpi.users')"
           :value="data.totalUsers"
+          :sub-items="[
+            { label: t('dashboard.kpi.usersWithServers'), value: data.usersWithServers, tone: 'green' },
+          ]"
         />
         <KpiTile
           icon="hub"
@@ -449,14 +464,21 @@ onUnmounted(() => {
             </div>
           </header>
           <BaseCard variant="bg2" class="dist-card stretch-card">
-            <VChart class="donut-chart" :option="donutOption" autoresize />
+            <VChart class="donut-chart" :option="donutOption" autoresize @click="onDonutClick" />
             <div class="legend">
-              <span v-for="i in legendItems" :key="i.label" class="leg-item">
+              <button
+                v-for="i in legendItems"
+                :key="i.label"
+                type="button"
+                class="leg-item leg-item--clickable"
+                :title="t('dashboard.chart.viewServers')"
+                @click="gotoStatus(i.key)"
+              >
                 <span class="leg-dot" :style="{ background: i.color }" />
                 <span class="leg-lab">{{ i.label }}</span>
                 <span class="leg-cnt">{{ i.count }}</span>
                 <span class="leg-pct">({{ i.pct }}%)</span>
-              </span>
+              </button>
             </div>
           </BaseCard>
         </section>
@@ -769,6 +791,18 @@ onUnmounted(() => {
   font-size: var(--text-xs);
   white-space: nowrap;
 }
+.leg-item--clickable {
+  background: transparent;
+  border: 0;
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-xs);
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  line-height: inherit;
+}
+.leg-item--clickable:hover { background: var(--bg3); }
+.donut-chart { cursor: pointer; }
 .leg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .leg-lab { color: var(--t2); }
 .leg-cnt { color: var(--t1); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -909,7 +943,7 @@ onUnmounted(() => {
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
   .row-a, .row-c { grid-template-columns: 1fr; }
   .row-c .activity-section { grid-column: auto; }
-  .host-grid { grid-template-columns: 1fr; }
+  .host-grid { grid-template-columns: minmax(0, 1fr); }
   .trends-grid { grid-template-columns: 1fr; }
 }
 </style>

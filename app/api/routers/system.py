@@ -88,6 +88,7 @@ async def dashboard(
 
     return DashboardResponse(
         totalUsers=total_users,
+        usersWithServers=len({s.owner_id for s in all_servers if s.owner_id is not None}),
         totalServers=len(all_servers),
         normalCount=counts["normal"] + counts["expiring_soon"] + counts["permanent"],
         statusDistribution=StatusDistribution(**counts),

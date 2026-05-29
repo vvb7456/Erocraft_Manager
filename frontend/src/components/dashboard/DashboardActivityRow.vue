@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MsIcon from '@/components/ui/MsIcon.vue'
+import { useNow } from '@/composables/useNow'
 
 defineOptions({ name: 'DashboardActivityRow' })
 
@@ -16,12 +17,13 @@ const props = defineProps<{
 
 const { t, te, tm, rt } = useI18n({ useScope: 'global' })
 
+const now = useNow()
 const timeAgo = computed(() => {
   if (!props.timestamp) return '--'
   const hasTz = /Z|[+-]\d{2}:?\d{2}$/.test(props.timestamp)
   const ts = new Date(hasTz ? props.timestamp : props.timestamp + 'Z').getTime()
   if (Number.isNaN(ts)) return '--'
-  const delta = Math.max(0, Math.floor((Date.now() - ts) / 1000))
+  const delta = Math.max(0, Math.floor((now.value - ts) / 1000))
   if (delta < 60) return `${delta}s`
   if (delta < 3600) return `${Math.floor(delta / 60)}m`
   if (delta < 86400) return `${Math.floor(delta / 3600)}h`

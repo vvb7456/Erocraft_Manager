@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AuthForm from '@/components/auth/AuthForm.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -13,7 +13,6 @@ import Spinner from '@/components/ui/Spinner.vue'
 
 defineOptions({ name: 'RegisterPage' })
 
-const router = useRouter()
 const route = useRoute()
 const { t, te } = useI18n({ useScope: 'global' })
 
@@ -33,8 +32,6 @@ const loading = ref(false)
 const error = ref('')
 const success = ref('')
 const allowRegistration = ref(true)
-
-let redirectTimer: ReturnType<typeof setTimeout> | null = null
 
 function translateApiText(value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) return ''
@@ -126,17 +123,9 @@ watch(inviteCode, (value) => {
 })
 
 onBeforeUnmount(() => {
-  if (redirectTimer) clearTimeout(redirectTimer)
   if (inviteTimer) clearTimeout(inviteTimer)
   if (inviteAbort) inviteAbort.abort()
 })
-
-function queueRedirect() {
-  if (redirectTimer) clearTimeout(redirectTimer)
-  redirectTimer = setTimeout(() => {
-    router.replace({ name: 'login' })
-  }, 5000)
-}
 
 async function handleSubmit() {
   // Reentrancy guard. The submit handler can be triggered twice in the
@@ -180,7 +169,6 @@ async function handleSubmit() {
       success.value = t('register.success')
       password.value = ''
       confirmPassword.value = ''
-      queueRedirect()
       return
     }
     error.value = translateApiText(data?.detail || data?.error || data?.message)
@@ -261,8 +249,6 @@ async function handleSubmit() {
         />
       </FormField>
     </template>
-
-    <p v-if="success" class="register-hint">{{ t('register.redirecting') }}</p>
 
     <template v-if="allowRegistration && !success" #submit>
       <BaseButton

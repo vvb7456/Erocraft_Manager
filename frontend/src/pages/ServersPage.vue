@@ -61,7 +61,7 @@ interface BatchServersResult {
 const rawServers = ref<ServerItem[]>([])
 
 // ── Client-side state ──
-const filterStatus = ref('all')
+const filterStatus = ref((route.query.status as string) || 'all')
 const sortBy = ref('expiration_date')
 const sortOrder = ref<'asc' | 'desc'>('asc')
 const searchTerm = ref((route.query.q as string) || '')
@@ -116,6 +116,7 @@ const statusOptions = computed(() => [
   { value: 'expiring_soon', label: t('servers.filter.expiring_soon') },
   { value: 'expired', label: t('servers.filter.expired') },
   { value: 'permanent', label: t('servers.filter.permanent') },
+  { value: 'suspended', label: t('servers.filter.suspended') },
 ])
 
 // ── Fetch (no sort/filter/search params — gets everything) ──
@@ -156,7 +157,11 @@ const filtered = computed(() => {
 
   // Status filter
   if (filterStatus.value !== 'all') {
-    list = list.filter(s => s.statusLabel === filterStatus.value)
+    if (filterStatus.value === 'suspended') {
+      list = list.filter(s => s.isSuspended)
+    } else {
+      list = list.filter(s => s.statusLabel === filterStatus.value)
+    }
   }
 
   return list

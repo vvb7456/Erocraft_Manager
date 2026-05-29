@@ -42,6 +42,7 @@ class CertSummary(BaseModel):
 
 class DashboardResponse(BaseModel):
     totalUsers: int
+    usersWithServers: int
     totalServers: int
     normalCount: int
     statusDistribution: StatusDistribution

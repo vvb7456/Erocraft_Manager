@@ -7,7 +7,8 @@
     "normal": "Normal",
     "expiring_soon": "Expiring Soon",
     "expired": "Expired",
-    "permanent": "Permanent"
+    "permanent": "Permanent",
+    "suspended": "Suspended"
   },
   "table": {
     "id": "ID",

@@ -11,11 +11,13 @@
     "permanent": "Permanent"
   },
   "chart": {
-    "title": "Server Status Distribution"
+    "title": "Server status distribution",
+    "viewServers": "View servers in this status"
   },
   "kpi": {
     "servers": "Servers",
     "users": "Users",
+    "usersWithServers": "With servers",
     "hosts": "Hosts",
     "certs": "Certs Expiring",
     "certTotal": "Total Certs",
