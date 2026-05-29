@@ -156,7 +156,7 @@ start_web() {
     rm -f "$WEB_PID_FILE"
     echo "正在启动 manager-web ..."
     cd "$APP_DIR" || exit 1
-    start_detached "$WEB_LOG_FILE" "$UVICORN_BIN" "$WEB_APP" --host "$WEB_HOST" --port "$WEB_PORT" --workers "$WEB_WORKERS"
+    start_detached "$WEB_LOG_FILE" "$UVICORN_BIN" "$WEB_APP" --host "$WEB_HOST" --port "$WEB_PORT" --workers "$WEB_WORKERS" --no-access-log
     echo $! > "$WEB_PID_FILE"
 
     if wait_for_start "$WEB_PID_FILE" && wait_for_web_ready; then
