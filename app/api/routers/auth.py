@@ -154,20 +154,28 @@ async def logout(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> LogoutResponse:
-    username = "unknown"
     user_id = request.session.get(SESSION_USER_ID_KEY)
+    username = "unknown"
     if user_id:
         user = await user_repository.get_by_id(db, int(user_id))
         if user:
             username = user.username
 
     request.session.clear()
-    await log_manager_activity(
-        db,
-        actor=username,
-        category="auth",
-        status="info",
-        detail_key="logout",
-        detail_params={"username": username},
-    )
+
+    # Only write an audit row when there was an authenticated session.
+    # The logout endpoint is unauthenticated (no get_current_user dep) so
+    # web crawlers/scanners that probe POST /api/logout would otherwise
+    # pollute the audit trail with "unknown" actor entries and trigger
+    # pointless DB writes. A session-less logout is a no-op (clearing an
+    # already-empty session), so there is nothing meaningful to audit.
+    if user_id:
+        await log_manager_activity(
+            db,
+            actor=username,
+            category="auth",
+            status="info",
+            detail_key="logout",
+            detail_params={"username": username},
+        )
     return LogoutResponse(ok=True)
