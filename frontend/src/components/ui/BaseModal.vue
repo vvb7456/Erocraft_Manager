@@ -345,17 +345,42 @@ const footerClass = computed(() => {
   }
   .modal-box {
     max-width: 100%;
-    max-height: 95dvh;
+    /* Reserve space for the page header so it stays visible behind the
+       dimmed overlay. --app-header-h is set by useHeaderHeight composable
+       via ResizeObserver on .page-header. 100svh excludes browser UI,
+       subtracting header height leaves the top strip uncovered by the
+       modal box. !important overrides the inline max-height from the
+       maxHeight prop (default "90vh"). */
+    max-height: calc(100svh - var(--app-header-h, 0px)) !important;
     height: auto;
     border-radius: var(--r-lg) var(--r-lg) 0 0;
     border-bottom: none;
+    overflow: hidden;
   }
+  /* Force content-scroll architecture on mobile: header & footer are
+     non-scrolling flex items (flex-shrink:0), only .modal-body scrolls.
+     This avoids iOS Safari's unreliable position:sticky inside flex+
+     overflow containers, where sticky header fails to stick or covers
+     content that can't be scrolled into view. Desktop emulation doesn't
+     reproduce this — only real iOS devices do. */
+  .modal-box--scroll-body {
+    overflow: hidden;
+  }
+  .modal-box--scroll-body > .modal-body {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+  .modal-header {
+    flex-shrink: 0;
+    padding-bottom: 16px;
+  }
+  .modal-box--compact > .modal-header { padding-bottom: 12px; }
+  .modal-box--roomy > .modal-header { padding-bottom: 16px; }
   .modal-footer {
-    position: sticky;
-    bottom: 0;
-    background: var(--bg3);
+    flex-shrink: 0;
     padding: var(--sp-4) var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom)) !important;
-    border-top: none;
     flex-direction: column-reverse;
     gap: var(--sp-2);
   }

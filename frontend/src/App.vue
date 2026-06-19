@@ -7,12 +7,14 @@ import ConfirmProvider from '@/components/ui/ConfirmProvider.vue'
 import RenewFlowProvider from '@/components/billing/RenewFlowProvider.vue'
 import { provideToast } from '@/composables/useToast'
 import { useTheme } from '@/composables/useTheme'
+import { useHeaderHeight } from '@/composables/useHeaderHeight'
 import { useAppStore } from '@/stores/app'
 
 defineOptions({ name: 'App' })
 
 provideToast()
 useTheme()
+useHeaderHeight()
 
 const app = useAppStore()
 const route = useRoute()

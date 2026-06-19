@@ -35,8 +35,10 @@ onUnmounted(() => { if (isLocked) { unlockBodyScroll(); isLocked = false } })
     <Transition name="bs">
       <div v-if="modelValue" class="bs-overlay" @click="onOverlay">
         <div ref="inner" class="bs-panel" role="dialog" aria-modal="true">
-          <div class="bs-handle" @click="close"><span /></div>
-          <div v-if="title" class="bs-title">{{ title }}</div>
+          <div class="bs-header">
+            <div class="bs-handle" @click="close"><span /></div>
+            <div v-if="title" class="bs-title">{{ title }}</div>
+          </div>
           <div class="bs-body">
             <slot />
           </div>
@@ -60,13 +62,19 @@ onUnmounted(() => { if (isLocked) { unlockBodyScroll(); isLocked = false } })
 .bs-panel {
   width: 100%;
   max-width: 480px;
-  max-height: 80dvh;
+  max-height: calc(100svh - var(--app-header-h, 0px));
   background: var(--bg2);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Header is a non-scrolling flex item; only .bs-body scrolls. Avoids
+   iOS Safari's broken position:sticky inside flex+overflow containers. */
+.bs-header {
+  flex-shrink: 0;
 }
 
 .bs-handle {
@@ -91,6 +99,11 @@ onUnmounted(() => { if (isLocked) { unlockBodyScroll(); isLocked = false } })
 
 .bs-body {
   padding: 0 var(--sp-4) var(--sp-4);
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 /* transitions */
