@@ -122,6 +122,15 @@ onMounted(loadPlans)
 <template>
   <PageHeader icon="storefront" :title="t('billing.plans.pageTitle')" />
 
+  <AlertBanner
+    v-if="!initialLoading && !loadFailed && plans.length > 0 && app.hasOwnedServer"
+    tone="info"
+    :closable="false"
+    class="plans-renew-banner"
+  >
+    {{ t('billing.plans.renewHintBanner') }}
+  </AlertBanner>
+
   <div class="plans-page">
     <LoadingCenter v-if="initialLoading" />
 
@@ -189,6 +198,18 @@ onMounted(loadPlans)
 </template>
 
 <style scoped>
+.plans-renew-banner {
+  margin: 0;
+  border-radius: 0;
+}
+
+.plans-renew-banner :deep(.alert-banner) {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  padding: 10px clamp(28px, 2.5vw, 42px);
+}
+
 .plans-page {
   padding: var(--sp-5) var(--sp-6);
   max-width: 1320px;

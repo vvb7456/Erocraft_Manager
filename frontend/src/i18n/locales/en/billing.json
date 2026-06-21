@@ -13,6 +13,7 @@
     "resDisk": "{n} GB Storage",
     "buyNow": "Buy now",
     "trialBadge": "Trial",
+    "renewHintBanner": "To renew an existing server, go to \"My Servers\" and click the renew button in the console.",
     "supportHint": "Need help?",
     "supportLink": "Contact support"
   },
