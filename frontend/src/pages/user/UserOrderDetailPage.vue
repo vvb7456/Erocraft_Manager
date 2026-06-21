@@ -146,6 +146,7 @@ function gatewayLabel(code: string | null): string {
 function kindLabel(kind: string): string {
   if (kind === 'renew') return t('billing.orderDetail.kindRenew')
   if (kind === 'upgrade') return t('billing.orderDetail.kindUpgrade')
+  if (kind === 'convert') return t('billing.orderDetail.kindConvert')
   return t('billing.orderDetail.kindNew')
 }
 

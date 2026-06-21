@@ -12,6 +12,7 @@
     "resMemory": "{n} GB RAM",
     "resDisk": "{n} GB Storage",
     "buyNow": "Buy now",
+    "trialBadge": "Trial",
     "supportHint": "Need help?",
     "supportLink": "Contact support"
   },
@@ -20,6 +21,9 @@
     "renewTitle": "Renew Order",
     "renewTarget": "Target",
     "renewHint": "Renewal extends the current plan; expiration date will be pushed forward.",
+    "convertTitle": "Convert to Standard Plan",
+    "convertTarget": "Target",
+    "convertHint": "Conversion binds the standard plan; expiration date will be pushed forward.",
     "periodSection": "Billing Period",
     "periodMonth": "{count} months",
     "periodPerMonth": "¥{amount}/mo",
@@ -136,6 +140,7 @@
     "kindNew": "New",
     "kindRenew": "Renew",
     "kindUpgrade": "Upgrade",
+    "kindConvert": "Trial upgrade",
     "totals": {
       "discount": "Discount",
       "amount": "Amount due",
@@ -281,6 +286,7 @@
       "kindNewPurchase": "New",
       "kindRenew": "Renew",
       "kindUpgrade": "Upgrade",
+      "kindConvert": "Trial upgrade",
       "view": "View",
       "forceApply": "Force Apply",
       "forceApplyTitle": "Force Apply Order",
@@ -317,6 +323,8 @@
       "filterAll": "All",
       "filterActive": "Active",
       "filterInactive": "Inactive",
+      "planTypeStandard": "Standard",
+      "planTypeTrial": "Trial",
       "totalCount": "{n} plan(s)",
       "empty": "No plans yet. Click “New plan” to create one.",
       "emptySearch": "No plans match “{q}”",
@@ -378,11 +386,14 @@
         "days": "Base period (days)",
         "periodOptions": "Period options",
         "categoryLabel": "Category label",
-        "displayOrder": "Display order"
+        "displayOrder": "Display order",
+        "planType": "Plan type",
+        "linkedPlan": "Linked standard plan"
       },
       "placeholders": {
         "displayName": "e.g. SillyTavern Basic",
-        "categoryLabel": "e.g. SillyTavern"
+        "categoryLabel": "e.g. SillyTavern",
+        "linkedPlan": "Select a standard plan with the same egg"
       },
       "hints": {
         "code": "Unique identifier; avoid changing after creation",
@@ -395,7 +406,8 @@
         "category": "Used to group plans on the user-facing plans page. Plans sharing the same category label are merged under one heading; leave blank to fall into the \"Other\" group.",
         "displayOrder": "Lower numbers appear first",
         "switchEggReset": "Switching Egg will reset env defaults to the new Egg’s defaults.",
-        "periodCount1Locked": "1-period option is required and cannot be deleted"
+        "periodCount1Locked": "1-period option is required and cannot be deleted",
+        "trial": "Trial plans mirror the linked standard plan's resource config automatically. Trial plans can only be purchased once by users who have never owned a server, and are deleted immediately on expiry (no grace period). Users can only renew by converting to the standard plan."
       },
       "periods": {
         "count": "Periods",
@@ -412,6 +424,7 @@
         "eggRequired": "Select an egg",
         "dockerImageRequired": "Docker image is required",
         "startupRequired": "Startup command is required",
+        "linkedPlanRequired": "Please select a linked standard plan",
         "periodCountRange": "Period count must be 1–24",
         "periodCountDup": "Duplicate period count {c}",
         "periodDiscountRange": "Discount must be 0–50",

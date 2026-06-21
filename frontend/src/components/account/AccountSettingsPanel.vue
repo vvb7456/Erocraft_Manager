@@ -125,6 +125,7 @@ async function loadProfile() {
       ok: true,
       username: data.username,
       is_admin: data.is_admin,
+      has_owned_server: app.hasOwnedServer,
       language: data.language,
     })
   }
@@ -223,6 +224,7 @@ async function submitLanguage() {
       ok: true,
       username: profile.value?.username ?? '',
       is_admin: profile.value?.is_admin ?? false,
+      has_owned_server: app.hasOwnedServer,
       language: selectedLanguage.value,
     })
     languageBanner.value = t('account.language.success')

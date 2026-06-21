@@ -142,7 +142,11 @@ class ServerRepository:
         )
 
     async def list_suspend_candidates(self, db: AsyncSession, today: date) -> list[PteroServer]:
-        """Return servers whose expiration_date < today and not yet suspended."""
+        """Return servers whose expiration_date < today and not yet suspended.
+
+        Trial servers are excluded — they bypass the global suspend cadence
+        and are deleted with zero grace by the dedicated trial_expire task.
+        """
         result = await db.execute(
             select(PteroServer)
             .join(ServerMeta, ServerMeta.server_id == PteroServer.id)
@@ -150,6 +154,7 @@ class ServerRepository:
             .where(
                 ServerMeta.expiration_date < today,
                 PteroServer.status.is_(None),
+                ServerMeta.is_trial.is_(False),
                 _exclude_placeholders(),
             )
             .order_by(PteroServer.id.asc())
@@ -167,11 +172,39 @@ class ServerRepository:
         return list(result.scalars().all())
 
     async def list_expired_before_or_on(self, db: AsyncSession, threshold: date) -> list[PteroServer]:
+        """Return non-trial servers expired at or before ``threshold``.
+
+        Trial servers are excluded — they follow their own zero-grace
+        deletion via :meth:`list_trial_expired`.
+        """
         result = await db.execute(
             select(PteroServer)
             .join(ServerMeta, ServerMeta.server_id == PteroServer.id)
             .options(selectinload(PteroServer.meta))
-            .where(ServerMeta.expiration_date <= threshold, _exclude_placeholders())
+            .where(
+                ServerMeta.expiration_date <= threshold,
+                ServerMeta.is_trial.is_(False),
+                _exclude_placeholders(),
+            )
+            .order_by(PteroServer.id.asc())
+        )
+        return list(result.scalars().all())
+
+    async def list_trial_expired(self, db: AsyncSession, today: date) -> list[PteroServer]:
+        """Return trial servers whose expiration_date < today.
+
+        These are deleted with zero grace (no suspend step, no
+        AUTOMATION_DELETE_DAYS window) by the trial_expire task.
+        """
+        result = await db.execute(
+            select(PteroServer)
+            .join(ServerMeta, ServerMeta.server_id == PteroServer.id)
+            .options(selectinload(PteroServer.meta))
+            .where(
+                ServerMeta.expiration_date < today,
+                ServerMeta.is_trial.is_(True),
+                _exclude_placeholders(),
+            )
             .order_by(PteroServer.id.asc())
         )
         return list(result.scalars().all())

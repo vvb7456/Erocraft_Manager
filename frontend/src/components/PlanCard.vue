@@ -9,6 +9,7 @@
   memory_mb: number
   disk_mb: number
   description_md: string | null
+  plan_type?: string
 }">
 /**
  * PlanCard — single billing plan tile used by UserPlansPage.
@@ -20,6 +21,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import { renderMarkdown } from '@/utils/markdown'
 
@@ -41,6 +43,7 @@ interface Plan {
   memory_mb: number
   disk_mb: number
   description_md: string | null
+  plan_type?: string
 }
 
 const props = defineProps<{
@@ -82,6 +85,9 @@ const descriptionHtml = computed(() => renderMarkdown(props.plan.description_md)
     <div class="plan-card__inner">
       <div class="plan-card__head">
         <h3 class="plan-card__name">{{ plan.display_name }}</h3>
+        <Badge v-if="plan.plan_type === 'trial'" color="var(--amber)">
+          {{ t('billing.plans.trialBadge') }}
+        </Badge>
       </div>
 
       <div class="plan-card__price-block">

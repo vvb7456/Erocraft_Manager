@@ -45,6 +45,14 @@ class ServerMeta(Base):
     # by manual server creation. Renew reads this to look up price + period.
     # See ``docs/BILLING_DESIGN.md`` §3.3.2.
     plan_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Trial-plan flag (20260619_trial migration). Snapshot of the bound
+    # plan's ``plan_type`` at apply time, so a trial server stays
+    # identifiable even if its plan row is later deleted. Drives:
+    #   - exclusion from the global suspend/delete cadence
+    #   - zero-grace deletion by the daily trial_expire task
+    #   - the convert (trial → linked standard) renewal path
+    #   - upgrade block until converted
+    is_trial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Set once when the "server installed" notification email has been sent
     # for this server (or the row was backfilled on first deploy of the
     # feature). Stays set across reinstalls so they don't re-trigger the

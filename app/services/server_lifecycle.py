@@ -191,6 +191,18 @@ async def create_server(
             )
         raise LifecycleError(f"Wings 创建失败: {exc}") from exc
 
+    # Mark the owner as having owned a server (permanent, never reset).
+    # This covers admin manual creation + any import path that doesn't go
+    # through the billing order flow, so the trial-plan eligibility rule
+    # ("only users who never owned a server") holds regardless of how the
+    # server was provisioned.
+    from app.db.models.pterodactyl import PteroUser  # local: avoid cycle
+
+    owner = await db.get(PteroUser, owner_id)
+    if owner is not None and not owner.has_owned_server:
+        owner.has_owned_server = True
+        await db.commit()
+
     return created
 
 

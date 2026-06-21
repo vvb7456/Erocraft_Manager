@@ -19,6 +19,7 @@ class LoginResponse(BaseModel):
     ok: bool
     username: str
     is_admin: bool
+    has_owned_server: bool = False
     language: str = "zh"
 
 
@@ -26,6 +27,7 @@ class MeResponse(BaseModel):
     ok: bool
     username: str
     is_admin: bool
+    has_owned_server: bool = False
     language: str = "zh"
 
 

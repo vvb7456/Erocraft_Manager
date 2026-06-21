@@ -29,8 +29,14 @@ static/dist/
 docs/
 tests/
 
+# Pterodactyl panel 私有补丁（仅运维本地保留）
+panel-patches/
+
 # Claude Code
 CLAUDE.md
+
+# OpenCode / AI 会话工作指导（仅本地保留，不上传）
+AGENTS.md
 
 # 编辑器 / Copilot（仅忽略 copilot 配置；放行 workflows）
 .github/*

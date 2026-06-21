@@ -304,14 +304,30 @@ async def _commit_business_effect(db: AsyncSession, order: BillingOrder) -> int:
         return await _effect_renew(db, order)
     elif order.kind == "upgrade":
         return await _effect_upgrade(db, order)
+    elif order.kind == "convert":
+        return await _effect_convert(db, order)
     else:  # new_purchase
         return await _effect_new_purchase(db, order)
 
 
-def _local_today() -> date:
+async def _local_today(db: AsyncSession) -> date:
     """Local-day 'today' — billing periods are day-granular and the
-    business definition lives in local time, not UTC."""
-    return date.today()
+    business definition lives in local time, not UTC.
+
+    Reads the ``TIMEZONE`` runtime setting so the result is correct
+    regardless of the host's system timezone (the dev machine runs UTC
+    while production runs Asia/Shanghai). Mirrors the ``get_job_today``
+    helper used by the automation tasks so apply-time and task-time
+    agree on what "today" means.
+    """
+    from app.core.runtime_settings import AUTOMATION_SPECS
+    from app.core.settings_store import get_settings_store
+    from app.core.time import local_today
+
+    tz_name = await get_settings_store().get(
+        db, "TIMEZONE", AUTOMATION_SPECS["TIMEZONE"].default_value()
+    )
+    return local_today(str(tz_name))
 
 
 async def _effect_upgrade(db: AsyncSession, order: BillingOrder) -> int:
@@ -396,7 +412,7 @@ async def _effect_renew(db: AsyncSession, order: BillingOrder) -> int:
             f"server {order.target_server_id} 已删除"
         )
 
-    today = _local_today()
+    today = await _local_today(db)
     prev = meta.expiration_date
     base = prev if prev and prev > today else today
     new_date = base + timedelta(days=order.total_days)
@@ -414,6 +430,76 @@ async def _effect_renew(db: AsyncSession, order: BillingOrder) -> int:
         )
     )
     meta.expiration_date = new_date
+    await db.commit()
+    return order.target_server_id
+
+
+async def _effect_convert(db: AsyncSession, order: BillingOrder) -> int:
+    """Convert = trial → linked standard plan renewal.
+
+    Adds the standard plan's purchased days, rebinds ``meta.plan_id`` to
+    the standard plan, clears ``meta.is_trial``, and syncs the Wings build
+    to the standard plan's current resources (from the order snapshot).
+    Without the build sync, a trial created before the standard plan's
+    resources were edited would keep stale limits after conversion.
+    """
+    if order.target_server_id is None:
+        raise ApplyOrphanError(f"convert order {order.id} 缺少 target_server_id")
+
+    server = await db.get(PteroServer, order.target_server_id)
+    if server is None:
+        raise ApplyOrphanError(f"server {order.target_server_id} 已删除")
+
+    snap = order.plan_snapshot or {}
+
+    # Sync Wings build to the standard plan's resources (same as upgrade).
+    from app.services import server_management  # local import
+
+    await server_management.update_build(
+        db, server.id,
+        cpu=snap.get("cpu"),
+        memory=snap.get("memory_mb"),
+        disk=snap.get("disk_mb"),
+        swap=snap.get("swap_mb"),
+        io=snap.get("io"),
+        database_limit=snap.get("database_limit"),
+        backup_limit=snap.get("backup_limit"),
+        allocation_limit=snap.get("allocation_limit"),
+        oom_disabled=snap.get("oom_disabled"),
+    )
+
+    meta = await db.scalar(
+        select(ServerMeta)
+        .where(ServerMeta.server_id == order.target_server_id)
+        .with_for_update()
+    )
+    if meta is None:
+        raise ApplyOrphanError(
+            f"server {order.target_server_id} 已删除"
+        )
+
+    today = await _local_today(db)
+    prev = meta.expiration_date
+    base = prev if prev and prev > today else today
+    new_date = base + timedelta(days=order.total_days)
+
+    snap_plan_id = snap.get("plan_id") or order.plan_id
+
+    db.add(
+        BillingOrderEffect(
+            order_id=order.id,
+            server_id=order.target_server_id,
+            effect_type="convert",
+            days=order.total_days,
+            prev_expiration_date=prev,
+            new_expiration_date=new_date,
+            effect_committed_at=utc_naive_now(),
+            post_actions_done_at=None,
+        )
+    )
+    meta.expiration_date = new_date
+    meta.plan_id = snap_plan_id
+    meta.is_trial = False
     await db.commit()
     return order.target_server_id
 
@@ -448,7 +534,8 @@ async def _effect_new_purchase(db: AsyncSession, order: BillingOrder) -> int:
         raise ApplyError(f"wings.create_server 失败: {exc}") from exc
 
     # 2) In-tx: flip external_id, write effect row, set meta + plan_id binding.
-    new_date = _local_today() + timedelta(days=order.total_days)
+    today = await _local_today(db)
+    new_date = today + timedelta(days=order.total_days)
     now = utc_naive_now()
     await db.execute(
         update(PteroServer)
@@ -471,31 +558,52 @@ async def _effect_new_purchase(db: AsyncSession, order: BillingOrder) -> int:
     # that admin plan deletes between order placement and apply still bind
     # the server to its purchased plan id.
     snap_plan_id = (order.plan_snapshot or {}).get("plan_id") or order.plan_id
-    await _upsert_meta_expiration_and_plan(
-        db, server_id, new_date, snap_plan_id
+    # Snapshot the plan_type at apply time so the server is correctly
+    # flagged as trial even if the plan is later edited/deleted.
+    snap_plan_type = (order.plan_snapshot or {}).get("plan_type", "standard")
+    is_trial = snap_plan_type == "trial"
+    await _upsert_meta_expiration_plan_trial(
+        db, server_id, new_date, snap_plan_id, is_trial
     )
+    # Mark the owner as having owned a server — permanent, never reset.
+    await _mark_user_owned_server(db, server.owner_id)
     await db.commit()
     return server_id
 
 
-async def _upsert_meta_expiration_and_plan(
+async def _upsert_meta_expiration_plan_trial(
     db: AsyncSession,
     server_id: int,
     expiration: date,
     plan_id: int,
+    is_trial: bool,
 ) -> None:
     """INSERT ... ON DUPLICATE KEY UPDATE for manager_server_meta."""
     await db.execute(
         text(
             """
-            INSERT INTO manager_server_meta (server_id, expiration_date, plan_id)
-            VALUES (:sid, :exp, :pid)
+            INSERT INTO manager_server_meta
+              (server_id, expiration_date, plan_id, is_trial)
+            VALUES (:sid, :exp, :pid, :trial)
             ON DUPLICATE KEY UPDATE
               expiration_date = VALUES(expiration_date),
-              plan_id = VALUES(plan_id)
+              plan_id = VALUES(plan_id),
+              is_trial = VALUES(is_trial)
             """
-        ).bindparams(sid=server_id, exp=expiration, pid=plan_id)
+        ).bindparams(
+            sid=server_id, exp=expiration, pid=plan_id,
+            trial=1 if is_trial else 0,
+        )
     )
+
+
+async def _mark_user_owned_server(db: AsyncSession, user_id: int) -> None:
+    """Set ``users.has_owned_server = 1`` (idempotent, permanent)."""
+    from app.db.models.pterodactyl import PteroUser  # local: avoid cycle
+
+    user = await db.get(PteroUser, user_id)
+    if user is not None and not user.has_owned_server:
+        user.has_owned_server = True
 
 
 # --------------------------------------------------------------------------- #

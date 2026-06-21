@@ -56,6 +56,8 @@ class PublicPlanOut(_Forbid):
     description_md: str | None
     category_label: str | None
     display_order: int
+    plan_type: str = "standard"
+    linked_plan_id: int | None = None
     created_at: str
     updated_at: str
 
@@ -78,6 +80,8 @@ def _serialize(plan: BillingPlan) -> PublicPlanOut:
         description_md=plan.description_md,
         category_label=plan.category_label,
         display_order=plan.display_order,
+        plan_type=plan.plan_type,
+        linked_plan_id=plan.linked_plan_id,
         created_at=to_iso_z(plan.created_at),
         updated_at=to_iso_z(plan.updated_at),
     )

@@ -378,6 +378,7 @@ function openMobileAction(plan: AdminPlan) {
       :nodes-map="nodes"
       :nests-map="nests"
       :eggs-map="eggs"
+      :all-plans="plans"
       @saved="onSaved"
     />
   </div>

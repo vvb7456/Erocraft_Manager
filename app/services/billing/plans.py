@@ -61,6 +61,57 @@ class PlanCodeConflictError(ValueError):
 
 
 # --------------------------------------------------------------------------- #
+# Trial-plan helpers
+# --------------------------------------------------------------------------- #
+
+# Resource columns a trial plan mirrors from its linked standard plan.
+# Kept in sync with BillingPlan's mapped columns + _build_snapshot readers.
+_TRIAL_MIRRORED_FIELDS = (
+    "node_id", "egg_id", "nest_id",
+    "cpu", "memory_mb", "disk_mb", "swap_mb", "io",
+    "database_limit", "backup_limit", "allocation_limit", "oom_disabled",
+    "docker_image", "startup_command", "env_defaults",
+)
+
+
+async def _resolve_linked_plan(
+    db: AsyncSession, payload: PlanIn
+) -> BillingPlan:
+    """Validate + fetch the linked standard plan for a trial payload.
+
+    Rules:
+    - ``linked_plan_id`` required.
+    - The linked plan must exist and be a ``standard`` plan.
+    - Same egg as the trial payload (so the trial's env_defaults validation
+      against the egg is meaningful — the linked plan's env is what we'll
+      actually use).
+    - On *update* of the trial itself, a self-reference is rejected.
+    """
+    if payload.linked_plan_id is None:
+        raise PlanValidationError("试用套餐必须指定关联的标准套餐 (linked_plan_id)")
+    linked = await db.get(BillingPlan, payload.linked_plan_id)
+    if linked is None:
+        raise PlanValidationError(
+            f"关联套餐 id={payload.linked_plan_id} 不存在"
+        )
+    if linked.plan_type != "standard":
+        raise PlanValidationError("关联套餐必须是标准套餐 (plan_type=standard)")
+    if linked.egg_id != payload.egg_id:
+        raise PlanValidationError(
+            f"关联套餐的 egg (id={linked.egg_id}) 与本试用套餐 (id={payload.egg_id}) 不一致"
+        )
+    if not linked.is_active:
+        raise PlanValidationError("关联的标准套餐已下架，无法作为试用套餐的资源来源")
+    return linked
+
+
+def _copy_resource_fields(data: dict[str, Any], linked: BillingPlan) -> None:
+    """Overwrite trial payload resource fields with the linked plan's values."""
+    for field in _TRIAL_MIRRORED_FIELDS:
+        data[field] = getattr(linked, field)
+
+
+# --------------------------------------------------------------------------- #
 # DB-aware validation (egg + node existence + env_defaults rules)
 # --------------------------------------------------------------------------- #
 
@@ -213,7 +264,15 @@ async def validate_plan_payload(
     db: AsyncSession,
     payload: PlanIn,
 ) -> dict[str, Any]:
-    """Run full DB-aware validation; return ORM-ready column dict."""
+    """Run full DB-aware validation; return ORM-ready column dict.
+
+    For trial plans the resource fields (node/egg/nest/cpu/mem/disk/swap/
+    io/docker_image/startup/env_defaults/limits/oom_disabled) are NOT taken
+    from the payload — they are copied from the linked standard plan so a
+    trial always shares its standard sibling's configuration. The caller
+    still sends these fields (the form is shared), but they are discarded.
+    Trial period_options is forced to a single ``count=1`` entry.
+    """
     await _check_node_exists(db, payload.node_id)
     await _check_node_capacity(
         db,
@@ -231,6 +290,17 @@ async def validate_plan_payload(
     # period_options: nested PeriodOption -> dict[str, Any]
     data["period_options"] = [opt.model_dump() for opt in payload.period_options]
     data["env_defaults"] = normalized_env
+
+    # Trial normalization: resource fields mirror the linked standard plan.
+    if payload.plan_type == "trial":
+        linked = await _resolve_linked_plan(db, payload)
+        _copy_resource_fields(data, linked)
+        # Trial is not renewable in-place; force single base period.
+        data["period_options"] = [{"count": 1, "discount_pct": 0.0}]
+    else:
+        # Standard plan must not declare a linked plan.
+        data["linked_plan_id"] = None
+
     return data
 
 

@@ -121,6 +121,7 @@ def _serialize_server(
         planCode=plan.code if plan else None,
         planName=plan.display_name if plan else None,
         hasUpgradeOptions=has_upgrade_options,
+        isTrial=bool(server.meta.is_trial) if server.meta else False,
     )
 
 
@@ -180,6 +181,10 @@ async def list_user_servers(
         plan_id = server.meta.plan_id if server.meta else None
         if plan_id is None:
             return False
+        # Trial servers can't upgrade until converted (frontend disables
+        # the button; this is the backend truth source).
+        if server.meta and server.meta.is_trial:
+            return False
         old_plan = plans.get(plan_id)
         if old_plan is None:
             return False
@@ -212,15 +217,17 @@ async def get_user_server_detail(
     if plan_id:
         plan = await db.get(BillingPlan, plan_id)
     if plan and not server.is_suspended and (server.expiration_date is None or server.expiration_date >= today):
-        candidates = await db.execute(
-            select(BillingPlan).where(
-                BillingPlan.is_active.is_(True),
-                BillingPlan.egg_id == server.egg_id,
-                BillingPlan.price_fen > plan.price_fen,
-                BillingPlan.id != plan.id,
+        # Trial servers can't upgrade until converted to a standard plan.
+        if not (server.meta and server.meta.is_trial):
+            candidates = await db.execute(
+                select(BillingPlan).where(
+                    BillingPlan.is_active.is_(True),
+                    BillingPlan.egg_id == server.egg_id,
+                    BillingPlan.price_fen > plan.price_fen,
+                    BillingPlan.id != plan.id,
+                )
             )
-        )
-        has_upgrade = candidates.first() is not None
+            has_upgrade = candidates.first() is not None
     item = _serialize_server(server, today, plan=plan, has_upgrade_options=has_upgrade)
 
     # Tunnel info — best-effort lookup; failures should not break the

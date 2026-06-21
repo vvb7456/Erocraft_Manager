@@ -32,8 +32,9 @@ from app.core.time import utc_naive_now
 from app.db.base import Base
 
 
-# ── shared enum value tuples (keep in sync with 0012_billing.py) ─────────────
-ORDER_KIND_VALUES = ("renew", "new_purchase", "upgrade")
+# ── shared enum value tuples (keep in sync with baseline + trial migration) ─
+PLAN_TYPE_VALUES = ("standard", "trial")
+ORDER_KIND_VALUES = ("renew", "new_purchase", "upgrade", "convert")
 ORDER_STATUS_VALUES = (
     "pending",
     "processing",
@@ -47,7 +48,7 @@ ORDER_STATUS_VALUES = (
 )
 INVOICE_STATUS_VALUES = ("pending", "paid", "void")
 TX_STATUS_VALUES = ("succeeded", "failed", "refunded")
-EFFECT_TYPE_VALUES = ("renew", "new_purchase", "upgrade")
+EFFECT_TYPE_VALUES = ("renew", "new_purchase", "upgrade", "convert")
 REFUND_STATUS_VALUES = ("pending", "succeeded", "failed")
 REFUND_PREV_STATUS_VALUES = ("applied", "apply_failed", "manual_review")
 INCIDENT_KIND_VALUES = (
@@ -107,6 +108,25 @@ class BillingPlan(Base):
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     description_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     category_label: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Trial-plan support (20260619_trial migration). ``plan_type`` is
+    # ``standard`` (default) or ``trial``. A trial plan mirrors the
+    # resource fields of its ``linked_plan_id`` (a standard plan with the
+    # same egg); admin edits the linked plan, not the trial's resources.
+    # Trial plans: low price to attract first-time subscribers; on
+    # expiry they are deleted with zero grace (not the global suspend/
+    # delete cadence), and their only renewal path is a ``convert`` order
+    # that rebinds the server to the linked standard plan.
+    plan_type: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="standard",
+    )
+    linked_plan_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("manager_billing_plans.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_naive_now

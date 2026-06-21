@@ -96,7 +96,7 @@ const daysLeft = computed<number | null>(() => {
 const expirationColor = computed(() => {
   if (!detail.value || detail.value.server.expirationDate === null) return 'var(--t2)'
   if (daysLeft.value === null) return 'var(--t2)'
-  if (daysLeft.value <= 0) return 'var(--red)'
+  if (daysLeft.value < 0) return 'var(--red)'
   if (daysLeft.value <= 7) return 'var(--amber)'
   return 'var(--green)'
 })
@@ -104,7 +104,7 @@ const expirationText = computed(() => {
   if (!detail.value) return ''
   if (detail.value.server.expirationDate === null) return t('adminServer.overview.values.permanent')
   if (daysLeft.value === null) return ''
-  if (daysLeft.value <= 0) return t('adminServer.overview.expired')
+  if (daysLeft.value < 0) return t('adminServer.overview.expired')
   return t('adminServer.overview.daysLeft', { n: daysLeft.value })
 })
 

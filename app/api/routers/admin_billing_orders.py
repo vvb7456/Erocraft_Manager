@@ -192,7 +192,7 @@ def _serialize_refund(refund: BillingRefund) -> RefundOut:
 async def list_orders_endpoint(
     status_filter: str | None = Query(None, alias="status", max_length=32),
     user_id: int | None = Query(None, gt=0),
-    kind: str | None = Query(None, pattern=r"^(renew|new_purchase|upgrade)$"),
+    kind: str | None = Query(None, pattern=r"^(renew|new_purchase|upgrade|convert)$"),
     q: str | None = Query(
         None,
         max_length=64,

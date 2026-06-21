@@ -58,6 +58,7 @@ interface Server {
   address: string | null
   planId: number | null
   hasUpgradeOptions: boolean
+  isTrial: boolean
 }
 
 const servers = ref<Server[]>([])
@@ -317,6 +318,7 @@ function fmtBytes(bytes: number): string {
 }
 
 function expirationDisplay(s: Server): { date: string; tag: string; color: string } {
+  if (s.isTrial) return { date: s.expirationDate ? s.expirationDate.slice(0, 10) : '—', tag: t('userServers.trialBadge'), color: 'var(--amber)' }
   if (!s.expirationDate) return { date: '—', tag: t('userServers.permanent'), color: 'var(--t3)' }
   const dateStr = s.expirationDate.slice(0, 10)
   if (s.daysLeft !== null && s.daysLeft < 0) return { date: dateStr, tag: t('userServers.expired'), color: 'var(--red)' }
@@ -391,10 +393,6 @@ function goToDetail(s: Server) {
 }
 
 const { openRenew, loading: renewLoading } = useRenewFlow()
-async function onRenew(s: Server) {
-  if (!s.planId) return
-  await openRenew({ serverId: s.id, serverName: s.name, planId: s.planId })
-}
 
 // ── Upgrade ──
 const upgradeModalOpen = ref(false)
@@ -402,6 +400,68 @@ const upgradeServer = ref<Server | null>(null)
 function onUpgrade(s: Server) {
   upgradeServer.value = s
   upgradeModalOpen.value = true
+}
+
+// ── Convert (trial → standard) ──
+// Trial servers can't renew in-place or upgrade. The renew button on a
+// trial server opens the convert flow instead: load the trial's linked
+// standard plan and show the cashier in 'convert' mode.
+const convertModalOpen = ref(false)
+const convertServer = ref<Server | null>(null)
+const convertPlan = ref<Plan | null>(null)
+const convertLoading = ref(false)
+
+interface Plan {
+  id: number
+  code: string
+  display_name: string
+  description_md: string | null
+  category_label: string | null
+  price_fen: number
+  days: number
+  currency_code: string
+  period_options: { count: number; discount_pct: number }[]
+  cpu: number
+  memory_mb: number
+  disk_mb: number
+  plan_type: string
+  linked_plan_id: number | null
+}
+
+async function onRenew(s: Server) {
+  if (!s.planId) return
+  // Trial servers: redirect to convert flow.
+  if (s.isTrial) {
+    await onConvert(s)
+    return
+  }
+  await openRenew({ serverId: s.id, serverName: s.name, planId: s.planId })
+}
+
+async function onConvert(s: Server) {
+  if (!s.planId || convertLoading.value) return
+  convertLoading.value = true
+  try {
+    // Load the trial plan to get its linked_plan_id.
+    const trial = await get<Plan>(`/api/user/plans/${s.planId}`, { silent: true })
+    if (!trial || !trial.linked_plan_id) {
+      toast(t('userServers.convert.failed'), 'error')
+      return
+    }
+    // Load the linked standard plan.
+    const std = await get<Plan>(`/api/user/plans/${trial.linked_plan_id}`, { silent: true })
+    if (!std) {
+      toast(t('userServers.convert.failed'), 'error')
+      return
+    }
+    convertPlan.value = std
+    convertServer.value = s
+    convertModalOpen.value = true
+  } catch {
+    toast(t('userServers.convert.failed'), 'error')
+  } finally {
+    convertLoading.value = false
+  }
 }
 
 // ── Mobile action sheet ──
@@ -530,12 +590,17 @@ function openMobileAction(s: Server) {
             <BaseButton size="sm" :loading="pendingStore.has(s.id)" :disabled="s.isSuspended || s.isInstalling || resourceStore.isStale(s.id) || pendingStore.has(s.id) || liveState(s) === 'starting' || liveState(s) === 'stopping'" @click="togglePower(s)">
               <MsIcon :name="powerBtnIcon(s)" size="xs" /> {{ powerBtnLabel(s) }}
             </BaseButton>
-            <BaseButton size="sm" :disabled="!s.planId" :loading="renewLoading" :title="s.planId ? '' : t('userServers.renewFlow.noPlan')" @click="onRenew(s)">
-              <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+            <BaseButton v-if="s.isTrial" size="sm" variant="primary" :disabled="!s.planId" :loading="convertLoading" :title="s.planId ? '' : t('userServers.renewFlow.noPlan')" @click="onRenew(s)">
+              <MsIcon name="autorenew" size="xs" /> {{ t('userServers.convert.button') }}
             </BaseButton>
-            <BaseButton size="sm" :disabled="!s.hasUpgradeOptions" @click="onUpgrade(s)">
-              <MsIcon name="arrow_upward" size="xs" /> {{ t('userServers.upgrade.button') }}
-            </BaseButton>
+            <template v-else>
+              <BaseButton size="sm" :disabled="!s.planId" :loading="renewLoading" :title="s.planId ? '' : t('userServers.renewFlow.noPlan')" @click="onRenew(s)">
+                <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+              </BaseButton>
+              <BaseButton size="sm" :disabled="!s.hasUpgradeOptions" @click="onUpgrade(s)">
+                <MsIcon name="arrow_upward" size="xs" /> {{ t('userServers.upgrade.button') }}
+              </BaseButton>
+            </template>
             <BaseButton v-if="s.address && hasWebUi(s.eggName)" variant="primary" size="sm" :disabled="s.isSuspended || s.isInstalling || liveState(s) !== 'running'" @click="openUrl(s)">
               <MsIcon name="open_in_new" size="xs" /> {{ openLabel(s.eggName) }}
             </BaseButton>
@@ -625,12 +690,17 @@ function openMobileAction(s: Server) {
         <button :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling || resourceStore.isStale(mobileActionServer.id) || pendingStore.has(mobileActionServer.id) || liveState(mobileActionServer) === 'starting' || liveState(mobileActionServer) === 'stopping'" @click="mobileActionOpen = false; togglePower(mobileActionServer!)">
           <MsIcon :name="powerBtnIcon(mobileActionServer)" size="sm" /> {{ powerBtnLabel(mobileActionServer) }}
         </button>
-        <button :disabled="!mobileActionServer.planId" :title="mobileActionServer.planId ? '' : t('userServers.renewFlow.noPlan')" @click="mobileActionOpen = false; onRenew(mobileActionServer!)">
-          <MsIcon name="autorenew" size="sm" /> {{ t('userServers.renew') }}
+        <button v-if="mobileActionServer.isTrial" :disabled="!mobileActionServer.planId" :loading="convertLoading" :title="mobileActionServer.planId ? '' : t('userServers.renewFlow.noPlan')" @click="mobileActionOpen = false; onRenew(mobileActionServer!)">
+          <MsIcon name="autorenew" size="sm" /> {{ t('userServers.convert.button') }}
         </button>
-        <button :disabled="!mobileActionServer.hasUpgradeOptions" @click="mobileActionOpen = false; onUpgrade(mobileActionServer!)">
-          <MsIcon name="arrow_upward" size="sm" /> {{ t('userServers.upgrade.button') }}
-        </button>
+        <template v-else>
+          <button :disabled="!mobileActionServer.planId" :loading="renewLoading" :title="mobileActionServer.planId ? '' : t('userServers.renewFlow.noPlan')" @click="mobileActionOpen = false; onRenew(mobileActionServer!)">
+            <MsIcon name="autorenew" size="sm" /> {{ t('userServers.renew') }}
+          </button>
+          <button :disabled="!mobileActionServer.hasUpgradeOptions" @click="mobileActionOpen = false; onUpgrade(mobileActionServer!)">
+            <MsIcon name="arrow_upward" size="sm" /> {{ t('userServers.upgrade.button') }}
+          </button>
+        </template>
         <button v-if="mobileActionServer.address && hasWebUi(mobileActionServer.eggName)" :disabled="mobileActionServer.isSuspended || mobileActionServer.isInstalling || liveState(mobileActionServer) !== 'running'" @click="mobileActionOpen = false; openUrl(mobileActionServer!)">
           <MsIcon name="open_in_new" size="sm" /> {{ openLabel(mobileActionServer!.eggName) }}
         </button>
@@ -644,6 +714,15 @@ function openMobileAction(s: Server) {
       mode="upgrade"
       :target-server-id="upgradeServer.id"
       :server-name="upgradeServer.name"
+    />
+    <!-- Convert Trial → Standard Plan Modal -->
+    <CreateOrderModal
+      v-if="convertServer && convertPlan"
+      v-model="convertModalOpen"
+      :plan="convertPlan"
+      mode="convert"
+      :target-server-id="convertServer.id"
+      :server-name="convertServer.name"
     />
   </div>
 </template>

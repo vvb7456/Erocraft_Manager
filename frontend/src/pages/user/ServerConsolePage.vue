@@ -15,6 +15,8 @@ import PowerControls from '@/components/server/PowerControls.vue'
 import ResourceStats from '@/components/server/ResourceStats.vue'
 import ServerAddress from '@/components/server/ServerAddress.vue'
 import { useRenewFlow } from '@/composables/useRenewFlow'
+import { useApiFetch } from '@/composables/useApiFetch'
+import { useToast } from '@/composables/useToast'
 import CreateOrderModal from '@/components/CreateOrderModal.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
 import { useClipboard } from '@/composables/useClipboard'
@@ -34,6 +36,7 @@ interface ServerDetail {
   planId: number | null
   planName: string | null
   hasUpgradeOptions: boolean
+  isTrial: boolean
   tunnel: { status: string; hostname: string; customSubdomain: string | null; lastError: string | null } | null
   hostTunnelReady: boolean
 }
@@ -43,14 +46,59 @@ const isInstalling = inject<Ref<boolean>>('isInstalling', ref(false))
 
 // ── Renewal flow ──
 const { openRenew, loading: renewLoading } = useRenewFlow()
+const { get } = useApiFetch()
+const { toast } = useToast()
 const canRenew = computed(() => !!server.value?.planId)
+
+// Trial servers: renew button opens convert flow (loads linked standard
+// plan, shows CreateOrderModal in convert mode). UI is identical to renew.
+const convertModalOpen = ref(false)
+const convertPlan = ref<unknown>(null)
+const convertLoading = ref(false)
+
+interface Plan {
+  id: number; code: string; display_name: string
+  price_fen: number; days: number; currency_code: string
+  period_options: { count: number; discount_pct: number }[]
+  cpu: number; memory_mb: number; disk_mb: number
+  description_md: string | null; category_label: string | null
+  display_order: number; plan_type: string; linked_plan_id: number | null
+}
+
 async function onRenew() {
   if (!server.value || !server.value.planId) return
+  if (server.value.isTrial) {
+    await openConvert()
+    return
+  }
   await openRenew({
     serverId: server.value.id,
     serverName: server.value.name,
     planId: server.value.planId,
   })
+}
+
+async function openConvert() {
+  if (!server.value || !server.value.planId || convertLoading.value) return
+  convertLoading.value = true
+  try {
+    const trial = await get<Plan>(`/api/user/plans/${server.value.planId}`, { silent: true })
+    if (!trial || !trial.linked_plan_id) {
+      toast(t('userServers.renewFlow.planLoadFailed'), 'error')
+      return
+    }
+    const std = await get<Plan>(`/api/user/plans/${trial.linked_plan_id}`, { silent: true })
+    if (!std) {
+      toast(t('userServers.renewFlow.planLoadFailed'), 'error')
+      return
+    }
+    convertPlan.value = std
+    convertModalOpen.value = true
+  } catch {
+    toast(t('userServers.renewFlow.planLoadFailed'), 'error')
+  } finally {
+    convertLoading.value = false
+  }
 }
 
 // ── Upgrade flow ──
@@ -99,10 +147,11 @@ const dotKey = computed(() =>
 const expirationText = computed(() => {
   const s = server.value
   if (!s) return ''
+  if (s.isTrial) return t('userServers.trialBadge')
   if (s.expirationDate === null) return t('userServers.permanent')
   if (s.daysLeft === null) return ''
   if (s.daysLeft < 0) return t('userServers.expired')
-  if (s.daysLeft === 0) return t('userServers.expired')
+  if (s.daysLeft === 0) return t('userServers.daysLeft', { n: 0 })
   return t('userServers.daysLeft', { n: s.daysLeft })
 })
 
@@ -110,7 +159,7 @@ const expirationColor = computed(() => {
   const s = server.value
   if (!s || s.expirationDate === null) return 'var(--t2)' // permanent
   if (s.daysLeft === null) return 'var(--t2)'
-  if (s.daysLeft <= 0) return 'var(--red)'
+  if (s.daysLeft < 0) return 'var(--red)'
   if (s.daysLeft <= 7) return 'var(--amber)'
   return 'var(--green)'
 })
@@ -240,23 +289,36 @@ onBeforeUnmount(() => {
             </span>
             <span v-else class="lifecycle-value">{{ expirationText }}</span>
           </div>
-          <div class="mobile-lifecycle-card__actions">
+          <div class="mobile-lifecycle-card__actions" :class="{ 'mobile-lifecycle-card__actions--single': server?.isTrial }">
             <BaseButton
+              v-if="server?.isTrial"
               size="sm"
+              variant="primary"
               :disabled="!canRenew"
-              :loading="renewLoading"
+              :loading="convertLoading"
               :title="canRenew ? '' : t('userServers.renewFlow.noPlan')"
               @click="onRenew"
             >
-              <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+              <MsIcon name="autorenew" size="xs" /> {{ t('userServers.convert.button') }}
             </BaseButton>
-            <BaseButton
-              size="sm"
-              :disabled="!server?.hasUpgradeOptions"
-              @click="onUpgrade"
-            >
-              <MsIcon name="arrow_upward" size="xs" /> {{ t('userServers.upgrade.button') }}
-            </BaseButton>
+            <template v-else>
+              <BaseButton
+                size="sm"
+                :disabled="!canRenew"
+                :loading="renewLoading"
+                :title="canRenew ? '' : t('userServers.renewFlow.noPlan')"
+                @click="onRenew"
+              >
+                <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+              </BaseButton>
+              <BaseButton
+                size="sm"
+                :disabled="!server?.hasUpgradeOptions"
+                @click="onUpgrade"
+              >
+                <MsIcon name="arrow_upward" size="xs" /> {{ t('userServers.upgrade.button') }}
+              </BaseButton>
+            </template>
           </div>
         </div>
       </BaseCard>
@@ -294,11 +356,11 @@ onBeforeUnmount(() => {
             variant="primary"
             class="overlay-renew-btn"
             :disabled="!canRenew"
-            :loading="renewLoading"
+            :loading="renewLoading || convertLoading"
             :title="canRenew ? '' : t('userServers.renewFlow.noPlan')"
             @click="onRenew"
           >
-            <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+            <MsIcon name="autorenew" size="xs" /> {{ server?.isTrial ? t('userServers.convert.button') : t('userServers.renew') }}
           </BaseButton>
         </div>
         <!-- Reconnecting overlay -->
@@ -364,23 +426,36 @@ onBeforeUnmount(() => {
           </span>
           <span v-else class="lifecycle-value">{{ expirationText }}</span>
         </div>
-        <div class="lifecycle-actions">
+        <div class="lifecycle-actions" :class="{ 'lifecycle-actions--single': server?.isTrial }">
           <BaseButton
+            v-if="server?.isTrial"
             size="sm"
+            variant="primary"
             :disabled="!canRenew"
-            :loading="renewLoading"
+            :loading="convertLoading"
             :title="canRenew ? '' : t('userServers.renewFlow.noPlan')"
             @click="onRenew"
           >
-            <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+            <MsIcon name="autorenew" size="xs" /> {{ t('userServers.convert.button') }}
           </BaseButton>
-          <BaseButton
-            size="sm"
-            :disabled="!server?.hasUpgradeOptions"
-            @click="onUpgrade"
-          >
-            <MsIcon name="arrow_upward" size="xs" /> {{ t('userServers.upgrade.button') }}
-          </BaseButton>
+          <template v-else>
+            <BaseButton
+              size="sm"
+              :disabled="!canRenew"
+              :loading="renewLoading"
+              :title="canRenew ? '' : t('userServers.renewFlow.noPlan')"
+              @click="onRenew"
+            >
+              <MsIcon name="autorenew" size="xs" /> {{ t('userServers.renew') }}
+            </BaseButton>
+            <BaseButton
+              size="sm"
+              :disabled="!server?.hasUpgradeOptions"
+              @click="onUpgrade"
+            >
+              <MsIcon name="arrow_upward" size="xs" /> {{ t('userServers.upgrade.button') }}
+            </BaseButton>
+          </template>
         </div>
       </BaseCard>
 
@@ -488,6 +563,15 @@ onBeforeUnmount(() => {
     :target-server-id="server.id"
     :server-name="server.name"
   />
+  <!-- Convert (trial → standard) Modal — reuses renew UI -->
+  <CreateOrderModal
+    v-if="server && convertPlan"
+    v-model="convertModalOpen"
+    :plan="convertPlan as Plan"
+    mode="convert"
+    :target-server-id="server.id"
+    :server-name="server.name"
+  />
 
   <!-- Mobile: long-press terminal action sheet -->
   <ActionSheet v-model="copySheetOpen" :title="t('userServers.consoleActions.copyTitle')">
@@ -550,6 +634,10 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-2);
+}
+
+.mobile-lifecycle-card__actions--single {
+  grid-template-columns: 1fr;
 }
 
 .mobile-lifecycle-card__actions :deep(.base-btn) {
@@ -799,6 +887,10 @@ onBeforeUnmount(() => {
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-2);
   margin-top: var(--sp-3);
+}
+
+.lifecycle-actions--single {
+  grid-template-columns: 1fr;
 }
 
 .lifecycle-actions :deep(.base-btn) {

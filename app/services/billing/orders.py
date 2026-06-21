@@ -162,6 +162,8 @@ def _build_snapshot(
         "backup_limit": plan.backup_limit,
         "allocation_limit": plan.allocation_limit,
         "oom_disabled": plan.oom_disabled,
+        "plan_type": plan.plan_type,
+        "linked_plan_id": plan.linked_plan_id,
     }
 
 
@@ -239,6 +241,10 @@ async def create_order(
         meta = await db.get(ServerMeta, server.id)
         if meta is None or meta.plan_id is None:
             raise InvalidOrderRequest("无套餐服务器无法升级")
+        # Trial servers cannot be upgraded until converted to a standard
+        # plan. Backend backstop; the frontend disables the upgrade button.
+        if meta.is_trial:
+            raise InvalidOrderRequest("试用套餐需先转换为标准套餐才能升级")
         old_plan = await db.get(BillingPlan, meta.plan_id)
         if old_plan is None:
             raise PlanNotPurchasable("此服务器关联的套餐已被删除，请联系管理员")
@@ -278,10 +284,35 @@ async def create_order(
         meta = await db.get(ServerMeta, server.id)
         if meta is None or meta.plan_id is None:
             raise PlanNotPurchasable("此服务器未绑定套餐，无法续费")
+        # Trial servers cannot be renewed in-place — only converted to
+        # their linked standard plan (kind=convert). Backend backstop;
+        # the frontend hides the renew button for trial servers.
+        if meta.is_trial:
+            raise InvalidOrderRequest("试用套餐无法续费，请转换为标准套餐")
         plan = await db.get(BillingPlan, meta.plan_id)
         if plan is None:
             raise PlanNotPurchasable("此服务器关联的套餐已被删除，请联系管理员")
         # Note: NOT checking is_active — bound servers can always renew (§6).
+        period = _select_period(plan, payload.period_count)
+        total_fen, total_days = _calc_total(plan, period)
+    elif payload.kind == "convert":
+        # Trial → its linked standard plan. Only valid for trial servers.
+        # The target plan is resolved from the trial plan's linked_plan_id,
+        # not from the payload, so the user can't convert to an arbitrary plan.
+        server = await db.get(PteroServer, payload.target_server_id)
+        if server is None or server.owner_id != user.id:
+            raise InvalidOrderRequest("服务器不存在或无权操作")
+        meta = await db.get(ServerMeta, server.id)
+        if meta is None or meta.plan_id is None:
+            raise PlanNotPurchasable("此服务器未绑定套餐，无法转换")
+        if not meta.is_trial:
+            raise InvalidOrderRequest("仅试用套餐可转换为标准套餐")
+        trial_plan = await db.get(BillingPlan, meta.plan_id)
+        if trial_plan is None or trial_plan.linked_plan_id is None:
+            raise PlanNotPurchasable("试用套餐或其关联标准套餐已被删除，请联系管理员")
+        plan = await db.get(BillingPlan, trial_plan.linked_plan_id)
+        if plan is None:
+            raise PlanNotPurchasable("关联的标准套餐已被删除，请联系管理员")
         period = _select_period(plan, payload.period_count)
         total_fen, total_days = _calc_total(plan, period)
     else:  # new_purchase
@@ -295,6 +326,12 @@ async def create_order(
         ).scalar_one_or_none()
         if plan is None:
             raise PlanNotPurchasable(f"套餐 {payload.plan_code!r} 不存在或已下架")
+        # Trial plans: only users who have never owned a server (via any
+        # path) may purchase, and only once. ``has_owned_server`` is a
+        # permanent flag set on first server ownership and never reset.
+        if plan.plan_type == "trial":
+            if user.has_owned_server:
+                raise InvalidOrderRequest("试用套餐仅限从未拥有过服务器的用户购买")
         period = _select_period(plan, payload.period_count)
         total_fen, total_days = _calc_total(plan, period)
 
@@ -374,7 +411,7 @@ async def create_order(
                 coupon_discount_fen if coupon_code_norm else None
             ),
             target_server_id=(
-                payload.target_server_id if payload.kind in ("renew", "upgrade") else None
+                payload.target_server_id if payload.kind in ("renew", "upgrade", "convert") else None
             ),
             status="pending",
             received_fen=0,

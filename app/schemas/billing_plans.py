@@ -69,6 +69,15 @@ class PlanIn(_Forbid):
     description_md: str | None = None
     category_label: str | None = Field(default=None, max_length=64)
 
+    # Trial-plan support (20260619_trial). ``plan_type`` defaults to
+    # ``standard``. When ``trial``: ``linked_plan_id`` MUST point at a
+    # standard plan with the same egg; the trial's resource fields are
+    # ignored on save and copied from the linked plan instead, and
+    # ``period_options`` is forced to a single ``count=1`` entry (trial
+    # is not renewable in-place, only convertible).
+    plan_type: str = Field(default="standard", pattern=r"^(standard|trial)$")
+    linked_plan_id: int | None = Field(default=None, gt=0)
+
     @model_validator(mode="after")
     def _check_period_options(self) -> "PlanIn":
         seen: set[int] = set()

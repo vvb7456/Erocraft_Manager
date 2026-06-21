@@ -34,6 +34,16 @@ class PteroUser(Base):
     remember_token: Mapped[str | None] = mapped_column(String(191), nullable=True)
     language: Mapped[str] = mapped_column(String(5), nullable=False, default="zh")
     root_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Permanent per-user flag (20260619_trial migration). Set to True the
+    # first time this user owns a server via ANY path (paid order apply,
+    # admin manual create, import) and never reset — even if the server is
+    # later deleted. Drives the trial-plan eligibility rule ("trial plans
+    # only for users who have never owned a server, once"), which cannot
+    # rely on order history because most servers are admin-created from
+    # off-platform sales and leave no order row.
+    has_owned_server: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     use_totp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     totp_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
     totp_authenticated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

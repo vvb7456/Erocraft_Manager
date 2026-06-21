@@ -11,6 +11,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
+import { useAppStore } from '@/stores/app'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -43,6 +44,8 @@ interface Plan {
   description_md: string | null
   category_label: string | null
   display_order: number
+  plan_type: string
+  linked_plan_id: number | null
   created_at: string
   updated_at: string
 }
@@ -55,6 +58,7 @@ interface PlanGroup {
 const { t } = useI18n({ useScope: 'global' })
 const { get } = useApiFetch()
 const router = useRouter()
+const app = useAppStore()
 
 const plans = ref<Plan[]>([])
 const initialLoading = ref(true)
@@ -68,12 +72,15 @@ const cashierPeriodCount = ref<number | undefined>(undefined)
 // Support modal state
 const supportOpen = ref(false)
 
-/** Group plans by category_label, preserving display_order within each group. */
+/** Group plans by category_label, preserving display_order within each group.
+ *  Trial plans are hidden from users who already own a server — showing
+ *  the card then blocking at checkout is bad UX. */
 const groups = computed<PlanGroup[]>(() => {
   const map = new Map<string, PlanGroup>()
   const order: string[] = []
 
   for (const p of plans.value) {
+    if (p.plan_type === 'trial' && app.hasOwnedServer) continue
     const key = p.category_label ?? '__uncategorised__'
     if (!map.has(key)) {
       map.set(key, { label: p.category_label, plans: [] })

@@ -133,6 +133,7 @@ async def login(
         ok=True,
         username=user.username,
         is_admin=bool(user.root_admin),
+        has_owned_server=bool(user.has_owned_server),
         language=user.language or "zh",
     )
 
@@ -145,6 +146,7 @@ async def me(
         ok=True,
         username=current_user.username,
         is_admin=bool(current_user.root_admin),
+        has_owned_server=bool(current_user.has_owned_server),
         language=current_user.language or "zh",
     )
 

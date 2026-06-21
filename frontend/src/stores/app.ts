@@ -8,6 +8,7 @@ interface SessionUser {
   ok: boolean
   username: string
   is_admin: boolean
+  has_owned_server: boolean
   language: string
 }
 
@@ -15,6 +16,7 @@ export const useAppStore = defineStore('app', () => {
   const sidebarCollapsed = ref(localStorage.getItem('sidebar_collapsed') === '1')
   const mobileSidebarOpen = ref(false)
   const isAdmin = ref(false)
+  const hasOwnedServer = ref(false)
   const version = ref('')
   const brandName = ref('Erocraft Manager')
   const systemName = ref('')
@@ -63,6 +65,7 @@ export const useAppStore = defineStore('app', () => {
     sessionUser.value = value
     sessionUserFetchedAt.value = value ? Date.now() : 0
     setIsAdmin(!!value?.is_admin)
+    hasOwnedServer.value = !!value?.has_owned_server
   }
 
   function clearSessionUser() {
@@ -122,6 +125,7 @@ export const useAppStore = defineStore('app', () => {
     sidebarCollapsed,
     mobileSidebarOpen,
     isAdmin,
+    hasOwnedServer,
     version,
     brandName,
     systemName,

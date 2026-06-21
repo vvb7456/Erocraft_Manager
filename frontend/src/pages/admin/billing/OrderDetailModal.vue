@@ -160,6 +160,7 @@ function statusColor(s: string): string {
 function kindLabel(k: string): string {
   if (k === 'new_purchase') return t('billing.admin.orders.kindNewPurchase')
   if (k === 'upgrade') return t('billing.admin.orders.kindUpgrade')
+  if (k === 'convert') return t('billing.admin.orders.kindConvert')
   return t('billing.admin.orders.kindRenew')
 }
 
@@ -167,6 +168,7 @@ function kindColor(k: string): string {
   if (k === 'new_purchase') return 'var(--blue)'
   if (k === 'renew') return 'var(--green)'
   if (k === 'upgrade') return 'var(--amber)'
+  if (k === 'convert') return 'var(--ac)'
   return 'var(--t3)'
 }
 

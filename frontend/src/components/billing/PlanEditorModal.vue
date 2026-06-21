@@ -42,6 +42,8 @@ export interface AdminPlan {
   display_order: number
   description_md: string | null
   category_label: string | null
+  plan_type: string
+  linked_plan_id: number | null
   created_at: string
   updated_at: string
 }
@@ -80,6 +82,7 @@ const props = defineProps<{
   nodesMap: Map<number, NodeRef>
   nestsMap: Map<number, NestRef>
   eggsMap: Map<number, EggRef>
+  allPlans?: AdminPlan[]
 }>()
 
 const emit = defineEmits<{
@@ -124,6 +127,8 @@ interface PlanFormState {
   // Display
   category_label: string
   display_order: number
+  plan_type: string
+  linked_plan_id: number | null
 }
 
 function emptyForm(): PlanFormState {
@@ -154,6 +159,8 @@ function emptyForm(): PlanFormState {
     period_options: [{ count: 1, discount_pct: 0 }],
     category_label: '',
     display_order: 0,
+    plan_type: 'standard',
+    linked_plan_id: null,
   }
 }
 
@@ -187,6 +194,8 @@ function fromAdminPlan(p: AdminPlan, mode: EditorMode): PlanFormState {
     period_options: p.period_options.map((o) => ({ ...o })),
     category_label: p.category_label ?? '',
     display_order: p.display_order,
+    plan_type: p.plan_type ?? 'standard',
+    linked_plan_id: p.linked_plan_id ?? null,
   }
 }
 
@@ -252,13 +261,31 @@ const eggOptions = computed(() => {
     .map((e) => ({ value: e.id, label: e.name }))
 })
 
-const tabs = computed<TabItem[]>(() => [
-  { key: 'basic',     label: t('billing.admin.plans.tabs.basic') },
-  { key: 'resources', label: t('billing.admin.plans.tabs.resources') },
-  { key: 'runtime',   label: t('billing.admin.plans.tabs.runtime') },
-  { key: 'pricing',   label: t('billing.admin.plans.tabs.pricing') },
-  { key: 'display',   label: t('billing.admin.plans.tabs.display') },
+const planTypeOptions = computed(() => [
+  { value: 'standard', label: t('billing.admin.plans.planTypeStandard') },
+  { value: 'trial', label: t('billing.admin.plans.planTypeTrial') },
 ])
+
+const linkedPlanOptions = computed(() => {
+  // List all active standard plans regardless of egg — the admin picks
+  // the standard plan first; the trial's egg/node/resources are then
+  // inherited from it. Filtering by egg would require the admin to
+  // pre-select the egg on the resources tab, which defeats the purpose.
+  return (props.allPlans ?? [])
+    .filter((p) => p.plan_type === 'standard' && p.is_active && p.id !== props.plan?.id)
+    .map((p) => ({ value: p.id, label: `${p.display_name} · ${p.code}` }))
+})
+
+const tabs = computed<TabItem[]>(() => {
+  const isTrial = form.value.plan_type === 'trial'
+  return [
+    { key: 'basic',     label: t('billing.admin.plans.tabs.basic') },
+    { key: 'resources', label: t('billing.admin.plans.tabs.resources'), disabled: isTrial },
+    { key: 'runtime',   label: t('billing.admin.plans.tabs.runtime'),   disabled: isTrial },
+    { key: 'pricing',   label: t('billing.admin.plans.tabs.pricing') },
+    { key: 'display',   label: t('billing.admin.plans.tabs.display') },
+  ]
+})
 
 const modalTitle = computed(() => {
   if (props.mode === 'create') return t('billing.admin.plans.create')
@@ -431,11 +458,18 @@ const preflightErrors = computed<string[]>(() => {
   if (!form.value.code.trim()) errs.push(t('billing.admin.plans.errors.codeRequired'))
   if (!form.value.display_name.trim()) errs.push(t('billing.admin.plans.errors.nameRequired'))
   if (parsePriceFen(form.value.price_yuan) == null) errs.push(t('billing.admin.plans.errors.priceInvalid'))
-  if (form.value.node_id == null) errs.push(t('billing.admin.plans.errors.nodeRequired'))
-  if (form.value.nest_id == null) errs.push(t('billing.admin.plans.errors.nestRequired'))
-  if (form.value.egg_id == null) errs.push(t('billing.admin.plans.errors.eggRequired'))
-  if (!form.value.docker_image.trim()) errs.push(t('billing.admin.plans.errors.dockerImageRequired'))
-  if (!form.value.startup_command.trim()) errs.push(t('billing.admin.plans.errors.startupRequired'))
+  if (form.value.plan_type === 'trial') {
+    // Trial plans inherit all resource fields from the linked standard
+    // plan — the resources/runtime tabs are disabled. Only validate
+    // that a linked plan is selected.
+    if (form.value.linked_plan_id == null) errs.push(t('billing.admin.plans.errors.linkedPlanRequired'))
+  } else {
+    if (form.value.node_id == null) errs.push(t('billing.admin.plans.errors.nodeRequired'))
+    if (form.value.nest_id == null) errs.push(t('billing.admin.plans.errors.nestRequired'))
+    if (form.value.egg_id == null) errs.push(t('billing.admin.plans.errors.eggRequired'))
+    if (!form.value.docker_image.trim()) errs.push(t('billing.admin.plans.errors.dockerImageRequired'))
+    if (!form.value.startup_command.trim()) errs.push(t('billing.admin.plans.errors.startupRequired'))
+  }
   if (periodErrors.value.length > 0) errs.push(...periodErrors.value)
   return errs
 })
@@ -444,16 +478,11 @@ const canSave = computed(() => preflightErrors.value.length === 0 && !saving.val
 
 // ── Save ──
 function buildPayload(): Record<string, unknown> {
-  return {
-    code: form.value.code.trim(),
-    display_name: form.value.display_name.trim(),
-    price_fen: parsePriceFen(form.value.price_yuan),
-    days: form.value.days,
-    currency_code: form.value.currency_code,
-    period_options: form.value.period_options.map((o) => ({
-      count: o.count,
-      discount_pct: o.discount_pct,
-    })),
+  // For trial plans, resource fields are inherited from the linked
+  // standard plan — the form's resource/runtime tabs are disabled and
+  // may hold stale/empty values. Pull the actual values from allPlans
+  // so the backend's strict PlanIn validation passes.
+  let res = {
     node_id: form.value.node_id,
     egg_id: form.value.egg_id,
     nest_id: form.value.nest_id,
@@ -469,10 +498,46 @@ function buildPayload(): Record<string, unknown> {
     docker_image: form.value.docker_image.trim(),
     startup_command: form.value.startup_command,
     env_defaults: form.value.env_defaults,
+  }
+  if (form.value.plan_type === 'trial' && form.value.linked_plan_id != null) {
+    const linked = (props.allPlans ?? []).find((p) => p.id === form.value.linked_plan_id)
+    if (linked) {
+      res = {
+        node_id: linked.node_id,
+        egg_id: linked.egg_id,
+        nest_id: linked.nest_id,
+        cpu: linked.cpu,
+        memory_mb: linked.memory_mb,
+        disk_mb: linked.disk_mb,
+        swap_mb: linked.swap_mb,
+        io: linked.io,
+        database_limit: linked.database_limit,
+        backup_limit: linked.backup_limit,
+        allocation_limit: linked.allocation_limit,
+        oom_disabled: linked.oom_disabled,
+        docker_image: linked.docker_image,
+        startup_command: linked.startup_command,
+        env_defaults: { ...linked.env_defaults },
+      }
+    }
+  }
+  return {
+    code: form.value.code.trim(),
+    display_name: form.value.display_name.trim(),
+    price_fen: parsePriceFen(form.value.price_yuan),
+    days: form.value.days,
+    currency_code: form.value.currency_code,
+    period_options: form.value.period_options.map((o) => ({
+      count: o.count,
+      discount_pct: o.discount_pct,
+    })),
+    ...res,
     is_active: form.value.is_active,
     display_order: form.value.display_order,
     description_md: form.value.description_md.trim() || null,
     category_label: form.value.category_label.trim() || null,
+    plan_type: form.value.plan_type,
+    linked_plan_id: form.value.linked_plan_id,
   }
 }
 
@@ -576,6 +641,24 @@ function onDockerImageSelectChange(v: string | number | boolean | (string | numb
         <FormField required>
           <template #label>{{ t('billing.admin.plans.fields.code') }}<HelpTip :text="t('billing.admin.plans.hints.code')" /></template>
           <BaseInput v-model="form.code" mono :placeholder="'st-basic'" />
+        </FormField>
+
+        <FormField :label="t('billing.admin.plans.fields.planType')">
+          <BaseSelect
+            :model-value="form.plan_type"
+            :options="planTypeOptions"
+            @update:model-value="(v) => { form.plan_type = String(v); if (v !== 'trial') form.linked_plan_id = null }"
+          />
+        </FormField>
+
+        <FormField v-if="form.plan_type === 'trial'" required>
+          <template #label>{{ t('billing.admin.plans.fields.linkedPlan') }}<HelpTip :text="t('billing.admin.plans.hints.trial')" /></template>
+          <BaseSelect
+            :model-value="form.linked_plan_id ?? ''"
+            :options="linkedPlanOptions"
+            :placeholder="t('billing.admin.plans.placeholders.linkedPlan')"
+            @update:model-value="(v) => form.linked_plan_id = v == null || v === '' ? null : Number(v)"
+          />
         </FormField>
 
         <FormField>

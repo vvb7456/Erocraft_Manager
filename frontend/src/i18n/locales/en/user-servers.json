@@ -18,6 +18,10 @@
     "planLoadFailed": "Failed to load plan details",
     "noPlan": "This server has no plan attached, renewal unavailable"
   },
+  "convert": {
+    "button": "Convert to Standard",
+    "failed": "Failed to load standard plan details"
+  },
   "searchPlaceholder": "Search servers...",
   "scope": {
     "all": "Show all servers"
@@ -65,6 +69,7 @@
   "daysLeft": "{n} days left",
   "expired": "Expired",
   "permanent": "Permanent",
+  "trialBadge": "Trial",
   "console": "Console",
   "files": "Files",
   "more": "More",

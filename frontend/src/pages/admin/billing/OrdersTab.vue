@@ -79,6 +79,7 @@ const kindOptions = [
   { value: 'new_purchase',  label: t('billing.admin.orders.kindNewPurchase') },
   { value: 'renew',         label: t('billing.admin.orders.kindRenew') },
   { value: 'upgrade',       label: t('billing.admin.orders.kindUpgrade') },
+  { value: 'convert',       label: t('billing.admin.orders.kindConvert') },
 ]
 
 // ── Fetch ──
@@ -161,6 +162,7 @@ function kindColor(k: string): string {
     case 'new_purchase': return 'var(--blue)'
     case 'renew':        return 'var(--green)'
     case 'upgrade':      return 'var(--amber)'
+    case 'convert':      return 'var(--ac)'
     default:             return 'var(--t3)'
   }
 }
@@ -168,6 +170,7 @@ function kindColor(k: string): string {
 function kindLabel(k: string): string {
   if (k === 'new_purchase') return t('billing.admin.orders.kindNewPurchase')
   if (k === 'upgrade') return t('billing.admin.orders.kindUpgrade')
+  if (k === 'convert') return t('billing.admin.orders.kindConvert')
   return t('billing.admin.orders.kindRenew')
 }
 

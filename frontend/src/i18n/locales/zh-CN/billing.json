@@ -12,6 +12,7 @@
     "resMemory": "{n} GB 内存",
     "resDisk": "{n} GB 存储",
     "buyNow": "立即购买",
+    "trialBadge": "试用",
     "supportHint": "需要帮助？",
     "supportLink": "联系客服"
   },
@@ -20,6 +21,9 @@
     "renewTitle": "续费订单",
     "renewTarget": "续费目标",
     "renewHint": "续费将沿用当前套餐，到期时间在原有效期基础上延长",
+    "convertTitle": "转换为标准套餐",
+    "convertTarget": "转换目标",
+    "convertHint": "转换后将绑定标准套餐，到期时间在原有效期基础上延长",
     "periodSection": "购买周期",
     "periodMonth": "{count} 个月",
     "periodPerMonth": "¥{amount}/月",
@@ -136,6 +140,7 @@
     "kindNew": "新购",
     "kindRenew": "续费",
     "kindUpgrade": "升级",
+    "kindConvert": "试用升级",
     "totals": {
       "discount": "折扣",
       "amount": "应付",
@@ -281,6 +286,7 @@
       "kindNewPurchase": "新购",
       "kindRenew": "续费",
       "kindUpgrade": "升级",
+      "kindConvert": "试用升级",
       "view": "查看",
       "forceApply": "强制开通",
       "forceApplyTitle": "强制开通订单",
@@ -317,6 +323,8 @@
       "filterAll": "全部",
       "filterActive": "启用中",
       "filterInactive": "已停用",
+      "planTypeStandard": "标准",
+      "planTypeTrial": "试用",
       "totalCount": "共 {n} 个套餐",
       "empty": "还没有任何套餐，点击“新建套餐”开始",
       "emptySearch": "没有匹配“{q}”的套餐",
@@ -378,11 +386,14 @@
         "days": "基础周期天数",
         "periodOptions": "周期选项",
         "categoryLabel": "分类标签",
-        "displayOrder": "显示顺序"
+        "displayOrder": "显示顺序",
+        "planType": "套餐类型",
+        "linkedPlan": "关联标准套餐"
       },
       "placeholders": {
         "displayName": "例：SillyTavern 基础版",
-        "categoryLabel": "例：SillyTavern"
+        "categoryLabel": "例：SillyTavern",
+        "linkedPlan": "选择同 egg 的标准套餐"
       },
       "hints": {
         "code": "唯一标识，创建后不建议修改",
@@ -395,7 +406,8 @@
         "category": "用于在用户端套餐页按此文本分组。相同分类标签的套餐会合并在同一标题下；留空则归入\"其他\"分组。",
         "displayOrder": "数值越小越靠前",
         "switchEggReset": "切换 Egg 会重置环境变量默认值为新 Egg 的默认。",
-        "periodCount1Locked": "1 周期为基础选项，不可删除"
+        "periodCount1Locked": "1 周期为基础选项，不可删除",
+        "trial": "试用套餐的资源配置从关联的标准套餐自动同步，无需手动填写。试用套餐仅限从未拥有过服务器的用户购买一次，到期后立即删除（无宽限期）。用户只能通过转换为标准套餐来续费。"
       },
       "periods": {
         "count": "周期倍数",
@@ -412,6 +424,7 @@
         "eggRequired": "请选择 Egg",
         "dockerImageRequired": "请填写 Docker 镜像",
         "startupRequired": "请填写启动命令",
+        "linkedPlanRequired": "请选择关联的标准套餐",
         "periodCountRange": "周期倍数需在 1–24 之间",
         "periodCountDup": "周期倍数 {c} 重复",
         "periodDiscountRange": "折扣需在 0–50 之间",

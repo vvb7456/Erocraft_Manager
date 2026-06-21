@@ -31,7 +31,7 @@ class CreateOrderRequest(_Forbid):
       for renew/new_purchase; ignored for upgrade (forced to 1).
     """
 
-    kind: str = Field(pattern=r"^(renew|new_purchase|upgrade)$")
+    kind: str = Field(pattern=r"^(renew|new_purchase|upgrade|convert)$")
     plan_code: str | None = Field(default=None, max_length=64)
     target_server_id: int | None = Field(default=None, gt=0)
     period_count: int = Field(default=1, ge=1, le=24)
@@ -53,6 +53,14 @@ class CreateOrderRequest(_Forbid):
                 raise ValueError("升级订单必须提供 target_server_id")
             if self.plan_code is None:
                 raise ValueError("升级订单必须提供 plan_code")
+        elif self.kind == "convert":
+            # Trial → linked standard plan. target_server_id required; the
+            # target plan is resolved server-side from the trial's
+            # linked_plan_id, so plan_code is forbidden here.
+            if self.target_server_id is None:
+                raise ValueError("转换订单必须提供 target_server_id")
+            if self.plan_code is not None:
+                raise ValueError("转换订单不应提供 plan_code（从试用套餐的关联标准套餐读取）")
         else:  # new_purchase
             if self.plan_code is None:
                 raise ValueError("新购订单必须提供 plan_code")

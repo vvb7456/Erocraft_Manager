@@ -18,6 +18,10 @@
     "planLoadFailed": "套餐信息加载失败",
     "noPlan": "此服务器未绑定套餐，无法续费"
   },
+  "convert": {
+    "button": "转为正式版",
+    "failed": "加载标准套餐信息失败"
+  },
   "searchPlaceholder": "搜索服务器...",
   "scope": {
     "all": "显示全部服务器"
@@ -65,6 +69,7 @@
   "daysLeft": "剩余 {n} 天",
   "expired": "已过期",
   "permanent": "永久",
+  "trialBadge": "试用版",
   "console": "控制台",
   "files": "文件",
   "more": "更多",

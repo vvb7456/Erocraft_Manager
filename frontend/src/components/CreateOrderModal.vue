@@ -100,7 +100,7 @@ interface CouponListPayload {
   total: number
 }
 
-type CashierMode = 'new_purchase' | 'renew' | 'upgrade'
+type CashierMode = 'new_purchase' | 'renew' | 'upgrade' | 'convert'
 
 const props = withDefaults(
   defineProps<{
@@ -257,6 +257,7 @@ async function loadGateways() {
 // ── Mode flags (must be declared before the immediate watch below) ──
 const isRenew = computed(() => props.mode === 'renew')
 const isUpgrade = computed(() => props.mode === 'upgrade')
+const isConvert = computed(() => props.mode === 'convert')
 
 watch(
   () => props.modelValue,
@@ -287,8 +288,9 @@ const usableCoupons = ref<UsableCoupon[]>([])
 const couponsLoading = ref(false)
 const selectedCouponCode = ref<string>('')
 
-const couponOrderKind = computed<'new_purchase' | 'renew' | 'upgrade'>(() => {
+const couponOrderKind = computed<'new_purchase' | 'renew' | 'upgrade' | 'convert'>(() => {
   if (isUpgrade.value) return 'upgrade'
+  if (isConvert.value) return 'convert'
   if (isRenew.value) return 'renew'
   return 'new_purchase'
 })
@@ -372,6 +374,7 @@ watch(
 const submitting = ref(false)
 
 const modalTitle = computed(() => {
+  if (isConvert.value) return t('billing.cashier.renewTitle')
   if (isRenew.value) return t('billing.cashier.renewTitle')
   if (isUpgrade.value) return t('userServers.upgrade.modalTitle')
   return t('billing.cashier.title')
@@ -381,7 +384,7 @@ const canSubmit = computed(() => {
   if (!selectedGateway.value || submitting.value) return false
   if (isUpgrade.value) return !!(selectedUpgradePlan.value && props.targetServerId)
   if (!props.plan) return false
-  if (isRenew.value && !props.targetServerId) return false
+  if ((isRenew.value || isConvert.value) && !props.targetServerId) return false
   return true
 })
 
@@ -401,6 +404,13 @@ async function onConfirm() {
     } else if (isRenew.value) {
       body = {
         kind: 'renew' as const,
+        target_server_id: props.targetServerId!,
+        period_count: selectedPeriod.value.count,
+        gateway_code: selectedGateway.value,
+      }
+    } else if (isConvert.value) {
+      body = {
+        kind: 'convert' as const,
         target_server_id: props.targetServerId!,
         period_count: selectedPeriod.value.count,
         gateway_code: selectedGateway.value,
@@ -533,8 +543,8 @@ function onCancel() {
         </Badge>
       </div>
 
-      <!-- Renew target hint -->
-      <div v-if="isRenew" class="renew-hint">
+      <!-- Renew / Convert target hint -->
+      <div v-if="isRenew || isConvert" class="renew-hint">
         <MsIcon name="autorenew" size="sm" class="renew-hint__icon" />
         <div class="renew-hint__body">
           <div class="renew-hint__row">
