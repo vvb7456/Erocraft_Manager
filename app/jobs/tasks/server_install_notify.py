@@ -9,13 +9,18 @@ job polls ``servers.installed_at`` paired with our own
 
 * A server is **eligible** when ``installed_at`` is set, the row's
   ``status`` is NULL (i.e. not ``installing`` / ``suspended`` /
-  ``install_failed``), and ``install_notified_at`` is NULL.
+  ``install_failed``), ``install_notified_at`` is NULL, and the retry
+  backoff window has elapsed (``install_notify_next_at`` is NULL or in
+  the past).
 * On send success we set ``install_notified_at = NOW()`` so subsequent
   scans skip the row.
-* On send failure (SMTP / template / no email) we leave the flag NULL
-  so the next tick retries — except for the deterministic "owner has no
-  email" case, where we set the flag anyway to avoid spamming the log
-  every minute.
+* On send failure we bump ``install_notify_attempts`` and schedule the
+  next retry via ``install_notify_next_at`` on an exponential backoff
+  (``_RETRY_DELAYS`` — 1m, 5m, 15m, 1h, 4h, mirroring the billing apply
+  engine). Once the budget is exhausted we set ``install_notified_at`` to
+  give up, so a permanently-undeliverable recipient does not spam the
+  audit log every tick. The deterministic "owner has no email" case sets
+  the flag immediately.
 
 Reinstalls (admin / user-triggered) clear ``installed_at`` but do **not**
 clear ``install_notified_at`` (only this job and the baseline backfill
@@ -54,6 +59,15 @@ logger = logging.getLogger(__name__)
 
 INSTALL_NOTIFY_JOB_ID = "server_install_notify"
 
+# Exponential backoff schedule for failed install-notify sends, mirroring
+# the billing apply engine (apply_engine.RETRY_DELAYS). After each failure
+# the row is skipped until ``install_notify_next_at``; once attempts exceed
+# the schedule length the row is finalized as given-up so the audit log is
+# not spammed by a permanently-undeliverable recipient (e.g. an invalid
+# address the relay rejects with a 5xx such as QQ's ``559 invaddr``).
+# 1m, 5m, 15m, 1h, 4h
+_RETRY_DELAYS = [60, 5 * 60, 15 * 60, 60 * 60, 4 * 60 * 60]
+
 
 def sync_install_notify_job(scheduler: BaseScheduler, settings: Mapping[str, object]) -> None:
     """Wire up the job to APScheduler. Driven by ``AUTOMATION_EMAIL_ENABLED``."""
@@ -83,13 +97,18 @@ _SCAN_SQL = text(
         s.installed_at AS installed_at,
         u.id           AS owner_id,
         u.username     AS username,
-        u.email        AS email
+        u.email        AS email,
+        COALESCE(m.install_notify_attempts, 0) AS notify_attempts
     FROM servers s
     LEFT JOIN manager_server_meta m ON m.server_id = s.id
     JOIN users u ON u.id = s.owner_id
     WHERE s.installed_at IS NOT NULL
       AND s.status IS NULL
       AND (m.install_notified_at IS NULL)
+      AND (
+          m.install_notify_next_at IS NULL
+          OR m.install_notify_next_at <= NOW()
+      )
     ORDER BY s.installed_at ASC
     LIMIT 100
     """
@@ -112,6 +131,50 @@ async def _mark_notified(db: AsyncSession, server_id: int) -> None:
         ).bindparams(sid=server_id)
     )
     await db.commit()
+
+
+async def _record_notify_failure(
+    db: AsyncSession, server_id: int, attempts_before: int
+) -> bool:
+    """Bump ``install_notify_attempts`` and schedule the next retry.
+
+    Mirrors apply_engine's ``_record_failure_and_release``: increment the
+    counter, and if it still fits within ``_RETRY_DELAYS`` set
+    ``install_notify_next_at = NOW() + _RETRY_DELAYS[attempts-1]``; once
+    the budget is exhausted set ``install_notified_at`` to give up and
+    stop the row being scanned. Returns True iff the budget was exhausted.
+    """
+    new_attempts = attempts_before + 1
+    exhausted = new_attempts > len(_RETRY_DELAYS)
+    if exhausted:
+        await db.execute(
+            text(
+                """
+                INSERT INTO manager_server_meta (server_id, install_notify_attempts)
+                VALUES (:sid, :att)
+                ON DUPLICATE KEY UPDATE
+                    install_notify_attempts = :att,
+                    install_notify_next_at = NULL,
+                    install_notified_at = NOW()
+                """
+            ).bindparams(sid=server_id, att=new_attempts)
+        )
+    else:
+        delay = _RETRY_DELAYS[new_attempts - 1]
+        await db.execute(
+            text(
+                """
+                INSERT INTO manager_server_meta
+                    (server_id, install_notify_attempts, install_notify_next_at)
+                VALUES (:sid, :att, DATE_ADD(NOW(), INTERVAL :delay SECOND))
+                ON DUPLICATE KEY UPDATE
+                    install_notify_attempts = :att,
+                    install_notify_next_at = DATE_ADD(NOW(), INTERVAL :delay SECOND)
+                """
+            ).bindparams(sid=server_id, att=new_attempts, delay=delay)
+        )
+    await db.commit()
+    return exhausted
 
 
 async def run_install_notify_scan() -> None:
@@ -194,10 +257,21 @@ async def run_install_notify_scan() -> None:
                     await _mark_notified(db, server_id)
                     sent_count += 1
                 else:
-                    # Leave install_notified_at NULL so the next tick retries.
+                    # Back off: schedule the next retry on an exponential
+                    # delay (see _RETRY_DELAYS) so a permanently-failing
+                    # recipient does not spam the audit log every tick.
+                    # Once the budget is exhausted the row is finalized.
+                    attempts_before = int(row["notify_attempts"] or 0)
+                    exhausted = await _record_notify_failure(
+                        db, server_id, attempts_before
+                    )
                     logger.warning(
-                        "install_notify: send failed for server %s: %s",
-                        server_id, err,
+                        "install_notify: send failed for server %s "
+                        "(attempt %d%s): %s",
+                        server_id,
+                        attempts_before + 1,
+                        ", retries exhausted — giving up" if exhausted else "",
+                        err,
                     )
 
                 if delay > 0 and index < len(rows) - 1:
