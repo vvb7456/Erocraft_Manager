@@ -61,6 +61,19 @@ class ServerMeta(Base):
     install_notified_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
+    # Install-notify retry state, mirroring BillingOrder.apply_retry_count +
+    # next_apply_at: ``install_notify_attempts`` counts failed send attempts;
+    # ``install_notify_next_at`` is the earliest the per-minute scan should
+    # retry. Failed sends back off on an exponential schedule (see
+    # RETRY_DELAYS in server_install_notify) so a permanently-undeliverable
+    # recipient does not spam the audit log every tick. After the retry
+    # budget is exhausted ``install_notified_at`` is set to give up.
+    install_notify_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    install_notify_next_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
 
     server: Mapped["PteroServer"] = relationship("PteroServer", back_populates="meta")
 
