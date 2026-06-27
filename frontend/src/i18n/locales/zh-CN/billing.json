@@ -14,6 +14,12 @@
     "buyNow": "立即购买",
     "trialBadge": "试用",
     "renewHintBanner": "续费已有服务器，请在「我的服务器」控制台中点击续费按钮。",
+    "newPurchaseConfirm": {
+      "title": "确认购买新服务器",
+      "message": "您已拥有服务器。继续操作将创建一台全新服务器，而非续费已有服务器。如需续费，请前往「我的服务器」点击续费按钮。",
+      "confirm": "确认新购",
+      "cancel": "取消"
+    },
     "supportHint": "需要帮助？",
     "supportLink": "联系客服"
   },

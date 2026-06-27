@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useAppStore } from '@/stores/app'
+import { useConfirm } from '@/composables/useConfirm'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -59,6 +60,7 @@ const { t } = useI18n({ useScope: 'global' })
 const { get } = useApiFetch()
 const router = useRouter()
 const app = useAppStore()
+const { confirm } = useConfirm()
 
 const plans = ref<Plan[]>([])
 const initialLoading = ref(true)
@@ -111,6 +113,15 @@ async function loadPlans() {
 }
 
 async function handleBuy(plan: Plan, period: PeriodOption) {
+  if (app.hasOwnedServer) {
+    const ok = await confirm({
+      title: t('billing.plans.newPurchaseConfirm.title'),
+      message: t('billing.plans.newPurchaseConfirm.message'),
+      confirmText: t('billing.plans.newPurchaseConfirm.confirm'),
+      cancelText: t('billing.plans.newPurchaseConfirm.cancel'),
+    })
+    if (!ok) return
+  }
   cashierPlan.value = plan
   cashierPeriodCount.value = period.count
   cashierOpen.value = true
