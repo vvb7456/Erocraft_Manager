@@ -114,13 +114,17 @@ async function loadPlans() {
 
 async function handleBuy(plan: Plan, period: PeriodOption) {
   if (app.hasOwnedServer) {
-    const ok = await confirm({
+    const result = await confirm({
       title: t('billing.plans.newPurchaseConfirm.title'),
       message: t('billing.plans.newPurchaseConfirm.message'),
       confirmText: t('billing.plans.newPurchaseConfirm.confirm'),
-      cancelText: t('billing.plans.newPurchaseConfirm.cancel'),
+      altText: t('billing.plans.newPurchaseConfirm.alt'),
     })
-    if (!ok) return
+    if (result === 'alt') {
+      router.push({ name: 'user-servers' })
+      return
+    }
+    if (!result) return
   }
   cashierPlan.value = plan
   cashierPeriodCount.value = period.count

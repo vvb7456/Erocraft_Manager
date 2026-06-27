@@ -16,9 +16,9 @@
     "renewHintBanner": "To renew an existing server, go to \"My Servers\" and click the renew button in the console.",
     "newPurchaseConfirm": {
       "title": "Buying a new server?",
-      "message": "You already have a server. This will create a brand-new server, not renew your existing one. To renew, go to \"My Servers\" and click the Renew button.",
+      "message": "You already have a server. This will create a brand-new server, not renew your existing one. To renew, click the button below to go to My Servers and click the Renew button in the console.",
       "confirm": "Yes, buy new server",
-      "cancel": "Cancel"
+      "alt": "Go to My Servers"
     },
     "supportHint": "Need help?",
     "supportLink": "Contact support"
