@@ -61,7 +61,8 @@
       "title": "Payment Gateways",
       "desc": "Enable the payment methods you want to offer.",
       "enabled": "Enabled Gateways",
-      "hupijiao": "Hupijiao (Alipay)"
+      "hupijiao": "Hupijiao (Alipay)",
+      "alipay_direct": "Alipay (direct)"
     },
     "credentials": {
       "title": "Gateway Credentials",
@@ -85,7 +86,15 @@
     "payTimeout": "QR Code Validity (min)",
     "payTimeout_tip": "QR code validity is capped at 5 minutes. Keeping it at 5 is recommended.",
     "refundStuckHours": "Refund Stuck Alert (hours)",
-    "refundStuckHours_tip": "Refunds pending longer than this become manual incidents."
+    "refundStuckHours_tip": "Refunds pending longer than this become manual incidents.",
+    "alipay": {
+      "appPrivateKey": "App private key",
+      "alipayPublicKey": "Alipay public key",
+      "gateway": "Gateway URL",
+      "gateway_tip": "Alipay open gateway; sandbox uses https://openapi-sandbox.dl.alipaydev.com/gateway.do",
+      "gatewayDesc": "Configure Alipay open-platform gateway and seller PID.",
+      "sellerId": "Seller PID"
+    }
   },
   "defaults": {
     "title": "Server Defaults",

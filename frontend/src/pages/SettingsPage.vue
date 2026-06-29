@@ -22,7 +22,6 @@ import DirtyBar from '@/components/ui/DirtyBar.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import AccountSettingsPanel from '@/components/account/AccountSettingsPanel.vue'
-import ChipSelect from '@/components/ui/ChipSelect.vue'
 import { TIMEZONE_OPTIONS } from '@/config/timezones'
 
 defineOptions({ name: 'SettingsPage' })
@@ -63,11 +62,26 @@ const automation = ref({
 const saveLoading = ref(false)
 
 // ── Payment tab helpers ──
-const GATEWAY_CODES = ['hupijiao'] as const
-const activeGateway = ref<string>('hupijiao')
-const gatewayChips = computed(() =>
-  GATEWAY_CODES.map(code => ({ value: code, label: getBillingStr(`${code.toUpperCase()}_DISPLAY_NAME`) || code }))
+const GATEWAY_CODES = ['hupijiao', 'alipay_direct'] as const
+const gatewayTabs = computed<TabItem[]>(() =>
+  GATEWAY_CODES.map(code => {
+    const enabled = getBillingBool(`${code.toUpperCase()}_ENABLED`)
+    const labelKey = code === 'hupijiao' ? 'settings.payment.gateways.hupijiao' : 'settings.payment.gateways.alipay_direct'
+    return {
+      key: code,
+      label: t(labelKey),
+      disabled: !enabled,
+    }
+  })
 )
+const activeGateway = ref<string>('hupijiao')
+watch(gatewayTabs, (tabs) => {
+  const active = tabs.find(t => t.key === activeGateway.value)
+  if (!active || active.disabled) {
+    const firstEnabled = tabs.find(t => !t.disabled)
+    if (firstEnabled) activeGateway.value = firstEnabled.key
+  }
+}, { immediate: true })
 function getBillingStr(key: string, def = ''): string { return billingSettings.value[key] ?? def }
 function setBillingStr(key: string, val: string) { billingSettings.value[key] = val }
 function getBillingNum(key: string, def = 0): number { return Number(billingSettings.value[key]) || def }
@@ -489,23 +503,27 @@ async function onTabChange(next: string) {
               <p class="section-note">{{ t('settings.payment.gateways.desc') }}</p>
               <FormField :label="t('settings.payment.gateways.enabled')" layout="horizontal">
                 <BaseSelect
-                  :modelValue="getBillingBool('HUPIJIAO_ENABLED') ? ['hupijiao'] : []"
-                  :options="[{ value: 'hupijiao', label: t('settings.payment.gateways.hupijiao') }]"
+                  :modelValue="[
+                    ...(getBillingBool('HUPIJIAO_ENABLED') ? ['hupijiao'] : []),
+                    ...(getBillingBool('ALIPAY_DIRECT_ENABLED') ? ['alipay_direct'] : []),
+                  ]"
+                  :options="[
+                    { value: 'hupijiao', label: t('settings.payment.gateways.hupijiao') },
+                    { value: 'alipay_direct', label: t('settings.payment.gateways.alipay_direct') },
+                  ]"
                   multiple
-                  @update:modelValue="setBillingBool('HUPIJIAO_ENABLED', (($event as string[]).includes('hupijiao')))"
+                  @update:modelValue="setBillingBool('HUPIJIAO_ENABLED', (($event as string[]).includes('hupijiao'))), setBillingBool('ALIPAY_DIRECT_ENABLED', (($event as string[]).includes('alipay_direct')))"
                 />
               </FormField>
             </BaseCard>
 
-            <!-- Gateway config cards: ChipSelect to switch, one card per gateway -->
-            <template v-if="getBillingBool('HUPIJIAO_ENABLED')">
-              <div class="pay-gateway-switcher">
-                <ChipSelect :options="gatewayChips" :modelValue="activeGateway" @update:modelValue="activeGateway = String($event)" />
-              </div>
+            <!-- Gateway config: TabSwitcher wrapping all gateway cards in one container -->
+            <template v-if="getBillingBool('HUPIJIAO_ENABLED') || getBillingBool('ALIPAY_DIRECT_ENABLED')">
+              <BaseCard variant="bg2" class="settings-card pay-gateway-config-card">
+                <TabSwitcher :tabs="gatewayTabs" :modelValue="activeGateway" @update:modelValue="activeGateway = $event" />
 
-              <!-- Hupijiao card -->
-              <template v-if="activeGateway === 'hupijiao'">
-                <BaseCard variant="bg2" class="settings-card">
+                <!-- Hupijiao -->
+                <div v-if="activeGateway === 'hupijiao'" class="pay-gateway-pane">
                   <SectionHeader icon="badge" flush>{{ t('settings.payment.credentials.title') }}</SectionHeader>
                   <p class="section-note">{{ t('settings.payment.credentials.desc') }}</p>
                   <FormField :label="t('settings.payment.credentials.displayName')" layout="horizontal">
@@ -517,9 +535,7 @@ async function onTabChange(next: string) {
                   <FormField :label="t('settings.payment.credentials.appsecret')" layout="horizontal">
                     <SecretInput :modelValue="getBillingStr('HUPIJIAO_APPSECRET')" @update:modelValue="setBillingStr('HUPIJIAO_APPSECRET', $event)" />
                   </FormField>
-                </BaseCard>
 
-                <BaseCard variant="bg2" class="settings-card">
                   <SectionHeader icon="link" flush>{{ t('settings.payment.urls.title') }}</SectionHeader>
                   <p class="section-note">{{ t('settings.payment.urls.desc') }}</p>
                   <FormField layout="horizontal">
@@ -536,11 +552,40 @@ async function onTabChange(next: string) {
                     </template>
                     <BaseInput :modelValue="getBillingStr('HUPIJIAO_GATEWAY_ENDPOINTS')" @update:modelValue="setBillingStr('HUPIJIAO_GATEWAY_ENDPOINTS', $event)" />
                   </FormField>
-                </BaseCard>
-              </template>
-            </template>
+                </div>
 
-            <!-- Quota & policy card (always visible) -->
+                <!-- Alipay direct -->
+                <div v-if="activeGateway === 'alipay_direct'" class="pay-gateway-pane">
+                  <SectionHeader icon="badge" flush>{{ t('settings.payment.credentials.title') }}</SectionHeader>
+                  <p class="section-note">{{ t('settings.payment.credentials.desc') }}</p>
+                  <FormField :label="t('settings.payment.credentials.displayName')" layout="horizontal">
+                    <BaseInput :modelValue="getBillingStr('ALIPAY_DIRECT_DISPLAY_NAME')" @update:modelValue="setBillingStr('ALIPAY_DIRECT_DISPLAY_NAME', $event)" />
+                  </FormField>
+                  <FormField :label="t('settings.payment.credentials.appid')" layout="horizontal">
+                    <BaseInput :modelValue="getBillingStr('ALIPAY_DIRECT_APPID')" @update:modelValue="setBillingStr('ALIPAY_DIRECT_APPID', $event)" />
+                  </FormField>
+                  <FormField :label="t('settings.payment.alipay.appPrivateKey')" layout="horizontal">
+                    <SecretInput :modelValue="getBillingStr('ALIPAY_DIRECT_APP_PRIVATE_KEY')" @update:modelValue="setBillingStr('ALIPAY_DIRECT_APP_PRIVATE_KEY', $event)" />
+                  </FormField>
+                  <FormField :label="t('settings.payment.alipay.alipayPublicKey')" layout="horizontal">
+                    <SecretInput :modelValue="getBillingStr('ALIPAY_DIRECT_ALIPAY_PUBLIC_KEY')" @update:modelValue="setBillingStr('ALIPAY_DIRECT_ALIPAY_PUBLIC_KEY', $event)" />
+                  </FormField>
+
+                  <SectionHeader icon="link" flush>{{ t('settings.payment.urls.title') }}</SectionHeader>
+                  <p class="section-note">{{ t('settings.payment.alipay.gatewayDesc') }}</p>
+                  <FormField layout="horizontal">
+                    <template #label>
+                      {{ t('settings.payment.alipay.gateway') }}
+                      <HelpTip :text="t('settings.payment.alipay.gateway_tip')" />
+                    </template>
+                    <BaseInput :modelValue="getBillingStr('ALIPAY_DIRECT_GATEWAY')" @update:modelValue="setBillingStr('ALIPAY_DIRECT_GATEWAY', $event)" />
+                  </FormField>
+                  <FormField :label="t('settings.payment.alipay.sellerId')" layout="horizontal">
+                    <BaseInput :modelValue="getBillingStr('ALIPAY_DIRECT_SELLER_ID')" @update:modelValue="setBillingStr('ALIPAY_DIRECT_SELLER_ID', $event)" />
+                  </FormField>
+                </div>
+              </BaseCard>
+            </template>
             <BaseCard variant="bg2" class="settings-card">
               <SectionHeader icon="tune" flush>{{ t('settings.payment.quotas.title') }}</SectionHeader>
               <p class="section-note">{{ t('settings.payment.quotas.desc') }}</p>
@@ -798,7 +843,8 @@ async function onTabChange(next: string) {
 }
 .db-err-chip:hover { background: var(--bg-in); }
 
-.pay-gateway-switcher { margin-bottom: var(--sp-1); }
+.pay-gateway-config-card { display: flex; flex-direction: column; gap: var(--sp-4); }
+.pay-gateway-pane { display: flex; flex-direction: column; gap: var(--sp-3); }
 .dirty-bar__err-item:hover {
   background: color-mix(in srgb, var(--amber) 10%, transparent);
 }

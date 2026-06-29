@@ -93,7 +93,6 @@
     }
   },
   "pay": {
-    "subtitle": "Scan to complete payment",
     "statusPending": "Awaiting payment",
     "statusPaid": "Payment successful",
     "statusProcessing": "Provisioning",
@@ -108,12 +107,6 @@
     "processingSub": "Hang tight; this page refreshes automatically when ready",
     "expiredTitle": "Order expired",
     "closedTitle": "Order closed",
-    "scanHint": "Scan the QR code with Alipay to complete payment",
-    "h5Title": "Tap below to launch Alipay",
-    "h5Sub": "Return to this page after paying — the order status will refresh automatically",
-    "h5Launch": "Launch Alipay",
-    "h5Relaunch": "Relaunch Alipay",
-    "h5AmountHint": "Complete the payment in Alipay",
     "summaryPlan": "Plan",
     "summaryDuration": "Duration",
     "summaryDays": "{days} days",
@@ -126,7 +119,13 @@
     "btnReorder": "Reorder",
     "btnDashboard": "Back to my servers",
     "supportHint": "Need help?",
-    "supportLink": "Contact support"
+    "supportLink": "Contact support",
+    "redirecting": "Redirecting to Alipay…",
+    "subtitleQR": "Scan QR with Alipay",
+    "subtitleRedirect": "Open Alipay to pay",
+    "buttonOpen": "Open Alipay",
+    "buttonReopen": "Reopen Alipay",
+    "amountLabel": "Amount"
   },
   "orderDetail": {
     "pageTitle": "Order detail",
@@ -555,7 +554,9 @@
     "daysLeft": "{days} d left",
     "copyCode": "Copy code",
     "statusFilterLabel": "Status",
-    "totalCount": "{n} coupons",    "showAll": "Show all {n}",    "tabs": {
+    "totalCount": "{n} coupons",
+    "showAll": "Show all {n}",
+    "tabs": {
       "unused": "Available",
       "used": "Used",
       "expired": "Expired"

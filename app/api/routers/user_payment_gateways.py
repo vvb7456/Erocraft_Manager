@@ -25,6 +25,7 @@ router = APIRouter(prefix="/user/payment-gateways", tags=["billing"])
 # display_name is admin-editable via ``<CODE_UPPER>_DISPLAY_NAME`` setting.
 _GATEWAY_ICON: dict[str, str] = {
     "hupijiao": "qr_code_2",
+    "alipay_direct": "payments",
 }
 
 _FALLBACK_DISPLAY_NAME = "在线支付"

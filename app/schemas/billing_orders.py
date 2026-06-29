@@ -84,6 +84,7 @@ class OrderInvoiceOut(BaseModel):
     transaction_id: str | None = None
     code_url: str | None
     pay_url: str | None
+    pay_url_h5: str | None = None
 
 
 class OrderOut(BaseModel):

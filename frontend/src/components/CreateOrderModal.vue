@@ -85,7 +85,14 @@ interface UpgradeOptionsResponse {
   options: UpgradeOption[]
 }
 interface OrderCreated {
-  order: { id: number }
+  order: {
+    id: number
+    invoice: {
+      pay_url: string | null
+      pay_url_h5: string | null
+      code_url: string | null
+    } | null
+  }
 }
 interface UsableCoupon {
   id: number

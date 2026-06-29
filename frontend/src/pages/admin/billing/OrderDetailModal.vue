@@ -31,7 +31,7 @@ interface Invoice {
   id: number; invoice_no: string; status: string; total_fen: number
   currency_code: string; due_at: string | null; paid_at: string | null
   gateway_code: string | null; gateway_prepay_id: string | null
-  code_url: string | null; pay_url: string | null
+  code_url: string | null; pay_url: string | null; pay_url_h5?: string | null
   created_at: string; updated_at: string
 }
 

@@ -61,7 +61,8 @@
       "title": "支付网关",
       "desc": "启用你要开放的支付方式。",
       "enabled": "启用网关",
-      "hupijiao": "虎皮椒支付"
+      "hupijiao": "虎皮椒支付",
+      "alipay_direct": "支付宝直连"
     },
     "credentials": {
       "title": "网关凭据",
@@ -85,7 +86,15 @@
     "payTimeout": "二维码有效期 (分钟)",
     "payTimeout_tip": "支付 QR 码有效期上限为 5 分钟，建议保持 5。",
     "refundStuckHours": "退款超时告警 (小时)",
-    "refundStuckHours_tip": "退款处于 pending 状态超过此时限后进入人工介入列表。"
+    "refundStuckHours_tip": "退款处于 pending 状态超过此时限后进入人工介入列表。",
+    "alipay": {
+      "appPrivateKey": "应用私钥",
+      "alipayPublicKey": "支付宝公钥",
+      "gateway": "网关地址",
+      "gateway_tip": "支付宝开放平台网关；沙箱用 https://openapi-sandbox.dl.alipaydev.com/gateway.do",
+      "gatewayDesc": "配置支付宝开放平台网关与商户 PID。",
+      "sellerId": "卖家 PID"
+    }
   },
   "defaults": {
     "title": "服务器默认配置",

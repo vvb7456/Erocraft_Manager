@@ -93,7 +93,6 @@
     }
   },
   "pay": {
-    "subtitle": "扫码完成支付",
     "statusPending": "等待支付",
     "statusPaid": "支付成功",
     "statusProcessing": "开通中",
@@ -108,12 +107,6 @@
     "processingSub": "请稍候，进度完成后页面将自动刷新",
     "expiredTitle": "订单已过期",
     "closedTitle": "订单已关闭",
-    "scanHint": "请使用支付宝扫描二维码完成支付",
-    "h5Title": "点击下方按钮唤起支付宝",
-    "h5Sub": "完成支付后请返回本页面，订单状态会自动更新",
-    "h5Launch": "唤起支付宝",
-    "h5Relaunch": "重新唤起支付宝",
-    "h5AmountHint": "请在支付宝中完成付款",
     "summaryPlan": "套餐",
     "summaryDuration": "时长",
     "summaryDays": "{days} 天",
@@ -126,7 +119,13 @@
     "btnReorder": "重新下单",
     "btnDashboard": "返回我的服务器",
     "supportHint": "遇到问题？",
-    "supportLink": "联系客服"
+    "supportLink": "联系客服",
+    "redirecting": "正在跳转到支付宝…",
+    "subtitleQR": "使用支付宝扫描二维码",
+    "subtitleRedirect": "前往支付宝付款",
+    "buttonOpen": "打开支付宝",
+    "buttonReopen": "重新打开支付宝",
+    "amountLabel": "付款金额"
   },
   "orderDetail": {
     "pageTitle": "订单详情",

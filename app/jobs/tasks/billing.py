@@ -245,6 +245,7 @@ async def run_order_query() -> None:
                     BillingOrder.id,
                     BillingInvoice.invoice_no,
                     BillingInvoice.id.label("invoice_id"),
+                    BillingInvoice.gateway_code,
                 )
                 .join(BillingInvoice, BillingInvoice.order_id == BillingOrder.id)
                 .where(
@@ -256,20 +257,27 @@ async def run_order_query() -> None:
             )
         ).all()
 
-    for order_id, invoice_no, invoice_id in rows:
+    for order_id, invoice_no, invoice_id, gateway_code in rows:
         async with session_factory() as db:
             try:
-                await _query_one_order(db, order_id, invoice_no, invoice_id)
+                await _query_one_order(
+                    db, order_id, invoice_no, invoice_id, gateway_code
+                )
             except Exception:
                 logger.exception("order_query failed for order %s", order_id)
 
 
 async def _query_one_order(
-    db: AsyncSession, order_id: int, invoice_no: str, invoice_id: int
+    db: AsyncSession,
+    order_id: int,
+    invoice_no: str,
+    invoice_id: int,
+    gateway_code: str | None,
 ) -> None:
+    code = gateway_code or "hupijiao"
     await gateway_registry.ensure_loaded(db)
     try:
-        gateway = gateway_registry.get("hupijiao")
+        gateway = gateway_registry.get(code)
     except KeyError:
         return
     try:
@@ -285,7 +293,7 @@ async def _query_one_order(
         await payments.safe_add_payment(
             db,
             invoice,
-            gateway_code="hupijiao",
+            gateway_code=code,
             transaction_id=result.transaction_id or "",
             amount_fen=result.amount_fen or invoice.total_fen,
             raw_event_id=None,
@@ -295,7 +303,7 @@ async def _query_one_order(
             db,
             invoice_id,
             result.transaction_id,
-            gateway_code="hupijiao",
+            gateway_code=code,
             amount_fen=result.amount_fen or invoice.total_fen,
         )
     # NOTPAY / USERPAYING / NOTFOUND / PROCESSING: ignore until next round.

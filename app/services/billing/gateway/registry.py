@@ -78,4 +78,27 @@ async def ensure_loaded(db: "AsyncSession", *, force: bool = False) -> None:
                 _log.warning(
                     "HUPIJIAO_ENABLED=true but APPID/APPSECRET missing — gateway not registered"
                 )
+
+        if values.get("ALIPAY_DIRECT_ENABLED"):
+            from app.services.billing.gateway.alipay_direct import AlipayDirectGateway
+
+            appid = (values.get("ALIPAY_DIRECT_APPID") or "").strip()
+            priv = (values.get("ALIPAY_DIRECT_APP_PRIVATE_KEY") or "").strip()
+            pub = (values.get("ALIPAY_DIRECT_ALIPAY_PUBLIC_KEY") or "").strip()
+            if appid and priv and pub:
+                gw_url = (values.get("ALIPAY_DIRECT_GATEWAY") or "").strip()
+                seller_id = (values.get("ALIPAY_DIRECT_SELLER_ID") or "").strip() or None
+                _REGISTRY["alipay_direct"] = AlipayDirectGateway(
+                    appid=appid,
+                    app_private_key_pem=priv,
+                    alipay_public_key_pem=pub,
+                    gateway_url=gw_url,
+                    seller_id=seller_id,
+                )
+                _log.info("Registered payment gateway: alipay_direct")
+            else:
+                _log.warning(
+                    "ALIPAY_DIRECT_ENABLED=true but APPID/PRIVATE_KEY/PUBLIC_KEY "
+                    "missing — gateway not registered"
+                )
         _loaded = True

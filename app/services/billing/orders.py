@@ -509,7 +509,7 @@ async def create_order(
     try:
         site_url = str(await _runtime_site_url(db)).rstrip("/")
         return_url = f"{site_url}/#/pay/{order.id}"
-        notify_url = f"{site_url}/api/webhook/hupijiao"
+        notify_url = f"{site_url}/api/webhook/{gateway.code}"
         gw_result = await gateway.create_invoice(
             CreateInvoiceRequest(
                 invoice_no=invoice_no,

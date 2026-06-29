@@ -139,6 +139,17 @@ class AdminOrderListItem(BaseModel):
     updated_at: str
 
 
+class OrderListResponse(BaseModel):
+    """Paginated envelope for ``GET /api/admin/billing/orders``.
+
+    Mirrors ``CouponListResponse`` so the admin DataTable can compute
+    ``totalPages = ceil(total / perPage)`` instead of guessing.
+    """
+
+    items: list[AdminOrderListItem]
+    total: int
+
+
 class AdminInvoiceOut(BaseModel):
     """Invoice projection used by admin order detail."""
 
@@ -153,6 +164,7 @@ class AdminInvoiceOut(BaseModel):
     gateway_prepay_id: str | None
     code_url: str | None
     pay_url: str | None
+    pay_url_h5: str | None = None
     created_at: str
     updated_at: str
 

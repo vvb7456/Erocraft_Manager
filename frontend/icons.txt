@@ -14,6 +14,7 @@ chat
 # Payment gateway icons (returned dynamically from /api/user/payment-gateways)
 qr_code_2
 payments
+account_balance_wallet
 
 # UserPayPage / SupportModal — payment status and contact
 check_circle

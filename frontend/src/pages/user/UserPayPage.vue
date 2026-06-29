@@ -130,6 +130,9 @@ const statusLabel = computed(() => {
 // ── QR image ──
 // Hupijiao 文档：`url_qrcode` 字段本身就是已渲染好的 PC 端二维码图片地址，
 // 直接 <img src> 展示即可，不要再做二次 QR 编码。
+// 支付宝直连（alipay_direct）走 alipay.trade.page.pay：返回的是收银台跳转
+// URL,无预渲染 QR，前端直接「同窗口跳转」到支付页面 (付完支付宝点「返回
+// 商户」跳回 return_url = /#/pay/:id，原页继续轮询)。
 const qrImageUrl = computed(() => invoice.value?.code_url ?? null)
 const qrError = ref(false)
 
@@ -141,9 +144,10 @@ function onQrImageLoad() {
   qrError.value = false
 }
 
-// ── Mobile H5 detection ──
-// 移动端无法扫自己屏幕的二维码；改为直接跳转网关返回的 pay_url（H5 收银台）。
-// 检测以 UA 为准，pointer:coarse 作为辅助。
+// ── PC vs mobile detection ──
+// hupijiao: 移动端在浏览器内打开支付宝 H5 收银台；PC 端展示二维码图片。
+// alipay_direct: 不分 PC/H5，支付宝 page.pay 按 UA 自动切换收银台形态，
+// 都走同窗口跳转 (return_url 跳回 /pay/:id)。
 const isMobile = (() => {
   if (typeof navigator === 'undefined') return false
   const ua = navigator.userAgent || ''
@@ -152,23 +156,57 @@ const isMobile = (() => {
   return false
 })()
 
-const payUrl = computed(() => invoice.value?.pay_url ?? null)
+// 前端按 isMobile 选 PC(page.pay) 或 H5(wap.pay) 收银台 URL
+const payUrl = computed(() => {
+  if (!invoice.value) return null
+  if (isMobile && invoice.value.pay_url_h5) return invoice.value.pay_url_h5
+  return invoice.value.pay_url ?? null
+})
 const h5Launched = ref(false)
+const redirecting = ref(false)
 
 function launchH5Pay() {
   if (!payUrl.value) return
   h5Launched.value = true
-  // 同窗口跳转，体验最接近原生「唤起支付宝」
-  window.location.href = payUrl.value
+  // PC: 新标签打开, 原页继续轮询, 付完自动捕获到账。
+  // 移动端: iOS Safari 拦截 setTimeout 后的 window.open, 只能同窗口跳;
+  //         付完支付宝「返回商户」跳回 return_url=/#/pay/:id 恢复轮询。
+  if (isMobile) {
+    window.location.href = payUrl.value
+  } else {
+    window.open(payUrl.value, '_blank')
+  }
 }
 
-// 移动端订单首次加载到 pay_url 后自动唤起一次
+// 所有平台统一: 拿到 pay_url 后先显示「正在跳转到支付宝…」600ms 再跳,
+// 让用户有时间看清页面。手动按钮始终 enabled, 用户可随时点跳过等待。
+const REDIRECT_DELAY_MS = 600
 watch(payUrl, (url) => {
-  if (!isMobile) return
   if (!url) return
   if (h5Launched.value) return
   if (phase.value !== 'pending') return
-  launchH5Pay()
+  if (!isMobile && qrImageUrl.value) return  // hupijiao PC: 展示 QR 不跳
+  redirecting.value = true
+  setTimeout(() => {
+    if (!h5Launched.value && phase.value === 'pending' && payUrl.value) {
+      launchH5Pay()
+    }
+  }, REDIRECT_DELAY_MS)
+})
+
+// 副标题: 唯一主提示, 按状态切换
+const subtitleText = computed(() => {
+  if (!order.value || redirecting.value) return t('billing.pay.redirecting')
+  switch (phase.value) {
+    case 'paid': return t('billing.pay.successTitle')
+    case 'processing': return t('billing.pay.processingTitle')
+    case 'expired': return t('billing.pay.expiredTitle')
+    case 'closed': return t('billing.pay.closedTitle')
+    default:
+      return qrImageUrl.value
+        ? t('billing.pay.subtitleQR')
+        : t('billing.pay.subtitleRedirect')
+  }
 })
 
 // ── Auto-redirect on success ──
@@ -232,105 +270,54 @@ function fenToYuan(fen: number | null | undefined): string {
 </script>
 
 <template>
-  <AuthShell icon="receipt_long" :subtitle="t('billing.pay.subtitle')">
-    <div v-if="phase === 'loading' && !order" class="loading">
-      <Spinner />
-    </div>
-
-    <div v-else-if="order" class="pay-content">
-      <!-- Mobile H5 panel: 直接唤起支付宝 -->
-      <div v-if="isMobile" class="h5-wrap">
-        <div v-if="phase === 'pending'" class="h5-card">
-          <MsIcon name="smartphone" size="lg" />
-          <p class="h5-title">{{ t('billing.pay.h5Title') }}</p>
-          <p class="h5-sub">{{ t('billing.pay.h5Sub') }}</p>
-          <BaseButton variant="primary" :disabled="!payUrl" @click="launchH5Pay">
-            <MsIcon name="open_in_new" size="sm" />
-            {{ h5Launched ? t('billing.pay.h5Relaunch') : t('billing.pay.h5Launch') }}
-          </BaseButton>
-        </div>
-        <div v-else-if="phase === 'paid'" class="h5-card h5-card--success">
-          <MsIcon name="check_circle" size="lg" />
-          <p class="h5-title">{{ t('billing.pay.successTitle') }}</p>
-          <p class="h5-sub">{{ t('billing.pay.successCountdown', { n: redirectCountdown }) }}</p>
-        </div>
-        <div v-else-if="phase === 'processing'" class="h5-card h5-card--processing">
-          <Spinner />
-          <p class="h5-title">{{ t('billing.pay.processingTitle') }}</p>
-          <p class="h5-sub">{{ t('billing.pay.processingSub') }}</p>
-        </div>
-        <div v-else-if="phase === 'expired'" class="h5-card h5-card--expired">
+  <AuthShell icon="receipt_long" :subtitle="subtitleText">
+    <div class="pay-content">
+      <!-- QR (hupijiao PC, pending only) -->
+      <div v-if="phase === 'pending' && qrImageUrl && !isMobile" class="qr-wrap">
+        <img v-if="!qrError" :src="qrImageUrl" alt="QR" class="qr-image" width="240" height="240" @load="onQrImageLoad" @error="onQrImageError" />
+        <div v-else class="qr-error">
           <MsIcon name="error_outline" size="lg" />
-          <p class="h5-title">{{ t('billing.pay.expiredTitle') }}</p>
-        </div>
-        <div v-else-if="phase === 'closed'" class="h5-card h5-card--closed">
-          <MsIcon name="error_outline" size="lg" />
-          <p class="h5-title">{{ t('billing.pay.closedTitle') }}</p>
+          <p>{{ t('billing.pay.qrError') }}</p>
+          <BaseButton size="sm" variant="ghost" @click="refresh">{{ t('billing.pay.retry') }}</BaseButton>
         </div>
       </div>
 
-      <!-- Desktop QR area with overlay states -->
-      <div v-else class="qr-wrap">
-        <img
-          v-if="qrImageUrl"
-          :src="qrImageUrl"
-          alt="QR"
-          class="qr-image"
-          :class="{ 'qr-image--dim': phase !== 'pending' }"
-          width="240"
-          height="240"
-          @load="onQrImageLoad"
-          @error="onQrImageError"
-        />
-        <div v-else class="qr-placeholder" />
+      <!-- Button (loading + non-QR pending) -->
+      <div v-else-if="phase === 'loading' || phase === 'pending'" class="pay-action">
+        <BaseButton variant="primary" :disabled="!payUrl || phase !== 'pending'" @click="launchH5Pay">
+          <MsIcon name="open_in_new" size="sm" />
+          {{ h5Launched ? t('billing.pay.buttonReopen') : t('billing.pay.buttonOpen') }}
+        </BaseButton>
+      </div>
 
-        <div v-if="!qrImageUrl && !qrError && phase === 'pending'" class="qr-loading">
-          <Spinner />
-        </div>
-
-        <div v-if="qrError && phase === 'pending'" class="qr-overlay qr-overlay--error">
-          <MsIcon name="error_outline" size="lg" />
-          <p>{{ t('billing.pay.qrError') }}</p>
-          <BaseButton size="sm" variant="ghost" @click="refresh">
-            {{ t('billing.pay.retry') }}
-          </BaseButton>
-        </div>
-
-        <div v-if="phase === 'paid'" class="qr-overlay qr-overlay--success">
-          <MsIcon name="check_circle" size="lg" />
-          <p class="overlay-title">{{ t('billing.pay.successTitle') }}</p>
-          <p class="overlay-sub">
-            {{ t('billing.pay.successCountdown', { n: redirectCountdown }) }}
-          </p>
-        </div>
-
-        <div v-if="phase === 'processing'" class="qr-overlay qr-overlay--processing">
-          <Spinner />
-          <p class="overlay-title">{{ t('billing.pay.processingTitle') }}</p>
-          <p class="overlay-sub">{{ t('billing.pay.processingSub') }}</p>
-        </div>
-
-        <div v-if="phase === 'expired'" class="qr-overlay qr-overlay--expired">
-          <MsIcon name="error_outline" size="lg" />
-          <p class="overlay-title">{{ t('billing.pay.expiredTitle') }}</p>
-        </div>
-
-        <div v-if="phase === 'closed'" class="qr-overlay qr-overlay--closed">
-          <MsIcon name="error_outline" size="lg" />
-          <p class="overlay-title">{{ t('billing.pay.closedTitle') }}</p>
-        </div>
+      <!-- Terminal states (all platforms unified) -->
+      <div v-else-if="phase === 'paid'" class="pay-status pay-status--success">
+        <MsIcon name="check_circle" size="lg" />
+        <p class="status-sub">{{ t('billing.pay.successCountdown', { n: redirectCountdown }) }}</p>
+      </div>
+      <div v-else-if="phase === 'processing'" class="pay-status pay-status--processing">
+        <Spinner />
+        <p class="status-sub">{{ t('billing.pay.processingSub') }}</p>
+      </div>
+      <div v-else-if="phase === 'expired'" class="pay-status pay-status--expired">
+        <MsIcon name="error_outline" size="lg" />
+        <p class="status-sub">{{ t('billing.pay.expiredTitle') }}</p>
+      </div>
+      <div v-else-if="phase === 'closed'" class="pay-status pay-status--closed">
+        <MsIcon name="error_outline" size="lg" />
+        <p class="status-sub">{{ t('billing.pay.closedTitle') }}</p>
       </div>
 
       <!-- Amount -->
-      <div class="amount-row">
+      <div v-if="order" class="amount-row">
+        <span class="amount-label">{{ t('billing.pay.amountLabel') }}</span>
         <span class="amount">¥{{ fenToYuan(order.total_fen) }}</span>
-        <span class="amount-hint">{{ isMobile ? t('billing.pay.h5AmountHint') : t('billing.pay.scanHint') }}</span>
       </div>
 
       <div class="divider" />
 
       <!-- Summary -->
-      <dl class="summary">
+      <dl v-if="order" class="summary">
         <div class="summary-row">
           <dt>{{ t('billing.pay.summaryPlan') }}</dt>
           <dd>{{ order.plan_name }}</dd>
@@ -395,12 +382,6 @@ function fenToYuan(fen: number | null | undefined): string {
 </template>
 
 <style scoped>
-.loading {
-  padding: var(--sp-6) 0;
-  display: flex;
-  justify-content: center;
-}
-
 .pay-content {
   display: flex;
   flex-direction: column;
@@ -408,6 +389,7 @@ function fenToYuan(fen: number | null | undefined): string {
   gap: var(--sp-3);
 }
 
+/* ── QR (hupijiao PC) ── */
 .qr-wrap {
   position: relative;
   width: 240px;
@@ -427,114 +409,66 @@ function fenToYuan(fen: number | null | undefined): string {
   object-fit: contain;
   background: #fff;
 }
-.qr-image--dim {
-  opacity: 0.18;
-  filter: grayscale(1);
-}
-.qr-placeholder {
-  width: 240px;
-  height: 240px;
-}
-.qr-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.qr-overlay {
-  position: absolute;
-  inset: 0;
+.qr-error {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: var(--sp-2);
   text-align: center;
-  padding: var(--sp-3);
-  border-radius: var(--r-md);
-}
-.qr-overlay--success {
-  background: color-mix(in srgb, var(--green) 92%, transparent);
-  color: #fff;
-}
-.qr-overlay--processing {
-  background: color-mix(in srgb, var(--blue) 92%, transparent);
-  color: #fff;
-}
-.qr-overlay--expired,
-.qr-overlay--closed {
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  color: var(--t2);
-}
-.qr-overlay--error {
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
   color: var(--red);
 }
-.overlay-title {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: 600;
-}
-.overlay-sub {
-  margin: 0;
-  font-size: var(--text-sm);
-  opacity: 0.85;
-}
 
-.h5-wrap {
-  width: 100%;
+/* ── Button (loading + non-QR pending) ── */
+.pay-action {
   display: flex;
   justify-content: center;
+  min-height: 44px;
+  align-items: center;
 }
-.h5-card {
-  width: 100%;
-  max-width: 320px;
-  padding: var(--sp-5) var(--sp-4);
-  background: color-mix(in srgb, var(--ac) 6%, var(--bg-in));
-  border: 1px solid color-mix(in srgb, var(--ac) 25%, transparent);
-  border-radius: var(--r-md);
+
+/* ── Terminal states (all platforms) ── */
+.pay-status {
   display: flex;
   flex-direction: column;
   align-items: center;
-  text-align: center;
   gap: var(--sp-2);
-  color: var(--t1);
+  text-align: center;
+  padding: var(--sp-4) 0;
+  min-height: 80px;
+  justify-content: center;
 }
-.h5-card :deep(.ms-icon) {
-  color: var(--ac);
+.pay-status :deep(.ms-icon) {
+  font-size: 36px;
+  line-height: 1;
 }
-.h5-card--success :deep(.ms-icon) { color: var(--green); }
-.h5-card--processing :deep(.ms-icon) { color: var(--blue); }
-.h5-card--expired :deep(.ms-icon),
-.h5-card--closed :deep(.ms-icon) { color: var(--t3); }
-.h5-title {
+.pay-status--success :deep(.ms-icon) { color: var(--green); }
+.pay-status--processing :deep(.ms-icon) { color: var(--blue); }
+.pay-status--expired :deep(.ms-icon),
+.pay-status--closed :deep(.ms-icon) { color: var(--t3); }
+.status-sub {
   margin: 0;
-  font-size: var(--text-md);
-  font-weight: 600;
-}
-.h5-sub {
-  margin: 0 0 var(--sp-2);
   font-size: var(--text-sm);
   color: var(--t2);
 }
 
+/* ── Amount ── */
 .amount-row {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-1);
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
   margin-top: var(--sp-2);
+}
+.amount-label {
+  color: var(--t2);
+  font-size: var(--text-sm);
 }
 .amount {
   font-family: 'IBM Plex Mono', monospace;
   font-size: var(--text-xl);
   font-weight: 700;
   color: var(--ac);
-}
-.amount-hint {
-  font-size: var(--text-xs);
-  color: var(--t2);
+  text-align: right;
 }
 
 .divider {

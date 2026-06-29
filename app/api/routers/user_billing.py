@@ -53,6 +53,7 @@ def serialize_invoice(
         return None
     payload = invoice.gateway_payload or {}
     pay_url = payload.get("url") if isinstance(payload, dict) else None
+    pay_url_h5 = payload.get("url_h5") if isinstance(payload, dict) else None
     return OrderInvoiceOut(
         id=invoice.id,
         invoice_no=invoice.invoice_no,
@@ -66,6 +67,7 @@ def serialize_invoice(
         transaction_id=transaction_id,
         code_url=invoice.gateway_code_url,
         pay_url=pay_url,
+        pay_url_h5=pay_url_h5,
     )
 
 

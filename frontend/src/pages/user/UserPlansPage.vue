@@ -65,6 +65,7 @@ const { confirm } = useConfirm()
 const plans = ref<Plan[]>([])
 const initialLoading = ref(true)
 const loadFailed = ref(false)
+const currentServerCount = ref(0)
 
 // Cashier modal state
 const cashierOpen = ref(false)
@@ -112,8 +113,13 @@ async function loadPlans() {
   initialLoading.value = false
 }
 
+async function loadServerCount() {
+  const data = await get<unknown[]>('/api/user/servers?scope=owner', { silent: true })
+  currentServerCount.value = Array.isArray(data) ? data.length : 0
+}
+
 async function handleBuy(plan: Plan, period: PeriodOption) {
-  if (app.hasOwnedServer) {
+  if (currentServerCount.value > 0) {
     const result = await confirm({
       title: t('billing.plans.newPurchaseConfirm.title'),
       message: t('billing.plans.newPurchaseConfirm.message'),
@@ -131,14 +137,17 @@ async function handleBuy(plan: Plan, period: PeriodOption) {
   cashierOpen.value = true
 }
 
-onMounted(loadPlans)
+onMounted(() => {
+  loadPlans()
+  loadServerCount()
+})
 </script>
 
 <template>
   <PageHeader icon="storefront" :title="t('billing.plans.pageTitle')" />
 
   <AlertBanner
-    v-if="!initialLoading && !loadFailed && plans.length > 0 && app.hasOwnedServer"
+    v-if="!initialLoading && !loadFailed && plans.length > 0 && currentServerCount > 0"
     tone="info"
     :closable="false"
     class="plans-renew-banner"

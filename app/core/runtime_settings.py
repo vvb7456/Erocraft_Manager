@@ -443,6 +443,49 @@ BILLING_SPECS: dict[str, SettingSpec] = _register({
         ),
         _normalize_str,
     ),
+    # ---- Alipay direct gateway (open-platform, RSA2, H5/wap channel) ----
+    # Distinct from 虎皮椒: talks straight to open.alipay.com gateway.
+    "ALIPAY_DIRECT_ENABLED": SettingSpec(
+        "ALIPAY_DIRECT_ENABLED", "billing",
+        lambda: _env_bool("ALIPAY_DIRECT_ENABLED", False),
+        _normalize_bool,
+    ),
+    "ALIPAY_DIRECT_APPID": SettingSpec(
+        "ALIPAY_DIRECT_APPID", "billing",
+        lambda: _env_str("ALIPAY_DIRECT_APPID", ""),
+        _normalize_str,
+        sensitive=True,
+    ),
+    "ALIPAY_DIRECT_APP_PRIVATE_KEY": SettingSpec(
+        "ALIPAY_DIRECT_APP_PRIVATE_KEY", "billing",
+        lambda: _env_str("ALIPAY_DIRECT_APP_PRIVATE_KEY", ""),
+        _normalize_str,
+        sensitive=True,
+    ),
+    "ALIPAY_DIRECT_ALIPAY_PUBLIC_KEY": SettingSpec(
+        "ALIPAY_DIRECT_ALIPAY_PUBLIC_KEY", "billing",
+        lambda: _env_str("ALIPAY_DIRECT_ALIPAY_PUBLIC_KEY", ""),
+        _normalize_str,
+        sensitive=True,
+    ),
+    "ALIPAY_DIRECT_GATEWAY": SettingSpec(
+        "ALIPAY_DIRECT_GATEWAY", "billing",
+        lambda: _env_str(
+            "ALIPAY_DIRECT_GATEWAY",
+            "https://openapi.alipay.com/gateway.do",
+        ),
+        _normalize_str,
+    ),
+    "ALIPAY_DIRECT_SELLER_ID": SettingSpec(
+        "ALIPAY_DIRECT_SELLER_ID", "billing",
+        lambda: _env_str("ALIPAY_DIRECT_SELLER_ID", ""),
+        _normalize_str,
+    ),
+    "ALIPAY_DIRECT_DISPLAY_NAME": SettingSpec(
+        "ALIPAY_DIRECT_DISPLAY_NAME", "billing",
+        lambda: _env_str("ALIPAY_DIRECT_DISPLAY_NAME", "支付宝"),
+        _normalize_str,
+    ),
     # ---- Billing runtime parameters ----
     # 5 min hard cap — payment QR codes typically valid up to 5 min.
     "BILLING_ORDER_PAY_TIMEOUT_MIN": SettingSpec(

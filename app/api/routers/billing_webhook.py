@@ -83,21 +83,17 @@ async def _mark_event_processed(
 
 
 # --------------------------------------------------------------------------- #
-# POST /webhook/hupijiao
+# Generic notify dispatch — shared by all gateway webhook endpoints.
 # --------------------------------------------------------------------------- #
+# Both 虎皮椒 and Alipay expect the literal ``success`` body to ack; a non-200
+# resp makes the gateway retry (give us another inspection shot). The handler
+# logic is gateway-agnostic after ``parse_notify`` (§7.2) — only the signature
+# verification inside the adapter differs.
 
 
-@router.post("/webhook/hupijiao", response_class=PlainTextResponse)
-async def hupijiao_notify(
-    request: Request, db: AsyncSession = Depends(get_db)
+async def _handle_notify(
+    gateway_code: str, request: Request, db: AsyncSession
 ) -> PlainTextResponse:
-    """Hupijiao payment-success webhook.
-
-    Implements §7.2 step-by-step. Always returns ``success`` (HTTP 200)
-    on signature-valid notifies even if internal processing detects a
-    manual-review situation — the incident captures the anomaly and a
-    human resolves it without hupijiao re-delivering the same payload.
-    """
     received_at = utc_naive_now()
     form = await request.form()
     raw_form: dict[str, Any] = {k: v for k, v in form.items()}
@@ -107,22 +103,19 @@ async def hupijiao_notify(
     # ── 1) Verify signature
     await gateway_registry.ensure_loaded(db)
     try:
-        gateway = gateway_registry.get("hupijiao")
+        gateway = gateway_registry.get(gateway_code)
     except KeyError:
-        # Gateway not configured — refuse (don't ack, so admin notices).
-        logger.error("hupijiao webhook arrived but gateway not registered")
+        logger.error("%s webhook arrived but gateway not registered", gateway_code)
         return PlainTextResponse("gateway not configured", status_code=503)
 
     try:
         event = gateway.parse_notify(raw_form)
     except GatewaySignatureError as exc:
-        # Audit even invalid notifies (best-effort, separate session not needed
-        # because this row stays in its own commit).
         try:
             await _record_event(
                 db,
-                gateway_code="hupijiao",
-                event_type="hupijiao.payment.invalid",
+                gateway_code=gateway_code,
+                event_type=f"{gateway_code}.payment.invalid",
                 signature_ok=False,
                 invoice_id=None,
                 transaction_id=None,
@@ -131,20 +124,16 @@ async def hupijiao_notify(
                 received_at=received_at,
             )
         except Exception:
-            logger.exception("failed to audit invalid hupijiao notify")
-        logger.warning("hupijiao webhook signature failure: %s", exc)
-        # 400 (not 401): 401 implies "auth credentials missing" but here we
-        # received a complete payload with an invalid signature — closer to
-        # "malformed request". Returning a non-200 / non-"success" body is
-        # intentional so hupijiao retries (giving us another shot to inspect
-        # via the audit row above).
+            logger.exception("failed to audit invalid %s notify", gateway_code)
+        logger.warning("%s webhook signature failure: %s", gateway_code, exc)
+        # Non-200 so the gateway retries (give us another inspection shot).
         return PlainTextResponse("invalid sign", status_code=400)
 
     # ── 2) Audit row
     evt_id = await _record_event(
         db,
-        gateway_code="hupijiao",
-        event_type=f"hupijiao.payment.{event.status.lower()}",
+        gateway_code=gateway_code,
+        event_type=f"{gateway_code}.payment.{event.status.lower()}",
         signature_ok=True,
         invoice_id=None,
         transaction_id=event.transaction_id or None,
@@ -194,7 +183,7 @@ async def hupijiao_notify(
             await payments.add_payment(
                 db,
                 invoice.id,
-                gateway_code="hupijiao",
+                gateway_code=gateway_code,
                 transaction_id=event.transaction_id,
                 amount_fen=event.amount_fen,
                 raw_event_id=evt_id,
@@ -223,3 +212,40 @@ async def hupijiao_notify(
 
     await _mark_event_processed(db, evt_id, result_tag)
     return PlainTextResponse(_SUCCESS_BODY)
+
+
+# --------------------------------------------------------------------------- #
+# POST /webhook/hupijiao
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/webhook/hupijiao", response_class=PlainTextResponse)
+async def hupijiao_notify(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> PlainTextResponse:
+    """Hupijiao payment-success webhook.
+
+    Implements §7.2 step-by-step. Always returns ``success`` (HTTP 200)
+    on signature-valid notifies even if internal processing detects a
+    manual-review situation — the incident captures the anomaly and a
+    human resolves it without hupijiao re-delivering the same payload.
+    """
+    return await _handle_notify("hupijiao", request, db)
+
+
+# --------------------------------------------------------------------------- #
+# POST /webhook/alipay_direct
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/webhook/alipay_direct", response_class=PlainTextResponse)
+async def alipay_direct_notify(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> PlainTextResponse:
+    """Alipay open-platform payment-success webhook.
+
+    Alipay posts ``application/x-www-form-urlencoded`` and expects the literal
+    ``success`` body to stop retries — identical ack convention to 虎皮椒.
+    Signature is RSA2-verified inside the adapter against the Alipay public key.
+    """
+    return await _handle_notify("alipay_direct", request, db)

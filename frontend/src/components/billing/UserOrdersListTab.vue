@@ -39,6 +39,7 @@ interface OrderInvoice {
   transaction_id: string | null
   code_url: string | null
   pay_url: string | null
+  pay_url_h5?: string | null
 }
 
 interface Order {
