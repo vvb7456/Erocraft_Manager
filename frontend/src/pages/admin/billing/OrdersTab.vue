@@ -58,7 +58,7 @@ const sortOrder = ref<'asc' | 'desc'>('desc')
 
 const rawOrders = ref<OrderItem[]>([])
 const totalCount = ref(0)
-const totalPages = ref(1)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / perPage.value)))
 const loading = ref(false)
 
 const statusOptions = [
@@ -92,17 +92,26 @@ async function loadOrders() {
   if (statusFilter.value) params.set('status', statusFilter.value)
   if (kindFilter.value) params.set('kind', kindFilter.value)
 
-  const data = await get<OrderItem[]>(`/api/admin/billing/orders?${params}`, { silent: true })
+  const data = await get<{ items: OrderItem[]; total: number }>(
+    `/api/admin/billing/orders?${params}`,
+    { silent: true },
+  )
   if (data !== null) {
-    rawOrders.value = data
-    totalCount.value = data.length
-    totalPages.value = data.length < perPage.value ? page.value : page.value + 1
+    rawOrders.value = data.items
+    totalCount.value = data.total
+    if (page.value > totalPages.value) page.value = totalPages.value
   }
   loading.value = false
 }
 
-watch([searchTerm, statusFilter, kindFilter], () => { page.value = 1; loadOrders() })
-watch([page, perPage], () => { loadOrders() }, { immediate: true })
+watch([searchTerm, statusFilter, kindFilter], () => {
+  if (page.value === 1) {
+    void loadOrders()
+  } else {
+    page.value = 1
+  }
+})
+watch([page, perPage], () => { void loadOrders() }, { immediate: true })
 
 // ── Client-side sort ──
 function toggleSort(col: string) {

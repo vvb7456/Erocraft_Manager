@@ -18,7 +18,7 @@ Action endpoints (§11.2 capability matrix):
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_admin
@@ -41,6 +41,7 @@ from app.schemas.billing_admin_orders import (
     ForceApplyRequest,
     ForceCloseRequest,
     OrderEffectOut,
+    OrderListResponse,
     OrderRefundSummary,
     OrderTransactionOut,
 )
@@ -190,7 +191,7 @@ def _serialize_refund(refund: BillingRefund) -> RefundOut:
 # --------------------------------------------------------------------------- #
 
 
-@router.get("", response_model=list[AdminOrderListItem])
+@router.get("", response_model=OrderListResponse)
 async def list_orders_endpoint(
     status_filter: str | None = Query(None, alias="status", max_length=32),
     user_id: int | None = Query(None, gt=0),
@@ -204,14 +205,18 @@ async def list_orders_endpoint(
     offset: int = Query(0, ge=0),
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
-) -> list[AdminOrderListItem]:
-    stmt = select(BillingOrder).order_by(BillingOrder.id.desc())
+) -> OrderListResponse:
+    stmt = select(BillingOrder)
+    count_stmt = select(func.count(BillingOrder.id))
     if status_filter:
         stmt = stmt.where(BillingOrder.status == status_filter)
+        count_stmt = count_stmt.where(BillingOrder.status == status_filter)
     if user_id:
         stmt = stmt.where(BillingOrder.user_id == user_id)
+        count_stmt = count_stmt.where(BillingOrder.user_id == user_id)
     if kind:
         stmt = stmt.where(BillingOrder.kind == kind)
+        count_stmt = count_stmt.where(BillingOrder.kind == kind)
     if q:
         token = q.strip()
         if token:
@@ -256,10 +261,12 @@ async def list_orders_endpoint(
                 order_ids.add(prepay_match)
 
             if not order_ids:
-                return []
+                return OrderListResponse(items=[], total=0)
             stmt = stmt.where(BillingOrder.id.in_(order_ids))
-    stmt = stmt.limit(limit).offset(offset)
+            count_stmt = count_stmt.where(BillingOrder.id.in_(order_ids))
+    stmt = stmt.order_by(BillingOrder.id.desc()).limit(limit).offset(offset)
     rows = (await db.execute(stmt)).scalars().all()
+    total = int(await db.scalar(count_stmt) or 0)
 
     # Bulk resolve usernames and server names
     user_ids = {o.user_id for o in rows}
@@ -280,10 +287,13 @@ async def list_orders_endpoint(
         )
         server_names = {sid: sname for sid, sname in srv_rows.all()}
 
-    return [
-        _list_item(o, owner_username=usernames.get(o.user_id), target_server_name=server_names.get(o.target_server_id))
-        for o in rows
-    ]
+    return OrderListResponse(
+        items=[
+            _list_item(o, owner_username=usernames.get(o.user_id), target_server_name=server_names.get(o.target_server_id))
+            for o in rows
+        ],
+        total=total,
+    )
 
 
 @router.get("/{order_id}", response_model=AdminOrderOut)
