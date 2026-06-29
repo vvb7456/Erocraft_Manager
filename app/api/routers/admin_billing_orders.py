@@ -92,6 +92,7 @@ def _list_item(
 def _serialize_invoice(invoice: BillingInvoice) -> AdminInvoiceOut:
     payload = invoice.gateway_payload or {}
     pay_url = payload.get("url") if isinstance(payload, dict) else None
+    pay_url_h5 = payload.get("url_h5") if isinstance(payload, dict) else None
     return AdminInvoiceOut(
         id=invoice.id,
         invoice_no=invoice.invoice_no,
@@ -104,6 +105,7 @@ def _serialize_invoice(invoice: BillingInvoice) -> AdminInvoiceOut:
         gateway_prepay_id=invoice.gateway_prepay_id,
         code_url=invoice.gateway_code_url,
         pay_url=pay_url,
+        pay_url_h5=pay_url_h5,
         created_at=to_iso_z(invoice.created_at),
         updated_at=to_iso_z(invoice.updated_at),
     )
