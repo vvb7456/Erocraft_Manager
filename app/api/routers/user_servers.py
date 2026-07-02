@@ -21,6 +21,7 @@ from app.core.settings_store import get_settings_store
 from app.core.time import local_today
 from app.db.models.pterodactyl import ActivityLog, ActivityLogSubject, PteroServer, PteroUser
 from app.db.models.billing import BillingPlan
+from app.db.models.manager import ServerLlmKey
 from app.db.repositories.servers import server_repository
 from app.services.billing._pricing import remaining_billable_days, upgrade_diff_fen
 from app.schemas.user_servers import (
@@ -71,6 +72,7 @@ def _serialize_server(
     *,
     plan: BillingPlan | None = None,
     has_upgrade_options: bool = False,
+    llm_key: ServerLlmKey | None = None,
 ) -> UserServerItem:
     expiration_date = server.expiration_date
     days_left = (expiration_date - today).days if expiration_date is not None else None
@@ -122,6 +124,8 @@ def _serialize_server(
         planName=plan.display_name if plan else None,
         hasUpgradeOptions=has_upgrade_options,
         isTrial=bool(server.meta.is_trial) if server.meta else False,
+        llmEnabled=llm_key is not None and llm_key.status != "revoked",
+        llmStatus=llm_key.status if llm_key else None,
     )
 
 
@@ -162,6 +166,15 @@ async def list_user_servers(
         rows = await db.execute(select(BillingPlan).where(BillingPlan.id.in_(plan_ids)))
         plans = {p.id: p for p in rows.scalars().all()}
 
+    # Bulk load LLM keys
+    server_ids = [s.id for s in servers]
+    llm_keys: dict[int, ServerLlmKey] = {}
+    if server_ids:
+        llm_rows = await db.execute(
+            select(ServerLlmKey).where(ServerLlmKey.server_id.in_(server_ids))
+        )
+        llm_keys = {k.server_id: k for k in llm_rows.scalars().all()}
+
     # Load all active plans for hasUpgradeOptions calculation
     active_rows = await db.execute(
         select(BillingPlan).where(BillingPlan.is_active.is_(True))
@@ -200,6 +213,7 @@ async def list_user_servers(
             today,
             plan=plans.get(server.meta.plan_id) if server.meta and server.meta.plan_id else None,
             has_upgrade_options=_has_upgrade(server),
+            llm_key=llm_keys.get(server.id),
         )
         for server in servers
     ]
@@ -228,7 +242,10 @@ async def get_user_server_detail(
                 )
             )
             has_upgrade = candidates.first() is not None
-    item = _serialize_server(server, today, plan=plan, has_upgrade_options=has_upgrade)
+    llm_key = await db.get(ServerLlmKey, server.id)
+    item = _serialize_server(
+        server, today, plan=plan, has_upgrade_options=has_upgrade, llm_key=llm_key
+    )
 
     # Tunnel info — best-effort lookup; failures should not break the
     # core detail response (the Network tab will surface them on its own).
@@ -723,3 +740,61 @@ async def set_st_default_password(
     )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --------------------------------------------------------------------------- #
+# LLM free quota — usage display
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/servers/{server_id}/llm/usage")
+async def get_llm_usage(
+    server: PteroServer = Depends(get_owned_server),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return the server's LLM quota usage and API config for the user-facing tab."""
+    row = await db.get(ServerLlmKey, server.id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="LLM quota not provisioned for this server")
+
+    from app.core.runtime_settings import LLM_SPECS, defaults_for
+    settings = await get_settings_store().get_many(db, defaults_for(LLM_SPECS))
+    base_url = str(settings.get("NEWAPI_BASE_URL", "")).rstrip("/")
+    endpoint_url = str(settings.get("LLM_ST_ENDPOINT_URL", "")).rstrip("/") or f"{base_url}/v1"
+
+    allowed_models: list[str] | None
+    if row.model_limits:
+        allowed_models = [m.strip() for m in row.model_limits.split(",") if m.strip()]
+    else:
+        allowed_models = None
+
+    from app.services.llm_provision.helpers import next_reset_date
+    next_reset = next_reset_date(row)
+
+    # Real-time usage from NewAPI. If NewAPI is unreachable, fall back to the
+    # locally cached counters so the user can still see their key + config
+    # (mirrors the admin serializer's degradation behaviour).
+    quota_used = row.quota_used
+    quota_available = row.quota_available
+    usage_query_failed = False
+    if base_url:
+        from app.services.llm_provision import newapi_client
+        try:
+            usage = await newapi_client.get_token_usage(row.api_key, base_url)
+            quota_used = int(usage.get("total_used", 0))
+            quota_available = int(usage.get("total_available", 0))
+        except Exception:
+            usage_query_failed = True
+
+    return {
+        "status": row.status,
+        "quotaGrant": row.quota_grant,
+        "quotaUsed": quota_used,
+        "quotaAvailable": quota_available,
+        "nextResetAt": next_reset,
+        "enabled": row.status != "revoked",
+        "apiKey": row.api_key,
+        "apiBaseUrl": endpoint_url,
+        "allowedModels": allowed_models,
+        "usageQueryFailed": usage_query_failed,
+    }

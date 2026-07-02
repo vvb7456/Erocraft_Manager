@@ -228,7 +228,7 @@ async def dispatch_pending_deployments(
     """
     rows = (
         await db.execute(
-            select(ManagerCertDeployment, ManagerCertificate)
+            select(ManagerCertDeployment.id, ManagerCertDeployment.certificate_id, ManagerCertDeployment.host_id)
             .join(ManagerCertificate, ManagerCertificate.id == ManagerCertDeployment.certificate_id)
             .where(ManagerCertificate.enabled.is_(True))
             .where(ManagerCertificate.source_fingerprint_sha256.is_not(None))
@@ -236,18 +236,20 @@ async def dispatch_pending_deployments(
         )
     ).all()
     out: list[dict[str, Any]] = []
-    for deployment, cert in rows:
-        pending = (
-            deployment.status in {"outdated", "unknown", "deploy_failed"}
-            or deployment.deployed_fingerprint_sha256 != cert.source_fingerprint_sha256
-        )
-        if not pending:
-            continue
-        # Isolate per-deployment failures so one host's DB hiccup or agent
-        # outage doesn't strand the rest of the batch for an entire scheduler
-        # cycle. Failed items are still picked up by the next run because
-        # their status / fingerprint mismatch persists. (Audit H5.)
+    for dep_id, cert_id, host_id in rows:
         try:
+            deployment = await db.get(ManagerCertDeployment, dep_id)
+            if deployment is None:
+                continue
+            cert = await db.get(ManagerCertificate, cert_id)
+            if cert is None:
+                continue
+            pending = (
+                deployment.status in {"outdated", "unknown", "deploy_failed"}
+                or deployment.deployed_fingerprint_sha256 != cert.source_fingerprint_sha256
+            )
+            if not pending:
+                continue
             out.append(await redeploy_deployment(db, deployment, actor=actor))
         except Exception as exc:  # noqa: BLE001
             try:
@@ -256,13 +258,13 @@ async def dispatch_pending_deployments(
                 pass
             logger.exception(
                 "redeploy_deployment failed for deployment_id=%s host_id=%s cert_id=%s: %s",
-                deployment.id, deployment.host_id, cert.id, exc,
+                dep_id, host_id, cert_id, exc,
             )
             out.append({
                 "ok": False,
-                "deployment_id": deployment.id,
-                "certificate_id": cert.id,
-                "host_id": deployment.host_id,
+                "deployment_id": dep_id,
+                "certificate_id": cert_id,
+                "host_id": host_id,
                 "error": str(exc),
             })
     return out

@@ -58,6 +58,9 @@ class PublicPlanOut(_Forbid):
     display_order: int
     plan_type: str = "standard"
     linked_plan_id: int | None = None
+    llm_enabled: bool = False
+    llm_quota_grant: int = 0
+    llm_model_limits: str | None = None
     created_at: str
     updated_at: str
 
@@ -82,6 +85,9 @@ def _serialize(plan: BillingPlan) -> PublicPlanOut:
         display_order=plan.display_order,
         plan_type=plan.plan_type,
         linked_plan_id=plan.linked_plan_id,
+        llm_enabled=plan.llm_enabled,
+        llm_quota_grant=plan.llm_quota_grant,
+        llm_model_limits=plan.llm_model_limits,
         created_at=to_iso_z(plan.created_at),
         updated_at=to_iso_z(plan.updated_at),
     )

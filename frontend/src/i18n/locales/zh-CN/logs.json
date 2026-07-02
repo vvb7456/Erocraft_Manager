@@ -206,6 +206,16 @@
     "order_force_applied": "已对订单 #{order_id} 强制发货。",
     "order_force_closed": "已对订单 #{order_id} 强制关闭。",
     "order_placeholder_cleaned": "已清理订单 #{order_id} 的占位服务器。",
+    "llm.settings.batch": "已保存 {count} 项 LLM 配置。",
+    "llm.provision": "服务器 #{server_id} 已开通 LLM 额度（套餐 {plan_code}，额度 {quota_grant}，token #{token_id}）。",
+    "llm.revoke": "服务器 #{server_id} 的 LLM 额度已撤销（token #{token_id}）。",
+    "llm.upgrade": "服务器 #{server_id} 的 LLM 额度已更新（额度 {quota_grant}，模型 {models}）。",
+    "llm.reset": "LLM 月度额度重置：{reset_count}/{total} 个 key 已重置。",
+    "llm.admin.update": "管理员调整了服务器 #{server_id} 的 LLM 额度（额度 {quota_grant}，模型 {models}）。",
+    "llm.admin.reset": "管理员重置了服务器 #{server_id} 的 LLM 密钥（token #{old_token_id} → #{token_id}）。",
+    "llm.admin.status": "管理员将服务器 #{server_id} 的 LLM 密钥启用状态设为 {enabled}。",
+    "llm.admin.reset_usage": "管理员重发了服务器 #{server_id} 的本月 LLM 额度（额度 {quota_grant}）。",
+    "llm.admin.revoke": "管理员吊销了服务器 #{server_id} 的 LLM 额度（token #{token_id}）。",
     "unknown": "未知日志详情: {key}"
   },
   "pagination": {

@@ -15,7 +15,9 @@ from app.api.routers.admin_hosts import router as admin_hosts_router
 from app.api.routers.admin_hosts_allocations import router as admin_hosts_allocations_router
 from app.api.routers.admin_hosts_wings import router as admin_hosts_wings_router
 from app.api.routers.admin_hosts_tunnel import router as admin_hosts_tunnel_router
+from app.api.routers.admin_llm_settings import router as admin_llm_settings_router
 from app.api.routers.admin_server_detail import router as admin_server_detail_router
+from app.api.routers.admin_server_llm import router as admin_server_llm_router
 from app.api.routers.billing_webhook import router as billing_webhook_router
 from app.api.routers.email_templates import router as email_templates_router
 from app.api.routers.integrations import router as integrations_router
@@ -52,7 +54,9 @@ api_router.include_router(admin_hosts_router)
 api_router.include_router(admin_hosts_allocations_router)
 api_router.include_router(admin_hosts_wings_router)
 api_router.include_router(admin_hosts_tunnel_router)
+api_router.include_router(admin_llm_settings_router)
 api_router.include_router(admin_server_detail_router)
+api_router.include_router(admin_server_llm_router)
 api_router.include_router(billing_webhook_router)
 api_router.include_router(email_templates_router)
 api_router.include_router(integrations_router)

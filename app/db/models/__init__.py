@@ -11,6 +11,7 @@ from app.db.models.manager import (
     ManagerHost,
     ManagerPasswordReset,
     ManagerPendingRegistration,
+    ServerLlmKey,
     ServerMeta,
     SystemSetting,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "PteroServer",
     "PteroUser",
     "ServerVariable",
+    "ServerLlmKey",
     "ServerMeta",
     "SystemSetting",
 ]

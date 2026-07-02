@@ -128,6 +128,15 @@ class BillingPlan(Base):
         nullable=True,
     )
 
+    # LLM free quota (20260622_llm migration). Per-plan configuration for
+    # the SillyTavern free LLM experience feature. ``llm_enabled`` is a
+    # redundant switch for admin convenience; ``llm_quota_grant`` is the
+    # monthly quota in NewAPI quota points (500000 = $1); ``llm_model_limits``
+    # is a comma-separated model whitelist (NULL = follow NewAPI default).
+    llm_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    llm_quota_grant: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    llm_model_limits: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_naive_now
     )

@@ -44,6 +44,9 @@ export interface AdminPlan {
   category_label: string | null
   plan_type: string
   linked_plan_id: number | null
+  llm_enabled: boolean
+  llm_quota_grant: number
+  llm_model_limits: string | null
   created_at: string
   updated_at: string
 }
@@ -129,6 +132,10 @@ interface PlanFormState {
   display_order: number
   plan_type: string
   linked_plan_id: number | null
+  // LLM
+  llm_enabled: boolean
+  llm_quota_grant: number
+  llm_model_limits: string
 }
 
 function emptyForm(): PlanFormState {
@@ -161,6 +168,9 @@ function emptyForm(): PlanFormState {
     display_order: 0,
     plan_type: 'standard',
     linked_plan_id: null,
+    llm_enabled: false,
+    llm_quota_grant: 0,
+    llm_model_limits: '',
   }
 }
 
@@ -196,6 +206,9 @@ function fromAdminPlan(p: AdminPlan, mode: EditorMode): PlanFormState {
     display_order: p.display_order,
     plan_type: p.plan_type ?? 'standard',
     linked_plan_id: p.linked_plan_id ?? null,
+    llm_enabled: p.llm_enabled ?? false,
+    llm_quota_grant: p.llm_quota_grant ?? 0,
+    llm_model_limits: p.llm_model_limits ?? '',
   }
 }
 
@@ -229,6 +242,35 @@ interface EggDetail {
   docker_images: Record<string, string>
 }
 const eggDetailsCache = ref<Map<number, EggDetail>>(new Map())
+
+// ── LLM model options (fetched from NewAPI) ──
+const llmModelOptions = ref<{ value: string; label: string }[]>([])
+const llmModelsLoading = ref(false)
+
+async function fetchLlmModels() {
+  llmModelsLoading.value = true
+  try {
+    const data = await get<{ models: string[] }>('/api/admin/llm/models', { silent: true })
+    if (data?.models) {
+      llmModelOptions.value = data.models.map((m) => ({ value: m, label: m }))
+    }
+  } catch {
+    // ignore — user may not have configured NewAPI connection yet
+  } finally {
+    llmModelsLoading.value = false
+  }
+}
+
+function getLlmModelLimits(): string[] {
+  const raw = form.value.llm_model_limits
+  if (!raw) return []
+  return raw.split(',').map((s) => s.trim()).filter(Boolean)
+}
+
+function setLlmModelLimits(val: string | string[]) {
+  const arr = Array.isArray(val) ? val : [val]
+  form.value.llm_model_limits = arr.filter(Boolean).join(',')
+}
 
 const dockerImageOptions = computed<EggImageOption[]>(() => listEggImages(form.value.egg_id))
 
@@ -276,6 +318,13 @@ const linkedPlanOptions = computed(() => {
     .map((p) => ({ value: p.id, label: `${p.display_name} · ${p.code}` }))
 })
 
+const isSillyTavernEgg = computed(() => {
+  const eggId = form.value.egg_id
+  if (eggId == null) return false
+  const egg = props.eggsMap.get(eggId)
+  return egg?.name === 'SillyTavern'
+})
+
 const tabs = computed<TabItem[]>(() => {
   const isTrial = form.value.plan_type === 'trial'
   return [
@@ -283,6 +332,7 @@ const tabs = computed<TabItem[]>(() => {
     { key: 'resources', label: t('billing.admin.plans.tabs.resources'), disabled: isTrial },
     { key: 'runtime',   label: t('billing.admin.plans.tabs.runtime'),   disabled: isTrial },
     { key: 'pricing',   label: t('billing.admin.plans.tabs.pricing') },
+    { key: 'llm',       label: t('billing.admin.plans.tabs.llm'),       disabled: isTrial || !isSillyTavernEgg.value },
     { key: 'display',   label: t('billing.admin.plans.tabs.display') },
   ]
 })
@@ -298,6 +348,8 @@ watch(() => props.modelValue, async (open) => {
   if (!open) return
   saveError.value = null
   activeTab.value = 'basic'
+
+  fetchLlmModels()
 
   // Build initial form
   if (props.mode === 'create' || !props.plan) {
@@ -538,6 +590,9 @@ function buildPayload(): Record<string, unknown> {
     category_label: form.value.category_label.trim() || null,
     plan_type: form.value.plan_type,
     linked_plan_id: form.value.linked_plan_id,
+    llm_enabled: form.value.llm_enabled,
+    llm_quota_grant: form.value.llm_enabled ? form.value.llm_quota_grant : 0,
+    llm_model_limits: form.value.llm_enabled ? (form.value.llm_model_limits.trim() || null) : null,
   }
 }
 
@@ -885,6 +940,31 @@ function onDockerImageSelectChange(v: string | number | boolean | (string | numb
           <NumberInput v-model="form.display_order" :min="0" :max="10000" />
         </FormField>
       </div>
+
+      <!-- ═══ Tab: LLM ═══ -->
+      <div v-show="activeTab === 'llm'" class="tab-pane">
+        <FormField layout="horizontal" keep-horizontal>
+          <template #label>{{ t('billing.admin.plans.fields.llmEnabled') }}<HelpTip :text="t('billing.admin.plans.hints.llmEnabled')" /></template>
+          <ToggleSwitch v-model="form.llm_enabled" />
+        </FormField>
+        <FormField>
+          <template #label>{{ t('billing.admin.plans.fields.llmQuotaGrant') }}<HelpTip :text="t('billing.admin.plans.hints.llmQuotaGrant')" /></template>
+          <NumberInput v-model="form.llm_quota_grant" :min="0" :max="1000000000" :step="100000" :disabled="!form.llm_enabled" />
+        </FormField>
+        <FormField>
+          <template #label>{{ t('billing.admin.plans.fields.llmModelLimits') }}<HelpTip :text="t('billing.admin.plans.hints.llmModelLimits')" /></template>
+          <BaseSelect
+            :modelValue="getLlmModelLimits()"
+            :options="llmModelOptions"
+            multiple
+            searchable
+            teleport
+            :disabled="!form.llm_enabled || llmModelsLoading"
+            :placeholder="llmModelsLoading ? t('common.loading') : t('billing.admin.plans.placeholders.llmModelLimits')"
+            @update:modelValue="setLlmModelLimits($event as string | string[])"
+          />
+        </FormField>
+      </div>
     </div>
 
     <template #footer>
@@ -994,6 +1074,29 @@ function onDockerImageSelectChange(v: string | number | boolean | (string | numb
 
 @media (max-width: 768px) {
   .env-grid { grid-template-columns: 1fr; }
+}
+
+.llm-section {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--bd);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.llm-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.llm-section__head h4 {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--t1);
 }
 
 .periods {

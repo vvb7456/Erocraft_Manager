@@ -547,6 +547,58 @@ BILLING_SPECS: dict[str, SettingSpec] = _register({
 })
 
 
+LLM_SPECS: dict[str, SettingSpec] = _register({
+    # ---- LLM free quota (docs/LLM_FREE_QUOTA_DESIGN.md) ----
+    # Master switch — when False, all LLM provision/inject/sync hooks are
+    # no-ops. Lets admins disable the feature without removing config.
+    "LLM_ENABLED": SettingSpec(
+        "LLM_ENABLED", "llm",
+        lambda: _env_bool("LLM_ENABLED", False),
+        _normalize_bool,
+    ),
+    # NewAPI management API base URL (no trailing /v1). Used by Manager to
+    # call admin endpoints (POST /api/user/, POST /api/token/, etc.).
+    "NEWAPI_BASE_URL": SettingSpec(
+        "NEWAPI_BASE_URL", "llm",
+        lambda: _env_str("NEWAPI_BASE_URL", ""),
+        _normalize_str,
+    ),
+    # NewAPI root admin AccessToken (Authorization: Bearer <token>). Sensitive.
+    "NEWAPI_ADMIN_TOKEN": SettingSpec(
+        "NEWAPI_ADMIN_TOKEN", "llm",
+        lambda: _env_str("NEWAPI_ADMIN_TOKEN", ""),
+        _normalize_str,
+        sensitive=True,
+    ),
+    # API endpoint URL written into SillyTavern containers (should be
+    # reachable from all nodes' ST containers). Usually NEWAPI_BASE_URL + /v1
+    # but can differ if NewAPI is behind a different public-facing reverse proxy.
+    "LLM_ST_ENDPOINT_URL": SettingSpec(
+        "LLM_ST_ENDPOINT_URL", "llm",
+        lambda: _env_str("LLM_ST_ENDPOINT_URL", ""),
+        _normalize_str,
+    ),
+    # NewAPI pool user id — the single pool user under which all server
+    # tokens are created. Set once after initial NewAPI setup.
+    "NEWAPI_POOL_USER_ID": SettingSpec(
+        "NEWAPI_POOL_USER_ID", "llm",
+        lambda: _env_int("NEWAPI_POOL_USER_ID", 0),
+        _int_clamper(0, 9_999_999, 0),
+    ),
+    # Pool user's AccessToken — used to call native UserAuth endpoints
+    # (POST /api/token/, PUT /api/token/, DELETE /api/token/:id, POST
+    # /api/token/:id/key) for token CRUD. Generated once from the NewAPI
+    # admin UI (user settings → generate system token). Sensitive.
+    # When a fork adds admin-level token endpoints, this becomes unnecessary.
+    "NEWAPI_POOL_USER_ACCESS_TOKEN": SettingSpec(
+        "NEWAPI_POOL_USER_ACCESS_TOKEN", "llm",
+        lambda: _env_str("NEWAPI_POOL_USER_ACCESS_TOKEN", ""),
+        _normalize_str,
+        sensitive=True,
+    ),
+})
+
+
 # ---------------------------------------------------------------------------
 # Sensitive-key registry
 #

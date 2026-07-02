@@ -92,3 +92,13 @@ async def run_suspend_task() -> None:
                 detail_key="automated_suspend_failed",
                 detail_params={"error": str(exc)},
             )
+
+    # ── LLM daily sync (state + usage + monthly reset) ──
+    # Runs after the suspend task in the daily lifecycle batch. Placed here
+    # (not in delete/trial_expire) to avoid running it multiple times per day.
+    try:
+        from app.services.llm_provision import sync as llm_sync
+        async with session_factory() as llm_db:
+            await llm_sync.run_llm_daily_sync(llm_db)
+    except Exception:
+        logger.warning("LLM daily sync failed", exc_info=True)

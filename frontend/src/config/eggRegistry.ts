@@ -19,6 +19,8 @@ export interface EggMeta {
   hasWebUi?: boolean
   /** Show "Network" tab + tunnel feature for servers with this egg */
   hasTunnel?: boolean
+  /** Show "LLM Quota" tab for servers with this egg */
+  hasLlmKey?: boolean
   /** Env vars hidden from the generic settings form */
   hiddenVars?: string[]
   /** Env vars whose values should be masked in activity logs */
@@ -31,6 +33,7 @@ const EGG_META: Record<string, EggMeta> = {
   SillyTavern: {
     hasWebUi: true,
     hasTunnel: true,
+    hasLlmKey: true,
     hiddenVars: ['FORCE_REINSTALL'],
     secretVars: ['PASSWORD'],
     label: 'SillyTavern',
@@ -71,4 +74,9 @@ export function hasWebUi(eggName: string): boolean {
 /** Check if servers with this egg expose the custom-domain (tunnel) feature. */
 export function hasTunnel(eggName: string): boolean {
   return EGG_META[eggName]?.hasTunnel ?? false
+}
+
+/** Check if servers with this egg have LLM quota provisioned. */
+export function hasLlmKey(eggName: string): boolean {
+  return EGG_META[eggName]?.hasLlmKey ?? false
 }

@@ -440,6 +440,18 @@ async def delete_server(db: AsyncSession, server_id: int, *, force: bool = False
             server_id, exc,
         )
 
+    # 0b. LLM key revoke hook (best-effort — must never block deletion).
+    try:
+        from app.services.llm_provision import provision as llm_provision
+        await llm_provision.revoke_for_server(db, server_id)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001 — LLM hook must never block deletion
+        logger.warning(
+            "llm_provision.revoke_for_server failed for server %s: %s",
+            server_id, exc,
+        )
+        await db.rollback()
+
     # 1. Delete physical backup archives on the node (best-effort)
     from sqlalchemy import select as sql_select
 

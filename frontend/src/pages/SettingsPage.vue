@@ -42,12 +42,14 @@ const tabs = computed<TabItem[]>(() => [
   { key: 'defaults',   label: t('settings.defaults.title'), icon: 'tune' },
   { key: 'automation', label: t('settings.automation.title'), icon: 'schedule' },
   { key: 'marketing',  label: t('settings.marketing.title'), icon: 'campaign' },
+  { key: 'llm',        label: t('settings.llm.title'),        icon: 'smart_toy' },
 ])
 
 // ── State ──
 const initialLoading = ref(true)
 const settings = ref<Record<string, any>>({})
 const billingSettings = ref<Record<string, any>>({})
+const llmSettings = ref<Record<string, any>>({})
 const automation = ref({
   AUTOMATION_RUN_HOUR: 2,
   AUTOMATION_RUN_MINUTE: 0,
@@ -94,6 +96,26 @@ function getBillingBool(key: string): boolean {
   return v === true || v === 'true' || v === '1'
 }
 function setBillingBool(key: string, val: boolean) { billingSettings.value[key] = val }
+
+// ── LLM settings helpers ──
+function getLlmStr(key: string, def = ''): string { return llmSettings.value[key] ?? def }
+function setLlmStr(key: string, val: string) { llmSettings.value[key] = val }
+function getLlmNum(key: string, def = 0): number { return Number(llmSettings.value[key]) || def }
+function setLlmNum(key: string, val: string | number | boolean | (string | number | boolean)[]) {
+  const v = Array.isArray(val) ? val[0] : val
+  llmSettings.value[key] = Number(v)
+}
+function getLlmBool(key: string): boolean {
+  const v = llmSettings.value[key]
+  return v === true || v === 'true' || v === '1'
+}
+function setLlmBool(key: string, val: boolean) { llmSettings.value[key] = val }
+function getLlmSecret(key: string): string {
+  const v = llmSettings.value[key]
+  if (!v || v === '********') return ''
+  return String(v)
+}
+function setLlmSecret(key: string, val: string) { llmSettings.value[key] = val }
 
 // ── SMTP test email ──
 const testEmailRecipient = ref('')
@@ -192,10 +214,11 @@ watch(() => getNum('DEFAULT_NEST_ID'), async (nestId) => {
 
 // ── Fetch ──
 onMounted(async () => {
-  const [settingsData, autoData, billingData, nestsRes, nodesRes, tplRes] = await Promise.all([
+  const [settingsData, autoData, billingData, llmData, nestsRes, nodesRes, tplRes] = await Promise.all([
     get<Record<string, any>>('/api/admin/settings'),
     get<Record<string, any>>('/api/admin/automation'),
     get<Record<string, any>>('/api/admin/billing/settings'),
+    get<Record<string, any>>('/api/admin/llm/settings'),
     get<{ nests: any[] }>('/api/admin/resources/nests'),
     get<{ nodes: any[] }>('/api/admin/resources/nodes'),
     get<CouponTemplateLite[]>('/api/admin/billing/coupon-templates'),
@@ -203,6 +226,7 @@ onMounted(async () => {
   if (settingsData) settings.value = settingsData
   if (autoData) Object.assign(automation.value, autoData)
   if (billingData) billingSettings.value = billingData
+  if (llmData) llmSettings.value = llmData
   if (nestsRes) nestList.value = nestsRes.nests
   if (nodesRes) nodeList.value = nodesRes.nodes
   if (tplRes) couponTemplates.value = tplRes
@@ -224,17 +248,20 @@ const orig = ref({
   settings: '{}',
   automation: '{}',
   billing: '{}',
+  llm: '{}',
 })
 function snapshot() {
   orig.value.settings   = JSON.stringify(settings.value)
   orig.value.automation = JSON.stringify(automation.value)
   orig.value.billing    = JSON.stringify(billingSettings.value)
+  orig.value.llm        = JSON.stringify(llmSettings.value)
 }
 const isDirty = computed(() => {
   if (activeTab.value === 'account') return false
   if (JSON.stringify(settings.value)        !== orig.value.settings) return true
   if (JSON.stringify(automation.value)      !== orig.value.automation) return true
   if (JSON.stringify(billingSettings.value) !== orig.value.billing) return true
+  if (JSON.stringify(llmSettings.value)     !== orig.value.llm) return true
   return false
 })
 
@@ -242,6 +269,7 @@ function discardChanges() {
   settings.value        = JSON.parse(orig.value.settings)
   automation.value      = JSON.parse(orig.value.automation)
   billingSettings.value = JSON.parse(orig.value.billing)
+  llmSettings.value     = JSON.parse(orig.value.llm)
 }
 
 // ── Save ──
@@ -286,6 +314,18 @@ function validateAll(): ValidationError[] {
     }
   }
 
+  // LLM: URL fields must be http(s)://
+  const llmUrlFields: [string, string][] = [
+    ['NEWAPI_BASE_URL', 'settings.llm.connection.baseUrl'],
+    ['LLM_ST_ENDPOINT_URL', 'settings.llm.injection.stEndpoint'],
+  ]
+  for (const [key, labelKey] of llmUrlFields) {
+    const v = String(llmSettings.value[key] || '').trim()
+    if (v && !URL_RE.test(v)) {
+      errs.push({ tab: 'llm', label: t(labelKey), message: t('settings.validate.invalidUrl') })
+    }
+  }
+
   return errs
 }
 
@@ -309,6 +349,7 @@ async function saveAll(): Promise<boolean> {
     const settingsDirty = JSON.stringify(settings.value) !== orig.value.settings
     const autoDirty = JSON.stringify(automation.value) !== orig.value.automation
     const billingDirty = JSON.stringify(billingSettings.value) !== orig.value.billing
+    const llmDirty = JSON.stringify(llmSettings.value) !== orig.value.llm
     if (settingsDirty) {
       const r = await post<{ message: string }>('/api/admin/settings', settings.value)
       if (!r) return false
@@ -319,6 +360,10 @@ async function saveAll(): Promise<boolean> {
     }
     if (billingDirty) {
       const r = await post<{ message: string }>('/api/admin/billing/settings', { settings: billingSettings.value })
+      if (!r) return false
+    }
+    if (llmDirty) {
+      const r = await post<{ message: string }>('/api/admin/llm/settings', { settings: llmSettings.value })
       if (!r) return false
     }
     if (settingsDirty) await app.loadVersion()
@@ -760,6 +805,41 @@ async function onTabChange(next: string) {
                   :placeholder="t('settings.marketing.referral.qualifyingKindsPlaceholder')"
                   @update:modelValue="billingSettings[`REFERRAL_QUALIFYING_KINDS`] = Array.isArray($event) ? $event.map(String) : [String($event)]"
                 />
+              </FormField>
+            </BaseCard>
+          </template>
+          <template v-else-if="activeTab === 'llm'">
+            <BaseCard variant="bg2" class="settings-card">
+              <SectionHeader icon="toggle_on" flush>{{ t('settings.llm.general.title') }}</SectionHeader>
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.llm.general.enabled') }}
+                  <HelpTip :text="t('settings.llm.general.enabledHint')" />
+                </template>
+                <ToggleSwitch :modelValue="getLlmBool('LLM_ENABLED')" size="sm" @update:modelValue="setLlmBool('LLM_ENABLED', $event)" />
+              </FormField>
+            </BaseCard>
+
+            <BaseCard variant="bg2" class="settings-card">
+              <SectionHeader icon="hub" flush>{{ t('settings.llm.connection.title') }}</SectionHeader>
+              <FormField :label="t('settings.llm.connection.baseUrl')" layout="horizontal">
+                <BaseInput :modelValue="getLlmStr('NEWAPI_BASE_URL')" @update:modelValue="setLlmStr('NEWAPI_BASE_URL', $event)" placeholder="https://llm.erocraft.com:8443" />
+              </FormField>
+              <FormField :label="t('settings.llm.connection.adminToken')" layout="horizontal">
+                <SecretInput :modelValue="getLlmSecret('NEWAPI_ADMIN_TOKEN')" @update:modelValue="setLlmSecret('NEWAPI_ADMIN_TOKEN', $event)" />
+              </FormField>
+              <FormField :label="t('settings.llm.connection.poolUserId')" layout="horizontal">
+                <NumberInput :modelValue="getLlmNum('NEWAPI_POOL_USER_ID', 0)" @update:modelValue="setLlmNum('NEWAPI_POOL_USER_ID', $event)" :min="0" />
+              </FormField>
+              <FormField :label="t('settings.llm.connection.poolUserToken')" layout="horizontal">
+                <SecretInput :modelValue="getLlmSecret('NEWAPI_POOL_USER_ACCESS_TOKEN')" @update:modelValue="setLlmSecret('NEWAPI_POOL_USER_ACCESS_TOKEN', $event)" />
+              </FormField>
+            </BaseCard>
+
+            <BaseCard variant="bg2" class="settings-card">
+              <SectionHeader icon="extension" flush>{{ t('settings.llm.injection.title') }}</SectionHeader>
+              <FormField :label="t('settings.llm.injection.stEndpoint')" layout="horizontal">
+                <BaseInput :modelValue="getLlmStr('LLM_ST_ENDPOINT_URL')" @update:modelValue="setLlmStr('LLM_ST_ENDPOINT_URL', $event)" placeholder="https://llm.erocraft.com:8443/v1" />
               </FormField>
             </BaseCard>
           </template>

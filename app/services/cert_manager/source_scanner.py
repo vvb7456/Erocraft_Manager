@@ -31,7 +31,11 @@ async def scan_certificate_source(
         cert.source_last_seen_at = now
         cert.source_last_error = str(exc)
         if commit:
-            await db.commit()
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
         return {
             "ok": False,
             "certificate_id": cert.id,
@@ -46,7 +50,11 @@ async def scan_certificate_source(
     cert.source_last_seen_at = now
     cert.source_last_error = None
     if commit:
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
     changed = before_fp is not None and before_fp != parsed.fingerprint_sha256
     return {
         "ok": True,
@@ -63,22 +71,30 @@ async def scan_certificate_source(
 async def scan_all_certificate_sources(db: AsyncSession) -> list[dict[str, Any]]:
     """Scan every enabled registered certificate source."""
     result = await db.execute(
-        select(ManagerCertificate)
+        select(ManagerCertificate.id)
         .where(ManagerCertificate.enabled.is_(True))
         .order_by(ManagerCertificate.id)
     )
+    cert_ids = [row[0] for row in result.all()]
     out: list[dict[str, Any]] = []
-    for cert in result.scalars().all():
+    for cert_id in cert_ids:
         try:
+            cert = await db.get(ManagerCertificate, cert_id)
+            if cert is None:
+                continue
             out.append(await scan_certificate_source(db, cert))
         except Exception as exc:  # noqa: BLE001
-            logger.exception("cert source scan crashed cert_id=%s", cert.id)
-            cert.source_last_seen_at = utc_naive_now()
-            cert.source_last_error = str(exc)[:1000]
-            await db.commit()
+            # MariaDB REPEATABLE-READ can raise error 1020 "Record has
+            # changed since last read" when a concurrent cert job modified
+            # the same row. Rollback resets the session; re-fetching the
+            # cert in the next iteration avoids accessing expired ORM
+            # attributes on a degraded session (which would cascade into
+            # MissingGreenlet / PendingRollbackError).
+            await db.rollback()
+            logger.warning("cert source scan crashed cert_id=%s: %s", cert_id, exc)
             out.append({
                 "ok": False,
-                "certificate_id": cert.id,
+                "certificate_id": cert_id,
                 "changed": False,
                 "error": str(exc),
             })

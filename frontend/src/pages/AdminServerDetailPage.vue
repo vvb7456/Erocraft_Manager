@@ -14,6 +14,7 @@ import TabSwitcher from '@/components/ui/TabSwitcher.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import { getStatusDotKey, getStatusColor } from '@/utils/status'
+import { hasLlmKey } from '@/config/eggRegistry'
 import type {
   AdminServerDetailResponse,
   ServerRuntimeResponse,
@@ -29,6 +30,8 @@ const { get } = useApiFetch()
 const serverId = computed(() => Number(route.params.id))
 const detail = ref<AdminServerDetailResponse | null>(null)
 const loading = ref(false)
+// Whether this server has a provisioned LLM key (gates the LLM tab).
+const llmProvisioned = ref(false)
 
 provide('adminServerDetail', detail)
 provide('adminServerId', serverId)
@@ -44,6 +47,16 @@ async function loadDetail(silent = false) {
   }
 }
 provide('reloadAdminServer', () => loadDetail(true))
+
+async function refreshLlmProvisioned() {
+  if (!Number.isFinite(serverId.value)) return
+  const data = await get<{ provisioned: boolean }>(
+    `/api/admin/servers/${serverId.value}/llm`,
+    { silent: true },
+  )
+  llmProvisioned.value = !!data?.provisioned
+}
+provide('refreshAdminServerLlm', refreshLlmProvisioned)
 
 // ── runtime polling shared with Overview pane ──────────────────────────
 const SAMPLE_INTERVAL_MS = 5_000
@@ -144,11 +157,23 @@ const headerTitle = computed(() => {
     : t('adminServer.title')
 })
 
-const tabs = computed(() => [
-  { key: 'admin-server-overview',  label: t('adminServer.tabs.overview'),  icon: 'dashboard' },
-  { key: 'admin-server-settings',  label: t('adminServer.tabs.settings'),  icon: 'settings' },
-  { key: 'admin-server-lifecycle', label: t('adminServer.tabs.lifecycle'), icon: 'warning' },
-])
+const tabs = computed(() => {
+  const list: { key: string; label: string; icon: string; disabled?: boolean }[] = [
+    { key: 'admin-server-overview',  label: t('adminServer.tabs.overview'),  icon: 'dashboard' },
+    { key: 'admin-server-settings',  label: t('adminServer.tabs.settings'),  icon: 'settings' },
+  ]
+  // LLM tab only for LLM-capable eggs; disabled until a key is provisioned.
+  if (detail.value && hasLlmKey(detail.value.egg.name)) {
+    list.push({
+      key: 'admin-server-llm',
+      label: t('adminServer.tabs.llm'),
+      icon: 'smart_toy',
+      disabled: !llmProvisioned.value,
+    })
+  }
+  list.push({ key: 'admin-server-lifecycle', label: t('adminServer.tabs.lifecycle'), icon: 'warning' })
+  return list
+})
 
 const activeTab = computed(() => {
   const name = route.name as string | undefined
@@ -187,6 +212,7 @@ watch(
     // Single detail fetch when opening / switching tabs. No background
     // detail polling while staying on a tab.
     await loadDetail(changedServer)
+    if (changedServer) refreshLlmProvisioned()
 
     // Header badge keeps a minimal live status on every tab.
     // Only overview tab appends metrics history buffers.

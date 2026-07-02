@@ -317,6 +317,30 @@ async def create_server(
             if meta is not None:
                 meta.plan_id = payload.plan_id
         await db.commit()
+
+        # LLM provision: if the bound plan has LLM enabled, provision a key
+        # for this server (mirrors apply_engine._run_post_actions).
+        # ``plan_obj`` was loaded above and survives the commit
+        # (expire_on_commit=False), so no re-fetch is needed.
+        if payload.plan_id is not None:
+            if plan_obj is not None and plan_obj.llm_enabled and plan_obj.llm_quota_grant > 0:
+                try:
+                    from app.services.llm_provision import provision as llm_provision
+                    snapshot = {
+                        "llm_enabled": True,
+                        "llm_quota_grant": plan_obj.llm_quota_grant,
+                        "llm_model_limits": plan_obj.llm_model_limits,
+                    }
+                    await llm_provision.provision_for_server(
+                        db, server_id, payload.user_id, snapshot
+                    )
+                    await db.commit()
+                except Exception:
+                    logger.warning(
+                        "LLM provision failed for admin-created server %s (non-blocking)",
+                        server_id, exc_info=True,
+                    )
+                    await db.rollback()
     except Exception as exc:
         await db.rollback()
         cleanup_succeeded = False

@@ -78,6 +78,47 @@ class ServerMeta(Base):
     server: Mapped["PteroServer"] = relationship("PteroServer", back_populates="meta")
 
 
+class ServerLlmKey(Base):
+    """LLM API key bound to a server — see ``docs/LLM_FREE_QUOTA_DESIGN.md``.
+
+    One row per server that has been provisioned with a free LLM experience
+    quota. The ``api_key`` is stored in plaintext (it is also plaintext inside
+    the SillyTavern container and the NewAPI database; encryption here would
+    be security theater). All quota/control dimensions live on the NewAPI
+    token (verified in ``model/token.go``); this table is Manager's local
+    cache of the token id, key, and last-synced usage.
+    """
+
+    __tablename__ = "manager_server_llm_keys"
+
+    server_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("servers.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    newapi_token_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    api_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    quota_grant: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quota_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quota_available: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    model_limits: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # active / disabled / exhausted / revoked
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    last_reset_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Day-of-month (1-28) on which this key's monthly quota resets.
+    # Set once at first provision = min(created_at.day, 28); never changes.
+    # Prevents all keys from resetting on the same day (traffic spike).
+    reset_day: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now, onupdate=_utc_now
+    )
+
+
 class ManagerHost(Base):
     """Unified host registry — see ``docs/HOST_MANAGEMENT_DESIGN.md`` §4.1.
 

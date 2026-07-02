@@ -6,6 +6,17 @@
 
 以 Wings 为唯一运行时依赖的服务器租赁管理平台。提供面向终端用户的控制台 / 文件 / 计费 / 注册 / 续费界面，以及管理员侧的服务器、用户、节点、证书、告警与计费控制台。
 
+**主要功能：**
+
+- **服务器生命周期** — 创建 / 暂停 / 删除 / 重装（Wings）；实时控制台（WebSocket）、文件管理、启动变量编辑
+- **计费与套餐** — 订阅套餐（可配置资源限额）、试用套餐（自动转正）、支付宝直连支付
+- **优惠券与邀请返利** — 优惠券模板（定额 / 折扣）、邀请码与返利奖励
+- **免费 AI 额度** — 基于 NewAPI 网关的按套餐 AI API 额度；下单自动开通密钥，管理员可重置 / 吊销 / 调整配额与模型
+- **隧道** — 基于 Cloudflare 的按服务器隧道管理（用户侧 + 管理侧）
+- **证书** — acme.sh 集成，自动扫描来源、多目标部署（本机 / 远程 nginx / 群晖 DSM）、Webhook 续签
+- **监控与告警** — 按节点主机指标（CPU / 内存 / 磁盘）、可配置告警阈值、探针健康检查
+- **多语言** — 中文（zh-CN）与英文（en），完整 i18n 覆盖
+
 ---
 
 ## 一、介绍
@@ -97,7 +108,7 @@ manager.sh          后端服务管理脚本
 
 - Linux x86_64（Debian 12 / Ubuntu 22.04+ 验证通过）
 - 至少一台 Wings 节点与一个可访问的 MySQL / MariaDB 实例（表结构遵从 Wings 生态约定，通常由 Pterodactyl Panel 初始化）
-- Python 3.12+、Node.js 20+、nginx
+- Python 3.12+、Node.js 22+、nginx
 - 主机 A 能访问上述 MySQL（同机或跨机均可）
 - acme.sh 已安装
 
@@ -222,8 +233,8 @@ sudo systemctl enable --now erocraft-agent
 修改仓库内 `agent/` 后，需手动推送并重启运行中的 agent：
 
 ```bash
-bash scripts/deploy-agent.sh              # 部署到本机
-bash scripts/deploy-agent.sh <node-host>  # 部署到远程节点
+bash scripts/deploy/deploy-agent.sh              # 部署到本机
+bash scripts/deploy/deploy-agent.sh <node-host>  # 部署到远程节点
 ```
 
 ### 2.7 数据库迁移
@@ -247,8 +258,6 @@ Manager 自有表全部以 `manager_` 前缀，迁移脚本仅作用于这些表
 
 ```bash
 bash manager.sh start | stop | restart | status            # web + jobs
-bash manager.sh start-web | stop-web | status-web
-bash manager.sh start-jobs | stop-jobs | status-jobs
 ```
 
 启动先跑 `alembic upgrade head`；迁移失败时查看 `logs/manager-web.log`。
@@ -271,7 +280,7 @@ bash manager.sh start-jobs | stop-jobs | status-jobs
 | 任务 | 触发 | 来源 |
 |---|---|---|
 | 监控采集（拉取所有 host agent 指标） | 每 `MONITOR_INTERVAL_SEC` 秒（默认 60） | `.env` + 运行时设置 |
-| 监控数据清理 | 每日 | `MONITOR_RETENTION_DAYS`（默认 30 天） |
+| 监控数据清理 | 每日 | 硬编码保留 14 天（原始 1 分钟粒度采样） |
 | 自动暂停 / 删除 / 提醒邮件 | 每日 `AUTOMATION_RUN_HOUR:MINUTE` | 运行时设置可覆盖 |
 | 证书续签与到期告警 | 每日 | acme.sh + 后台扫描 |
 
@@ -312,7 +321,7 @@ git pull
 venv/bin/pip install -r requirements.txt
 cd frontend && npm ci && npx vite build && cd ..
 bash manager.sh restart                     # 自动迁移
-bash scripts/deploy-agent.sh                # 仅 agent/ 有变更时
+bash scripts/deploy/deploy-agent.sh                # 仅 agent/ 有变更时
 ```
 
 ### 3.8 故障排查速查

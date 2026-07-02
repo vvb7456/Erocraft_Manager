@@ -6,6 +6,17 @@
 
 Server rental management platform whose only runtime dependency is Wings. Adds an end-user UI for console / files / billing / registration / renewal, plus an admin console for servers, users, hosts, certificates, alerting and billing.
 
+**Key features:**
+
+- **Server lifecycle** — create / suspend / delete / reinstall with Wings; real-time console (WebSocket), file manager, startup variable editor
+- **Billing & plans** — subscription plans with configurable resource limits, trial plans with auto-convert to standard, Alipay direct payment gateway
+- **Coupons & referral** — coupon templates (fixed-amount / percentage), invite codes with referral rewards
+- **Free LLM quota** — per-plan AI API quota via NewAPI gateway; keys provisioned automatically on order, managed by admins (reset / revoke / adjust quota & models)
+- **Tunnels** — Cloudflare tunnel management per server (user-side + admin-side)
+- **Certificates** — acme.sh integration with source scanning, multi-target deployment (local / remote nginx / Synology DSM), webhook-based renewal
+- **Monitoring & alerting** — per-node host metrics (CPU / memory / disk), configurable alert thresholds, probe health checks
+- **Multi-language** — Chinese (zh-CN) and English (en) with full i18n coverage
+
 ---
 
 ## 1. Overview
@@ -97,7 +108,7 @@ manager.sh          Backend service control script
 
 - Linux x86_64 (verified on Debian 12 / Ubuntu 22.04+)
 - At least one Wings node and a reachable MySQL / MariaDB instance (schema follows Wings ecosystem conventions; typically initialized by Pterodactyl Panel)
-- Python 3.12+, Node.js 20+, nginx
+- Python 3.12+, Node.js 22+, nginx
 - Network reach from host A to that MySQL (local or remote)
 - acme.sh installed
 
@@ -222,8 +233,8 @@ Register: in admin → Hosts → New, enter the agent endpoint URL (`http://<nod
 The running agent does not auto-sync from the repo; push changes manually with the helper script:
 
 ```bash
-bash scripts/deploy-agent.sh              # local
-bash scripts/deploy-agent.sh <node-host>  # remote node
+bash scripts/deploy/deploy-agent.sh              # local
+bash scripts/deploy/deploy-agent.sh <node-host>  # remote node
 ```
 
 ### 2.7 Database Migrations
@@ -247,8 +258,6 @@ All Manager-owned tables use the `manager_` prefix; migrations operate only on t
 
 ```bash
 bash manager.sh start | stop | restart | status            # web + jobs
-bash manager.sh start-web | stop-web | status-web
-bash manager.sh start-jobs | stop-jobs | status-jobs
 ```
 
 Startup runs `alembic upgrade head` first; if migration fails, check `logs/manager-web.log`.
@@ -271,7 +280,7 @@ Log level controlled by `LOG_LEVEL` in `.env` (`DEBUG / INFO / WARNING / ERROR`)
 | Job | Trigger | Source |
 |---|---|---|
 | Metrics pull (all hosts) | every `MONITOR_INTERVAL_SEC` (default 60) | `.env` + runtime setting |
-| Metrics pruning | daily | `MONITOR_RETENTION_DAYS` (default 30 days) |
+| Metrics pruning | daily | hardcoded 14-day retention (raw 1-min samples) |
 | Auto-suspend / delete / reminder mail | daily at `AUTOMATION_RUN_HOUR:MINUTE` | runtime setting overrides |
 | Certificate renewal & expiry alerts | daily | acme.sh + scanner |
 
@@ -312,7 +321,7 @@ git pull
 venv/bin/pip install -r requirements.txt
 cd frontend && npm ci && npx vite build && cd ..
 bash manager.sh restart                     # auto-migrates
-bash scripts/deploy-agent.sh                # only when agent/ changed
+bash scripts/deploy/deploy-agent.sh                # only when agent/ changed
 ```
 
 ### 3.8 Troubleshooting

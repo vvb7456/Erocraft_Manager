@@ -56,6 +56,8 @@ class UserServerItem(BaseModel):
     planName: str | None = None
     hasUpgradeOptions: bool = False
     isTrial: bool = False
+    llmEnabled: bool = False
+    llmStatus: str | None = None
 
 
 class UpgradeOption(BaseModel):

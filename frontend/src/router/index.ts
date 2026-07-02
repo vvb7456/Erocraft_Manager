@@ -144,6 +144,12 @@ const router = createRouter({
           meta: { admin: true },
         },
         {
+          path: 'llm',
+          name: 'admin-server-llm',
+          component: () => import('@/pages/admin-server/AdminServerLlmPane.vue'),
+          meta: { admin: true },
+        },
+        {
           path: 'lifecycle',
           name: 'admin-server-lifecycle',
           component: () => import('@/pages/admin-server/AdminServerLifecyclePane.vue'),

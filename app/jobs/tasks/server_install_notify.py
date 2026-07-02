@@ -291,3 +291,4 @@ async def run_install_notify_scan() -> None:
                     "scanned": len(rows),
                 },
             )
+

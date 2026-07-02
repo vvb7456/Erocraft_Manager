@@ -18,6 +18,7 @@
   "tabs": {
     "overview": "Overview",
     "settings": "Settings",
+    "llm": "AI Quota",
     "lifecycle": "Lifecycle"
   },
   "overview": {
@@ -220,6 +221,73 @@
       "forceConfirmTitle": "Force delete server",
       "confirmMessage": "Delete server {name}? This action cannot be undone.",
       "forceConfirmMessage": "About to force delete server {name}. Panel records will be removed even if Wings deletion fails. Please confirm the risk."
+    }
+  },
+  "llm": {
+    "loadFailed": "Failed to load",
+    "notProvisioned": "This server has no AI quota provisioned",
+    "statusSection": "Status & Usage",
+    "configSection": "API Config",
+    "adjustSection": "Adjust Quota & Models",
+    "actionsSection": "Key Actions",
+    "statuses": {
+      "active": "Active",
+      "disabled": "Disabled",
+      "exhausted": "Exhausted",
+      "revoked": "Revoked"
+    },
+    "usageQueryFailed": "Could not fetch real-time usage from NewAPI; showing locally cached values.",
+    "used": "Used",
+    "usedAmount": "Used",
+    "available": "Available",
+    "grant": "Grant",
+    "nextReset": "Next reset",
+    "lastReset": "Last reset",
+    "created": "Provisioned",
+    "resetDay": "day {day} monthly",
+    "apiBaseUrl": "Base URL",
+    "apiKey": "API Key",
+    "quotaGrant": "Monthly quota (credits)",
+    "allowedModels": "Allowed models",
+    "allowedModelsPlaceholder": "Leave empty to allow all models",
+    "save": "Save changes",
+    "toggle": {
+      "title": "Enable / disable key",
+      "desc": "Temporarily block or restore this key (synced to NewAPI). Disabled keys cannot call the API.",
+      "enable": "Enable",
+      "disable": "Disable"
+    },
+    "resetUsage": {
+      "rowTitle": "Refill monthly quota",
+      "rowDesc": "Restore available quota to the grant limit and clear used amount. For manual top-ups.",
+      "btn": "Refill",
+      "title": "Refill monthly quota",
+      "message": "Restore this server's available quota to the grant limit?",
+      "confirm": "Confirm refill"
+    },
+    "reset": {
+      "rowTitle": "Reset key",
+      "rowDesc": "Revoke the old key and generate a new sk-xxx. For leaked keys; the user must reconfigure.",
+      "btn": "Reset key",
+      "title": "Reset AI key",
+      "message": "Reset this server's key? The old key stops working immediately and the user must reconfigure SillyTavern.",
+      "confirm": "Confirm reset"
+    },
+    "revoke": {
+      "rowTitle": "Revoke quota",
+      "rowDesc": "Delete the NewAPI token and local record, fully removing this server's AI quota.",
+      "btn": "Revoke",
+      "title": "Revoke AI quota",
+      "message": "Revoke this server's AI quota? This action cannot be undone.",
+      "confirm": "Confirm revoke"
+    },
+    "toast": {
+      "saved": "Changes saved",
+      "keyReset": "Key reset",
+      "usageReset": "Quota refilled",
+      "enabled": "Key enabled",
+      "disabled": "Key disabled",
+      "revoked": "Quota revoked"
     }
   }
 }

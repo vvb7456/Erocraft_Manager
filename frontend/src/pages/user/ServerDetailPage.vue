@@ -48,6 +48,8 @@ interface ServerDetail {
     lastError: string | null
   } | null
   hostTunnelReady: boolean
+  llmEnabled: boolean
+  llmStatus: string | null
 }
 
 const server = ref<ServerDetail | null>(null)

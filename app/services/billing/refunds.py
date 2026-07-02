@@ -555,3 +555,7 @@ async def _finalize_refund_succeeded(
     )
 
     await db.commit()
+
+    # LLM: refund does NOT touch the key — it's a billing event, not a
+    # server-lifecycle event. The key follows server status (suspend /
+    # delete), which is handled by the daily sync job and delete_server.

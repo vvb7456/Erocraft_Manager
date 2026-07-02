@@ -166,5 +166,24 @@
   },
   "account": {
     "title": "账户设置"
+  },
+  "llm": {
+    "title": "LLM 额度",
+    "general": {
+      "title": "全局开关",
+      "enabled": "启用 LLM 免费额度",
+      "enabledHint": "启用后，订购含 LLM 额度套餐的用户将获得免费 LLM API 密钥，自动注入 SillyTavern 容器。"
+    },
+    "connection": {
+      "title": "NewAPI 连接",
+      "baseUrl": "Base URL",
+      "adminToken": "Admin Token",
+      "poolUserId": "Pool User ID",
+      "poolUserToken": "Pool User Token"
+    },
+    "injection": {
+      "title": "SillyTavern 注入",
+      "stEndpoint": "ST 端点 URL"
+    }
   }
 }

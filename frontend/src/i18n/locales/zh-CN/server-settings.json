@@ -63,5 +63,19 @@
   "saveConfirmMessage": "保存后服务器将自动重启以应用更改。确定要保存吗？",
   "saveConfirmBtn": "保存",
   "saveSuccess": "设置已保存",
-  "saveFailed": "保存失败"
+  "saveFailed": "保存失败",
+  "llm": {
+    "section": "免费 AI 额度",
+    "desc": "本套餐附赠的免费 AI 接口额度，可直接在 SillyTavern 中使用。",
+    "howtoTitle": "在 SillyTavern 中配置",
+    "step1": "进入「API 连接」页面，「API」选择「聊天补全」，「聊天补全来源」选择「自定义（兼容 OpenAI）」",
+    "step2": "将下方「API 地址」填入「自定义端点」，「API Key」填入「自定义 API 密钥」，然后点击「连接」",
+    "step3": "连接成功后，在「可用模型」下拉列表中任选一个模型即可开始对话",
+    "used": "已用额度",
+    "nextReset": "下次重置",
+    "usageStale": "暂时无法获取实时用量，稍后再试",
+    "apiBaseUrl": "API 地址",
+    "apiKey": "API Key",
+    "loadFailed": "额度信息加载失败"
+  }
 }

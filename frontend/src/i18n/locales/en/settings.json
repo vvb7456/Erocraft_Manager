@@ -166,5 +166,24 @@
   },
   "account": {
     "title": "Account Settings"
+  },
+  "llm": {
+    "title": "LLM Quota",
+    "general": {
+      "title": "Global Toggle",
+      "enabled": "Enable LLM Free Quota",
+      "enabledHint": "When enabled, users subscribing to plans with LLM quota will receive a free LLM API key, automatically injected into their SillyTavern container."
+    },
+    "connection": {
+      "title": "NewAPI Connection",
+      "baseUrl": "Base URL",
+      "adminToken": "Admin Token",
+      "poolUserId": "Pool User ID",
+      "poolUserToken": "Pool User Token"
+    },
+    "injection": {
+      "title": "SillyTavern Injection",
+      "stEndpoint": "ST Endpoint URL"
+    }
   }
 }

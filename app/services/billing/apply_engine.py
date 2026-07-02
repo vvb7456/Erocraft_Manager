@@ -629,6 +629,39 @@ async def _run_post_actions(
     if server is not None and server.is_suspended:
         await server_lifecycle.unsuspend_server(db, server_id)
 
+    # 3) LLM free quota provision (best-effort — must never block the order).
+    # Renew does NOT trigger provision — it doesn't change the plan's LLM
+    # config, and the key follows server status (sync job handles
+    # suspend/unsuspend).
+    #
+    #   * upgrade / convert -> always call update_for_upgrade. It reconciles
+    #     the key to the NEW snapshot, INCLUDING revoking it when the new plan
+    #     has no LLM quota (otherwise converting away from an LLM plan would
+    #     leak the NewAPI token + key row).
+    #   * new_purchase (and other kinds) -> provision only if the new plan
+    #     actually grants LLM quota.
+    if server is not None and order.kind != "renew":
+        snapshot = order.plan_snapshot or {}
+        try:
+            from app.services.llm_provision import provision as llm_provision
+            if order.kind in ("upgrade", "convert"):
+                await llm_provision.update_for_upgrade(db, server_id, snapshot)
+            else:
+                llm_enabled = bool(snapshot.get("llm_enabled")) and int(
+                    snapshot.get("llm_quota_grant", 0)
+                ) > 0
+                if llm_enabled:
+                    await llm_provision.provision_for_server(
+                        db, server_id, server.owner_id, snapshot
+                    )
+            await db.commit()
+        except Exception:
+            logger.warning(
+                "LLM provision failed for order %s server %s (non-blocking)",
+                order.id, server_id, exc_info=True,
+            )
+            await db.rollback()
+
 
 async def _mark_post_actions_done(db: AsyncSession, order_id: int) -> None:
     await db.execute(

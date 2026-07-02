@@ -206,6 +206,16 @@
     "order_force_applied": "Order #{order_id} force-applied.",
     "order_force_closed": "Order #{order_id} force-closed.",
     "order_placeholder_cleaned": "Placeholder server cleaned for order #{order_id}.",
+    "llm.settings.batch": "Saved {count} LLM settings.",
+    "llm.provision": "Server #{server_id} LLM quota provisioned (plan {plan_code}, quota {quota_grant}, token #{token_id}).",
+    "llm.revoke": "Server #{server_id} LLM quota revoked (token #{token_id}).",
+    "llm.upgrade": "Server #{server_id} LLM quota updated (quota {quota_grant}, models {models}).",
+    "llm.reset": "LLM monthly quota reset: {reset_count}/{total} keys reset.",
+    "llm.admin.update": "Admin adjusted LLM quota for server #{server_id} (quota {quota_grant}, models {models}).",
+    "llm.admin.reset": "Admin regenerated the LLM key for server #{server_id} (token #{old_token_id} → #{token_id}).",
+    "llm.admin.status": "Admin set the LLM key enabled state for server #{server_id} to {enabled}.",
+    "llm.admin.reset_usage": "Admin refilled this month's LLM quota for server #{server_id} (quota {quota_grant}).",
+    "llm.admin.revoke": "Admin revoked the LLM quota for server #{server_id} (token #{token_id}).",
     "unknown": "Unknown log detail: {key}"
   },
   "pagination": {

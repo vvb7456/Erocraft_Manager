@@ -63,5 +63,19 @@
   "saveConfirmMessage": "Server will automatically restart after saving. Continue?",
   "saveConfirmBtn": "Save",
   "saveSuccess": "Settings saved",
-  "saveFailed": "Save failed"
+  "saveFailed": "Save failed",
+  "llm": {
+    "section": "Free AI Quota",
+    "desc": "A free AI API quota included with this plan, ready to use in SillyTavern.",
+    "howtoTitle": "Configure in SillyTavern",
+    "step1": "Go to “API Connections”, set “API” to “Chat Completion” and “Chat Completion Source” to “Custom (OpenAI-compatible)”",
+    "step2": "Paste the “Base URL” below into “Custom Endpoint”, the “API Key” into “Custom API Key”, then click “Connect”",
+    "step3": "Once connected, pick any model from the “Available Models” dropdown and start chatting",
+    "used": "Used",
+    "nextReset": "Next reset",
+    "usageStale": "Real-time usage unavailable right now, try again later",
+    "apiBaseUrl": "Base URL",
+    "apiKey": "API Key",
+    "loadFailed": "Failed to load quota info"
+  }
 }

@@ -93,6 +93,13 @@ export function useApiFetch() {
     })
   }
 
+  async function patch<T = unknown>(url: string, body?: Record<string, unknown> | unknown[]): Promise<T | null> {
+    return request<T>(url, {
+      method: 'PATCH',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  }
+
   async function del<T = unknown>(url: string, body?: Record<string, unknown>): Promise<T | null> {
     return request<T>(url, {
       method: 'DELETE',
@@ -149,5 +156,5 @@ export function useApiFetch() {
     }
   }
 
-  return { loading, error, get, post, put, del, raw }
+  return { loading, error, get, post, put, patch, del, raw }
 }

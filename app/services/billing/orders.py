@@ -164,6 +164,9 @@ def _build_snapshot(
         "oom_disabled": plan.oom_disabled,
         "plan_type": plan.plan_type,
         "linked_plan_id": plan.linked_plan_id,
+        "llm_enabled": plan.llm_enabled,
+        "llm_quota_grant": plan.llm_quota_grant,
+        "llm_model_limits": plan.llm_model_limits,
     }
 
 

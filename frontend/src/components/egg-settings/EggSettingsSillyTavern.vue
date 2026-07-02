@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, inject, computed, watch, onMounted } from 'vue'
+import { ref, inject, computed, watch, onMounted, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -16,6 +16,8 @@ import HelpTip from '@/components/ui/HelpTip.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
+import UsageBar from '@/components/ui/UsageBar.vue'
+import Spinner from '@/components/ui/Spinner.vue'
 
 const props = defineProps<EggSettingsProps>()
 const emit = defineEmits<{
@@ -29,6 +31,47 @@ const { toast } = useToast()
 const { confirm } = useConfirm()
 
 const reloadServer = inject<() => Promise<void>>('reloadServer')!
+
+// ─── LLM free quota (optional; only shown when provisioned) ───
+interface ServerCtx {
+  llmEnabled: boolean
+}
+const server = inject<Ref<ServerCtx | null>>('server', ref(null))
+
+interface LlmUsage {
+  status: string | null
+  quotaGrant: number
+  quotaUsed: number
+  quotaAvailable: number
+  nextResetAt: string | null
+  enabled: boolean
+  apiKey: string | null
+  apiBaseUrl: string
+  allowedModels: string[] | null
+  usageQueryFailed: boolean
+}
+
+const llmUsage = ref<LlmUsage | null>(null)
+const llmLoading = ref(false)
+const llmLoadFailed = ref(false)
+const llmUsedPercent = computed(() => {
+  const u = llmUsage.value
+  if (!u || u.quotaGrant <= 0) return 0
+  return Math.round((u.quotaUsed / u.quotaGrant) * 100)
+})
+
+async function loadLlmUsage() {
+  if (!server.value?.llmEnabled) return
+  llmLoading.value = true
+  llmLoadFailed.value = false
+  try {
+    const data = await get<LlmUsage>(`/api/user/servers/${props.serverId}/llm/usage`)
+    if (data) llmUsage.value = data
+    else llmLoadFailed.value = true
+  } finally {
+    llmLoading.value = false
+  }
+}
 
 const updating = ref(false)
 const switchingVersion = ref(false)
@@ -142,7 +185,10 @@ async function fetchBranches() {
   }
 }
 
-onMounted(fetchBranches)
+onMounted(() => {
+  fetchBranches()
+  loadLlmUsage()
+})
 
 /** Save startup variables (no confirmation / no restart). Returns true on success. */
 async function save(): Promise<boolean> {
@@ -334,6 +380,63 @@ defineExpose({ save, discard, validationErrors })
       </FormField>
     </BaseCard>
 
+    <!-- ─── LLM free quota (only when provisioned) ─── -->
+    <BaseCard v-if="server?.llmEnabled" variant="bg2" class="st-card">
+      <SectionHeader icon="smart_toy" flush>{{ t('serverSettings.llm.section') }}</SectionHeader>
+      <p class="section-note">{{ t('serverSettings.llm.desc') }}</p>
+
+      <!-- How-to hint (static, shown immediately) -->
+      <div class="llm-hint">
+        <MsIcon name="info" class="llm-hint__icon" />
+        <div class="llm-hint__body">
+          <p class="llm-hint__title">{{ t('serverSettings.llm.howtoTitle') }}</p>
+          <ol class="llm-hint__steps">
+            <li>{{ t('serverSettings.llm.step1') }}</li>
+            <li>{{ t('serverSettings.llm.step2') }}</li>
+            <li>{{ t('serverSettings.llm.step3') }}</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- Loading spinner while usage/connection data is fetched -->
+      <div v-if="llmLoading" class="llm-loading">
+        <Spinner size="md" />
+      </div>
+
+      <!-- Load failed -->
+      <p v-else-if="llmLoadFailed" class="section-note section-note--danger">
+        {{ t('serverSettings.llm.loadFailed') }}
+      </p>
+
+      <template v-else-if="llmUsage">
+        <!-- Usage bar -->
+        <div class="llm-usage">
+          <div class="llm-usage__top">
+            <span class="llm-usage__label">{{ t('serverSettings.llm.used') }}</span>
+            <span class="llm-usage__val">{{ llmUsedPercent }}%</span>
+          </div>
+          <UsageBar :percent="llmUsedPercent" :height="8" />
+          <span v-if="llmUsage.usageQueryFailed" class="llm-usage__stale">{{ t('serverSettings.llm.usageStale') }}</span>
+          <span v-else class="llm-usage__reset">{{ t('serverSettings.llm.nextReset') }}: {{ llmUsage.nextResetAt }}</span>
+        </div>
+
+        <!-- Connection details -->
+        <FormField :label="t('serverSettings.llm.apiBaseUrl')" layout="horizontal">
+          <SecretInput
+            :modelValue="llmUsage.apiBaseUrl"
+            :revealed="true"
+            readonly
+            copyable
+            :toggleable="false"
+          />
+        </FormField>
+
+        <FormField :label="t('serverSettings.llm.apiKey')" layout="horizontal">
+          <SecretInput :modelValue="llmUsage.apiKey || ''" readonly copyable :toggleable="true" :masked-length="36" />
+        </FormField>
+      </template>
+    </BaseCard>
+
     <BaseCard variant="bg2" class="st-card">
       <SectionHeader icon="compare_arrows" flush>{{ t('serverSettings.networkSection') }}</SectionHeader>
       <FormField layout="horizontal" keep-horizontal>
@@ -468,5 +571,83 @@ defineExpose({ save, discard, validationErrors })
 
 .action-row :deep(.base-btn) {
   flex: 1;
+}
+
+/* ─── LLM quota card ─── */
+.llm-hint {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  background: color-mix(in srgb, var(--ac) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ac) 25%, transparent);
+  border-radius: var(--r-sm);
+}
+
+.llm-hint__icon {
+  flex-shrink: 0;
+  color: var(--ac);
+  font-size: 1.1rem;
+  margin-top: 1px;
+}
+
+.llm-hint__body {
+  min-width: 0;
+}
+
+.llm-hint__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--t1);
+}
+
+.llm-hint__steps {
+  margin: 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: .84rem;
+  line-height: 1.5;
+  color: var(--t2);
+}
+
+.llm-usage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.llm-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-4) 0;
+}.llm-usage__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.llm-usage__label {
+  font-size: var(--text-sm);
+  color: var(--t3);
+}
+
+.llm-usage__val {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--t1);
+  font-variant-numeric: tabular-nums;
+}
+
+.llm-usage__reset {
+  font-size: .8rem;
+  color: var(--t3);
+}
+
+.llm-usage__stale {
+  font-size: .8rem;
+  color: var(--amber, #f59e0b);
 }
 </style>

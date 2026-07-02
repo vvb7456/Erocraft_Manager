@@ -134,22 +134,23 @@ async def scan_deployment(
 
 async def scan_all_deployments(db: AsyncSession) -> list[dict[str, Any]]:
     result = await db.execute(
-        select(ManagerCertDeployment).order_by(ManagerCertDeployment.id)
+        select(ManagerCertDeployment.id).order_by(ManagerCertDeployment.id)
     )
+    deployment_ids = [row[0] for row in result.all()]
     out: list[dict[str, Any]] = []
-    for deployment in result.scalars().all():
+    for dep_id in deployment_ids:
         try:
+            deployment = await db.get(ManagerCertDeployment, dep_id)
+            if deployment is None:
+                continue
             out.append(await scan_deployment(db, deployment))
         except Exception as exc:  # noqa: BLE001
-            logger.exception("cert deployment scan crashed deployment_id=%s", deployment.id)
-            deployment.status = "unreachable"
-            deployment.last_check_at = utc_naive_now()
-            deployment.last_check_error = str(exc)[:1000]
-            await db.commit()
+            await db.rollback()
+            logger.warning("cert deployment scan crashed deployment_id=%s: %s", dep_id, exc)
             out.append({
                 "ok": False,
-                "deployment_id": deployment.id,
-                "status": deployment.status,
+                "deployment_id": dep_id,
+                "status": "unreachable",
                 "error": str(exc),
             })
     return out
