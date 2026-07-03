@@ -12,6 +12,8 @@ import { useRouter } from 'vue-router'
 import { useClipboard } from '@/composables/useClipboard'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
+import StatusDot from '@/components/ui/StatusDot.vue'
+import { getStatusDotKey, getStatusColor } from '@/utils/status'
 import ServerStatTile from '@/components/admin-server/ServerStatTile.vue'
 import ServerSparkline from '@/components/admin-server/ServerSparkline.vue'
 import type {
@@ -108,6 +110,36 @@ const expirationText = computed(() => {
   return t('adminServer.overview.daysLeft', { n: daysLeft.value })
 })
 
+// power state — mirrors the container's header badge logic
+const liveState = computed(() => runtime.value?.state ?? detail.value?.server.status ?? 'offline')
+const isSuspended = computed(() => detail.value?.server.isSuspended ?? false)
+const isInstalling = computed(() => detail.value?.server.isInstalling ?? false)
+const powerDotKey = computed(() =>
+  getStatusDotKey(liveState.value, isSuspended.value, isInstalling.value, runtimeStale.value),
+)
+const powerColor = computed(() =>
+  getStatusColor(liveState.value, isSuspended.value, isInstalling.value, runtimeStale.value),
+)
+const powerLabel = computed(() => {
+  if (!detail.value) return t('adminServer.status.unknown')
+  if (runtimeStale.value) return t('adminServer.status.disconnected')
+  if (isSuspended.value) return t('adminServer.status.suspended')
+  if (isInstalling.value) return t('adminServer.status.installing')
+  if (detail.value.server.status === 'install_failed') return t('adminServer.status.install_failed')
+  switch (liveState.value) {
+    case 'running': return t('adminServer.status.running')
+    case 'starting': return t('adminServer.status.starting')
+    case 'stopping': return t('adminServer.status.stopping')
+    default: return t('adminServer.status.offline')
+  }
+})
+
+const consoleHref = computed(() => {
+  const id = detail.value?.server.id
+  if (!id) return ''
+  return router.resolve({ name: 'server-console', params: { id } }).href
+})
+
 // resource tiles
 const cpuPercent = computed(() => {
   const used = res.value.cpu_absolute as number | undefined
@@ -178,12 +210,59 @@ async function copy(text: string) {
   <div v-if="!detail" class="muted">{{ t('adminServer.loading') }}</div>
 
   <div v-else class="pane">
-    <!-- 1) Identity bar — 5 equal stat-cards -->
+    <!-- 1) Identity bar — 6 equal stat-cards -->
     <section class="ident-row">
       <div class="ident-card">
         <div class="ident-card__label">{{ t('adminServer.overview.fields.serverName') }}</div>
         <div class="ident-card__value trunc" :title="detail.server.name">{{ detail.server.name }}</div>
         <div class="ident-card__sub mono">#{{ detail.server.id }}</div>
+      </div>
+
+      <div class="ident-card">
+        <div class="ident-card__label">{{ t('adminServer.overview.fields.powerState') }}</div>
+        <div class="ident-card__value ident-card__value--power">
+          <StatusDot :status="powerDotKey" size="sm" />
+          <span :style="{ color: powerColor }">{{ powerLabel }}</span>
+        </div>
+        <div class="ident-card__sub">
+          <a
+            v-if="consoleHref"
+            class="console-link"
+            :href="consoleHref"
+            target="_blank"
+            rel="noopener"
+          >
+            <MsIcon name="open_in_new" size="xxs" />
+            {{ t('adminServer.overview.openConsole') }}
+          </a>
+          <span v-else>—</span>
+        </div>
+      </div>
+
+      <div class="ident-card">
+        <div class="ident-card__label">{{ t('adminServer.overview.fields.expirationDate') }}</div>
+        <div class="ident-card__value" :style="{ color: expirationColor }">
+          <template v-if="!detail.server.expirationDate">
+            {{ t('adminServer.overview.values.permanent') }}
+          </template>
+          <template v-else>{{ detail.server.expirationDate }}</template>
+        </div>
+        <div class="ident-card__sub" :style="{ color: expirationColor }">
+          {{ expirationText || '—' }}
+        </div>
+      </div>
+
+      <div class="ident-card">
+        <div class="ident-card__label">{{ t('adminServer.overview.fields.address') }}</div>
+        <div class="ident-card__value mono trunc" :title="primaryString">
+          {{ primaryString || '—' }}
+        </div>
+        <div class="ident-card__sub">
+          <button v-if="primaryString" class="mini-btn" @click="copy(primaryString)">
+            <MsIcon name="content_copy" size="xxs" />{{ t('adminServer.overview.copy') }}
+          </button>
+          <span v-else>—</span>
+        </div>
       </div>
 
       <div class="ident-card">
@@ -205,32 +284,6 @@ async function copy(text: string) {
           <div class="ident-card__value trunc" :title="detail.node.name">{{ detail.node.name }}</div>
         </template>
         <div class="ident-card__sub mono trunc" :title="detail.node.fqdn">{{ detail.node.fqdn }}</div>
-      </div>
-
-      <div class="ident-card">
-        <div class="ident-card__label">{{ t('adminServer.overview.fields.address') }}</div>
-        <div class="ident-card__value mono trunc" :title="primaryString">
-          {{ primaryString || '—' }}
-        </div>
-        <div class="ident-card__sub">
-          <button v-if="primaryString" class="mini-btn" @click="copy(primaryString)">
-            <MsIcon name="content_copy" size="xxs" />{{ t('adminServer.overview.copy') }}
-          </button>
-          <span v-else>—</span>
-        </div>
-      </div>
-
-      <div class="ident-card">
-        <div class="ident-card__label">{{ t('adminServer.overview.fields.expirationDate') }}</div>
-        <div class="ident-card__value" :style="{ color: expirationColor }">
-          <template v-if="!detail.server.expirationDate">
-            {{ t('adminServer.overview.values.permanent') }}
-          </template>
-          <template v-else>{{ detail.server.expirationDate }}</template>
-        </div>
-        <div class="ident-card__sub" :style="{ color: expirationColor }">
-          {{ expirationText || '—' }}
-        </div>
       </div>
     </section>
 
@@ -396,7 +449,7 @@ async function copy(text: string) {
 /* ── 1) Identity bar ────────────────────────────────────────────── */
 .ident-row {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--sp-2);
 }
 @media (max-width: 1100px) { .ident-row { grid-template-columns: repeat(3, 1fr); } }
@@ -452,6 +505,24 @@ async function copy(text: string) {
 .ident-card__sub.mono {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
 }
+
+.ident-card__value--power {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.console-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ac2);
+  font-size: var(--text-xs);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color .15s;
+}
+.console-link:hover { text-decoration: underline; }
 
 .mini-btn {
   display: inline-flex;

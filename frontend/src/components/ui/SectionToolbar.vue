@@ -97,12 +97,14 @@ defineOptions({ name: 'SectionToolbar' })
  * Apply these classes on slot children to opt into the
  * standard mobile (≤768px) toolbar layout:
  *   - .tb-search    搜索框 → 单占整行
+ *   - .tb-search-row  搜索框 + 筛选按钮的行 wrapper → 移动端整行，内部按 flex 分配
+ *   - .tb-filter-btn  排序/筛选 icon 按钮 → 仅移动端显示，放在 .tb-search-row 内
  *   - .tb-select-group   一组下拉 wrapper → 整行内子元素平分
  *   - .tb-btn-group      一组按钮 wrapper → 整行内子元素平分
  *   - .tb-status / .tb-help / .tb-batch  → 移动端隐藏
  *
  * Layout order on mobile follows DOM order. Recommended:
- *   #start: tb-search
+ *   #start: tb-search  (or tb-search-row containing tb-search + tb-filter-btn)
  *   #end:   tb-select-group → tb-btn-group
  */
 
@@ -115,12 +117,65 @@ defineOptions({ name: 'SectionToolbar' })
   min-width: 0;
 }
 
+/* Search row wrapper: wraps search + optional filter-btn.
+ * On desktop it shrinks to content width (filter-btn hidden, search keeps
+ * its own max-width). On mobile it becomes a full-width row with search
+ * flex:1 and filter-btn flex:0. */
+:slotted(.tb-search-row) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+/* Unified search width across all toolbars */
+:slotted(.tb-search) {
+  max-width: 280px;
+}
+
+/* Filter button: hidden on desktop, shown on mobile inside .tb-search-row */
+:slotted(.tb-filter-btn) {
+  display: none;
+}
+
 @media (max-width: 768px) {
+  /* When a page marks its select-group as desktop-only (filters moved
+   * into MobileFilterSheet), hide it on mobile. */
+  :slotted(.tb-desktop-only) {
+    display: none !important;
+  }
+
   :slotted(.tb-search) {
     width: 100% !important;
     flex: 1 1 100% !important;
     min-width: 0 !important;
     max-width: none !important;
+  }
+
+  /* Search row takes full width on mobile */
+  :slotted(.tb-search-row) {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  :slotted(.tb-filter-btn) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--bd);
+    border-radius: var(--r-sm);
+    background: var(--bg2);
+    color: var(--t2);
+    cursor: pointer;
+  }
+
+  :slotted(.tb-filter-btn:hover) {
+    border-color: var(--ac);
+    color: var(--ac);
   }
 
   :slotted(.tb-select-group),

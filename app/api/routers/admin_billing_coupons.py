@@ -12,7 +12,7 @@ See ``docs/REFERRAL_AND_COUPON_DESIGN.md`` §11.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_admin
@@ -68,6 +68,7 @@ async def list_coupons(
     status_: str | None = Query(default=None, alias="status"),
     template_id: int | None = None,
     code: str | None = None,
+    q: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     _: PteroUser = Depends(require_admin),
@@ -90,6 +91,12 @@ async def list_coupons(
         filters.append(Coupon.template_id == template_id)
     if code:
         filters.append(Coupon.code == code.strip().upper())
+    if q:
+        like = f"%{q.strip()}%"
+        filters.append(or_(
+            Coupon.code.ilike(like),
+            cast(Coupon.user_id, String).ilike(like),
+        ))
     for f in filters:
         stmt = stmt.where(f)
         count_stmt = count_stmt.where(f)

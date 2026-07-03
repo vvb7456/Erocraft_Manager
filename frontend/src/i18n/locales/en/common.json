@@ -33,6 +33,10 @@
   "search_hint": "Search…",
   "empty": "No data",
   "filter_hint": "Filter…",
+  "filterSort": {
+    "title": "Filter & Sort",
+    "sortBy": "Sort by"
+  },
   "chip_more": "+{n} more",
   "chip_collapse": "Collapse",
   "footer": {

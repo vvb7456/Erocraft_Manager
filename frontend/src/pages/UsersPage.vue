@@ -17,6 +17,7 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import CardKV from '@/components/ui/CardKV.vue'
 import FormField from '@/components/form/FormField.vue'
@@ -341,8 +342,31 @@ function openMobileAction(u: UserItem) {
   mobileActionOpen.value = true
 }
 
-// ── Mobile sort sheet ──
-const mobileSortOpen = ref(false)
+// ── Mobile filter sheet ──
+const mobileFilterOpen = ref(false)
+const sortColumns = computed(() => [
+  { key: 'id', label: t('users.table.id') },
+  { key: 'username', label: t('users.table.username') },
+  { key: 'server_count', label: t('users.table.server_count') },
+  { key: 'created_at', label: t('users.table.created_at') },
+])
+const filterGroups = computed(() => [
+  {
+    key: 'server',
+    label: t('users.filter.label'),
+    modelValue: filterServer.value,
+    options: serverFilterOptions.value,
+  },
+])
+function onMobileSort(col: string) {
+  toggleSort(col)
+}
+function onMobileFilter(groupKey: string, value: string | number | boolean) {
+  if (groupKey === 'server') {
+    filterServer.value = String(value)
+    page.value = 1
+  }
+}
 </script>
 
 <template>
@@ -352,22 +376,32 @@ const mobileSortOpen = ref(false)
     <!-- Toolbar -->
     <SectionToolbar>
       <template #start>
-        <FilterInput
-          v-model="searchTerm"
-          :placeholder="t('users.search_placeholder')"
-          class="users-filter-input tb-search"
-        />
+        <div class="tb-search-row">
+          <FilterInput
+            v-model="searchTerm"
+            :placeholder="t('users.search_placeholder')"
+            class="tb-search"
+          />
+          <button
+            class="tb-filter-btn"
+            :title="t('common.filterSort.title')"
+            @click="mobileFilterOpen = true"
+          >
+            <MsIcon name="tune" size="sm" />
+          </button>
+        </div>
+        <span class="toolbar-status tb-status">{{ t('users.total', { n: rawUsers.length }) }}</span>
+      </template>
+      <template #end>
+        <div class="tb-select-group tb-desktop-only">
+          <BaseSelect v-model="filterServer" :options="serverFilterOptions" :prefix="t('users.filter.label') + ': '" size="sm" fit />
+        </div>
         <div class="batch-controls tb-batch">
           <BaseSelect v-model="batchActionType" :options="batchActionOptions" :placeholder="t('users.batch.select_action')" size="sm" fit :disabled="selectedIds.size === 0" />
           <BaseButton size="sm" :disabled="selectedIds.size === 0 || !batchActionType" @click="executeBatchAction">
             <MsIcon name="play_arrow" size="xs" /> {{ t('users.batch.execute') }}
           </BaseButton>
           <span v-if="selectedIds.size > 0" class="toolbar-status tb-status">{{ t('users.batch.selected', { n: selectedIds.size }) }}</span>
-        </div>
-      </template>
-      <template #end>
-        <div class="tb-select-group">
-          <BaseSelect v-model="filterServer" :options="serverFilterOptions" :prefix="t('users.filter.label') + ': '" size="sm" fit />
         </div>
         <div class="tb-btn-group">
           <BaseButton size="sm" variant="primary" @click="openCreate">
@@ -376,6 +410,17 @@ const mobileSortOpen = ref(false)
         </div>
       </template>
     </SectionToolbar>
+
+    <!-- Mobile filter & sort sheet -->
+    <MobileFilterSheet
+      v-model:open="mobileFilterOpen"
+      :sort-columns="sortColumns"
+      :sort-by="sortBy"
+      :sort-order="sortOrder"
+      :filters="filterGroups"
+      @sort="onMobileSort"
+      @update:filter="onMobileFilter"
+    />
 
     <!-- Table -->
     <DataTable
@@ -554,18 +599,6 @@ const mobileSortOpen = ref(false)
   cursor: pointer;
 }
 .checkbox-label input { margin: 0; }
-
-.users-filter-input {
-  flex: 1;
-  max-width: 280px;
-}
-
-@media (max-width: 768px) {
-  .users-filter-input {
-    max-width: none;
-    width: 100%;
-  }
-}
 
 .col-check { width: 36px; text-align: center !important; }
 .col-id { width: 56px; }

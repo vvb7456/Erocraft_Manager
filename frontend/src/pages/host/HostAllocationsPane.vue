@@ -21,6 +21,7 @@ import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import CardKV from '@/components/ui/CardKV.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import CreateAllocationsModal from '@/components/hosts/CreateAllocationsModal.vue'
 
@@ -82,6 +83,23 @@ const filterOptions = computed(() => [
   { value: 'assigned',   label: t('hosts.allocations.filter.assigned') },
   { value: 'unassigned', label: t('hosts.allocations.filter.unassigned') },
 ])
+
+// ── Mobile filter sheet ──
+const mobileFilterOpen = ref(false)
+const filterGroups = computed(() => [
+  {
+    key: 'assigned',
+    label: t('hosts.allocations.filter.label'),
+    modelValue: filterAssigned.value,
+    options: filterOptions.value,
+  },
+])
+function onMobileFilter(groupKey: string, value: string | number | boolean) {
+  if (groupKey === 'assigned') {
+    filterAssigned.value = String(value) as AssignedFilter
+    page.value = 1
+  }
+}
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
 
@@ -273,18 +291,27 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
   <div v-else class="alloc-pane">
     <SectionToolbar>
       <template #start>
-        <FilterInput
-          v-model="searchTerm"
-          :placeholder="t('hosts.allocations.search.placeholder')"
-          class="alloc-filter-input tb-search"
-          @update:modelValue="page = 1"
-        />
+        <div class="tb-search-row">
+          <FilterInput
+            v-model="searchTerm"
+            :placeholder="t('hosts.allocations.search.placeholder')"
+            class="tb-search"
+            @update:modelValue="page = 1"
+          />
+          <button
+            class="tb-filter-btn"
+            :title="t('common.filterSort.title')"
+            @click="mobileFilterOpen = true"
+          >
+            <MsIcon name="tune" size="sm" />
+          </button>
+        </div>
         <div class="summary tb-status" role="status">
           {{ t('hosts.allocations.summaryFiltered', { n: total }) }}
         </div>
       </template>
       <template #end>
-        <div class="tb-select-group">
+        <div class="tb-select-group tb-desktop-only">
           <BaseSelect
             v-model="filterAssigned"
             :options="filterOptions"
@@ -315,6 +342,15 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
         </div>
       </template>
     </SectionToolbar>
+
+    <MobileFilterSheet
+      v-model:open="mobileFilterOpen"
+      :sort-columns="[]"
+      :sort-by="''"
+      :sort-order="'asc'"
+      :filters="filterGroups"
+      @update:filter="onMobileFilter"
+    />
 
     <DataTable
       :items="items"
@@ -458,18 +494,6 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
   color: var(--t3);
   font-size: var(--text-sm);
   padding: var(--sp-4);
-}
-
-.alloc-filter-input {
-  flex: 1;
-  max-width: 280px;
-}
-
-@media (max-width: 768px) {
-  .alloc-filter-input {
-    max-width: none;
-    width: 100%;
-  }
 }
 
 .summary {

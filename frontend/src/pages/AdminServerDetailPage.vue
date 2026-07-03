@@ -12,7 +12,6 @@ import Badge from '@/components/ui/Badge.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import TabSwitcher from '@/components/ui/TabSwitcher.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
-import MsIcon from '@/components/ui/MsIcon.vue'
 import { getStatusDotKey, getStatusColor } from '@/utils/status'
 import { hasLlmKey } from '@/config/eggRegistry'
 import type {
@@ -180,10 +179,6 @@ const activeTab = computed(() => {
   return name && tabs.value.some(tab => tab.key === name) ? name : 'admin-server-overview'
 })
 
-const activeTabLabel = computed(() =>
-  tabs.value.find(tab => tab.key === activeTab.value)?.label ?? t('adminServer.tabs.overview'),
-)
-
 const headerBreadcrumbs = computed(() => [
   { label: t('servers.title'), to: { name: 'servers' } },
   { label: headerTitle.value },
@@ -225,12 +220,6 @@ watch(
 function onTabChange(key: string) {
   router.push({ name: key, params: { id: serverId.value } })
 }
-
-const consoleHref = computed(() => {
-  if (!Number.isFinite(serverId.value)) return ''
-  const resolved = router.resolve({ name: 'server-console', params: { id: serverId.value } })
-  return resolved.href
-})
 </script>
 
 <template>
@@ -247,38 +236,8 @@ const consoleHref = computed(() => {
     </PageHeader>
 
     <div class="page-body">
-      <TabSwitcher :tabs="tabs" :modelValue="activeTab" @update:modelValue="onTabChange">
-        <a
-          v-if="detail"
-          class="console-link"
-          :href="consoleHref"
-          target="_blank"
-          rel="noopener"
-        >
-          <MsIcon name="terminal" size="xs" />
-          {{ t('adminServer.controls.openConsole') }}
-        </a>
-      </TabSwitcher>
+      <TabSwitcher :tabs="tabs" :modelValue="activeTab" @update:modelValue="onTabChange" />
       <RouterView :key="serverId" />
     </div>
   </template>
 </template>
-
-<style scoped>
-.console-link {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  background: var(--bg3);
-  border: 1px solid var(--bd);
-  border-radius: var(--r-sm);
-  color: var(--t1);
-  font-size: var(--text-xs);
-  text-decoration: none;
-  cursor: pointer;
-  transition: border-color .15s, color .15s;
-}
-.console-link:hover { border-color: var(--bd-f); color: var(--ac2); }
-</style>

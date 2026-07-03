@@ -22,6 +22,7 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import CardKV from '@/components/ui/CardKV.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import CouponTemplateEditorModal, {
   type CouponTemplate,
   type CouponTemplateEditorMode,
@@ -45,6 +46,23 @@ const statusOptions = computed(() => [
   { value: 'active',   label: t('billing.admin.couponTemplates.filterActive') },
   { value: 'inactive', label: t('billing.admin.couponTemplates.filterInactive') },
 ])
+
+// ── Mobile filter sheet ──
+const mobileFilterOpen = ref(false)
+const filterGroups = computed(() => [
+  {
+    key: 'status',
+    label: t('billing.admin.couponTemplates.statusFilterLabel'),
+    modelValue: statusFilter.value,
+    options: statusOptions.value,
+  },
+])
+function onMobileFilter(groupKey: string, value: string | number | boolean) {
+  if (groupKey === 'status') {
+    statusFilter.value = String(value) as 'all' | 'active' | 'inactive'
+    page.value = 1
+  }
+}
 
 const editorOpen = ref(false)
 const editorMode = ref<CouponTemplateEditorMode>('create')
@@ -154,18 +172,27 @@ function fmtScope(tpl: CouponTemplate): string {
 <template>
   <SectionToolbar>
     <template #start>
-      <FilterInput
-        v-model="searchTerm"
-        :placeholder="t('billing.admin.couponTemplates.searchPlaceholder')"
-        class="tb-search"
-        @update:modelValue="page = 1"
-      />
+      <div class="tb-search-row">
+        <FilterInput
+          v-model="searchTerm"
+          :placeholder="t('billing.admin.couponTemplates.searchPlaceholder')"
+          class="tb-search"
+          @update:modelValue="page = 1"
+        />
+        <button
+          class="tb-filter-btn"
+          :title="t('common.filterSort.title')"
+          @click="mobileFilterOpen = true"
+        >
+          <MsIcon name="tune" size="sm" />
+          </button>
+      </div>
       <span class="toolbar-status tb-status">
         {{ t('billing.admin.couponTemplates.totalCount', { n: filtered.length }) }}
       </span>
     </template>
     <template #end>
-      <div class="tb-select-group">
+      <div class="tb-select-group tb-desktop-only">
         <BaseSelect
           v-model="statusFilter"
           :options="statusOptions"
@@ -182,6 +209,15 @@ function fmtScope(tpl: CouponTemplate): string {
       </div>
     </template>
   </SectionToolbar>
+
+  <MobileFilterSheet
+    v-model:open="mobileFilterOpen"
+    :sort-columns="[]"
+    :sort-by="''"
+    :sort-order="'asc'"
+    :filters="filterGroups"
+    @update:filter="onMobileFilter"
+  />
 
   <DataTable
     :items="paginated"

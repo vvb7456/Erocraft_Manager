@@ -3,6 +3,7 @@
   "total": "共 {n} 条",
   "empty": "暂无活动记录",
   "emptyFiltered": "没有找到匹配的活动记录",
+  "searchPlaceholder": "搜索事件 / 用户 / IP…",
   "filter": {
     "all": "全部",
     "label": "类型",

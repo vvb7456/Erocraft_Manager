@@ -5,8 +5,11 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useAppStore } from '@/stores/app'
 import { getEggMeta } from '@/config/eggRegistry'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
+import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
+import MsIcon from '@/components/ui/MsIcon.vue'
 
 defineOptions({ name: 'ServerActivityPage' })
 
@@ -52,6 +55,7 @@ const page = ref(1)
 const perPage = ref(20)
 const total = ref(0)
 const eventFilter = ref('')
+const searchTerm = ref('')
 
 // ── Filter options ──
 const filterOptions = computed(() => [
@@ -62,6 +66,20 @@ const filterOptions = computed(() => [
   { value: 'server:console', label: t('activity.filter.console') },
   { value: 'server:reinstall', label: t('activity.filter.system') },
 ])
+
+// ── Mobile filter sheet ──
+const mobileFilterOpen = ref(false)
+const filterGroups = computed(() => [
+  {
+    key: 'event',
+    label: t('activity.filter.label'),
+    modelValue: eventFilter.value,
+    options: filterOptions.value,
+  },
+])
+function onMobileFilter(groupKey: string, value: string | number | boolean) {
+  if (groupKey === 'event') eventFilter.value = String(value)
+}
 
 // ── Fetch ──
 async function loadLogs() {
@@ -84,6 +102,18 @@ watch([() => server.value?.id], () => { page.value = 1; loadLogs() }, { immediat
 watch(eventFilter, () => { page.value = 1; loadLogs() })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
+
+const filteredLogs = computed(() => {
+  const q = searchTerm.value.toLowerCase().trim()
+  if (!q) return logs.value
+  return logs.value.filter(l => {
+    const actor = l.actor?.username ?? ''
+    return l.event.toLowerCase().includes(q)
+      || actor.toLowerCase().includes(q)
+      || l.ip.toLowerCase().includes(q)
+      || (l.description ?? '').toLowerCase().includes(q)
+  })
+})
 
 // ── Event display helpers ──
 const EVENT_COLORS: Record<string, string> = {
@@ -184,10 +214,24 @@ function getPropsText(log: ActivityLogItem): string {
   <div class="activity-page">
     <SectionToolbar>
       <template #start>
+        <div class="tb-search-row">
+          <FilterInput
+            v-model="searchTerm"
+            :placeholder="t('activity.searchPlaceholder')"
+            class="tb-search"
+          />
+          <button
+            class="tb-filter-btn"
+            :title="t('common.filterSort.title')"
+            @click="mobileFilterOpen = true"
+          >
+            <MsIcon name="tune" size="sm" />
+          </button>
+        </div>
         <span class="toolbar-count tb-status">{{ t('activity.total', { n: total }) }}</span>
       </template>
       <template #end>
-        <div class="tb-select-group">
+        <div class="tb-select-group tb-desktop-only">
           <BaseSelect
             v-model="eventFilter"
             :options="filterOptions"
@@ -199,9 +243,18 @@ function getPropsText(log: ActivityLogItem): string {
       </template>
     </SectionToolbar>
 
+    <MobileFilterSheet
+      v-model:open="mobileFilterOpen"
+      :sort-columns="[]"
+      :sort-by="''"
+      :sort-order="'asc'"
+      :filters="filterGroups"
+      @update:filter="onMobileFilter"
+    />
+
     <!-- Table -->
     <DataTable
-      :items="logs"
+      :items="filteredLogs"
       :page="page"
       :total-pages="totalPages"
       :per-page="perPage"

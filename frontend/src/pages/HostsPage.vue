@@ -19,6 +19,7 @@ import DataTable from '@/components/ui/DataTable.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import CardKV from '@/components/ui/CardKV.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import GlobalDefaultsModal from '@/components/hosts/GlobalDefaultsModal.vue'
 import HostCreateModal from '@/components/hosts/HostCreateModal.vue'
 import { classifyHostStatus } from '@/utils/heartbeat'
@@ -128,6 +129,27 @@ const statusOptions = computed(() => [
   { value: 'unconfigured', label: t('hosts.status.unconfigured') },
 ])
 
+// ── Mobile filter sheet ──
+const mobileFilterOpen = ref(false)
+const filterGroups = computed(() => [
+  {
+    key: 'kind',
+    label: t('hosts.toolbar.filterKind'),
+    modelValue: filterKind.value,
+    options: kindOptions.value,
+  },
+  {
+    key: 'status',
+    label: t('hosts.toolbar.filterStatus'),
+    modelValue: filterStatus.value,
+    options: statusOptions.value,
+  },
+])
+function onMobileFilter(groupKey: string, value: string | number | boolean) {
+  if (groupKey === 'kind') filterKind.value = String(value)
+  else if (groupKey === 'status') filterStatus.value = String(value)
+}
+
 // ── Derived ──
 const filtered = computed(() => {
   const q = searchTerm.value.toLowerCase().trim()
@@ -224,17 +246,26 @@ function handleMobile(action: 'open') {
 
     <SectionToolbar>
       <template #start>
-        <FilterInput
-          v-model="searchTerm"
-          :placeholder="t('hosts.toolbar.search')"
-          class="hosts-filter-input tb-search"
-        />
+        <div class="tb-search-row">
+          <FilterInput
+            v-model="searchTerm"
+            :placeholder="t('hosts.toolbar.search')"
+            class="tb-search"
+          />
+          <button
+            class="tb-filter-btn"
+            :title="t('common.filterSort.title')"
+            @click="mobileFilterOpen = true"
+          >
+            <MsIcon name="tune" size="sm" />
+          </button>
+        </div>
         <div class="summary tb-status" role="status">
           <span>{{ t('hosts.summary.total', { n: summary.total }) }}</span>
         </div>
       </template>
       <template #end>
-        <div class="tb-select-group">
+        <div class="tb-select-group tb-desktop-only">
           <BaseSelect
             v-model="filterKind"
             :options="kindOptions"
@@ -262,6 +293,15 @@ function handleMobile(action: 'open') {
         </div>
       </template>
     </SectionToolbar>
+
+    <MobileFilterSheet
+      v-model:open="mobileFilterOpen"
+      :sort-columns="[]"
+      :sort-by="''"
+      :sort-order="'asc'"
+      :filters="filterGroups"
+      @update:filter="onMobileFilter"
+    />
 
     <DataTable
       :items="paginated"
@@ -354,11 +394,6 @@ function handleMobile(action: 'open') {
 
 <style scoped>
 /* ── Toolbar ── */
-.hosts-filter-input {
-  min-width: 240px;
-  flex: 0 1 280px;
-}
-
 .summary {
   display: flex;
   align-items: center;

@@ -36,6 +36,10 @@
   "empty": "暂无数据",
   "loading": "加载中…",
   "filter_hint": "筛选…",
+  "filterSort": {
+    "title": "筛选与排序",
+    "sortBy": "排序"
+  },
   "chip_more": "+{n} 更多",
   "chip_collapse": "收起",
   "footer": {

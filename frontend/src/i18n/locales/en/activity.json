@@ -3,6 +3,7 @@
   "total": "{n} total",
   "empty": "No activity yet",
   "emptyFiltered": "No matching activity found",
+  "searchPlaceholder": "Search event / user / IP…",
   "filter": {
     "all": "All",
     "label": "Type",

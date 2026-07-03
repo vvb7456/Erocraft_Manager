@@ -23,17 +23,6 @@
     "failed": "Failed to load standard plan details"
   },
   "searchPlaceholder": "Search servers...",
-  "scope": {
-    "all": "Show all servers"
-  },
-  "batch": {
-    "selectAction": "Select action",
-    "execute": "Execute",
-    "selected": "{n} selected",
-    "resultAllOk": "All {total} server actions dispatched",
-    "resultPartial": "Succeeded {ok}/{total}, failed: {names}",
-    "resultAllFail": "All {total} failed: {names}"
-  },
   "pagination": {
     "perPage": "/ page"
   },

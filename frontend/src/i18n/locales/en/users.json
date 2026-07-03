@@ -1,6 +1,7 @@
 {
   "title": "User List",
   "search_placeholder": "Search username or email…",
+  "total": "{n} users",
   "filter": {
     "label": "Servers",
     "all": "All",

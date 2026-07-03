@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useAppStore } from '@/stores/app'
@@ -9,6 +9,8 @@ import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import Badge from '@/components/ui/Badge.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
+import MsIcon from '@/components/ui/MsIcon.vue'
 
 defineOptions({ name: 'ActivityLogsPage' })
 
@@ -160,6 +162,27 @@ function detailLabel(log: LogItem): string {
 }
 
 const statusOptions = ['success', 'failed', 'partial', 'info']
+
+// ── Mobile filter sheet ──
+const mobileFilterOpen = ref(false)
+const filterGroups = computed(() => [
+  {
+    key: 'category',
+    label: t('logs.filter.category'),
+    modelValue: filterCategory.value,
+    options: [{ value: '', label: t('logs.filter.all') }, ...categoryOptions.value.map(c => ({ value: c, label: categoryLabel(c) }))],
+  },
+  {
+    key: 'status',
+    label: t('logs.filter.status'),
+    modelValue: filterStatus.value,
+    options: [{ value: '', label: t('logs.filter.all') }, ...statusOptions.map(s => ({ value: s, label: t(`logs.status_label.${s}`) }))],
+  },
+])
+function onMobileFilter(groupKey: string, value: string | number | boolean) {
+  if (groupKey === 'category') filterCategory.value = String(value)
+  else if (groupKey === 'status') filterStatus.value = String(value)
+}
 </script>
 
 <template>
@@ -169,17 +192,24 @@ const statusOptions = ['success', 'failed', 'partial', 'info']
     <!-- Filters -->
     <SectionToolbar>
       <template #start>
-        <div class="toolbar-start-row">
+        <div class="tb-search-row">
           <FilterInput
             v-model="filterActor"
             :placeholder="t('logs.filter.actorPlaceholder')"
-            class="logs-filter-input tb-search"
+            class="tb-search"
           />
-          <span class="toolbar-status tb-status">{{ t('logs.total', { n: totalCount }) }}</span>
+          <button
+            class="tb-filter-btn"
+            :title="t('common.filterSort.title')"
+            @click="mobileFilterOpen = true"
+          >
+            <MsIcon name="tune" size="sm" />
+          </button>
         </div>
+        <span class="toolbar-status tb-status">{{ t('logs.total', { n: totalCount }) }}</span>
       </template>
       <template #end>
-        <div class="tb-select-group">
+        <div class="tb-select-group tb-desktop-only">
           <BaseSelect
             v-model="filterCategory"
             :options="[{ value: '', label: t('logs.filter.all') }, ...categoryOptions.map(c => ({ value: c, label: categoryLabel(c) }))]"
@@ -197,6 +227,16 @@ const statusOptions = ['success', 'failed', 'partial', 'info']
         </div>
       </template>
     </SectionToolbar>
+
+    <!-- Mobile filter sheet -->
+    <MobileFilterSheet
+      v-model:open="mobileFilterOpen"
+      :sort-columns="[]"
+      :sort-by="''"
+      :sort-order="'asc'"
+      :filters="filterGroups"
+      @update:filter="onMobileFilter"
+    />
 
     <!-- Table -->
     <DataTable
@@ -254,26 +294,6 @@ const statusOptions = ['success', 'failed', 'partial', 'info']
 .col-action { width: 13%; white-space: nowrap; }
 .col-status { width: 7%; white-space: nowrap; }
 .col-details { width: 56%; }
-
-.toolbar-start-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  min-width: 0;
-}
-
-.logs-filter-input {
-  width: min(320px, 72vw);
-}
-
-@media (max-width: 768px) {
-  .toolbar-start-row {
-    width: 100%;
-  }
-  .logs-filter-input {
-    width: 100%;
-  }
-}
 
 .details-text {
   word-break: break-all;

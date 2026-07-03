@@ -1,9 +1,6 @@
 {
   "title": "服务器详情",
   "loading": "正在加载服务器详情…",
-  "controls": {
-    "openConsole": "控制台"
-  },
   "status": {
     "running": "运行中",
     "starting": "启动中",
@@ -47,7 +44,8 @@
       "cpuUsage": "CPU",
       "memoryUsage": "内存",
       "diskUsage": "磁盘",
-      "network": "网络"
+      "network": "网络",
+      "powerState": "电源状态"
     },
     "spark": {
       "cpu": "CPU 5min",
@@ -63,7 +61,8 @@
     "daysLeft": "剩 {n} 天",
     "copy": "复制",
     "copied": "已复制",
-    "copyFailed": "复制失败"
+    "copyFailed": "复制失败",
+    "openConsole": "打开控制台"
   },
   "settings": {
     "saved": "已保存",

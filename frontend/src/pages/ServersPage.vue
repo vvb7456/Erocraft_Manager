@@ -17,6 +17,7 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import NumberInput from '@/components/form/NumberInput.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import CardKV from '@/components/ui/CardKV.vue'
 import FormField from '@/components/form/FormField.vue'
@@ -487,6 +488,32 @@ function openMobileRenew(s: ServerItem) {
   mobileRenewServer.value = s
   mobileRenewOpen.value = true
 }
+
+// ── Mobile filter sheet ──
+const mobileFilterOpen = ref(false)
+const sortColumns = computed(() => [
+  { key: 'id', label: t('servers.table.id') },
+  { key: 'server_name', label: t('servers.table.name') },
+  { key: 'owner_username', label: t('servers.table.owner') },
+  { key: 'expiration_date', label: t('servers.table.expiration') },
+])
+const filterGroups = computed(() => [
+  {
+    key: 'status',
+    label: t('servers.filter.label'),
+    modelValue: filterStatus.value,
+    options: statusOptions.value,
+  },
+])
+function onMobileSort(col: string) {
+  toggleSort(col)
+}
+function onMobileFilter(groupKey: string, value: string | number | boolean) {
+  if (groupKey === 'status') {
+    filterStatus.value = String(value)
+    page.value = 1
+  }
+}
 </script>
 
 <template>
@@ -525,23 +552,32 @@ function openMobileRenew(s: ServerItem) {
     <!-- Toolbar -->
     <SectionToolbar>
       <template #start>
-        <FilterInput
-          v-model="searchTerm"
-          :placeholder="t('servers.search_placeholder')"
-          class="servers-filter-input tb-search"
-          @update:modelValue="page = 1"
-        />
+        <div class="tb-search-row">
+          <FilterInput
+            v-model="searchTerm"
+            :placeholder="t('servers.search_placeholder')"
+            class="tb-search"
+            @update:modelValue="page = 1"
+          />
+          <button
+            class="tb-filter-btn"
+            :title="t('common.filterSort.title')"
+            @click="mobileFilterOpen = true"
+          >
+            <MsIcon name="tune" size="sm" />
+          </button>
+        </div>
+      </template>
+      <template #end>
+        <div class="tb-select-group tb-desktop-only">
+          <BaseSelect v-model="filterStatus" :options="statusOptions" :prefix="t('servers.filter.label') + ': '" size="sm" fit @update:modelValue="page = 1" />
+        </div>
         <div class="batch-controls tb-batch">
           <BaseSelect v-model="batchActionType" :options="batchActionOptions" :placeholder="t('servers.batch.select_action')" size="sm" fit :disabled="selectedIds.size === 0" />
           <BaseButton size="sm" :disabled="selectedIds.size === 0 || !batchActionType" @click="executeBatchAction">
             <MsIcon name="play_arrow" size="xs" /> {{ t('servers.batch.execute') }}
           </BaseButton>
           <span v-if="selectedIds.size > 0" class="toolbar-status tb-status">{{ t('servers.batch.selected', { n: selectedIds.size }) }}</span>
-        </div>
-      </template>
-      <template #end>
-        <div class="tb-select-group">
-          <BaseSelect v-model="filterStatus" :options="statusOptions" :prefix="t('servers.filter.label') + ': '" size="sm" fit @update:modelValue="page = 1" />
         </div>
         <div class="tb-btn-group">
           <BaseButton size="sm" variant="primary" @click="createModalOpen = true">
@@ -550,6 +586,17 @@ function openMobileRenew(s: ServerItem) {
         </div>
       </template>
     </SectionToolbar>
+
+    <!-- Mobile filter & sort sheet -->
+    <MobileFilterSheet
+      v-model:open="mobileFilterOpen"
+      :sort-columns="sortColumns"
+      :sort-by="sortBy"
+      :sort-order="sortOrder"
+      :filters="filterGroups"
+      @sort="onMobileSort"
+      @update:filter="onMobileFilter"
+    />
 
     <!-- Table -->
     <DataTable
@@ -728,18 +775,6 @@ function openMobileRenew(s: ServerItem) {
 </template>
 
 <style scoped>
-.servers-filter-input {
-  flex: 1;
-  max-width: 280px;
-}
-
-@media (max-width: 768px) {
-  .servers-filter-input {
-    max-width: none;
-    width: 100%;
-  }
-}
-
 .row-selected {
   background: color-mix(in srgb, var(--ac) 8%, transparent) !important;
 }

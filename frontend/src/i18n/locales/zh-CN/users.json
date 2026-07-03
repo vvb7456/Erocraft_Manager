@@ -1,6 +1,7 @@
 {
   "title": "用户列表",
   "search_placeholder": "搜索用户名或邮箱…",
+  "total": "共 {n} 人",
   "filter": {
     "label": "服务器",
     "all": "全部",

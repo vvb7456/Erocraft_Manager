@@ -20,6 +20,7 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import CardKV from '@/components/ui/CardKV.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import FormField from '@/components/form/FormField.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
@@ -65,10 +66,9 @@ const items = ref<Coupon[]>([])
 const total = ref(0)
 const tableLoading = ref(false)
 
-const userIdFilter = ref<string>('')
 const statusFilter = ref<string>('all')
 const templateFilter = ref<string>('all')
-const codeFilter = ref<string>('')
+const searchQuery = ref<string>('')
 
 const limit = ref(50)
 const offset = ref(0)
@@ -92,6 +92,27 @@ const templateOptions = computed(() => [
   { value: 'all', label: t('billing.admin.coupons.filterAllTemplate') },
   ...templates.value.map((tpl) => ({ value: String(tpl.id), label: `${tpl.code} · ${tpl.name}` })),
 ])
+
+// ── Mobile filter sheet ──
+const mobileFilterOpen = ref(false)
+const filterGroups = computed(() => [
+  {
+    key: 'status',
+    label: t('billing.admin.coupons.statusFilterLabel'),
+    modelValue: statusFilter.value,
+    options: statusOptions.value,
+  },
+  {
+    key: 'template',
+    label: t('billing.admin.coupons.templateFilterLabel'),
+    modelValue: templateFilter.value,
+    options: templateOptions.value,
+  },
+])
+function onMobileFilter(groupKey: string, value: string | number | boolean) {
+  if (groupKey === 'status') statusFilter.value = String(value)
+  else if (groupKey === 'template') templateFilter.value = String(value)
+}
 
 function statusColor(s: string): string {
   switch (s) {
@@ -122,10 +143,9 @@ function fmtDate(s: string | null): string {
 async function loadList() {
   tableLoading.value = true
   const qs = new URLSearchParams()
-  if (userIdFilter.value.trim()) qs.set('user_id', userIdFilter.value.trim())
+  if (searchQuery.value.trim()) qs.set('q', searchQuery.value.trim())
   if (statusFilter.value !== 'all') qs.set('status', statusFilter.value)
   if (templateFilter.value !== 'all') qs.set('template_id', templateFilter.value)
-  if (codeFilter.value.trim()) qs.set('code', codeFilter.value.trim().toUpperCase())
   qs.set('limit', String(limit.value))
   qs.set('offset', String(offset.value))
   const data = await get<{ items: Coupon[]; total: number }>(
@@ -150,7 +170,7 @@ onMounted(async () => {
   if (props.initialAction === 'grant') grantOpen.value = true
 })
 
-watch([userIdFilter, statusFilter, templateFilter, codeFilter], () => {
+watch([searchQuery, statusFilter, templateFilter], () => {
   offset.value = 0
   void loadList()
 })
@@ -273,22 +293,26 @@ async function doGrant() {
 <template>
   <SectionToolbar>
     <template #start>
-      <FilterInput
-        v-model="codeFilter"
-        :placeholder="t('billing.admin.coupons.codePlaceholder')"
-        class="tb-search"
-      />
-      <FilterInput
-        v-model="userIdFilter"
-        :placeholder="t('billing.admin.coupons.userIdPlaceholder')"
-        class="tb-search tb-search--narrow"
-      />
+      <div class="tb-search-row">
+        <FilterInput
+          v-model="searchQuery"
+          :placeholder="t('billing.admin.coupons.searchPlaceholder')"
+          class="tb-search"
+        />
+        <button
+          class="tb-filter-btn"
+          :title="t('common.filterSort.title')"
+          @click="mobileFilterOpen = true"
+        >
+          <MsIcon name="tune" size="sm" />
+          </button>
+      </div>
       <span class="toolbar-status tb-status">
         {{ t('billing.admin.coupons.totalCount', { n: total }) }}
       </span>
     </template>
     <template #end>
-      <div class="tb-select-group">
+      <div class="tb-select-group tb-desktop-only">
         <BaseSelect
           v-model="statusFilter"
           :options="statusOptions"
@@ -311,6 +335,15 @@ async function doGrant() {
       </div>
     </template>
   </SectionToolbar>
+
+  <MobileFilterSheet
+    v-model:open="mobileFilterOpen"
+    :sort-columns="[]"
+    :sort-by="''"
+    :sort-order="'asc'"
+    :filters="filterGroups"
+    @update:filter="onMobileFilter"
+  />
 
   <DataTable
     :items="items"
@@ -439,7 +472,6 @@ code {
   color: var(--t1);
 }
 .name-sub { color: var(--t3); font-size: var(--text-xs); margin-top: 2px; }
-.tb-search--narrow { max-width: 160px; }
 .card-name { font-weight: 600; font-size: .92rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-id-inline { font-size: .78rem; font-weight: 400; color: var(--t3); margin-left: var(--sp-1); }
 .grant-form { display: flex; flex-direction: column; gap: var(--sp-3); }

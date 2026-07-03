@@ -25,6 +25,7 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 
 defineOptions({ name: 'OrdersTab' })
 
@@ -142,6 +143,36 @@ const sortedOrders = computed(() => {
   return list
 })
 
+// ── Mobile filter sheet ──
+const mobileFilterOpen = ref(false)
+const sortColumns = computed(() => [
+  { key: 'created_at', label: t('billing.admin.orders.col.time') },
+  { key: 'order_no', label: t('billing.admin.orders.col.orderNo') },
+  { key: 'total_fen', label: t('billing.admin.orders.col.amount') },
+  { key: 'user_id', label: t('billing.admin.orders.col.user') },
+])
+const filterGroups = computed(() => [
+  {
+    key: 'status',
+    label: t('billing.admin.orders.filterStatusPrefix'),
+    modelValue: statusFilter.value,
+    options: statusOptions,
+  },
+  {
+    key: 'kind',
+    label: t('billing.admin.orders.filterKindPrefix'),
+    modelValue: kindFilter.value,
+    options: kindOptions,
+  },
+])
+function onMobileSort(col: string) {
+  toggleSort(col)
+}
+function onMobileFilter(groupKey: string, value: string | number | boolean) {
+  if (groupKey === 'status') statusFilter.value = String(value)
+  else if (groupKey === 'kind') kindFilter.value = String(value)
+}
+
 // ── Display helpers ──
 function fenToYuan(fen: number): string { return (fen / 100).toFixed(2) }
 
@@ -220,17 +251,26 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
 <template>
   <SectionToolbar>
     <template #start>
-      <FilterInput
-        v-model="searchTerm"
-        :placeholder="t('billing.admin.orders.searchPlaceholder')"
-        class="orders-filter-input tb-search"
-      />
+      <div class="tb-search-row">
+        <FilterInput
+          v-model="searchTerm"
+          :placeholder="t('billing.admin.orders.searchPlaceholder')"
+            class="tb-search"
+        />
+        <button
+          class="tb-filter-btn"
+          :title="t('common.filterSort.title')"
+          @click="mobileFilterOpen = true"
+        >
+          <MsIcon name="tune" size="sm" />
+          </button>
+      </div>
       <span class="toolbar-count tb-status">
         {{ t('billing.admin.orders.totalCount', { n: totalCount }) }}
       </span>
     </template>
     <template #end>
-      <div class="tb-select-group">
+      <div class="tb-select-group tb-desktop-only">
         <BaseSelect
           v-model="statusFilter"
           :options="statusOptions"
@@ -248,6 +288,17 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
       </div>
     </template>
   </SectionToolbar>
+
+  <!-- Mobile filter & sort sheet -->
+  <MobileFilterSheet
+    v-model:open="mobileFilterOpen"
+    :sort-columns="sortColumns"
+    :sort-by="sortBy"
+    :sort-order="sortOrder"
+    :filters="filterGroups"
+    @sort="onMobileSort"
+    @update:filter="onMobileFilter"
+  />
 
   <div class="orders-table-wrap">
     <DataTable
@@ -460,10 +511,6 @@ code {
 
 <style>
 /* ── OrdersTab column widths (non-scoped — must pierce DataTable slot boundary) ── */
-.orders-filter-input {
-  width: 260px;
-}
-
 .orders-table-wrap .dt-table {
   table-layout: fixed;
 }

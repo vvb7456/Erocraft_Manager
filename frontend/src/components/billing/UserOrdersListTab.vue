@@ -20,6 +20,7 @@ import DataTable from '@/components/ui/DataTable.vue'
 import Badge from '@/components/ui/Badge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import SupportModal from '@/components/billing/SupportModal.vue'
@@ -123,6 +124,23 @@ const statusOptions = computed(() => [
   { value: 'closed', label: t('billing.orders.filter.closed') },
   { value: 'refunded', label: t('billing.orders.filter.refunded') },
 ])
+
+// ── Mobile filter sheet ──
+const mobileFilterOpen = ref(false)
+const filterGroups = computed(() => [
+  {
+    key: 'status',
+    label: t('billing.orders.filter.label'),
+    modelValue: statusFilter.value,
+    options: statusOptions.value,
+  },
+])
+function onMobileFilter(groupKey: string, value: string | number | boolean) {
+  if (groupKey === 'status') {
+    statusFilter.value = String(value)
+    page.value = 1
+  }
+}
 
 const filtered = computed(() => {
   let list = orders.value
@@ -244,11 +262,20 @@ onBeforeUnmount(() => {
 <template>
   <SectionToolbar>
     <template #start>
-      <FilterInput
-        v-model="searchTerm"
-        :placeholder="t('billing.orders.searchPlaceholder')"
-        class="filter-input tb-search"
-      />
+      <div class="tb-search-row">
+        <FilterInput
+          v-model="searchTerm"
+          :placeholder="t('billing.orders.searchPlaceholder')"
+          class="tb-search"
+        />
+        <button
+          class="tb-filter-btn"
+          :title="t('common.filterSort.title')"
+          @click="mobileFilterOpen = true"
+        >
+          <MsIcon name="tune" size="sm" />
+        </button>
+      </div>
       <span class="support-hint tb-help">
         {{ t('billing.orders.supportHint') }}
         <a href="#" class="support-link" @click.prevent="supportOpen = true">
@@ -257,7 +284,7 @@ onBeforeUnmount(() => {
       </span>
     </template>
     <template #end>
-      <div class="tb-select-group">
+      <div class="tb-select-group tb-desktop-only">
         <BaseSelect
           v-model="statusFilter"
           :options="statusOptions"
@@ -268,6 +295,15 @@ onBeforeUnmount(() => {
       </div>
     </template>
   </SectionToolbar>
+
+  <MobileFilterSheet
+    v-model:open="mobileFilterOpen"
+    :sort-columns="[]"
+    :sort-by="''"
+    :sort-order="'asc'"
+    :filters="filterGroups"
+    @update:filter="onMobileFilter"
+  />
 
   <DataTable
     :items="paginated"
@@ -368,11 +404,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.filter-input {
-  flex: 1;
-  max-width: 280px;
-}
-
 .action-group {
   display: flex;
   gap: var(--sp-2);

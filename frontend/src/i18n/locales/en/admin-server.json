@@ -1,9 +1,6 @@
 {
   "title": "Server detail",
   "loading": "Loading server detail…",
-  "controls": {
-    "openConsole": "Console"
-  },
   "status": {
     "running": "Running",
     "starting": "Starting",
@@ -47,7 +44,8 @@
       "cpuUsage": "CPU",
       "memoryUsage": "MEM",
       "diskUsage": "DISK",
-      "network": "NET"
+      "network": "NET",
+      "powerState": "Power"
     },
     "spark": {
       "cpu": "CPU 5min",
@@ -63,7 +61,8 @@
     "daysLeft": "{n}d left",
     "copy": "Copy",
     "copied": "Copied",
-    "copyFailed": "Copy failed"
+    "copyFailed": "Copy failed",
+    "openConsole": "Open console"
   },
   "settings": {
     "saved": "Saved",

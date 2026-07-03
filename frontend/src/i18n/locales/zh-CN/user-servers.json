@@ -23,17 +23,6 @@
     "failed": "加载标准套餐信息失败"
   },
   "searchPlaceholder": "搜索服务器...",
-  "scope": {
-    "all": "显示全部服务器"
-  },
-  "batch": {
-    "selectAction": "选择操作",
-    "execute": "执行",
-    "selected": "已选择 {n} 项",
-    "resultAllOk": "所有 {total} 台服务器操作已下发",
-    "resultPartial": "成功 {ok}/{total}，失败：{names}",
-    "resultAllFail": "全部 {total} 台失败：{names}"
-  },
   "pagination": {
     "perPage": "条/页"
   },

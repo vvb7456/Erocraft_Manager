@@ -7,7 +7,6 @@ import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { useServerResourceStore } from '@/stores/serverResources'
 import { usePowerPendingStore, type PowerAction } from '@/stores/powerPending'
-import { useAppStore } from '@/stores/app'
 import { getEggMeta, hasWebUi } from '@/config/eggRegistry'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
@@ -17,13 +16,11 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import Badge from '@/components/ui/Badge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import BaseSelect from '@/components/form/BaseSelect.vue'
 import StatCard from '@/components/ui/StatCard.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import UsageBar from '@/components/ui/UsageBar.vue'
-import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { getStatusDotKey, getStatusColor } from '@/utils/status'
 import { useRenewFlow } from '@/composables/useRenewFlow'
 import CreateOrderModal from '@/components/CreateOrderModal.vue'
@@ -35,7 +32,6 @@ const router = useRouter()
 const { get } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
-const app = useAppStore()
 const resourceStore = useServerResourceStore()
 const pendingStore = usePowerPendingStore()
 
@@ -66,92 +62,6 @@ const initialLoading = ref(true)
 const searchTerm = ref('')
 const page = ref(1)
 const perPage = ref(20)
-const showAllServers = ref(false)
-const canShowAllServers = computed(() => app.isAdmin)
-
-// ── Selection & batch ──
-const selectedIds = ref<Set<number>>(new Set())
-const batchActionType = ref('')
-const batchActionOptions = computed(() => [
-  { value: 'start', label: t('userServers.power.start') },
-  { value: 'restart', label: t('userServers.power.restart') },
-  { value: 'stop', label: t('userServers.power.stop') },
-  { value: 'kill', label: t('userServers.power.kill') },
-])
-
-const allSelected = computed({
-  get: () => paginated.value.length > 0 && paginated.value.every(s => selectedIds.value.has(s.id)),
-  set: (v: boolean) => {
-    const s = new Set(selectedIds.value)
-    if (v) {
-      paginated.value.forEach(srv => s.add(srv.id))
-    } else {
-      paginated.value.forEach(srv => s.delete(srv.id))
-    }
-    selectedIds.value = s
-  },
-})
-
-function toggleSelect(id: number) {
-  const s = new Set(selectedIds.value)
-  if (s.has(id)) s.delete(id)
-  else s.add(id)
-  selectedIds.value = s
-}
-
-async function executeBatchAction() {
-  const ids = [...selectedIds.value]
-  if (!ids.length || !batchActionType.value) return
-  const action = batchActionType.value
-  if (action === 'restart' || action === 'stop' || action === 'kill') {
-    const msgKey = action === 'restart' ? 'confirmRestart' : action === 'stop' ? 'confirmStop' : 'confirmKill'
-    const ok = await confirm({
-      title: t(action === 'kill' ? 'common.confirm.dangerTitle' : 'common.confirm.title'),
-      message: t(`userServers.power.${msgKey}`),
-      confirmText: t(`userServers.power.${action}`),
-      variant: action === 'kill' ? 'danger' : 'default',
-    })
-    if (!ok) return
-  }
-  const actionTyped = action as PowerAction
-  // Filter: skip servers with pending actions, and skip servers in inapplicable states
-  const allowedIds = ids.filter(id => {
-    if (!pendingStore.isActionAllowed(id, actionTyped)) return false
-    const state = resourceStore.getState(id)
-    if (actionTyped === 'start' && state !== 'offline' && state !== 'stopped') return false
-    if ((actionTyped === 'stop' || actionTyped === 'restart') && state !== 'running') return false
-    if (actionTyped === 'kill' && state !== 'running' && state !== 'stopping') return false
-    return true
-  })
-  if (!allowedIds.length) return
-  // Suppress per-server toasts (pass undefined for toastFn) so we can present
-  // a single aggregated summary at the end. (Audit FM6.)
-  const results = await Promise.allSettled(
-    allowedIds.map(id => pendingStore.sendPower(id, actionTyped, undefined)),
-  )
-  const failedIds: number[] = []
-  results.forEach((r, idx) => {
-    const id = allowedIds[idx]
-    if (r.status === 'rejected') failedIds.push(id)
-    else if (r.value !== null) failedIds.push(id)  // PowerError returned
-  })
-  const total = allowedIds.length
-  const okCount = total - failedIds.length
-  if (failedIds.length === 0) {
-    toast(t('userServers.batch.resultAllOk', { total }), 'success')
-  } else {
-    const failedNames = failedIds
-      .map(id => servers.value.find(s => s.id === id)?.name ?? `#${id}`)
-      .join('、')
-    if (okCount === 0) {
-      toast(t('userServers.batch.resultAllFail', { total, names: failedNames }), 'error')
-    } else {
-      toast(t('userServers.batch.resultPartial', { ok: okCount, total, names: failedNames }), 'warning')
-    }
-  }
-  selectedIds.value = new Set()
-  batchActionType.value = ''
-}
 
 // ── Summary stats ──
 const totalServers = computed(() => servers.value.length)
@@ -176,24 +86,9 @@ const paginated = computed(() => {
   return filteredServers.value.slice(start, start + perPage.value)
 })
 
-function pruneSelectionToCurrentPage() {
-  const pageIds = new Set(paginated.value.map((server) => server.id))
-  const next = new Set(
-    [...selectedIds.value].filter((id) => pageIds.has(id)),
-  )
-  if (next.size !== selectedIds.value.size) {
-    selectedIds.value = next
-  }
-  if (selectedIds.value.size === 0) {
-    batchActionType.value = ''
-  }
-}
-
-watch(paginated, pruneSelectionToCurrentPage, { immediate: true })
-
 // ── Load data ──
 async function loadServers() {
-  const scope = canShowAllServers.value && showAllServers.value ? 'all' : 'owner'
+  const scope = 'owner'
   const data = await get<Server[]>(`/api/user/servers?scope=${scope}`)
   if (data) {
     servers.value = data
@@ -226,13 +121,6 @@ watch(hasInstalling, (val) => {
     installPollTimer = null
   }
 }, { immediate: true })
-
-watch(showAllServers, () => {
-  page.value = 1
-  selectedIds.value = new Set()
-  batchActionType.value = ''
-  loadServers()
-})
 
 // ── Helpers ──
 function liveState(s: Server): string {
@@ -493,20 +381,7 @@ function openMobileAction(s: Server) {
     <!-- Toolbar -->
     <SectionToolbar>
       <template #start>
-        <FilterInput v-model="searchTerm" :placeholder="t('userServers.searchPlaceholder')" class="filter-input tb-search" @update:modelValue="selectedIds = new Set()" />
-        <div class="batch-controls tb-batch">
-          <BaseSelect v-model="batchActionType" :options="batchActionOptions" :placeholder="t('userServers.batch.selectAction')" size="sm" fit :disabled="selectedIds.size === 0" />
-          <BaseButton size="sm" :disabled="selectedIds.size === 0 || !batchActionType" @click="executeBatchAction">
-            <MsIcon name="play_arrow" size="xs" /> {{ t('userServers.batch.execute') }}
-          </BaseButton>
-          <span v-if="selectedIds.size > 0" class="toolbar-status tb-status">{{ t('userServers.batch.selected', { n: selectedIds.size }) }}</span>
-        </div>
-      </template>
-      <template #end>
-        <div v-if="canShowAllServers" class="scope-switch tb-btn-group">
-          <span class="scope-switch__label">{{ t('userServers.scope.all') }}</span>
-          <ToggleSwitch v-model="showAllServers" size="sm" />
-        </div>
+        <FilterInput v-model="searchTerm" :placeholder="t('userServers.searchPlaceholder')" class="tb-search" />
       </template>
     </SectionToolbar>
 
@@ -537,9 +412,6 @@ function openMobileAction(s: Server) {
       </template>
 
       <template #header>
-        <th class="col-check">
-          <input type="checkbox" v-model="allSelected" />
-        </th>
         <th class="col-dot"></th>
         <th class="col-name">{{ t('userServers.table.name') }}</th>
         <th class="col-plan">{{ t('userServers.table.plan') }}</th>
@@ -554,9 +426,6 @@ function openMobileAction(s: Server) {
       </template>
 
       <template #row="{ item: s }">
-        <td class="col-check">
-          <input type="checkbox" :checked="selectedIds.has(s.id)" @change="toggleSelect(s.id)" />
-        </td>
         <td class="col-dot">
           <StatusDot :status="statusDotKeyFor(s)" size="sm" />
         </td>
@@ -740,37 +609,7 @@ function openMobileAction(s: Server) {
   margin-bottom: var(--sp-4);
 }
 
-.filter-input {
-  flex: 1;
-  max-width: 280px;
-}
-
-.scope-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-
-.scope-switch__label {
-  font-size: .8rem;
-  color: var(--t2);
-  white-space: nowrap;
-}
-
-@media (max-width: 768px) {
-  .scope-switch {
-    justify-content: space-between;
-    width: 100%;
-  }
-  /* SectionToolbar 移动端会让 .tb-btn-group > * 平分行宽，
-     此处取消该行为，让 label 自适应、Switch 贴右。 */
-  .scope-switch > * {
-    flex: 0 0 auto;
-  }
-}
-
 /* ── Table columns ── */
-.col-check { width: 1%; text-align: center !important; vertical-align: middle; }
 .col-dot { width: 1%; text-align: center !important; vertical-align: middle; }
 .col-name { width: 13%; }
 .col-plan { width: 8%; color: var(--t2); }
@@ -985,11 +824,6 @@ function openMobileAction(s: Server) {
 
   .summary-row :deep(.stat-card) {
     padding: var(--sp-2) var(--sp-3);
-  }
-
-  .filter-input {
-    max-width: none;
-    width: 100%;
   }
 
   :deep(.dt-footer) {
