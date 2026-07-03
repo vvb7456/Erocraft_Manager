@@ -116,8 +116,14 @@ async def create_token(
     remain_quota: int,
     model_limits: str | None = None,
     expired_time: int = -1,
-) -> dict[str, Any]:
-    """Create a NewAPI token under the pool user. Returns the raw API response."""
+) -> int:
+    """Create a NewAPI token under the pool user and return its id.
+
+    NewAPI's ``POST /api/token/`` returns only ``{"success":true}`` without
+    the created token id, so a follow-up search by exact name is required
+    to obtain it. Callers MUST use a unique ``name`` (e.g. with a random
+    suffix) so the search result is unambiguous.
+    """
     settings = await _read_llm_settings(db)
     _check_configured(settings)
     body: dict[str, Any] = {
@@ -130,16 +136,27 @@ async def create_token(
         "allow_ips": "",
         "group": "default",
     }
-    return await _request(
+    await _request(
         "POST",
         f"{_base_url(settings)}/api/token/",
         headers=_pool_user_headers(settings),
         json_body=body,
     )
+    token_id = await find_token_by_name(db, name)
+    if token_id is None:
+        raise NewApiError(
+            f"create_token succeeded but token '{name}' not found via search"
+        )
+    return token_id
 
 
 async def find_token_by_name(db: Any, name: str) -> int | None:
-    """Search for a token by exact name. Returns the token id or None."""
+    """Search for a token by exact name. Returns the token id or None.
+
+    Raises ``NewApiError`` if multiple tokens share the same name — this
+    indicates a caller bug (non-unique name) that must be fixed, not
+    silently masked.
+    """
     settings = await _read_llm_settings(db)
     _check_configured(settings)
     data = await _request(
@@ -148,10 +165,15 @@ async def find_token_by_name(db: Any, name: str) -> int | None:
         headers=_pool_user_headers(settings),
     )
     items = data.get("data", {}).get("items", [])
-    for item in items:
-        if item.get("name") == name:
-            return int(item["id"])
-    return None
+    matches = [int(item["id"]) for item in items if item.get("name") == name]
+    if not matches:
+        return None
+    if len(matches) > 1:
+        raise NewApiError(
+            f"multiple tokens found with name '{name}' (ids: {matches}) — "
+            "token name must be unique"
+        )
+    return matches[0]
 
 
 async def get_token_key(db: Any, token_id: int) -> str:

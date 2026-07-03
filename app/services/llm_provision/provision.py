@@ -13,6 +13,7 @@ materializing the API key / endpoint / model into the container.
 from __future__ import annotations
 
 import logging
+import secrets
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,18 +81,13 @@ async def provision_for_server(
         logger.info("updated LLM key for server %s (active)", server_id)
         return existing
 
-    token_name = f"srv_{server_id}"
-    await newapi_client.create_token(
+    token_name = f"srv_{server_id}_{secrets.token_hex(4)}"
+    token_id = await newapi_client.create_token(
         db,
         name=token_name,
         remain_quota=quota_grant,
         model_limits=model_limits,
     )
-    token_id = await newapi_client.find_token_by_name(db, token_name)
-    if not token_id:
-        raise newapi_client.NewApiError(
-            f"create_token succeeded but token '{token_name}' not found"
-        )
 
     api_key = await newapi_client.get_token_key(db, token_id)
 
@@ -205,6 +201,7 @@ async def admin_update_key(
 
     row.quota_grant = new_grant
     row.model_limits = new_models
+    row.quota_available = max(0, new_grant - row.quota_used)
     await db.flush()
     await log_manager_activity(
         db,
@@ -240,24 +237,21 @@ async def admin_reset_key(db: AsyncSession, server_id: int, *, actor: str = "adm
     except Exception:  # noqa: BLE001
         logger.warning("reset: failed to delete old token %s for server %s", old_token_id, server_id, exc_info=True)
 
-    token_name = f"srv_{server_id}"
+    token_name = f"srv_{server_id}_{secrets.token_hex(4)}"
     try:
-        await newapi_client.create_token(
+        token_id = await newapi_client.create_token(
             db,
             name=token_name,
             remain_quota=row.quota_grant,
             model_limits=row.model_limits,
         )
-        new_token_id = await newapi_client.find_token_by_name(db, token_name)
-        if not new_token_id:
-            raise LlmAdminError(f"create_token succeeded but token '{token_name}' not found")
-        api_key = await newapi_client.get_token_key(db, new_token_id)
-    except LlmAdminError:
+        api_key = await newapi_client.get_token_key(db, token_id)
+    except newapi_client.NewApiError:
         raise
     except Exception as exc:  # noqa: BLE001
         raise LlmAdminError(f"NewAPI create failed: {exc}") from exc
 
-    row.newapi_token_id = new_token_id
+    row.newapi_token_id = token_id
     row.api_key = f"sk-{api_key}"
     if row.status == "revoked":
         row.status = "active"
@@ -268,9 +262,9 @@ async def admin_reset_key(db: AsyncSession, server_id: int, *, actor: str = "adm
         category="server",
         status="success",
         detail_key="llm.admin.reset",
-        detail_params={"server_id": server_id, "old_token_id": old_token_id, "token_id": new_token_id},
+        detail_params={"server_id": server_id, "old_token_id": old_token_id, "token_id": token_id},
     )
-    logger.info("admin reset LLM key for server %s: %s -> %s", server_id, old_token_id, new_token_id)
+    logger.info("admin reset LLM key for server %s: %s -> %s", server_id, old_token_id, token_id)
     return row
 
 

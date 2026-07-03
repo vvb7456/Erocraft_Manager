@@ -95,9 +95,7 @@ async def sync_all_states(db: AsyncSession) -> None:
         target_status = "active"
         if server is None:
             target_status = "revoked"
-        elif server.is_suspended or server.status == "installing":
-            target_status = "disabled"
-        elif server.status is not None and server.status != "running":
+        elif server.is_suspended:
             target_status = "disabled"
 
         if row.status in ("exhausted",):

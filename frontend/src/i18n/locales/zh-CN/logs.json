@@ -92,6 +92,8 @@
     "automated_suspend_noop": "任务完成，没有需要冻结的服务器。",
     "automated_suspend_finished": "任务完成，成功冻结了 {success} 台服务器，失败 {failed} 台。失败服务器: {failed_ids}",
     "automated_suspend_failed": "执行冻结任务时发生意外错误: {error}",
+    "automated_daily_lifecycle_started": "开始执行每日生命周期批处理任务。",
+    "automated_daily_lifecycle_finished": "每日生命周期批处理任务已完成。",
     "automated_delete_started": "开始执行自动删除任务。",
     "automated_delete_noop": "任务完成，没有需要删除的服务器。",
     "automated_delete_finished": "任务完成，成功删除了 {success} 台服务器，失败 {failed} 台。失败服务器: {failed_ids}",

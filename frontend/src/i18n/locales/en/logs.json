@@ -92,6 +92,8 @@
     "automated_suspend_noop": "Task complete. No servers need suspension.",
     "automated_suspend_finished": "Task complete. Suspended {success} servers, failed {failed}. Failed servers: {failed_ids}",
     "automated_suspend_failed": "Auto suspend task failed unexpectedly: {error}",
+    "automated_daily_lifecycle_started": "Started daily lifecycle batch task.",
+    "automated_daily_lifecycle_finished": "Daily lifecycle batch task complete.",
     "automated_delete_started": "Started auto delete task.",
     "automated_delete_noop": "Task complete. No servers need deletion.",
     "automated_delete_finished": "Task complete. Deleted {success} servers, failed {failed}. Failed servers: {failed_ids}",
