@@ -1,8 +1,7 @@
 """NewAPI management API client.
 
 Wraps the NewAPI HTTP API for user / subscription / token CRUD and
-usage queries. All requests use short-lived ``httpx.AsyncClient``
-instances with ``trust_env=False``.
+usage queries.
 
 Architecture (post 20260703_llm_sub):
   * **Admin token** — used for user CRUD, subscription plan CRUD,
@@ -11,12 +10,20 @@ Architecture (post 20260703_llm_sub):
     user (create / search / key / delete). Stored on ``ServerLlmKey``.
   * The old pool-user pattern is gone; each server gets its own NewAPI
     user with a native subscription.
+
+Performance: a module-level ``httpx.AsyncClient`` is kept alive for the
+process lifetime so that HTTP keep-alive reuses a single TLS connection
+across all NewAPI calls.  LLM settings are cached with a short TTL to
+avoid repeated DB reads.  Function signatures remain ``(db, ...)`` for
+backward compatibility — callers need no changes.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
+import urllib.parse
 from typing import Any
 
 import httpx
@@ -27,6 +34,14 @@ DEFAULT_TIMEOUT = 30.0
 _MAX_RETRIES = 5
 _RETRY_BASE_DELAY = 2.0  # seconds; doubles on each retry
 
+_SETTINGS_TTL = 30.0  # seconds — LLM settings cache lifetime
+
+# ── Module-level state ──
+
+_client: httpx.AsyncClient | None = None
+_settings_cache: dict[str, Any] | None = None
+_settings_cache_ts: float = 0.0
+
 
 class NewApiError(Exception):
     """Raised when a NewAPI management API call fails."""
@@ -36,12 +51,39 @@ class NewApiNotConfigured(NewApiError):
     """Raised when LLM/NewAPI settings are missing or incomplete."""
 
 
+# ── Client + settings helpers ──
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=DEFAULT_TIMEOUT, trust_env=False)
+    return _client
+
+
 async def _read_llm_settings(db: Any) -> dict[str, Any]:
-    """Load all LLM runtime settings from the settings store."""
+    """Load all LLM runtime settings, cached for ``_SETTINGS_TTL`` seconds."""
+    global _settings_cache, _settings_cache_ts
+    now = time.monotonic()
+    if _settings_cache is not None and (now - _settings_cache_ts) < _SETTINGS_TTL:
+        return _settings_cache
+
     from app.core.runtime_settings import LLM_SPECS, defaults_for
     from app.core.settings_store import get_settings_store
 
-    return await get_settings_store().get_many(db, defaults_for(LLM_SPECS))
+    _settings_cache = await get_settings_store().get_many(db, defaults_for(LLM_SPECS))
+    _settings_cache_ts = now
+    return _settings_cache
+
+
+async def close_client() -> None:
+    """Close the module-level client (called on app shutdown)."""
+    global _client, _settings_cache, _settings_cache_ts
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+    _client = None
+    _settings_cache = None
+    _settings_cache_ts = 0.0
 
 
 def _check_configured(settings: dict[str, Any]) -> None:
@@ -77,13 +119,22 @@ async def _request(
     *,
     headers: dict[str, str],
     json_body: dict[str, Any] | None = None,
-    timeout: float = DEFAULT_TIMEOUT,
 ) -> dict[str, Any]:
-    last_exc: Exception | None = None
+    client = _get_client()
     for attempt in range(_MAX_RETRIES + 1):
         try:
-            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-                resp = await client.request(method, url, headers=headers, json=json_body)
+            resp = await client.request(method, url, headers=headers, json=json_body)
+        except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadError) as exc:
+            # Stale keep-alive connection or transient network error —
+            # retry once; the connection pool will open a fresh connection.
+            if attempt < 2:
+                logger.warning(
+                    "NewAPI transport error on %s %s (attempt %d), retrying: %s",
+                    method, url.split("?")[0], attempt + 1, exc,
+                )
+                await asyncio.sleep(0.5)
+                continue
+            raise NewApiError(f"NewAPI request failed after retries: {exc}") from exc
         except httpx.HTTPError as exc:
             raise NewApiError(f"NewAPI request failed: {exc}") from exc
 
@@ -150,8 +201,6 @@ async def search_user_id(db: Any, username: str) -> int | None:
     """Search for a user by exact username. Returns the user id or None."""
     settings = await _read_llm_settings(db)
     _check_configured(settings)
-    import urllib.parse
-
     encoded = urllib.parse.quote(username)
     data = await _request(
         "GET",
@@ -211,8 +260,8 @@ async def login_and_gen_access_token(
     """Login as a user and generate their access token.
 
     NewAPI login uses session cookies; we then call ``GET /api/user/token``
-    to get the access token (char 32). Both calls use the session cookie
-    from login.
+    to get the access token (char 32). Uses a short-lived client to isolate
+    session cookies from the shared long-lived ``_client``.
     """
     settings = await _read_llm_settings(db)
     _check_configured(settings)

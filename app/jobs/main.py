@@ -25,6 +25,8 @@ async def run_jobs_process() -> None:
             await asyncio.sleep(3600)
     finally:
         scheduler.shutdown(wait=False)
+        from app.services.llm_provision.newapi_client import close_client
+        await close_client()
         await dispose_engine()
 
 

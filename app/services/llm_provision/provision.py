@@ -12,6 +12,7 @@ is entirely via the subscription (``subscription_only`` billing preference).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 from typing import Any
@@ -156,39 +157,53 @@ async def provision_for_server(
             db, username=username, password=password
         )
 
-        # Step 3: bind subscription (sets user.Group = plan.upgrade_group)
-        await newapi_client.bind_subscription(
-            db, user_id=newapi_user_id, plan_id=newapi_plan_id
-        )
-        subscription_id = await newapi_client.get_active_subscription_id(
-            db, newapi_user_id
-        )
-        if subscription_id is None:
-            raise newapi_client.NewApiError(
-                f"no active subscription found after bind (user_id={newapi_user_id})"
+        # Steps 3-4 (subscription) and Steps 5-6 (token) are independent
+        # — run them concurrently to halve the RTT wait.
+        # NOTE: both chains call newapi_client functions that read
+        # _read_llm_settings(db); this is safe because create_user +
+        # login above have already warmed the settings cache, so no
+        # DB access happens inside the gather.
+        async def _subscription_chain() -> int:
+            await newapi_client.bind_subscription(
+                db, user_id=newapi_user_id, plan_id=newapi_plan_id
             )
+            sub_id = await newapi_client.get_active_subscription_id(
+                db, newapi_user_id
+            )
+            if sub_id is None:
+                raise newapi_client.NewApiError(
+                    f"no active subscription found after bind (user_id={newapi_user_id})"
+                )
+            await newapi_client.set_billing_preference(
+                db,
+                access_token=access_token,
+                user_id=newapi_user_id,
+                preference="subscription_only",
+            )
+            return sub_id
 
-        # Step 4: set billing preference to subscription_only
-        await newapi_client.set_billing_preference(
-            db,
-            access_token=access_token,
-            user_id=newapi_user_id,
-            preference="subscription_only",
-        )
+        async def _token_chain() -> tuple[int, str]:
+            token_name = f"srv_{server_id}"
+            token_id = await newapi_client.create_token(
+                db,
+                access_token=access_token,
+                user_id=newapi_user_id,
+                name=token_name,
+                group="",
+                unlimited_quota=True,
+            )
+            api_key_raw = await newapi_client.get_token_key(
+                db, access_token=access_token, user_id=newapi_user_id, token_id=token_id
+            )
+            return token_id, api_key_raw
 
-        # Step 5: create token (unlimited_quota, no model_limits)
-        token_name = f"srv_{server_id}"
-        token_id = await newapi_client.create_token(
-            db,
-            access_token=access_token,
-            user_id=newapi_user_id,
-            name=token_name,
-            group="",
-            unlimited_quota=True,
+        sub_result, token_result = await asyncio.gather(
+            _subscription_chain(), _token_chain(), return_exceptions=True
         )
-        api_key_raw = await newapi_client.get_token_key(
-            db, access_token=access_token, user_id=newapi_user_id, token_id=token_id
-        )
+        if isinstance(sub_result, Exception) or isinstance(token_result, Exception):
+            raise sub_result if isinstance(sub_result, Exception) else token_result
+        subscription_id = sub_result
+        token_id, api_key_raw = token_result
     except Exception:
         # Rollback: delete the user (cascades to tokens + subscriptions)
         logger.warning(

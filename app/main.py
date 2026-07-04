@@ -28,6 +28,8 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         yield
+        from app.services.llm_provision.newapi_client import close_client
+        await close_client()
         await dispose_engine()
 
     app = FastAPI(
