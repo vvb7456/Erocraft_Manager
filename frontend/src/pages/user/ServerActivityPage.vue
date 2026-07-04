@@ -2,7 +2,7 @@
 import { ref, computed, watch, inject, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
-import { useAppStore } from '@/stores/app'
+import { useFormatDate } from '@/composables/useFormatDate'
 import { getEggMeta } from '@/config/eggRegistry'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -13,9 +13,9 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 
 defineOptions({ name: 'ServerActivityPage' })
 
-const { t, te, locale } = useI18n({ useScope: 'global' })
+const { t, te } = useI18n({ useScope: 'global' })
 const { get, loading } = useApiFetch()
-const appStore = useAppStore()
+const { formatDateTime: _formatDateTime } = useFormatDate()
 
 // ── Types ──
 interface ActivityActor {
@@ -139,16 +139,7 @@ function translateEvent(event: string): string {
 
 // ── Time formatting ──
 function formatDateTime(ts: string): string {
-  const d = new Date(ts.endsWith('Z') ? ts : ts + 'Z')
-  return d.toLocaleString(locale.value, {
-    timeZone: appStore.timezone,
-    hour12: false,
-    year: undefined,
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return _formatDateTime(ts.endsWith('Z') ? ts : ts + 'Z')
 }
 
 // ── Properties rendering ──

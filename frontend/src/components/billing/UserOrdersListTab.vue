@@ -13,6 +13,7 @@ import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
+import { useFormatDate } from '@/composables/useFormatDate'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
@@ -72,6 +73,7 @@ const router = useRouter()
 const { get, del } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
+const { formatDateTime: formatDate } = useFormatDate()
 
 const orders = ref<Order[]>([])
 const initialLoading = ref(true)
@@ -194,19 +196,6 @@ function statusColor(status: string): string {
 
 function statusLabel(status: string): string {
   return t(`billing.orders.status.${status}`)
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleString(undefined, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 
 function canCancel(o: Order): boolean {

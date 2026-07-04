@@ -374,6 +374,8 @@ async def update_plan(
         "duration_value": duration_value,
         "enabled": enabled,
         "sort_order": sort_order,
+        "allow_balance_pay": allow_balance_pay,
+        "allow_wallet_overflow": allow_wallet_overflow,
         "max_purchase_per_user": max_purchase_per_user,
         "total_amount": total_amount,
         "upgrade_group": upgrade_group,

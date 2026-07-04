@@ -11,6 +11,7 @@ import { computed, inject, onBeforeUnmount, onMounted, type Ref, ref } from 'vue
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
+import { useFormatDate } from '@/composables/useFormatDate'
 import { useToast } from '@/composables/useToast'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -20,7 +21,8 @@ import type { HostDetail } from '@/types/host'
 
 defineOptions({ name: 'HostOverviewPane' })
 
-const { t, locale } = useI18n({ useScope: 'global' })
+const { t } = useI18n({ useScope: 'global' })
+const { formatDateTime } = useFormatDate()
 const host = inject<Ref<HostDetail | null>>('hostDetail')!
 const { get, post } = useApiFetch()
 const { confirm } = useConfirm()
@@ -80,12 +82,8 @@ async function handleResolveAlert(alertId: number) {
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
-  try {
-    const hasTz = /Z|[+-]\d{2}:?\d{2}$/.test(iso)
-    return new Date(hasTz ? iso : iso + 'Z').toLocaleString(locale.value)
-  } catch {
-    return iso
-  }
+  const hasTz = /Z|[+-]\d{2}:?\d{2}$/.test(iso)
+  return formatDateTime(hasTz ? iso : iso + 'Z')
 }
 
 const enabledLabel = computed(() => {

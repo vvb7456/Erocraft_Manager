@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
-import { useAppStore } from '@/stores/app'
+import { useFormatDate } from '@/composables/useFormatDate'
 import type { StartupVar, EggSettingsProps, EggSettingsExpose } from './types'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
@@ -30,14 +30,7 @@ const router = useRouter()
 const { get, put, post, error: apiError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
-const appStore = useAppStore()
-
-function fmtTime(iso: string | null): string {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleString('zh-CN', { timeZone: appStore.timezone, hour12: false })
-  } catch { return iso }
-}
+const { formatDateTime: fmtTime } = useFormatDate()
 
 const reloadServer = inject<() => Promise<void>>('reloadServer')!
 

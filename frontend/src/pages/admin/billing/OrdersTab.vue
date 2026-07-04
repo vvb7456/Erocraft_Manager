@@ -15,7 +15,7 @@ import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
-import { useAppStore } from '@/stores/app'
+import { useFormatDate } from '@/composables/useFormatDate'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -46,7 +46,7 @@ const { get, post } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 const router = useRouter()
-const appStore = useAppStore()
+const { formatDateTime: formatTime } = useFormatDate()
 
 // ── Filters ──
 const searchTerm = ref('')
@@ -175,12 +175,6 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 
 // ── Display helpers ──
 function fenToYuan(fen: number): string { return (fen / 100).toFixed(2) }
-
-function formatTime(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleString('zh-CN', { timeZone: appStore.timezone, hour12: false })
-}
 
 function statusColor(s: string): string {
   switch (s) {

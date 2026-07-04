@@ -10,7 +10,7 @@ import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
-import { useAppStore } from '@/stores/app'
+import { useFormatDate } from '@/composables/useFormatDate'
 import { useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -82,7 +82,7 @@ const { get, post, loading } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 const router = useRouter()
-const appStore = useAppStore()
+const { formatDateTime: fmtTs } = useFormatDate()
 
 interface Incident {
   id: number; kind: string
@@ -131,16 +131,6 @@ function goServer(serverId: number, name: string | null) { close(); router.push(
 
 // ── Display helpers ──
 function fenToYuan(fen: number): string { return (fen / 100).toFixed(2) }
-
-function fmtTs(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString('zh-CN', { timeZone: appStore.timezone, hour12: false })
-}
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('zh-CN', { timeZone: appStore.timezone })
-}
 
 function statusColor(s: string): string {
   switch (s) {

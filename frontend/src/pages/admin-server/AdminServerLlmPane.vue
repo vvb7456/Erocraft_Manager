@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
-import { useAppStore } from '@/stores/app'
+import { useFormatDate } from '@/composables/useFormatDate'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -21,7 +21,7 @@ const { t } = useI18n({ useScope: 'global' })
 const { get, post, loading } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
-const appStore = useAppStore()
+const { formatDateTime: fmtTime } = useFormatDate()
 
 const serverId = inject<Ref<number | null>>('adminServerId')!
 const refreshTabState = inject<() => Promise<void>>('refreshAdminServerLlm', async () => {})
@@ -55,13 +55,6 @@ const usedPercent = computed(() => {
 
 function credits(v: number): string {
   return `$${(v / 500000).toFixed(2)}`
-}
-
-function fmtTime(iso: string | null): string {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleString('zh-CN', { timeZone: appStore.timezone, hour12: false })
-  } catch { return iso }
 }
 
 async function load() {

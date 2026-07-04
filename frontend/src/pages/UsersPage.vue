@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { useFormatDate } from '@/composables/useFormatDate'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -30,6 +31,7 @@ const router = useRouter()
 const { get, post, put, del, loading } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
+const { formatDate } = useFormatDate()
 
 // ── Types ──
 interface UserItem {
@@ -469,7 +471,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
           </router-link>
           <span v-else class="count-zero">0</span>
         </td>
-        <td class="col-created">{{ u.created_at ? new Date(u.created_at).toLocaleDateString() : '-' }}</td>
+        <td class="col-created">{{ formatDate(u.created_at) }}</td>
         <td class="col-inviter">
           <span v-if="u.inviter_username" :title="`#${u.inviter_user_id}`">{{ u.inviter_username }}</span>
           <span v-else class="count-zero">—</span>
@@ -505,7 +507,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
             <CardKV :label="t('users.table.server_count')">
               <span :class="u.server_count > 0 ? '' : 'count-zero'">{{ u.server_count }}</span>
             </CardKV>
-            <CardKV :label="t('users.table.created_at')">{{ u.created_at ? new Date(u.created_at).toLocaleDateString() : '-' }}</CardKV>
+            <CardKV :label="t('users.table.created_at')">{{ formatDate(u.created_at) }}</CardKV>
             <CardKV v-if="u.inviter_username" :label="t('users.table.inviter')">{{ u.inviter_username }}</CardKV>
           </div>
         </CardTap>

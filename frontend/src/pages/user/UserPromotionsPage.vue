@@ -13,6 +13,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useClipboard } from '@/composables/useClipboard'
+import { useFormatDate } from '@/composables/useFormatDate'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
@@ -62,6 +63,7 @@ interface CouponListResponse { items: Coupon[]; total: number }
 const { t } = useI18n({ useScope: 'global' })
 const { get } = useApiFetch()
 const { copy } = useClipboard()
+const { formatDate, formatDateTime } = useFormatDate()
 
 const loading = ref(true)
 const invite = ref<InviteSummary | null>(null)
@@ -136,23 +138,6 @@ const rewardCopy = computed<{ headline: string; detail: string }>(() => {
 })
 
 // ── Helpers ──
-function formatDate(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' })
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleString(undefined, {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
-
 function daysLeft(iso: string): number {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return 0

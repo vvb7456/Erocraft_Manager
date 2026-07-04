@@ -18,6 +18,7 @@ import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { useFormatDate } from '@/composables/useFormatDate'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
@@ -71,6 +72,7 @@ const { t } = useI18n({ useScope: 'global' })
 const { get, post, put, del } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
+const { formatDateTime: formatTime } = useFormatDate()
 
 // ---------------------------------------------------------------
 // Top-section state
@@ -123,10 +125,6 @@ const busy = computed(() =>
 function shortId(id: string | null | undefined): string {
   if (!id) return '—'
   return id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id
-}
-function formatTime(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString()
 }
 
 async function loadDetail() {

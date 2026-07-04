@@ -18,6 +18,7 @@ import { useAppStore } from '@/stores/app'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
+import { useFormatDate } from '@/composables/useFormatDate'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -78,6 +79,7 @@ const { confirm } = useConfirm()
 const { toast } = useToast()
 const appStore = useAppStore()
 const { displayName } = storeToRefs(appStore)
+const { formatDate } = useFormatDate()
 
 const order = ref<Order | null>(null)
 const loading = ref(true)
@@ -108,17 +110,6 @@ async function loadOrder(silent = false) {
 // ── Display helpers ──
 function fenToYuan(fen: number): string {
   return (fen / 100).toFixed(2)
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
 }
 
 function statusColor(status: string): string {

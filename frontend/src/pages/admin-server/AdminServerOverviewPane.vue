@@ -10,6 +10,7 @@ import { computed, inject, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useClipboard } from '@/composables/useClipboard'
+import { useFormatDate } from '@/composables/useFormatDate'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
@@ -24,7 +25,8 @@ import type {
 
 defineOptions({ name: 'AdminServerOverviewPane' })
 
-const { t, locale } = useI18n({ useScope: 'global' })
+const { t } = useI18n({ useScope: 'global' })
+const { formatDate } = useFormatDate()
 const router = useRouter()
 const { copy: copyToClipboard } = useClipboard()
 
@@ -63,10 +65,8 @@ function fmtUptimeMs(ms: number | null | undefined): string {
 }
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
-  try {
-    const hasTz = /Z|[+-]\d{2}:?\d{2}$/.test(iso)
-    return new Date(hasTz ? iso : iso + 'Z').toLocaleDateString(locale.value)
-  } catch { return iso }
+  const hasTz = /Z|[+-]\d{2}:?\d{2}$/.test(iso)
+  return formatDate(hasTz ? iso : iso + 'Z')
 }
 
 // ── derived ────────────────────────────────────────────────────────────

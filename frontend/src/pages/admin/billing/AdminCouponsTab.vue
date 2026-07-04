@@ -10,6 +10,7 @@ import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
+import { useFormatDate } from '@/composables/useFormatDate'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -38,6 +39,7 @@ const { t, te } = useI18n({ useScope: 'global' })
 const { get, raw } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
+const { formatDateTime: fmtDate } = useFormatDate()
 
 interface Coupon {
   id: number
@@ -135,10 +137,6 @@ function sourceLabel(s: string): string {
 }
 
 function fenToYuan(fen: number): string { return (fen / 100).toFixed(2) }
-function fmtDate(s: string | null): string {
-  if (!s) return '—'
-  try { return new Date(s).toLocaleString() } catch { return s }
-}
 
 async function loadList() {
   tableLoading.value = true

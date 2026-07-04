@@ -45,6 +45,70 @@ async def _is_llm_globally_enabled(db: AsyncSession) -> bool:
     return bool(values.get("LLM_ENABLED"))
 
 
+async def _reprovision_existing(
+    db: AsyncSession, row: ServerLlmKey, newapi_plan_id: int
+) -> ServerLlmKey:
+    uid = row.newapi_user_id
+    access_token = row.newapi_user_access_token
+
+    if row.newapi_subscription_id:
+        try:
+            await newapi_client.invalidate_subscription(
+                db, row.newapi_subscription_id
+            )
+        except Exception:
+            logger.warning(
+                "reprovision server %s: failed to invalidate old sub %s",
+                row.server_id, row.newapi_subscription_id, exc_info=True,
+            )
+
+    await newapi_client.bind_subscription(db, user_id=uid, plan_id=newapi_plan_id)
+    new_sub_id = await newapi_client.get_active_subscription_id(db, uid)
+    if new_sub_id is None:
+        raise newapi_client.NewApiError(
+            f"reprovision: no active subscription after rebind (user_id={uid})"
+        )
+
+    try:
+        await newapi_client.update_token(
+            db,
+            access_token=access_token,
+            user_id=uid,
+            token_id=row.newapi_token_id,
+            status=1,
+        )
+    except Exception:
+        logger.warning(
+            "reprovision server %s: failed to re-enable token %s",
+            row.server_id, row.newapi_token_id, exc_info=True,
+        )
+
+    row.newapi_subscription_id = new_sub_id
+    row.newapi_plan_id = newapi_plan_id
+    row.status = "active"
+    row.last_synced_at = utc_naive_now()
+    await db.flush()
+
+    await log_manager_activity(
+        db,
+        actor="system",
+        category="billing",
+        status="success",
+        detail_key="llm.provision",
+        detail_params={
+            "server_id": row.server_id,
+            "newapi_user_id": uid,
+            "subscription_id": new_sub_id,
+            "token_id": row.newapi_token_id,
+        },
+    )
+    logger.info(
+        "reprovisioned LLM for server %s: user=%s sub=%s",
+        row.server_id, uid, new_sub_id,
+    )
+    return row
+
+
 async def provision_for_server(
     db: AsyncSession,
     server_id: int,
@@ -74,6 +138,9 @@ async def provision_for_server(
     if existing is not None and existing.status == "active":
         logger.info("LLM key already active for server %s, skipping", server_id)
         return existing
+
+    if existing is not None and existing.newapi_user_id:
+        return await _reprovision_existing(db, existing, newapi_plan_id)
 
     username = f"srv_{server_id}"
     password = _gen_password()
@@ -401,7 +468,8 @@ async def update_for_upgrade(
             )
     except Exception:
         logger.warning(
-            "upgrade: failed to bind new subscription for server %s",
+            "upgrade: failed to bind new subscription for server %s "
+            "(old sub may already be invalidated; sync job will reconcile)",
             server_id, exc_info=True,
         )
         return
@@ -409,9 +477,7 @@ async def update_for_upgrade(
     row.newapi_subscription_id = new_sub_id
     row.newapi_plan_id = new_plan_id
     row.last_synced_at = utc_naive_now()
-    if row.status == "disabled":
-        pass
-    else:
+    if row.status != "disabled":
         row.status = "active"
     await db.flush()
     await log_manager_activity(

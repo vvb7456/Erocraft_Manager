@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
-import { useAppStore } from '@/stores/app'
+import { useFormatDate } from '@/composables/useFormatDate'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -16,7 +16,7 @@ defineOptions({ name: 'ActivityLogsPage' })
 
 const { t, te, tm, rt } = useI18n({ useScope: 'global' })
 const { get, loading } = useApiFetch()
-const appStore = useAppStore()
+const { formatDateTime } = useFormatDate()
 
 // ── Types ──
 interface LogItem {
@@ -77,9 +77,7 @@ watch([filterActor, filterCategory, filterStatus], () => {
 
 // ── Helpers ──
 function formatTime(ts: string | null): string {
-  if (!ts) return '—'
-  const d = new Date(ts + 'Z') // UTC
-  return d.toLocaleString('zh-CN', { timeZone: appStore.timezone, hour12: false })
+  return formatDateTime(ts ? ts + 'Z' : null)
 }
 
 

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
+import { useFormatDate } from '@/composables/useFormatDate'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import StatCard from '@/components/ui/StatCard.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -27,6 +28,7 @@ const { t } = useI18n({ useScope: 'global' })
 const { get, post } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
+const { formatDateTime: formatDate } = useFormatDate()
 
 const certificates = ref<ManagedCertificate[]>([])
 const acmeStatus = ref<AcmeStatus | null>(null)
@@ -51,12 +53,6 @@ function parseDate(value: string | null): Date | null {
   const normalized = /Z|[+-]\d{2}:?\d{2}$/.test(value) ? value : `${value}Z`
   const dt = new Date(normalized)
   return Number.isNaN(dt.getTime()) ? null : dt
-}
-
-function formatDate(value: string | null): string {
-  const dt = parseDate(value)
-  if (!dt) return t('certificates.common.none')
-  return dt.toLocaleString()
 }
 
 function daysLeft(value: string | null): number | null {
