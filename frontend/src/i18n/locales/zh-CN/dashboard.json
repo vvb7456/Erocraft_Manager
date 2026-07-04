@@ -52,8 +52,5 @@
     "pickerTitle": "选择要展示的主机",
     "pickerSubtitle": "还可添加 {remaining} 个",
     "allPinned": "所有主机已展示"
-  },
-  "notConfigured": "Pterodactyl API 未配置",
-  "notConfiguredMsg": "请先在系统设置中填写面板地址和 API Key",
-  "goToSettings": "前往设置"
+  }
 }

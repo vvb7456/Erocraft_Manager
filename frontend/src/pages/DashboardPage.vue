@@ -17,7 +17,6 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
-import BaseButton from '@/components/ui/BaseButton.vue'
 import AddCard from '@/components/ui/AddCard.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 
@@ -92,7 +91,6 @@ const alerts = ref<AlertItem[]>([])
 const activity = ref<ActivityItem[]>([])
 const loading = ref(true)
 const fatalError = ref<string | null>(null)
-const notConfigured = ref(false)
 
 const hostMap = computed<Record<number, DashboardHostData>>(() => {
   const m: Record<number, DashboardHostData> = {}
@@ -290,7 +288,6 @@ async function loadDashboard() {
   const res = await dashboardApi.get<DashboardData>('/api/admin/dashboard')
   if (!alive) return
   if (res) data.value = res
-  else if (dashboardApi.error.value) notConfigured.value = true
 }
 async function loadMonitoring() {
   const res = await monitoringApi.get<MonitoringData>('/api/admin/monitoring/overview')
@@ -369,17 +366,6 @@ onUnmounted(() => {
     <div v-if="loading && !data" class="loading">
       <Spinner size="lg" />
     </div>
-
-    <EmptyState
-      v-else-if="notConfigured"
-      icon="settings"
-      :title="t('dashboard.notConfigured')"
-      :message="t('dashboard.notConfiguredMsg')"
-    >
-      <BaseButton variant="primary" href="#/admin/settings" style="margin-top: var(--sp-3)">
-        {{ t('dashboard.goToSettings') }}
-      </BaseButton>
-    </EmptyState>
 
     <AlertBanner v-else-if="fatalError" tone="danger" icon="error">
       {{ fatalError }}
