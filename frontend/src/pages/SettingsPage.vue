@@ -828,12 +828,6 @@ async function onTabChange(next: string) {
               <FormField :label="t('settings.llm.connection.adminToken')" layout="horizontal">
                 <SecretInput :modelValue="getLlmSecret('NEWAPI_ADMIN_TOKEN')" @update:modelValue="setLlmSecret('NEWAPI_ADMIN_TOKEN', $event)" />
               </FormField>
-              <FormField :label="t('settings.llm.connection.poolUserId')" layout="horizontal">
-                <NumberInput :modelValue="getLlmNum('NEWAPI_POOL_USER_ID', 0)" @update:modelValue="setLlmNum('NEWAPI_POOL_USER_ID', $event)" :min="0" />
-              </FormField>
-              <FormField :label="t('settings.llm.connection.poolUserToken')" layout="horizontal">
-                <SecretInput :modelValue="getLlmSecret('NEWAPI_POOL_USER_ACCESS_TOKEN')" @update:modelValue="setLlmSecret('NEWAPI_POOL_USER_ACCESS_TOKEN', $event)" />
-              </FormField>
             </BaseCard>
 
             <BaseCard variant="bg2" class="settings-card">

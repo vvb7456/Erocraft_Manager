@@ -46,7 +46,8 @@ export interface AdminPlan {
   linked_plan_id: number | null
   llm_enabled: boolean
   llm_quota_grant: number
-  llm_model_limits: string | null
+  llm_group: string | null
+  newapi_plan_id: number | null
   created_at: string
   updated_at: string
 }
@@ -134,8 +135,8 @@ interface PlanFormState {
   linked_plan_id: number | null
   // LLM
   llm_enabled: boolean
-  llm_quota_grant: number
-  llm_model_limits: string
+  llm_quota_grant_usd: string
+  llm_group: string
 }
 
 function emptyForm(): PlanFormState {
@@ -169,8 +170,8 @@ function emptyForm(): PlanFormState {
     plan_type: 'standard',
     linked_plan_id: null,
     llm_enabled: false,
-    llm_quota_grant: 0,
-    llm_model_limits: '',
+    llm_quota_grant_usd: '1.00',
+    llm_group: '',
   }
 }
 
@@ -207,8 +208,8 @@ function fromAdminPlan(p: AdminPlan, mode: EditorMode): PlanFormState {
     plan_type: p.plan_type ?? 'standard',
     linked_plan_id: p.linked_plan_id ?? null,
     llm_enabled: p.llm_enabled ?? false,
-    llm_quota_grant: p.llm_quota_grant ?? 0,
-    llm_model_limits: p.llm_model_limits ?? '',
+    llm_quota_grant_usd: ((p.llm_quota_grant ?? 0) / 500000).toFixed(2),
+    llm_group: p.llm_group ?? '',
   }
 }
 
@@ -243,33 +244,21 @@ interface EggDetail {
 }
 const eggDetailsCache = ref<Map<number, EggDetail>>(new Map())
 
-// ── LLM model options (fetched from NewAPI) ──
-const llmModelOptions = ref<{ value: string; label: string }[]>([])
-const llmModelsLoading = ref(false)
+const llmGroupOptions = ref<{ value: string; label: string }[]>([])
+const llmGroupsLoading = ref(false)
 
-async function fetchLlmModels() {
-  llmModelsLoading.value = true
+async function fetchLlmGroups() {
+  llmGroupsLoading.value = true
   try {
-    const data = await get<{ models: string[] }>('/api/admin/llm/models', { silent: true })
-    if (data?.models) {
-      llmModelOptions.value = data.models.map((m) => ({ value: m, label: m }))
+    const data = await get<{ groups: string[] }>('/api/admin/llm/groups', { silent: true })
+    if (data?.groups) {
+      llmGroupOptions.value = data.groups.map((g) => ({ value: g, label: g }))
     }
   } catch {
-    // ignore — user may not have configured NewAPI connection yet
+    // ignore — NewAPI may not be configured yet
   } finally {
-    llmModelsLoading.value = false
+    llmGroupsLoading.value = false
   }
-}
-
-function getLlmModelLimits(): string[] {
-  const raw = form.value.llm_model_limits
-  if (!raw) return []
-  return raw.split(',').map((s) => s.trim()).filter(Boolean)
-}
-
-function setLlmModelLimits(val: string | string[]) {
-  const arr = Array.isArray(val) ? val : [val]
-  form.value.llm_model_limits = arr.filter(Boolean).join(',')
 }
 
 const dockerImageOptions = computed<EggImageOption[]>(() => listEggImages(form.value.egg_id))
@@ -349,7 +338,7 @@ watch(() => props.modelValue, async (open) => {
   saveError.value = null
   activeTab.value = 'basic'
 
-  fetchLlmModels()
+  fetchLlmGroups()
 
   // Build initial form
   if (props.mode === 'create' || !props.plan) {
@@ -591,8 +580,10 @@ function buildPayload(): Record<string, unknown> {
     plan_type: form.value.plan_type,
     linked_plan_id: form.value.linked_plan_id,
     llm_enabled: form.value.llm_enabled,
-    llm_quota_grant: form.value.llm_enabled ? form.value.llm_quota_grant : 0,
-    llm_model_limits: form.value.llm_enabled ? (form.value.llm_model_limits.trim() || null) : null,
+    llm_quota_grant: form.value.llm_enabled
+      ? Math.round((parseFloat(form.value.llm_quota_grant_usd) || 0) * 500000)
+      : 0,
+    llm_group: form.value.llm_enabled ? (form.value.llm_group.trim() || null) : null,
   }
 }
 
@@ -949,19 +940,16 @@ function onDockerImageSelectChange(v: string | number | boolean | (string | numb
         </FormField>
         <FormField>
           <template #label>{{ t('billing.admin.plans.fields.llmQuotaGrant') }}<HelpTip :text="t('billing.admin.plans.hints.llmQuotaGrant')" /></template>
-          <NumberInput v-model="form.llm_quota_grant" :min="0" :max="1000000000" :step="100000" :disabled="!form.llm_enabled" />
+          <BaseInput v-model="form.llm_quota_grant_usd" mono placeholder="1.00" :disabled="!form.llm_enabled" />
         </FormField>
         <FormField>
-          <template #label>{{ t('billing.admin.plans.fields.llmModelLimits') }}<HelpTip :text="t('billing.admin.plans.hints.llmModelLimits')" /></template>
+          <template #label>{{ t('billing.admin.plans.fields.llmGroup') }}<HelpTip :text="t('billing.admin.plans.hints.llmGroup')" /></template>
           <BaseSelect
-            :modelValue="getLlmModelLimits()"
-            :options="llmModelOptions"
-            multiple
-            searchable
+            v-model="form.llm_group"
+            :options="llmGroupOptions"
+            :disabled="!form.llm_enabled || llmGroupsLoading"
             teleport
-            :disabled="!form.llm_enabled || llmModelsLoading"
-            :placeholder="llmModelsLoading ? t('common.loading') : t('billing.admin.plans.placeholders.llmModelLimits')"
-            @update:modelValue="setLlmModelLimits($event as string | string[])"
+            :placeholder="llmGroupsLoading ? t('common.loading') : t('billing.admin.plans.placeholders.llmGroup')"
           />
         </FormField>
       </div>

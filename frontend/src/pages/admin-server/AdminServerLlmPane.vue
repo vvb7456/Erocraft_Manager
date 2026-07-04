@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { useAppStore } from '@/stores/app'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -13,16 +14,14 @@ import AlertBanner from '@/components/ui/AlertBanner.vue'
 import UsageBar from '@/components/ui/UsageBar.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import Badge from '@/components/ui/Badge.vue'
-import FormField from '@/components/form/FormField.vue'
-import NumberInput from '@/components/form/NumberInput.vue'
-import BaseSelect from '@/components/form/BaseSelect.vue'
 
 defineOptions({ name: 'AdminServerLlmPane' })
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, patch, post, loading } = useApiFetch()
+const { get, post, loading } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
+const appStore = useAppStore()
 
 const serverId = inject<Ref<number | null>>('adminServerId')!
 const refreshTabState = inject<() => Promise<void>>('refreshAdminServerLlm', async () => {})
@@ -37,10 +36,9 @@ interface AdminLlmUsage {
   quotaGrant: number
   quotaUsed: number
   quotaAvailable: number
-  allowedModels: string[] | null
-  resetDay: number | null
   nextResetAt: string | null
-  lastResetAt: string | null
+  newapiPlanId: number | null
+  newapiSubscriptionId: number | null
   lastSyncedAt: string | null
   createdAt: string | null
   usageQueryFailed: boolean
@@ -49,34 +47,21 @@ interface AdminLlmUsage {
 const data = ref<AdminLlmUsage | null>(null)
 const loadFailed = ref(false)
 
-// Editable form state
-const quotaGrant = ref(0)
-const selectedModels = ref<string[]>([])
-const modelOptions = ref<{ value: string; label: string }[]>([])
-const modelsLoading = ref(false)
-const saving = ref(false)
-
 const usedPercent = computed(() => {
   const d = data.value
   if (!d || d.quotaGrant <= 0) return 0
   return Math.round((d.quotaUsed / d.quotaGrant) * 100)
 })
 
-// 500000 NewAPI credits = $1
 function credits(v: number): string {
   return `$${(v / 500000).toFixed(2)}`
 }
 
-const dirty = computed(() => {
-  if (!data.value) return false
-  const origModels = (data.value.allowedModels ?? []).slice().sort().join(',')
-  const curModels = selectedModels.value.slice().sort().join(',')
-  return quotaGrant.value !== data.value.quotaGrant || curModels !== origModels
-})
-
-function syncForm(d: AdminLlmUsage) {
-  quotaGrant.value = d.quotaGrant
-  selectedModels.value = (d.allowedModels ?? []).slice()
+function fmtTime(iso: string | null): string {
+  if (!iso) return '—'
+  try {
+    return new Date(iso).toLocaleString('zh-CN', { timeZone: appStore.timezone, hour12: false })
+  } catch { return iso }
 }
 
 async function load() {
@@ -85,61 +70,14 @@ async function load() {
   if (res) {
     data.value = res
     loadFailed.value = false
-    if (res.provisioned) syncForm(res)
   } else {
     loadFailed.value = true
   }
 }
 
-async function fetchModels() {
-  modelsLoading.value = true
-  try {
-    const res = await get<{ models: string[] }>('/api/admin/llm/models', { silent: true })
-    if (res?.models) modelOptions.value = res.models.map((m) => ({ value: m, label: m }))
-  } finally {
-    modelsLoading.value = false
-  }
-}
-
 onMounted(() => {
   load()
-  fetchModels()
 })
-
-async function saveChanges() {
-  if (!serverId.value || !dirty.value) return
-  saving.value = true
-  try {
-    const res = await patch<AdminLlmUsage>(`/api/admin/servers/${serverId.value}/llm`, {
-      quotaGrant: quotaGrant.value,
-      allowedModels: selectedModels.value,
-    })
-    if (res) {
-      data.value = res
-      syncForm(res)
-      toast(t('adminServer.llm.toast.saved'), 'success')
-    }
-  } finally {
-    saving.value = false
-  }
-}
-
-async function resetKey() {
-  if (!serverId.value) return
-  const ok = await confirm({
-    title: t('adminServer.llm.reset.title'),
-    message: t('adminServer.llm.reset.message'),
-    variant: 'danger',
-    confirmText: t('adminServer.llm.reset.confirm'),
-  })
-  if (!ok) return
-  const res = await post<AdminLlmUsage>(`/api/admin/servers/${serverId.value}/llm/reset`, {})
-  if (res) {
-    data.value = res
-    syncForm(res)
-    toast(t('adminServer.llm.toast.keyReset'), 'success')
-  }
-}
 
 async function toggleStatus() {
   if (!serverId.value || !data.value) return
@@ -149,7 +87,6 @@ async function toggleStatus() {
   })
   if (res) {
     data.value = res
-    syncForm(res)
     toast(enabling ? t('adminServer.llm.toast.enabled') : t('adminServer.llm.toast.disabled'), 'success')
   }
 }
@@ -165,7 +102,6 @@ async function resetUsage() {
   const res = await post<AdminLlmUsage>(`/api/admin/servers/${serverId.value}/llm/reset-usage`, {})
   if (res) {
     data.value = res
-    syncForm(res)
     toast(t('adminServer.llm.toast.usageReset'), 'success')
   }
 }
@@ -236,9 +172,8 @@ const statusColor = computed(() => {
         </div>
 
         <div class="meta-grid">
-          <div><span class="meta-grid__k">{{ t('adminServer.llm.nextReset') }}</span><span>{{ data.nextResetAt }} ({{ t('adminServer.llm.resetDay', { day: data.resetDay }) }})</span></div>
-          <div><span class="meta-grid__k">{{ t('adminServer.llm.lastReset') }}</span><span>{{ data.lastResetAt || '—' }}</span></div>
-          <div><span class="meta-grid__k">{{ t('adminServer.llm.created') }}</span><span>{{ data.createdAt || '—' }}</span></div>
+          <div><span class="meta-grid__k">{{ t('adminServer.llm.nextReset') }}</span><span>{{ fmtTime(data.nextResetAt) }}</span></div>
+          <div><span class="meta-grid__k">{{ t('adminServer.llm.created') }}</span><span>{{ fmtTime(data.createdAt) }}</span></div>
         </div>
       </BaseCard>
 
@@ -251,32 +186,6 @@ const statusColor = computed(() => {
         <FormField :label="t('adminServer.llm.apiKey')" layout="horizontal">
           <SecretInput :modelValue="data.apiKey || ''" readonly copyable :toggleable="true" :masked-length="36" />
         </FormField>
-      </BaseCard>
-
-      <!-- ─── Adjust quota & models ─── -->
-      <BaseCard variant="bg2" class="llm-card">
-        <SectionHeader icon="tune" flush>{{ t('adminServer.llm.adjustSection') }}</SectionHeader>
-        <FormField :label="t('adminServer.llm.quotaGrant')" layout="horizontal">
-          <div class="quota-field">
-            <NumberInput v-model="quotaGrant" :min="0" :max="1000000000" :step="100000" />
-            <span class="quota-field__hint">≈ {{ credits(quotaGrant) }}</span>
-          </div>
-        </FormField>
-        <FormField :label="t('adminServer.llm.allowedModels')" layout="horizontal">
-          <BaseSelect
-            v-model="selectedModels"
-            :options="modelOptions"
-            multiple
-            searchable
-            teleport
-            :placeholder="t('adminServer.llm.allowedModelsPlaceholder')"
-          />
-        </FormField>
-        <div class="action-row">
-          <BaseButton :disabled="!dirty || saving" :loading="saving" @click="saveChanges">
-            {{ t('adminServer.llm.save') }}
-          </BaseButton>
-        </div>
       </BaseCard>
 
       <!-- ─── Actions ─── -->
@@ -299,14 +208,6 @@ const statusColor = computed(() => {
             <p class="op-row__desc">{{ t('adminServer.llm.resetUsage.rowDesc') }}</p>
           </div>
           <BaseButton size="sm" @click="resetUsage">{{ t('adminServer.llm.resetUsage.btn') }}</BaseButton>
-        </div>
-
-        <div class="op-row">
-          <div class="op-row__info">
-            <p class="op-row__title">{{ t('adminServer.llm.reset.rowTitle') }}</p>
-            <p class="op-row__desc">{{ t('adminServer.llm.reset.rowDesc') }}</p>
-          </div>
-          <BaseButton size="sm" variant="danger" @click="resetKey">{{ t('adminServer.llm.reset.btn') }}</BaseButton>
         </div>
 
         <div class="op-row op-row--danger">
@@ -403,24 +304,6 @@ const statusColor = computed(() => {
 .meta-grid__k {
   min-width: 84px;
   color: var(--t3);
-}
-
-.quota-field {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  width: 100%;
-}
-
-.quota-field__hint {
-  font-size: .8rem;
-  color: var(--t3);
-  white-space: nowrap;
-}
-
-.action-row {
-  display: flex;
-  justify-content: flex-end;
 }
 
 .op-row {

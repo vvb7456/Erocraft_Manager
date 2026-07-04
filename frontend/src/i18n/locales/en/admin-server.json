@@ -227,7 +227,6 @@
     "notProvisioned": "This server has no AI quota provisioned",
     "statusSection": "Status & Usage",
     "configSection": "API Config",
-    "adjustSection": "Adjust Quota & Models",
     "actionsSection": "Key Actions",
     "statuses": {
       "active": "Active",
@@ -241,15 +240,9 @@
     "available": "Available",
     "grant": "Grant",
     "nextReset": "Next reset",
-    "lastReset": "Last reset",
     "created": "Provisioned",
-    "resetDay": "day {day} monthly",
     "apiBaseUrl": "Base URL",
     "apiKey": "API Key",
-    "quotaGrant": "Monthly quota (credits)",
-    "allowedModels": "Allowed models",
-    "allowedModelsPlaceholder": "Leave empty to allow all models",
-    "save": "Save changes",
     "toggle": {
       "title": "Enable / disable key",
       "desc": "Temporarily block or restore this key (synced to NewAPI). Disabled keys cannot call the API.",
@@ -264,14 +257,6 @@
       "message": "Restore this server's available quota to the grant limit?",
       "confirm": "Confirm refill"
     },
-    "reset": {
-      "rowTitle": "Reset key",
-      "rowDesc": "Revoke the old key and generate a new sk-xxx. For leaked keys; the user must reconfigure.",
-      "btn": "Reset key",
-      "title": "Reset AI key",
-      "message": "Reset this server's key? The old key stops working immediately and the user must reconfigure SillyTavern.",
-      "confirm": "Confirm reset"
-    },
     "revoke": {
       "rowTitle": "Revoke quota",
       "rowDesc": "Delete the NewAPI token and local record, fully removing this server's AI quota.",
@@ -281,8 +266,6 @@
       "confirm": "Confirm revoke"
     },
     "toast": {
-      "saved": "Changes saved",
-      "keyReset": "Key reset",
       "usageReset": "Quota refilled",
       "enabled": "Key enabled",
       "disabled": "Key disabled",

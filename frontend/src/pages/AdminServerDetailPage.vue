@@ -50,7 +50,7 @@ provide('reloadAdminServer', () => loadDetail(true))
 async function refreshLlmProvisioned() {
   if (!Number.isFinite(serverId.value)) return
   const data = await get<{ provisioned: boolean }>(
-    `/api/admin/servers/${serverId.value}/llm`,
+    `/api/admin/servers/${serverId.value}/llm/provisioned`,
     { silent: true },
   )
   llmProvisioned.value = !!data?.provisioned

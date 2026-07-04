@@ -329,7 +329,8 @@ async def create_server(
                     snapshot = {
                         "llm_enabled": True,
                         "llm_quota_grant": plan_obj.llm_quota_grant,
-                        "llm_model_limits": plan_obj.llm_model_limits,
+                        "newapi_plan_id": plan_obj.newapi_plan_id,
+                        "llm_group": plan_obj.llm_group,
                     }
                     await llm_provision.provision_for_server(
                         db, server_id, payload.user_id, snapshot

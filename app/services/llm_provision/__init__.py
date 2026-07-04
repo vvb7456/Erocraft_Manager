@@ -1,9 +1,9 @@
-"""LLM free quota provision / sync service.
+"""LLM subscription provision / sync service.
 
-See ``docs/LLM_FREE_QUOTA_DESIGN.md`` for the full design.
-
-Config injection into SillyTavern is handled entirely by the egg —
-Manager only creates the NewAPI token and stores the key locally.
+Each LLM-enabled server gets its own NewAPI user with a native
+subscription. Quota enforcement and monthly reset are handled by
+NewAPI's background tasks; Manager only manages the user/subscription/
+token lifecycle and reads usage at display time.
 """
 
 from app.services.llm_provision.provision import (

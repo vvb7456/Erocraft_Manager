@@ -578,24 +578,6 @@ LLM_SPECS: dict[str, SettingSpec] = _register({
         lambda: _env_str("LLM_ST_ENDPOINT_URL", ""),
         _normalize_str,
     ),
-    # NewAPI pool user id — the single pool user under which all server
-    # tokens are created. Set once after initial NewAPI setup.
-    "NEWAPI_POOL_USER_ID": SettingSpec(
-        "NEWAPI_POOL_USER_ID", "llm",
-        lambda: _env_int("NEWAPI_POOL_USER_ID", 0),
-        _int_clamper(0, 9_999_999, 0),
-    ),
-    # Pool user's AccessToken — used to call native UserAuth endpoints
-    # (POST /api/token/, PUT /api/token/, DELETE /api/token/:id, POST
-    # /api/token/:id/key) for token CRUD. Generated once from the NewAPI
-    # admin UI (user settings → generate system token). Sensitive.
-    # When a fork adds admin-level token endpoints, this becomes unnecessary.
-    "NEWAPI_POOL_USER_ACCESS_TOKEN": SettingSpec(
-        "NEWAPI_POOL_USER_ACCESS_TOKEN", "llm",
-        lambda: _env_str("NEWAPI_POOL_USER_ACCESS_TOKEN", ""),
-        _normalize_str,
-        sensitive=True,
-    ),
 })
 
 

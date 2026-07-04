@@ -1,8 +1,8 @@
-"""Admin routes for LLM free quota runtime settings.
+"""Admin routes for LLM subscription settings.
 
-All LLM-related keys (NewAPI base URL, admin token, ST endpoint URL, default
-models, pool user id) are DB-backed and UI-editable. The admin token is
-marked ``sensitive=True`` and is masked in responses by the settings store.
+All LLM-related keys (NewAPI base URL, admin token, ST endpoint URL)
+are DB-backed and UI-editable. The admin token is marked
+``sensitive=True`` and is masked in responses by the settings store.
 """
 
 from __future__ import annotations
@@ -132,3 +132,22 @@ async def llm_models_list(
         return {"models": []}
     except Exception:
         return {"models": []}
+
+
+@router.get("/groups")
+async def llm_groups_list(
+    _: PteroUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """List available NewAPI groups (method 3A: group → model access).
+
+    Used by the plan editor's group dropdown. Returns group names from
+    NewAPI's group ratio setting.
+    """
+    from app.services.llm_provision import newapi_client
+
+    try:
+        groups = await newapi_client.list_groups(db)
+        return {"groups": groups}
+    except Exception:
+        return {"groups": []}

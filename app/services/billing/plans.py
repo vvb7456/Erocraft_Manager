@@ -339,6 +339,9 @@ async def create_plan(db: AsyncSession, payload: PlanIn) -> BillingPlan:
             f"套餐代号已存在: {payload.code}"
         ) from exc
     await db.refresh(obj)
+
+    # Sync NewAPI subscription plan (best-effort, non-blocking).
+    await _sync_newapi_plan(db, obj)
     return obj
 
 
@@ -357,15 +360,67 @@ async def update_plan(
             f"套餐代号已存在: {payload.code}"
         ) from exc
     await db.refresh(obj)
+
+    # Sync NewAPI subscription plan (best-effort, non-blocking).
+    await _sync_newapi_plan(db, obj)
     return obj
 
 
 async def delete_plan(db: AsyncSession, plan_id: int) -> None:
-    # Plans are decoupled from orders: ``manager_billing_orders.plan_id`` has
-    # ON DELETE SET NULL and the order's ``plan_snapshot`` JSON keeps the
-    # full historical record. Hard-delete is therefore always safe; the FE
-    # “deactivate” toggle is now purely about hiding the plan from /plans,
-    # not a workaround for delete failures.
     obj = await get_plan(db, plan_id)
+    # Disable the NewAPI subscription plan if it exists (best-effort).
+    if obj.newapi_plan_id is not None:
+        try:
+            from app.services.llm_provision import newapi_client
+            await newapi_client.set_plan_status(db, obj.newapi_plan_id, enabled=False)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "delete_plan: failed to disable NewAPI plan %s",
+                obj.newapi_plan_id, exc_info=True,
+            )
     await db.delete(obj)
     await db.commit()
+
+
+# --------------------------------------------------------------------------- #
+# NewAPI subscription plan sync
+# --------------------------------------------------------------------------- #
+
+
+async def _sync_newapi_plan(db: AsyncSession, plan: BillingPlan) -> None:
+    """Create or update the NewAPI SubscriptionPlan for this billing plan.
+
+    Only fires when ``llm_enabled`` is True and ``llm_group`` is set.
+    Best-effort: failures are logged, not raised (the plan is still saved
+    locally; admin can retry by editing the plan again).
+    """
+    if not plan.llm_enabled or not plan.llm_group:
+        return
+
+    try:
+        from app.services.llm_provision import newapi_client
+
+        if plan.newapi_plan_id is not None:
+            await newapi_client.update_plan(
+                db,
+                plan.newapi_plan_id,
+                title=plan.display_name,
+                total_amount=plan.llm_quota_grant,
+                upgrade_group=plan.llm_group,
+            )
+        else:
+            new_id = await newapi_client.create_plan(
+                db,
+                title=plan.display_name,
+                total_amount=plan.llm_quota_grant,
+                upgrade_group=plan.llm_group,
+            )
+            plan.newapi_plan_id = new_id
+            await db.commit()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "sync_newapi_plan failed for plan %s (non-blocking)",
+            plan.id, exc_info=True,
+        )

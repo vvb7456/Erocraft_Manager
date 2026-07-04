@@ -227,7 +227,6 @@
     "notProvisioned": "此服务器未开通 AI 额度",
     "statusSection": "状态与用量",
     "configSection": "接入信息",
-    "adjustSection": "调整配额与模型",
     "actionsSection": "密钥操作",
     "statuses": {
       "active": "正常",
@@ -241,15 +240,9 @@
     "available": "剩余",
     "grant": "配额",
     "nextReset": "下次重置",
-    "lastReset": "上次重置",
     "created": "开通时间",
-    "resetDay": "每月 {day} 日",
     "apiBaseUrl": "API 地址",
     "apiKey": "API Key",
-    "quotaGrant": "月度配额（点）",
-    "allowedModels": "允许的模型",
-    "allowedModelsPlaceholder": "留空则允许全部模型",
-    "save": "保存修改",
     "toggle": {
       "title": "启用 / 停用密钥",
       "desc": "临时封禁或恢复该密钥（同步到 NewAPI）。停用后无法调用 API。",
@@ -264,14 +257,6 @@
       "message": "确定将该服务器的剩余额度恢复到配额上限吗？",
       "confirm": "确认重发"
     },
-    "reset": {
-      "rowTitle": "重置密钥",
-      "rowDesc": "吊销旧密钥并生成新的 sk-xxx。用于密钥泄露场景，用户需重新填写。",
-      "btn": "重置密钥",
-      "title": "重置 AI 密钥",
-      "message": "确定要重置该服务器的密钥吗？旧密钥将立即失效，用户需要重新配置 SillyTavern。",
-      "confirm": "确认重置"
-    },
     "revoke": {
       "rowTitle": "吊销额度",
       "rowDesc": "删除 NewAPI 令牌与本地记录，彻底移除该服务器的 AI 额度。",
@@ -281,8 +266,6 @@
       "confirm": "确认吊销"
     },
     "toast": {
-      "saved": "已保存修改",
-      "keyReset": "密钥已重置",
       "usageReset": "额度已重发",
       "enabled": "密钥已启用",
       "disabled": "密钥已停用",

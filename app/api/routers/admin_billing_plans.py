@@ -60,7 +60,8 @@ def _serialize(plan: BillingPlan) -> dict[str, Any]:
         "linked_plan_id": plan.linked_plan_id,
         "llm_enabled": plan.llm_enabled,
         "llm_quota_grant": plan.llm_quota_grant,
-        "llm_model_limits": plan.llm_model_limits,
+        "newapi_plan_id": plan.newapi_plan_id,
+        "llm_group": plan.llm_group,
         "created_at": plan.created_at.isoformat() + "Z",
         "updated_at": plan.updated_at.isoformat() + "Z",
     }

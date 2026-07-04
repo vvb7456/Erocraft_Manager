@@ -397,14 +397,14 @@
         "planType": "Plan type",
         "linkedPlan": "Linked standard plan",
         "llmEnabled": "Enable LLM free quota",
-        "llmQuotaGrant": "Monthly quota (credits)",
-        "llmModelLimits": "Allowed models"
+        "llmQuotaGrant": "Monthly quota ($)",
+        "llmGroup": "NewAPI Group"
       },
       "placeholders": {
         "displayName": "e.g. SillyTavern Basic",
         "categoryLabel": "e.g. SillyTavern",
         "linkedPlan": "Select a standard plan with the same egg",
-        "llmModelLimits": "Select models"
+        "llmGroup": "Select group"
       },
       "hints": {
         "code": "Unique identifier; avoid changing after creation",
@@ -420,8 +420,8 @@
         "periodCount1Locked": "1-period option is required and cannot be deleted",
         "trial": "Trial plans mirror the linked standard plan's resource config automatically. Trial plans can only be purchased once by users who have never owned a server, and are deleted immediately on expiry (no grace period). Users can only renew by converting to the standard plan.",
         "llmEnabled": "When enabled, servers purchased under this plan receive a monthly free LLM API quota. Requires NewAPI connection configured in Settings → LLM Quota.",
-        "llmQuotaGrant": "NewAPI quota credits (500000 credits = $1). Resets monthly, staggered by server creation day.",
-        "llmModelLimits": "Select a whitelist of allowed models from NewAPI's available models. Leave empty to allow all models. The first selected model is used when injecting into SillyTavern."
+        "llmQuotaGrant": "Monthly quota in USD. Maps to the NewAPI subscription TotalAmount; resets monthly.",
+        "llmGroup": "Select the NewAPI user group for this plan. A NewAPI user is automatically created under this group when a subscription is provisioned."
       },
       "periods": {
         "count": "Periods",

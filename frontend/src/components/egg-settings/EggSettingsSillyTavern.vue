@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { useAppStore } from '@/stores/app'
 import type { StartupVar, EggSettingsProps, EggSettingsExpose } from './types'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
@@ -29,6 +30,14 @@ const router = useRouter()
 const { get, put, post, error: apiError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
+const appStore = useAppStore()
+
+function fmtTime(iso: string | null): string {
+  if (!iso) return '—'
+  try {
+    return new Date(iso).toLocaleString('zh-CN', { timeZone: appStore.timezone, hour12: false })
+  } catch { return iso }
+}
 
 const reloadServer = inject<() => Promise<void>>('reloadServer')!
 
@@ -47,7 +56,6 @@ interface LlmUsage {
   enabled: boolean
   apiKey: string | null
   apiBaseUrl: string
-  allowedModels: string[] | null
   usageQueryFailed: boolean
 }
 
@@ -417,7 +425,7 @@ defineExpose({ save, discard, validationErrors })
           </div>
           <UsageBar :percent="llmUsedPercent" :height="8" />
           <span v-if="llmUsage.usageQueryFailed" class="llm-usage__stale">{{ t('serverSettings.llm.usageStale') }}</span>
-          <span v-else class="llm-usage__reset">{{ t('serverSettings.llm.nextReset') }}: {{ llmUsage.nextResetAt }}</span>
+          <span v-else class="llm-usage__reset">{{ t('serverSettings.llm.nextReset') }}: {{ fmtTime(llmUsage.nextResetAt) }}</span>
         </div>
 
         <!-- Connection details -->

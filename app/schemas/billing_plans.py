@@ -78,10 +78,10 @@ class PlanIn(_Forbid):
     plan_type: str = Field(default="standard", pattern=r"^(standard|trial)$")
     linked_plan_id: int | None = Field(default=None, gt=0)
 
-    # LLM free quota (20260622_llm migration).
+    # LLM subscription (20260703_llm_sub migration).
     llm_enabled: bool = False
     llm_quota_grant: int = Field(default=0, ge=0)
-    llm_model_limits: str | None = Field(default=None, max_length=255)
+    llm_group: str | None = Field(default=None, max_length=64)
 
     @model_validator(mode="after")
     def _check_period_options(self) -> "PlanIn":

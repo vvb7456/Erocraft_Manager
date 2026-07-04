@@ -397,14 +397,14 @@
         "planType": "套餐类型",
         "linkedPlan": "关联标准套餐",
         "llmEnabled": "启用 LLM 免费额度",
-        "llmQuotaGrant": "月度额度 (点)",
-        "llmModelLimits": "允许的模型"
+        "llmQuotaGrant": "月度额度 ($)",
+        "llmGroup": "NewAPI 分组"
       },
       "placeholders": {
         "displayName": "例：SillyTavern 基础版",
         "categoryLabel": "例：SillyTavern",
         "linkedPlan": "选择同 egg 的标准套餐",
-        "llmModelLimits": "选择模型"
+        "llmGroup": "选择分组"
       },
       "hints": {
         "code": "唯一标识，创建后不建议修改",
@@ -420,8 +420,8 @@
         "periodCount1Locked": "1 周期为基础选项，不可删除",
         "trial": "试用套餐的资源配置从关联的标准套餐自动同步，无需手动填写。试用套餐仅限从未拥有过服务器的用户购买一次，到期后立即删除（无宽限期）。用户只能通过转换为标准套餐来续费。",
         "llmEnabled": "开启后，购买此套餐的服务器将每月获得免费 LLM API 额度。需先在「设置 → LLM 额度」中配置 NewAPI 连接。",
-        "llmQuotaGrant": "NewAPI 额度点数（500000 点 = $1）。每月按服务器开通日错峰重置。",
-        "llmModelLimits": "从 NewAPI 可用模型中选择白名单。留空则允许所有模型。注入 SillyTavern 时使用第一个被选中的模型。"
+        "llmQuotaGrant": "每月额度，单位美元。NewAPI 订阅的 TotalAmount，每月自动重置。",
+        "llmGroup": "选择该套餐对应的 NewAPI 用户分组。订阅创建时会在此分组下自动创建 NewAPI 用户。"
       },
       "periods": {
         "count": "周期倍数",

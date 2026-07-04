@@ -79,14 +79,18 @@ class ServerMeta(Base):
 
 
 class ServerLlmKey(Base):
-    """LLM API key bound to a server — see ``docs/LLM_FREE_QUOTA_DESIGN.md``.
+    """LLM subscription bound to a server.
 
-    One row per server that has been provisioned with a free LLM experience
-    quota. The ``api_key`` is stored in plaintext (it is also plaintext inside
-    the SillyTavern container and the NewAPI database; encryption here would
-    be security theater). All quota/control dimensions live on the NewAPI
-    token (verified in ``model/token.go``); this table is Manager's local
-    cache of the token id, key, and last-synced usage.
+    One row per server provisioned with LLM. Each server gets its own
+    NewAPI user (``newapi_user_id``) with a native subscription tied to
+    a ``SubscriptionPlan`` (``newapi_plan_id`` / ``newapi_subscription_id``).
+    The user's access token is stored for token CRUD; the ``api_key``
+    (sk-xxx) is the actual key injected into SillyTavern.
+
+    All quota dimensions live on the NewAPI subscription (AmountTotal /
+    AmountUsed / NextResetTime) — Manager reads them at display time via
+    the admin token. This table is Manager's local cache of the NewAPI
+    user/token/subscription ids and the plaintext api_key.
     """
 
     __tablename__ = "manager_server_llm_keys"
@@ -97,19 +101,24 @@ class ServerLlmKey(Base):
         primary_key=True,
     )
     user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    # NewAPI per-server user (username = srv_{server_id})
+    newapi_user_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    newapi_user_access_token: Mapped[str] = mapped_column(
+        String(128), nullable=False, default=""
+    )
+    newapi_user_password: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
+    newapi_subscription_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    # Redundant snapshot of the plan id at provision time
+    newapi_plan_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # The actual API key (sk-xxx) used by SillyTavern
     newapi_token_id: Mapped[int] = mapped_column(Integer, nullable=False)
     api_key: Mapped[str] = mapped_column(String(128), nullable=False)
-    quota_grant: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    quota_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    quota_available: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    model_limits: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # active / disabled / exhausted / revoked
+    # active / disabled / revoked
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
-    last_reset_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    # Day-of-month (1-28) on which this key's monthly quota resets.
-    # Set once at first provision = min(created_at.day, 28); never changes.
-    # Prevents all keys from resetting on the same day (traffic spike).
-    reset_day: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=_utc_now

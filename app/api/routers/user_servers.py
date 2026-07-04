@@ -752,7 +752,7 @@ async def get_llm_usage(
     server: PteroServer = Depends(get_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Return the server's LLM quota usage and API config for the user-facing tab."""
+    """Return the server's LLM subscription usage and API config for the user-facing tab."""
     row = await db.get(ServerLlmKey, server.id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="LLM quota not provisioned for this server")
@@ -762,39 +762,41 @@ async def get_llm_usage(
     base_url = str(settings.get("NEWAPI_BASE_URL", "")).rstrip("/")
     endpoint_url = str(settings.get("LLM_ST_ENDPOINT_URL", "")).rstrip("/") or f"{base_url}/v1"
 
-    allowed_models: list[str] | None
-    if row.model_limits:
-        allowed_models = [m.strip() for m in row.model_limits.split(",") if m.strip()]
-    else:
-        allowed_models = None
-
-    from app.services.llm_provision.helpers import next_reset_date
-    next_reset = next_reset_date(row)
-
-    # Real-time usage from NewAPI. If NewAPI is unreachable, fall back to the
-    # locally cached counters so the user can still see their key + config
-    # (mirrors the admin serializer's degradation behaviour).
-    quota_used = row.quota_used
-    quota_available = row.quota_available
+    # Read subscription data via admin token (proxy query — user browser
+    # never touches NewAPI directly).
+    quota_grant = 0
+    quota_used = 0
+    quota_available = 0
+    next_reset_at: str | None = None
     usage_query_failed = False
-    if base_url:
+    try:
         from app.services.llm_provision import newapi_client
-        try:
-            usage = await newapi_client.get_token_usage(row.api_key, base_url)
-            quota_used = int(usage.get("total_used", 0))
-            quota_available = int(usage.get("total_available", 0))
-        except Exception:
-            usage_query_failed = True
+        subs = await newapi_client.get_user_subscriptions(db, row.newapi_user_id)
+        for item in subs:
+            sub = item.get("subscription", {}) if isinstance(item, dict) else {}
+            if sub.get("status") == "active":
+                quota_grant = int(sub.get("amount_total", 0))
+                quota_used = int(sub.get("amount_used", 0))
+                quota_available = max(0, quota_grant - quota_used)
+                next_reset_ts = int(sub.get("next_reset_time", 0) or 0)
+                if next_reset_ts > 0:
+                    from datetime import datetime, UTC
+                    from app.core.time import to_iso_z
+                    next_reset_at = to_iso_z(
+                        datetime.fromtimestamp(next_reset_ts, tz=UTC).replace(tzinfo=None)
+                    )
+                break
+    except Exception:
+        usage_query_failed = True
 
     return {
         "status": row.status,
-        "quotaGrant": row.quota_grant,
+        "quotaGrant": quota_grant,
         "quotaUsed": quota_used,
         "quotaAvailable": quota_available,
-        "nextResetAt": next_reset,
+        "nextResetAt": next_reset_at,
         "enabled": row.status != "revoked",
         "apiKey": row.api_key,
         "apiBaseUrl": endpoint_url,
-        "allowedModels": allowed_models,
         "usageQueryFailed": usage_query_failed,
     }

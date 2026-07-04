@@ -177,9 +177,7 @@
     "connection": {
       "title": "NewAPI 连接",
       "baseUrl": "Base URL",
-      "adminToken": "Admin Token",
-      "poolUserId": "Pool User ID",
-      "poolUserToken": "Pool User Token"
+      "adminToken": "Admin Token"
     },
     "injection": {
       "title": "SillyTavern 注入",
