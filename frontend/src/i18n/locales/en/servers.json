@@ -1,5 +1,6 @@
 {
   "title": "Server List",
+  "total": "{n} total",
   "search_placeholder": "Search name / owner / email / ID / UUID…",
   "filter": {
     "label": "Status",

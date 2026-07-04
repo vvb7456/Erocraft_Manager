@@ -207,8 +207,7 @@ const totalHostCount = computed(() => monitoring.value?.nodes?.length ?? 0)
 const totalsForKpi = computed(() => {
   const d = data.value?.statusDistribution
   if (!d) return null
-  // 「正常服务器」= 未过期且用户可操作（排除 expired 与 suspended）
-  // suspended 与到期分桶重叠，无法准确减去；当前后端未提供剖分。
+  // 「正常服务器」= 未冻结且未过期（normal + expiring_soon + permanent）
   return { normalOperable: d.normal + d.expiring_soon + d.permanent }
 })
 

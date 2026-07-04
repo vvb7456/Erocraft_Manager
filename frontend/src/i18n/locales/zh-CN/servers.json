@@ -1,5 +1,6 @@
 {
   "title": "服务器列表",
+  "total": "共 {n} 台",
   "search_placeholder": "搜索 名称 / 所有者 / 邮箱 / ID / UUID …",
   "filter": {
     "label": "状态",

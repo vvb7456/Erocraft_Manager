@@ -70,17 +70,19 @@ async def dashboard(
 
     counts = {"normal": 0, "expiring_soon": 0, "expired": 0, "suspended": 0, "permanent": 0}
     for server in all_servers:
-        if server.is_suspended:
-            counts["suspended"] += 1
-
         expiration_date = server.expiration_date
         if expiration_date is None:
-            counts["permanent"] += 1
+            if server.is_suspended:
+                counts["suspended"] += 1
+            else:
+                counts["permanent"] += 1
             continue
 
         days_left = (expiration_date - today).days
         if days_left < 0:
             counts["expired"] += 1
+        elif server.is_suspended:
+            counts["suspended"] += 1
         elif days_left <= 7:
             counts["expiring_soon"] += 1
         else:

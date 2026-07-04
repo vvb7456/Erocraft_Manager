@@ -567,6 +567,8 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
             <MsIcon name="tune" size="sm" />
           </button>
         </div>
+        <span class="toolbar-status tb-status">{{ t('servers.total', { n: rawServers.length }) }}</span>
+        <span v-if="selectedIds.size > 0" class="toolbar-status tb-status">{{ t('servers.batch.selected', { n: selectedIds.size }) }}</span>
       </template>
       <template #end>
         <div class="tb-select-group tb-desktop-only">
@@ -577,7 +579,6 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
           <BaseButton size="sm" :disabled="selectedIds.size === 0 || !batchActionType" @click="executeBatchAction">
             <MsIcon name="play_arrow" size="xs" /> {{ t('servers.batch.execute') }}
           </BaseButton>
-          <span v-if="selectedIds.size > 0" class="toolbar-status tb-status">{{ t('servers.batch.selected', { n: selectedIds.size }) }}</span>
         </div>
         <div class="tb-btn-group">
           <BaseButton size="sm" variant="primary" @click="createModalOpen = true">
