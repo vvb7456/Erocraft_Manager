@@ -15,4 +15,4 @@ async def run_probe(cfg: ProbeConfig) -> ProbeResult:
         )
     if cfg.type == "tcp":
         return await tcp_probe.run(cfg.name, cfg.target, cfg.timeout)
-    return ProbeResult(name=cfg.name, ok=False, error_msg=f"unsupported type: {cfg.type}")
+    raise ValueError(f"unsupported probe type: {cfg.type}")

@@ -480,5 +480,5 @@ _REASON_MSG = {
 }
 
 
-def _reason_to_msg(reason: str) -> str:
-    return _REASON_MSG.get(reason, "优惠券不可用")
+def _reason_to_msg(reason: str | None) -> str:
+    return _REASON_MSG.get(reason or "", "优惠券不可用")

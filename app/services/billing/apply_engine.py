@@ -562,6 +562,8 @@ async def _effect_new_purchase(db: AsyncSession, order: BillingOrder) -> int:
     # flagged as trial even if the plan is later edited/deleted.
     snap_plan_type = (order.plan_snapshot or {}).get("plan_type", "standard")
     is_trial = snap_plan_type == "trial"
+    if snap_plan_id is None:
+        raise ApplyError(f"order {order.id} has no plan_id in snapshot or FK")
     await _upsert_meta_expiration_plan_trial(
         db, server_id, new_date, snap_plan_id, is_trial
     )

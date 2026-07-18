@@ -563,7 +563,7 @@ class EmailClient:
         mime = MIMEText(html_body, "html", "utf-8")
         mime["From"] = formataddr((Header(self._brand_name, "utf-8").encode(), self._sender_email))
         mime["To"] = recipient_email
-        mime["Subject"] = Header(subject, "utf-8")
+        mime["Subject"] = str(Header(subject, "utf-8"))
         raw_msg = mime.as_string()
 
         # Up to 3 attempts: initial + 2 retries with exponential backoff.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Any
 
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
@@ -17,7 +18,7 @@ def get_engine(settings: Settings | None = None) -> AsyncEngine:
     global _engine
     if _engine is None:
         app_settings = settings or get_settings()
-        engine_kwargs = {}
+        engine_kwargs: dict[str, Any] = {}
         if app_settings.async_database_use_null_pool:
             engine_kwargs["poolclass"] = NullPool
         else:

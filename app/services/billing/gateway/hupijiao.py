@@ -267,7 +267,8 @@ class HupijiaoGateway:
                 )
             raise
         # Per docs, payload sits inside body["data"]; tolerate both shapes.
-        data = body.get("data") if isinstance(body.get("data"), dict) else body
+        raw_data = body.get("data")
+        data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else body
         hpj_status = str(data.get("status") or "").upper()
         normalized: Literal["SUCCESS", "PROCESSING", "CLOSED", "NOTFOUND"]
         if hpj_status == _HPJ_STATUS_PAID:

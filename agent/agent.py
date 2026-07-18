@@ -11,6 +11,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 
@@ -75,7 +76,7 @@ def main() -> None:
 
     app = create_app(cfg, config_path)
 
-    ssl_kwargs = {}
+    ssl_kwargs: dict[str, Any] = {}
     if cfg.agent.tls is not None:
         cert_p = Path(cfg.agent.tls.cert_path)
         key_p = Path(cfg.agent.tls.key_path)

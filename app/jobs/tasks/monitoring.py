@@ -24,7 +24,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from sqlalchemy import delete as sa_delete, func, select
+from sqlalchemy import delete as sa_delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import alert_defaults
@@ -144,7 +144,7 @@ async def _load_host_alert_config(
 
     email_enabled = alert_defaults.DEFAULT_EMAIL_ENABLED
     recipients: list[int] = list(global_default_recipients)
-    min_severity = alert_defaults.DEFAULT_MIN_SEVERITY
+    min_severity: str = alert_defaults.DEFAULT_MIN_SEVERITY
     notify_resolve = alert_defaults.DEFAULT_NOTIFY_RESOLVE
     cooldown_min = alert_defaults.DEFAULT_COOLDOWN_MIN
 
@@ -826,19 +826,19 @@ async def run_monitoring_collect() -> None:
                         error_msg=p.get("error_msg"),
                     ))
 
-            config = host_configs.get(host_id)
-            if config is not None:
-                host = next((h for h in hosts if h.id == host_id), None)
-                host_name = host.name if host else f"host-{host_id}"
-                host_is_wings = host.kind == host_registry.KIND_WINGS_NODE if host else False
-                await _check_alerts(db, metrics_row, config=config, host_name=host_name, is_wings=host_is_wings)
+            host_config: HostAlertConfig | None = host_configs.get(host_id)
+            if host_config is not None:
+                host_row: ManagerHost | None = next((h for h in hosts if h.id == host_id), None)
+                host_name = host_row.name if host_row else f"host-{host_id}"
+                host_is_wings = host_row.kind == host_registry.KIND_WINGS_NODE if host_row else False
+                await _check_alerts(db, metrics_row, config=host_config, host_name=host_name, is_wings=host_is_wings)
 
         await _check_probe_alerts(db, host_configs=host_configs, host_names={h.id: h.name for h in hosts})
         await _cleanup_old_data(db)
 
         if seen_host_ids:
             await db.execute(
-                ManagerHost.__table__.update()
+                update(ManagerHost)
                 .where(ManagerHost.id.in_(seen_host_ids))
                 .values(last_seen_at=now)
             )

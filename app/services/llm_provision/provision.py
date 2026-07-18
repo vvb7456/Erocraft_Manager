@@ -200,8 +200,10 @@ async def provision_for_server(
         sub_result, token_result = await asyncio.gather(
             _subscription_chain(), _token_chain(), return_exceptions=True
         )
-        if isinstance(sub_result, Exception) or isinstance(token_result, Exception):
-            raise sub_result if isinstance(sub_result, Exception) else token_result
+        if isinstance(sub_result, BaseException):
+            raise sub_result
+        if isinstance(token_result, BaseException):
+            raise token_result
         subscription_id = sub_result
         token_id, api_key_raw = token_result
     except Exception:

@@ -18,7 +18,7 @@ Action endpoints (§11.2 capability matrix):
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_admin
@@ -31,7 +31,7 @@ from app.db.models.billing import (
     BillingOrderEffect,
     BillingRefund,
 )
-from app.db.models.pterodactyl import PteroUser
+from app.db.models.pterodactyl import PteroServer, PteroUser
 from app.schemas.billing_admin_orders import (
     ActionAck,
     AdminInvoiceOut,
@@ -199,7 +199,7 @@ async def list_orders_endpoint(
     q: str | None = Query(
         None,
         max_length=64,
-        description="搜索：订单号 EMxxx / 发票号 INxxx / 网关交易号",
+        description="模糊搜索：订单号/订单ID/用户名/邮箱/用户UUID/服务器名/服务器ID/服务器UUID/服务器短UUID/发票号/网关交易号/网关预支付ID",
     ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -220,50 +220,74 @@ async def list_orders_endpoint(
     if q:
         token = q.strip()
         if token:
-            # Resolve token -> order_id via three lookups (order_no / invoice_no /
-            # gateway transaction_id), union the matches.
-            order_ids: set[int] = set()
-            order_match = await db.scalar(
-                select(BillingOrder.id).where(BillingOrder.order_no == token)
-            )
-            if order_match is not None:
-                order_ids.add(order_match)
-            inv_match = await db.scalar(
-                select(BillingInvoice.order_id).where(
-                    BillingInvoice.invoice_no == token
-                )
-            )
-            if inv_match is not None:
-                order_ids.add(inv_match)
-            tx_invoice_ids = (
-                await db.execute(
-                    select(BillingInvoiceTransaction.invoice_id).where(
-                        BillingInvoiceTransaction.transaction_id == token
-                    )
-                )
-            ).scalars().all()
-            if tx_invoice_ids:
-                tx_orders = (
-                    await db.execute(
-                        select(BillingInvoice.order_id).where(
-                            BillingInvoice.id.in_(tx_invoice_ids)
-                        )
-                    )
-                ).scalars().all()
-                order_ids.update(tx_orders)
-            # Also try gateway_prepay_id (虎皮椒 open_order_id) on invoices
-            prepay_match = await db.scalar(
-                select(BillingInvoice.order_id).where(
-                    BillingInvoice.gateway_prepay_id == token
-                )
-            )
-            if prepay_match is not None:
-                order_ids.add(prepay_match)
+            needle = f"%{token}%"
 
-            if not order_ids:
-                return OrderListResponse(items=[], total=0)
-            stmt = stmt.where(BillingOrder.id.in_(order_ids))
-            count_stmt = count_stmt.where(BillingOrder.id.in_(order_ids))
+            # 子查询：发票号 / 网关预支付ID 命中的 order_id 集合
+            inv_subq = select(BillingInvoice.order_id).where(
+                or_(
+                    BillingInvoice.invoice_no.ilike(needle),
+                    BillingInvoice.gateway_prepay_id.ilike(needle),
+                )
+            )
+
+            # 子查询：网关交易号命中 invoice -> order_id 集合
+            tx_subq = (
+                select(BillingInvoice.order_id)
+                .join(
+                    BillingInvoiceTransaction,
+                    BillingInvoiceTransaction.invoice_id == BillingInvoice.id,
+                )
+                .where(BillingInvoiceTransaction.transaction_id.ilike(needle))
+            )
+
+            # 主表条件：直接字段模糊匹配，或经 outerjoin 用户/服务器匹配，或命中发票/交易子查询
+            direct_or = or_(
+                BillingOrder.order_no.ilike(needle),
+                cast(BillingOrder.id, String).ilike(needle),
+                cast(BillingOrder.user_id, String).ilike(needle),
+                cast(BillingOrder.target_server_id, String).ilike(needle),
+                BillingOrder.id.in_(inv_subq),
+                BillingOrder.id.in_(tx_subq),
+            )
+
+            # 用 outerjoin 到 users / servers 表实现用户名/邮箱/UUID、
+            # 服务器名/UUID/短UUID 的模糊匹配。
+            stmt = (
+                stmt.outerjoin(PteroUser, PteroUser.id == BillingOrder.user_id)
+                .outerjoin(
+                    PteroServer,
+                    PteroServer.id == BillingOrder.target_server_id,
+                )
+                .where(
+                    or_(
+                        direct_or,
+                        PteroUser.username.ilike(needle),
+                        PteroUser.email.ilike(needle),
+                        PteroUser.uuid.ilike(needle),
+                        PteroServer.name.ilike(needle),
+                        PteroServer.uuid.ilike(needle),
+                        PteroServer.uuid_short.ilike(needle),
+                    )
+                )
+            )
+            count_stmt = (
+                count_stmt.outerjoin(PteroUser, PteroUser.id == BillingOrder.user_id)
+                .outerjoin(
+                    PteroServer,
+                    PteroServer.id == BillingOrder.target_server_id,
+                )
+                .where(
+                    or_(
+                        direct_or,
+                        PteroUser.username.ilike(needle),
+                        PteroUser.email.ilike(needle),
+                        PteroUser.uuid.ilike(needle),
+                        PteroServer.name.ilike(needle),
+                        PteroServer.uuid.ilike(needle),
+                        PteroServer.uuid_short.ilike(needle),
+                    )
+                )
+            )
     stmt = stmt.order_by(BillingOrder.id.desc()).limit(limit).offset(offset)
     rows = (await db.execute(stmt)).scalars().all()
     total = int(await db.scalar(count_stmt) or 0)
@@ -289,7 +313,11 @@ async def list_orders_endpoint(
 
     return OrderListResponse(
         items=[
-            _list_item(o, owner_username=usernames.get(o.user_id), target_server_name=server_names.get(o.target_server_id))
+            _list_item(
+                o,
+                owner_username=usernames.get(o.user_id),
+                target_server_name=server_names.get(o.target_server_id) if o.target_server_id is not None else None,
+            )
             for o in rows
         ],
         total=total,
@@ -386,7 +414,13 @@ async def get_order_endpoint(
         invoices=[_serialize_invoice(inv) for inv in invoices],
         transactions=[_serialize_transaction(tx) for tx in txs],
         effect=_serialize_effect(effect),
-        refunds=[_serialize_refund_summary(r, initiated_by_username=admin_names.get(r.initiated_by)) for r in refund_rows],
+        refunds=[
+            _serialize_refund_summary(
+                r,
+                initiated_by_username=admin_names.get(r.initiated_by) if r.initiated_by is not None else None,
+            )
+            for r in refund_rows
+        ],
     )
 
 

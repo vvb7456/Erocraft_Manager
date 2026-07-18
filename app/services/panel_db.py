@@ -390,8 +390,6 @@ async def create_server(
     # Insert all server_variables (one per egg_variable). Missing → default.
     for ev in egg_vars:
         value = environment.get(ev.env_variable, ev.default_value)
-        if value is None:
-            value = ev.default_value
         db.add(
             ServerVariable(
                 server_id=server_id,

@@ -227,6 +227,7 @@ async def create_order(
     await _check_no_pending_order(db, user)
 
     # ── 1) Resolve plan + validate kind-specific args ──────────────────────
+    plan: BillingPlan | None = None
     if payload.kind == "upgrade":
         server = await db.get(PteroServer, payload.target_server_id)
         if server is None or server.owner_id != user.id:
@@ -293,7 +294,9 @@ async def create_order(
         # the frontend hides the renew button for trial servers.
         if meta.is_trial:
             raise InvalidOrderRequest("试用套餐无法续费，请转换为标准套餐")
-        plan = await db.get(BillingPlan, meta.plan_id)
+        plan = (
+            await db.execute(select(BillingPlan).where(BillingPlan.id == meta.plan_id))
+        ).scalar_one_or_none()
         if plan is None:
             raise PlanNotPurchasable("此服务器关联的套餐已被删除，请联系管理员")
         # Note: NOT checking is_active — bound servers can always renew (§6).
@@ -314,7 +317,11 @@ async def create_order(
         trial_plan = await db.get(BillingPlan, meta.plan_id)
         if trial_plan is None or trial_plan.linked_plan_id is None:
             raise PlanNotPurchasable("试用套餐或其关联标准套餐已被删除，请联系管理员")
-        plan = await db.get(BillingPlan, trial_plan.linked_plan_id)
+        plan = (
+            await db.execute(
+                select(BillingPlan).where(BillingPlan.id == trial_plan.linked_plan_id)
+            )
+        ).scalar_one_or_none()
         if plan is None:
             raise PlanNotPurchasable("关联的标准套餐已被删除，请联系管理员")
         period = _select_period(plan, payload.period_count)
@@ -351,6 +358,7 @@ async def create_order(
     snapshot = _build_snapshot(plan, period, total_fen, total_days)
     # For upgrade orders, add the old plan snapshot
     if payload.kind == "upgrade":
+        assert old_plan is not None
         snapshot["previous_plan"] = {
             "plan_id": old_plan.id,
             "plan_code": old_plan.code,

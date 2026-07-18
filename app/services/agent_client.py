@@ -19,7 +19,7 @@ Error model:
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncIterator
+from typing import Any, AsyncGenerator
 
 import httpx
 
@@ -290,7 +290,7 @@ async def stream_wings_logs(
     *,
     lines: int = 100,
     connect_timeout: float = 10.0,
-) -> AsyncIterator[bytes]:
+) -> AsyncGenerator[bytes, None]:
     """Yield raw SSE bytes from ``/v1/wings/logs/stream``.
 
     The httpx stream + AsyncClient stay open for the lifetime of this

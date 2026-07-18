@@ -270,17 +270,17 @@ async def _deployment_target_paths(
     if dep.host_id not in cert_status_cache:
         try:
             endpoint, token = await host_registry.get_credentials(db, dep.host_id)
-            payload = await agent_client.get_cert_status(endpoint, token, timeout=3.0)
-            cert_status_cache[dep.host_id] = (payload, None)
+            fresh_payload = await agent_client.get_cert_status(endpoint, token, timeout=3.0)
+            cert_status_cache[dep.host_id] = (fresh_payload, None)
         except (host_registry.HostRegistryError, agent_client.AgentClientError) as exc:
             cert_status_cache[dep.host_id] = (None, str(exc))
 
-    payload, error = cert_status_cache[dep.host_id]
+    cached_payload, error = cert_status_cache[dep.host_id]
     if error:
         return None, None, error
-    if payload is None:
+    if cached_payload is None:
         return None, None, "agent certificate status unavailable"
-    return _cert_status_paths(payload, dep.target_name)
+    return _cert_status_paths(cached_payload, dep.target_name)
 
 
 def _deployment_out(
@@ -422,7 +422,7 @@ async def _add_deployment_row(
                 detail=f"failed to reach agent: {exc}",
             ) from exc
         targets = cert_status.get("targets") or []
-        known = {item.get("name") for item in targets if isinstance(item, dict)}
+        known: set[str] = {str(item.get("name")) for item in targets if isinstance(item, dict)}
         if body.target_name not in known:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

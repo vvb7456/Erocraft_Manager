@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models import ManagerActivityLog
 
@@ -21,7 +22,7 @@ class ActivityLogRepository:
         host_id: int | None = None,
         node_id: int | None = None,
     ) -> tuple[list[ManagerActivityLog], int]:
-        filters = []
+        filters: list[ColumnElement[bool]] = []
         if actor:
             filters.append(ManagerActivityLog.actor.ilike(f"%{actor}%"))
         if category:

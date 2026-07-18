@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import Any, cast
 
 from fastapi import FastAPI
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.types import ExceptionHandler
 
 from app.api.routers import api_router
 from app.core.config import get_settings
@@ -50,7 +52,10 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(OriginCheckMiddleware)
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_exception_handler(
+        RateLimitExceeded,
+        cast(ExceptionHandler, _rate_limit_exceeded_handler),
+    )
     register_exception_handlers(app)
     app.include_router(api_router, prefix="/api")
     return app

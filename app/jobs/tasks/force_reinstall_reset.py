@@ -56,7 +56,7 @@ async def run_force_reinstall_reset() -> None:
     async with session_factory() as db:
         result = await db.execute(_SCAN_AND_RESET_SQL)
         await db.commit()
-        n = result.rowcount or 0
+        n = getattr(result, "rowcount", 0) or 0
         if n:
             logger.info("force_reinstall_reset: cleared FORCE_REINSTALL on %d server(s)", n)
             await log_manager_activity(

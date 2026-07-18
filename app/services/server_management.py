@@ -605,8 +605,6 @@ async def switch_egg(
     values: dict[int, str] = {}
     for variable in egg_variables:
         value = environment.get(variable.env_variable, variable.default_value)
-        if value is None:
-            value = variable.default_value
         try:
             validate_environment(variable.env_variable, str(value), variable.rules)
         except EggValidationError as exc:

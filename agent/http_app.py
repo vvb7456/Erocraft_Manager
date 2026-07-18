@@ -180,7 +180,7 @@ def _register_wings_routes(app: FastAPI, cfg: AgentConfig, auth: Any) -> None:
                 yield b"retry: 5000\n\n"
                 log_iter = wings_service_collector.stream_logs(
                     cfg.wings.service_name, lines=lines
-                ).__aiter__()
+                )
                 while True:
                     if await request.is_disconnected():
                         break

@@ -186,6 +186,10 @@ async def _try_grant_inner(
     invitee_coupon_was_new = False
     if locked.invitee_coupon_id:
         invitee_coupon = await db.get(Coupon, locked.invitee_coupon_id)
+        if invitee_coupon is None:
+            raise RuntimeError(
+                f"invitee coupon {locked.invitee_coupon_id} disappeared"
+            )
     else:
         invitee_coupon = await coupon_service.issue_from_template(
             db,

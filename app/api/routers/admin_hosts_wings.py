@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import ClassVar
+from typing import AsyncGenerator, ClassVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -559,7 +559,7 @@ async def stream_wings_logs(
     """Proxy the agent's `journalctl -u wings -f` SSE stream to the admin."""
     host, _node = await _require_wings_host(db, host_id)
 
-    async def proxy() -> "asyncio.AsyncIterator[bytes]":
+    async def proxy() -> AsyncGenerator[bytes, None]:
         try:
             endpoint, token = await host_registry.get_credentials(db, host.id)
             agen = agent_client.stream_wings_logs(

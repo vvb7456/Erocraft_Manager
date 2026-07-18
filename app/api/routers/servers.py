@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import date, timedelta
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -131,7 +132,7 @@ async def _set_meta_expiration(db: AsyncSession, server_id: int, expiration_date
         return
 
     if dialect_name == "sqlite":
-        stmt = sqlite_insert(ServerMeta).values(**values)
+        stmt = cast(Any, sqlite_insert(ServerMeta).values(**values))
         await db.execute(
             stmt.on_conflict_do_update(
                 index_elements=[ServerMeta.server_id],

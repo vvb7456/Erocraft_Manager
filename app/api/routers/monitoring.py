@@ -59,10 +59,10 @@ async def monitoring_overview(
         )
 
     # Load all enabled hosts
-    result = await db.execute(
+    host_result = await db.execute(
         select(ManagerHost).where(ManagerHost.id.in_(monitored_host_ids))
     )
-    host_map = {h.id: h for h in result.scalars().all()}
+    host_map = {h.id: h for h in host_result.scalars().all()}
 
     # For wings hosts, load PanelNode info
     wings_nids = {h.pterodactyl_node_id for h in host_map.values()
@@ -82,18 +82,18 @@ async def monitoring_overview(
         .group_by(HostMetrics.host_id)
         .subquery()
     )
-    result = await db.execute(
+    metrics_result = await db.execute(
         select(HostMetrics).join(latest_sub, HostMetrics.id == latest_sub.c.max_id)
     )
-    metrics_map = {m.host_id: m for m in result.scalars().all()}
+    metrics_map = {m.host_id: m for m in metrics_result.scalars().all()}
 
     # Active alerts per host
-    result = await db.execute(
+    alert_result = await db.execute(
         select(HostAlert.host_id, func.count(HostAlert.id).label("cnt"))
         .where(HostAlert.host_id.in_(monitored_host_ids), HostAlert.resolved_at.is_(None))
         .group_by(HostAlert.host_id)
     )
-    alert_counts = {row.host_id: row.cnt for row in result}
+    alert_counts = {row.host_id: row.cnt for row in alert_result}
 
     hosts_out = []
     for hid in monitored_host_ids:
@@ -146,7 +146,7 @@ async def monitoring_overview(
         .group_by(HostProbeResult.source, HostProbeResult.probe_name)
         .subquery()
     )
-    result = await db.execute(
+    probe_result = await db.execute(
         select(HostProbeResult).join(probe_sub, HostProbeResult.id == probe_sub.c.max_id)
     )
     probes_out = [
@@ -157,7 +157,7 @@ async def monitoring_overview(
             source=p.source,
             ts=p.ts,
         )
-        for p in result.scalars().all()
+        for p in probe_result.scalars().all()
     ]
 
     # Alert summary

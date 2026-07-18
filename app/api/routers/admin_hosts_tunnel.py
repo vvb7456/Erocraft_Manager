@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -341,7 +342,7 @@ async def install_tunnel(
     # up in `systemctl show ActiveState` after the fact). Wait briefly,
     # then poll agent status. See B2 in CF_TUNNEL_LOGIC_AUDIT.md.
     live_active = False
-    live_status: dict[str, object] = {}
+    live_status: dict[str, Any] = {}
     last_err: str = ""
     for _attempt in range(5):  # up to ~5s
         await asyncio.sleep(1.0)

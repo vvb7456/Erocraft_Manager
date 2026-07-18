@@ -52,8 +52,8 @@ async def _notify(
             ok, err = await send_alert_email(
                 db,
                 recipient_email=email,
-                node_name=cert.name,
-                node_id=None,
+                host_name=cert.name,
+                host_id=None,
                 alert_type=alert_type,
                 severity=severity,
                 message=message,

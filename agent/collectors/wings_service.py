@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import AsyncIterator
+from typing import AsyncGenerator
 
 from ..schemas import WingsServiceStatus
 
@@ -125,7 +125,7 @@ async def status(service_name: str, timeout: float = 5.0) -> WingsServiceStatus:
     )
 
 
-async def stream_logs(service_name: str, lines: int = 100) -> AsyncIterator[bytes]:
+async def stream_logs(service_name: str, lines: int = 100) -> AsyncGenerator[bytes, None]:
     """Yield raw bytes from `journalctl -u <unit> -f -n <lines> --no-pager`.
 
     Caller is responsible for SSE framing. The subprocess is killed when

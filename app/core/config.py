@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Literal
 from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
@@ -14,6 +15,15 @@ def _as_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _as_same_site(value: str | None, default: str = "lax") -> Literal["lax", "strict", "none"]:
+    v = (value if value is not None else default).strip().lower()
+    if v == "strict":
+        return "strict"
+    if v == "none":
+        return "none"
+    return "lax"
 
 
 def _as_int(value: str | None, default: int) -> int:
@@ -43,7 +53,7 @@ class Settings:
     session_cookie_name: str
     session_max_age: int
     session_cookie_secure: bool
-    session_same_site: str
+    session_same_site: Literal["lax", "strict", "none"]
     db_host: str
     db_port: int
     db_user: str
@@ -115,7 +125,7 @@ def _build_settings() -> Settings:
         session_cookie_name=os.getenv("SESSION_COOKIE_NAME", "erocraft_manager_session"),
         session_max_age=_as_int(os.getenv("SESSION_MAX_AGE"), 60 * 60 * 24 * 14),
         session_cookie_secure=_as_bool(os.getenv("SESSION_COOKIE_SECURE"), False),
-        session_same_site=os.getenv("SESSION_SAME_SITE", "lax"),
+        session_same_site=_as_same_site(os.getenv("SESSION_SAME_SITE")),
         db_host=os.getenv("DB_HOST", "127.0.0.1"),
         db_port=_as_int(os.getenv("DB_PORT"), 3306),
         db_user=os.getenv("DB_USER", ""),

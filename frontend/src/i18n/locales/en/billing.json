@@ -284,7 +284,7 @@
       }
     },
     "orders": {
-      "searchPlaceholder": "Order No / Invoice No / Transaction ID",
+      "searchPlaceholder": "Search orders",
       "filterAllStatus": "All statuses",
       "filterAllKind": "All types",
       "filterStatusPrefix": "Status",
