@@ -1,0 +1,16 @@
+{
+  "checkbox": {
+    "label_prefix": "我已阅读并同意《",
+    "open_tos": "用户服务协议",
+    "label_mid": "》与《",
+    "open_privacy": "隐私政策",
+    "label_suffix": "》"
+  },
+  "viewer": {
+    "loading": "协议加载中…",
+    "close": "关闭"
+  },
+  "view_page": {
+    "back": "返回"
+  }
+}

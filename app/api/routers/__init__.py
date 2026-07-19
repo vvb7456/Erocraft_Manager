@@ -9,6 +9,7 @@ from app.api.routers.admin_billing_orders import router as admin_billing_orders_
 from app.api.routers.admin_billing_incidents import router as admin_billing_incidents_router
 from app.api.routers.admin_billing_coupon_templates import router as admin_billing_coupon_templates_router
 from app.api.routers.admin_billing_coupons import router as admin_billing_coupons_router
+from app.api.routers.admin_agreements import router as admin_agreements_router
 from app.api.routers.admin_certificates import router as admin_certificates_router
 from app.api.routers.admin_global_defaults import router as admin_global_defaults_router
 from app.api.routers.admin_hosts import router as admin_hosts_router
@@ -24,6 +25,7 @@ from app.api.routers.integrations import router as integrations_router
 from app.api.routers.logs import router as logs_router
 from app.api.routers.monitoring import router as monitoring_router
 from app.api.routers.public import router as public_router
+from app.api.routers.public_agreements import router as public_agreements_router
 from app.api.routers.resources import router as resources_router
 from app.api.routers.servers import router as servers_router
 from app.api.routers.settings import router as settings_router
@@ -48,6 +50,7 @@ api_router.include_router(admin_billing_orders_router)
 api_router.include_router(admin_billing_incidents_router)
 api_router.include_router(admin_billing_coupon_templates_router)
 api_router.include_router(admin_billing_coupons_router)
+api_router.include_router(admin_agreements_router)
 api_router.include_router(admin_certificates_router)
 api_router.include_router(admin_global_defaults_router)
 api_router.include_router(admin_hosts_router)
@@ -63,6 +66,7 @@ api_router.include_router(integrations_router)
 api_router.include_router(logs_router)
 api_router.include_router(monitoring_router)
 api_router.include_router(public_router)
+api_router.include_router(public_agreements_router)
 api_router.include_router(resources_router)
 api_router.include_router(servers_router)
 api_router.include_router(settings_router)

@@ -9,7 +9,8 @@
   "confirmPassword": "Confirm password",
   "confirmPassword_placeholder": "Enter password again",
   "submit": "Sign up",
-  "back": "Already have an account? Sign in",
+  "back_prefix": "Already have an account? ",
+  "back_link": "Sign in",
   "success": "Verification email sent. Please check your inbox to finish registration.",
   "redirecting": "Redirecting to the login page in a few seconds.",
   "error": {

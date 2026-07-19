@@ -9,7 +9,8 @@
   "confirmPassword": "确认密码",
   "confirmPassword_placeholder": "再输入一次密码",
   "submit": "注册",
-  "back": "已有账户？返回登录",
+  "back_prefix": "已有账户？",
+  "back_link": "返回登录",
   "success": "验证邮件已发送，请前往邮箱点击链接完成注册。",
   "redirecting": "页面将在几秒后自动跳转到登录页。",
   "error": {

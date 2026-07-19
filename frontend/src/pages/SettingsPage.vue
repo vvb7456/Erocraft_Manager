@@ -22,6 +22,7 @@ import DirtyBar from '@/components/ui/DirtyBar.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import AccountSettingsPanel from '@/components/account/AccountSettingsPanel.vue'
+import AgreementSettingsPanel from '@/components/settings/AgreementSettingsPanel.vue'
 import { TIMEZONE_OPTIONS } from '@/config/timezones'
 
 defineOptions({ name: 'SettingsPage' })
@@ -39,6 +40,7 @@ const tabs = computed<TabItem[]>(() => [
   { key: 'smtp',       label: t('settings.smtp.title'),     icon: 'mail' },
   { key: 'payment',    label: t('settings.payment.title'),  icon: 'payments' },
   { key: 'branding',   label: t('settings.branding.title'), icon: 'palette' },
+  { key: 'agreements', label: t('settings.agreements.title'), icon: 'gavel' },
   { key: 'defaults',   label: t('settings.defaults.title'), icon: 'tune' },
   { key: 'automation', label: t('settings.automation.title'), icon: 'schedule' },
   { key: 'marketing',  label: t('settings.marketing.title'), icon: 'campaign' },
@@ -443,6 +445,12 @@ async function onTabChange(next: string) {
       <TabSwitcher :tabs="tabs" :modelValue="activeTab" @update:modelValue="onTabChange" />
 
       <AccountSettingsPanel v-if="activeTab === 'account'" />
+
+      <AgreementSettingsPanel
+        v-else-if="activeTab === 'agreements'"
+        :settings="settings"
+        @update:settings="settings = { ...settings, ...$event }"
+      />
 
       <template v-else>
         <div class="st-panel">

@@ -27,6 +27,8 @@ from app.core.tokens import (
 from app.db.models.manager import ManagerPasswordReset, ManagerPendingRegistration
 from app.db.models.pterodactyl import PteroUser
 from app.db.repositories.users import user_repository
+from app.schemas.agreements import AcceptanceItem
+from app.services import agreements as agreements_svc
 from app.services import panel_db
 from app.services.audit import log_manager_activity
 from app.services.email import (
@@ -51,6 +53,7 @@ FORGOT_PASSWORD_GENERIC_MESSAGE = "如果该邮箱已注册，您将收到密码
 class BrandingResponse(BaseModel):
     brand_name: str
     allow_registration: bool
+    agreements_default_checked: bool
     support_email: str = ""
     support_qq_group: str = ""
     support_qq: str = ""
@@ -100,7 +103,7 @@ async def _site_url_or_503(db: AsyncSession, *, detail_key: str) -> str:
 async def get_branding(db: AsyncSession = Depends(get_db)) -> BrandingResponse:
     store = get_settings_store()
     keys = (
-        "BRAND_NAME", "ALLOW_PUBLIC_REGISTRATION",
+        "BRAND_NAME", "ALLOW_PUBLIC_REGISTRATION", "AGREEMENTS_DEFAULT_CHECKED",
         "SUPPORT_EMAIL", "SUPPORT_QQ_GROUP", "SUPPORT_QQ",
         "SUPPORT_WECHAT", "SUPPORT_FOOTER_NOTE",
     )
@@ -109,6 +112,7 @@ async def get_branding(db: AsyncSession = Depends(get_db)) -> BrandingResponse:
     return BrandingResponse(
         brand_name=str(values["BRAND_NAME"]),
         allow_registration=bool(values["ALLOW_PUBLIC_REGISTRATION"]),
+        agreements_default_checked=bool(values["AGREEMENTS_DEFAULT_CHECKED"]),
         support_email=str(values["SUPPORT_EMAIL"] or ""),
         support_qq_group=str(values["SUPPORT_QQ_GROUP"] or ""),
         support_qq=str(values["SUPPORT_QQ"] or ""),
@@ -303,6 +307,10 @@ class RegisterRequest(BaseModel):
     last_name: str = Field(default="", max_length=255)
     # 8-char invite code from the referring user, optional.
     invite_code: str | None = Field(default=None, max_length=8)
+    # Agreement consent intent — captured at /register, materialized to
+    # acceptances rows at /register/verify (when the real user.id exists).
+    # Validated against current versions of required register agreements.
+    accepted_agreements: list[AcceptanceItem] = Field(default_factory=list)
 
 
 class VerifyRegisterRequest(BaseModel):
@@ -346,6 +354,25 @@ async def register(
 
     if not USERNAME_RE.match(username):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.invalid_username")
+
+    # ── Agreement consent validation ──
+    # Validate the user's claimed agreement versions against the current
+    # versions of the required register agreements. Stale or tampered
+    # versions (or missing required agreements) are rejected before any
+    # row is written. The validated items are stored on the pending row
+    # and materialized into acceptances at /register/verify time (when
+    # the real user.id is finally known).
+    try:
+        agreements_items = await agreements_svc.validate_acceptance(
+            db,
+            payload.accepted_agreements,
+            context="register",
+        )
+    except agreements_svc.AgreementError:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="register.agreement_required",
+        ) from None
 
     # Conflict checks against the panel users table
     if await user_repository.get_by_email(db, email):
@@ -455,6 +482,14 @@ async def register(
         lookup_hash=lookup_hash,
         inviter_user_id=inviter_user_id,
         invite_code=normalized_code,
+        agreements_json=(
+            [
+                {"agreement_id": item.agreement_id, "version": item.version}
+                for item in agreements_items
+            ]
+            if agreements_items
+            else None
+        ),
     )
     db.add(pending)
     await db.flush()
@@ -601,6 +636,50 @@ async def verify_registration(
         detail_key="register_verified",
         detail_params={"username": created.username, "email": created.email},
     )
+
+    # ── Materialize agreement acceptances ──
+    # The consent intent was captured on the pending row at /register
+    # time (after validating against current versions). Now that the real
+    # user.id exists we can write the persistent acceptance rows. This is
+    # best-effort: a failure here does not roll back the user creation
+    # (the user is already created and can re-consent via the gate), but
+    # it is logged so an admin can investigate a discrepancy.
+    if pending.agreements_json:
+        try:
+            items = [
+                AcceptanceItem(
+                    agreement_id=int(row["agreement_id"]),
+                    version=int(row["version"]),
+                )
+                for row in pending.agreements_json
+                if isinstance(row, dict)
+                and "agreement_id" in row
+                and "version" in row
+            ]
+            if items:
+                fwd = request.headers.get("x-forwarded-for", "")
+                request_ip: str | None = (
+                    fwd.split(",")[0].strip() if fwd else None
+                )
+                if request_ip is None and request.client is not None:
+                    request_ip = request.client.host
+                await agreements_svc.record(
+                    db,
+                    user_id=int(created.id),
+                    items=items,
+                    context="register",
+                    ip=request_ip,
+                    locale=None,
+                    commit=False,
+                )
+                await db.commit()
+        except Exception:  # noqa: BLE001
+            await db.rollback()
+            logger.exception(
+                "register_verify: failed to record agreement acceptances "
+                "for user=%s",
+                created.id,
+            )
 
     # ── Referral row creation (registered state) ──
     # If this pending row had an inviter, persist the link now and

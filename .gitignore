@@ -48,3 +48,5 @@ AGENTS.md
 .DS_Store
 Thumbs.db
 *.swp
+# 用户协议模板正文（运行时从 DB / 前端 DEFAULT_AGREEMENT_BODIES 加载，不入库）
+/agreements/

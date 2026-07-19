@@ -1,0 +1,16 @@
+{
+  "checkbox": {
+    "label_prefix": "I have read and agree to the ",
+    "open_tos": "Terms of Service",
+    "label_mid": " and ",
+    "open_privacy": "Privacy Policy",
+    "label_suffix": ""
+  },
+  "viewer": {
+    "loading": "Loading agreement…",
+    "close": "Close"
+  },
+  "view_page": {
+    "back": "Back"
+  }
+}

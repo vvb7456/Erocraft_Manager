@@ -47,6 +47,12 @@ const router = createRouter({
       component: () => import('@/pages/VerifyEmailPage.vue'),
       meta: { public: true, layout: 'blank' },
     },
+    {
+      path: '/agreement/:slug',
+      name: 'agreement-view',
+      component: () => import('@/pages/AgreementViewPage.vue'),
+      meta: { public: true, layout: 'blank' },
+    },
     { path: '/', name: 'home', meta: { layout: 'blank' }, component: () => import('@/pages/LoadingPage.vue') },
 
     // ── User routes ──

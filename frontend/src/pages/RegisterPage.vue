@@ -10,6 +10,7 @@ import FormField from '@/components/form/FormField.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
+import AgreementCheckboxGroup from '@/components/agreements/AgreementCheckboxGroup.vue'
 
 defineOptions({ name: 'RegisterPage' })
 
@@ -21,10 +22,6 @@ const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const inviteCode = ref('')
-// Debounced probe state for the invite code field. We don't want to fire
-// a request on every keystroke, and we don't want to surface "invalid"
-// while the user is still typing — only after a short idle window. The
-// ``inviteState`` value mirrors the visual hint shown beneath the field.
 const inviteState = ref<'idle' | 'checking' | 'valid' | 'invalid'>('idle')
 let inviteTimer: ReturnType<typeof setTimeout> | null = null
 let inviteAbort: AbortController | null = null
@@ -32,6 +29,9 @@ const loading = ref(false)
 const error = ref('')
 const success = ref('')
 const allowRegistration = ref(true)
+const agreementsDefaultChecked = ref(false)
+const acceptedAgreements = ref<{ agreement_id: number; version: number }[]>([])
+const allAgreementsAccepted = ref(false)
 
 function translateApiText(value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) return ''
@@ -76,6 +76,7 @@ const canSubmit = computed(() =>
   && !emailError.value
   && !passwordError.value
   && !confirmPasswordError.value
+  && allAgreementsAccepted.value
   && !loading.value,
 )
 
@@ -92,9 +93,15 @@ onMounted(async () => {
   try {
     const res = await fetch('/api/public/branding')
     if (res.ok) {
-      const data = await res.json() as { allow_registration?: boolean }
+      const data = await res.json() as {
+        allow_registration?: boolean
+        agreements_default_checked?: boolean
+      }
       if (data && data.allow_registration === false) {
         allowRegistration.value = false
+      }
+      if (data && data.agreements_default_checked === true) {
+        agreementsDefaultChecked.value = true
       }
     }
   } catch { /* ignore */ }
@@ -156,10 +163,8 @@ async function handleSubmit() {
         email: email.value.trim(),
         username: username.value.trim(),
         password: password.value,
-        // Only include the invite code when the user actually filled
-        // one in. The backend treats missing and empty the same, but
-        // omitting the field keeps the request payload tidy in logs.
         ...(inviteCode.value.trim() ? { invite_code: inviteCode.value.trim().toUpperCase() } : {}),
+        accepted_agreements: acceptedAgreements.value,
       }),
     })
     let data: { message?: string; detail?: string; error?: string } | null = null
@@ -248,6 +253,13 @@ async function handleSubmit() {
           @input="inviteCode = inviteCode.toUpperCase()"
         />
       </FormField>
+
+      <AgreementCheckboxGroup
+        v-model="acceptedAgreements"
+        context="register"
+        :default-checked="agreementsDefaultChecked"
+        @update:all-accepted="allAgreementsAccepted = $event"
+      />
     </template>
 
     <template v-if="allowRegistration && !success" #submit>
@@ -267,30 +279,29 @@ async function handleSubmit() {
     </template>
 
     <template #footer>
-      <RouterLink class="register-link" :to="{ name: 'login' }">
-        {{ t('register.back') }}
+      <span class="footer-hint">{{ t('register.back_prefix') }}</span>
+      <RouterLink class="footer-link" :to="{ name: 'login' }">
+        {{ t('register.back_link') }}
       </RouterLink>
     </template>
   </AuthForm>
 </template>
 
 <style scoped>
-.register-link {
-  color: var(--t2);
+.footer-hint {
+  color: var(--t3);
+  font-size: .82rem;
+}
+
+.footer-link {
+  color: var(--ac);
   font-size: .82rem;
   text-decoration: none;
-  transition: color .15s ease;
+  transition: text-decoration .15s ease;
 }
 
-.register-link:hover {
-  color: var(--t1);
-}
-
-.register-hint {
-  color: var(--t3);
-  font-size: .78rem;
-  text-align: center;
-  margin-top: calc(var(--sp-2) * -1);
+.footer-link:hover {
+  text-decoration: underline;
 }
 
 .invite-hint {

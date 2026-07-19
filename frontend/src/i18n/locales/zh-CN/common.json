@@ -124,7 +124,15 @@
       "token_used": "验证链接已使用，请直接登录",
       "token_expired": "验证链接已过期，请重新注册",
       "site_url_not_configured": "系统未配置外部访问地址，请联系管理员",
-      "create_failed": "账号创建失败，请重新注册或联系管理员"
+      "create_failed": "账号创建失败，请重新注册或联系管理员",
+      "agreement_required": "请阅读并同意所有必选协议后继续"
+    },
+    "agreements": {
+      "not_found": "协议不存在或未发布",
+      "invalid_context": "无效的协议场景",
+      "slug_conflict": "协议标识已存在",
+      "egg_scope_requires_egg_id": "egg 作用域协议必须指定 egg_id",
+      "no_current_version_to_patch": "当前协议尚无已发布版本，无法订正"
     }
   }
 }

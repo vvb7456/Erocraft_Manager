@@ -55,6 +55,23 @@
       "footerNote_tip": "Displayed below the contact list. Use for business hours or any custom note. Leave empty to hide."
     }
   },
+  "agreements": {
+    "title": "User Agreements",
+    "desc": "Manage the body of agreements shown at registration.",
+    "subtitle_tos": "The Terms of Service shown on the registration page.",
+    "subtitle_privacy": "The Privacy Policy shown on the registration page.",
+    "default_checked": "Check agreements by default at registration",
+    "default_checked_tip": "When enabled, the registration form's agreement checkbox is checked by default. Users can still uncheck it.",
+    "edit_zh": "Edit Chinese",
+    "edit_en": "Edit English",
+    "lang_zh": "Chinese",
+    "lang_en": "English",
+    "editor_title": "Edit: {name}",
+    "field_body": "Body",
+    "preview": "Preview",
+    "save": "Save & Publish",
+    "save_ok": "Saved and published"
+  },
   "payment": {
     "title": "Payment",
     "gateways": {

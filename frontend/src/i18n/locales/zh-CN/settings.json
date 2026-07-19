@@ -55,6 +55,23 @@
       "footerNote_tip": "会显示在联系方式下方，可用于注明工作时间、说明文字等，留空则不显示。"
     }
   },
+  "agreements": {
+    "title": "用户协议",
+    "desc": "管理注册时展示的协议正文。",
+    "subtitle_tos": "注册页展示的用户服务条款。",
+    "subtitle_privacy": "注册页展示的隐私政策。",
+    "default_checked": "注册时默认勾选协议",
+    "default_checked_tip": "开启后，注册页的协议复选框默认处于勾选状态，用户仍可取消。",
+    "edit_zh": "编辑中文",
+    "edit_en": "编辑英文",
+    "lang_zh": "中文",
+    "lang_en": "英文",
+    "editor_title": "编辑：{name}",
+    "field_body": "正文",
+    "preview": "预览",
+    "save": "保存并生效",
+    "save_ok": "已保存并生效"
+  },
   "payment": {
     "title": "支付设置",
     "gateways": {

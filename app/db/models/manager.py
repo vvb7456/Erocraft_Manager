@@ -382,6 +382,14 @@ class ManagerPendingRegistration(Base):
     # is recorded on verify.
     inviter_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     invite_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # Captured at /register time: the agreement ids + versions the user
+    # consented to on the registration form. Materialized into
+    # ``manager_user_agreement_acceptances`` rows on /register/verify (when
+    # the real user.id is finally known). ``list[dict]`` shape:
+    # ``[{"agreement_id": int, "version": int}, ...]``.
+    agreements_json: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -591,3 +599,133 @@ class ManagerOrphanResource(Base):
         DateTime, nullable=False, default=_utc_now,
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# User Agreements — see docs/USER_AGREEMENT_DESIGN.md
+# ---------------------------------------------------------------------------
+
+
+class Agreement(Base):
+    """Agreement document definition + current version pointer.
+
+    One row per logical agreement (tos / privacy / aup_<egg> …). The
+    ``current_version`` int points at the currently effective row in
+    ``manager_agreement_versions``; 0 means "not yet published".
+
+    Re-consent is driven by comparing each user's latest
+    ``UserAgreementAcceptance.version`` against this ``current_version``:
+    if the user's version is lower, they must re-consent.
+    """
+
+    __tablename__ = "manager_agreements"
+    __table_args__ = (
+        UniqueConstraint("slug", name="uk_agreement_slug"),
+        Index("idx_agreement_scope", "scope"),
+        Index("idx_agreement_enabled", "is_enabled"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False, default="global")
+    # scope='egg' → matches BillingPlan.egg_id; NULL when scope='global'.
+    egg_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    require_register: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    require_purchase: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now, onupdate=_utc_now
+    )
+
+    versions: Mapped[list["AgreementVersion"]] = relationship(
+        "AgreementVersion",
+        back_populates="agreement",
+        cascade="all, delete-orphan",
+        order_by="AgreementVersion.version",
+    )
+
+
+class AgreementVersion(Base):
+    """Versioned bilingual body of an Agreement.
+
+    Versions are immutable once published: a "patch current version" action
+    overwrites the body in-place (same ``version`` int, no re-consent
+    triggered); a "bump new version" action inserts a new row with
+    ``version = max+1`` and advances ``Agreement.current_version``, which
+    triggers re-consent for every user.
+    """
+
+    __tablename__ = "manager_agreement_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "agreement_id", "version", name="uk_agreement_version"
+        ),
+        Index("idx_agreement_version_agreement", "agreement_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    agreement_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("manager_agreements.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    title_zh: Mapped[str] = mapped_column(String(191), nullable=False, default="")
+    title_en: Mapped[str] = mapped_column(String(191), nullable=False, default="")
+    body_zh: Mapped[str] = mapped_column(
+        Text(length=(1 << 32) - 1), nullable=False, default=""
+    )
+    body_en: Mapped[str] = mapped_column(
+        Text(length=(1 << 32) - 1), nullable=False, default=""
+    )
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now
+    )
+    published_by: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+
+    agreement: Mapped["Agreement"] = relationship(
+        "Agreement", back_populates="versions"
+    )
+
+
+class UserAgreementAcceptance(Base):
+    """Persistent record that a user consented to a specific agreement version.
+
+    ``UNIQUE(user_id, agreement_id, version)`` makes repeated submissions
+    no-op (idempotent against double-clicks / replays). The redundant
+    ``slug`` column survives agreement-row deletion so the audit trail
+    stays readable after the agreement definition is disabled.
+    """
+
+    __tablename__ = "manager_user_agreement_acceptances"
+    __table_args__ = (
+        Index("idx_agreement_acceptance_user", "user_id"),
+        UniqueConstraint(
+            "user_id",
+            "agreement_id",
+            "version",
+            name="uk_agreement_acceptance",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    agreement_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    slug: Mapped[str] = mapped_column(String(32), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    context: Mapped[str] = mapped_column(String(16), nullable=False)
+    order_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    locale: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    accepted_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utc_now
+    )

@@ -130,9 +130,12 @@ async function handleLogin() {
       <RouterLink class="login-link" :to="{ name: 'forgot-password' }">
         {{ t('login.forgot') }}
       </RouterLink>
-      <RouterLink v-if="allowRegistration" class="login-link" :to="{ name: 'register' }">
-        {{ t('login.register') }}
-      </RouterLink>
+      <span v-if="allowRegistration" class="register-hint">
+        <span class="register-hint__text">{{ t('login.register_prefix') }}</span>
+        <RouterLink class="login-link" :to="{ name: 'register' }">
+          {{ t('login.register_link') }}
+        </RouterLink>
+      </span>
       <span v-else />
     </template>
   </AuthForm>
@@ -140,13 +143,24 @@ async function handleLogin() {
 
 <style scoped>
 .login-link {
-  color: var(--t2);
+  color: var(--ac);
   font-size: .82rem;
   text-decoration: none;
-  transition: color .15s ease;
+  transition: text-decoration .15s ease;
 }
 
 .login-link:hover {
-  color: var(--t1);
+  text-decoration: underline;
+}
+
+.register-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.register-hint__text {
+  color: var(--t3);
+  font-size: .82rem;
 }
 </style>

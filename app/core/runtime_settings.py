@@ -197,6 +197,12 @@ SETTINGS_SPECS: dict[str, SettingSpec] = _register({
         lambda: _env_bool("ALLOW_PUBLIC_REGISTRATION", True),
         _normalize_bool,
     ),
+    "AGREEMENTS_DEFAULT_CHECKED": SettingSpec(
+        "AGREEMENTS_DEFAULT_CHECKED",
+        "agreements",
+        lambda: _env_bool("AGREEMENTS_DEFAULT_CHECKED", False),
+        _normalize_bool,
+    ),
     # ---- Support contact info (shown in SupportModal, public-readable) ----
     "SUPPORT_EMAIL": SettingSpec(
         "SUPPORT_EMAIL", "branding",

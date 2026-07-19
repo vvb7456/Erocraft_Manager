@@ -121,7 +121,15 @@
       "token_used": "The verification link has already been used. Please log in.",
       "token_expired": "The verification link has expired, please register again",
       "site_url_not_configured": "The system has not configured a public site URL. Please contact an administrator.",
-      "create_failed": "Failed to create the account. Please register again or contact an administrator"
+      "create_failed": "Failed to create the account. Please register again or contact an administrator",
+      "agreement_required": "Please read and accept all required agreements before continuing"
+    },
+    "agreements": {
+      "not_found": "Agreement not found or not published",
+      "invalid_context": "Invalid agreement context",
+      "slug_conflict": "Agreement slug already exists",
+      "egg_scope_requires_egg_id": "An egg-scoped agreement requires an egg_id",
+      "no_current_version_to_patch": "The agreement has no published version to patch"
     }
   },
   "loading": "Loading…"
