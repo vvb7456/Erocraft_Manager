@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, AsyncIterator, Dict
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
-from . import __version__
+from . import __version__, tls_reload
 from .auth import make_auth_dependency
 from .collectors.snapshot import SnapshotProvider
 from .collectors import certificates as cert_collector
@@ -88,6 +89,33 @@ def _compute_capabilities(cfg: AgentConfig) -> AgentCapabilities:
     )
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Start/stop the TLS listener-cert hot-reload watcher.
+
+    ``app.state.tls_reload`` is populated by ``agent.main`` *after* the
+    SSLContext is built (see agent.py) and before the server starts serving,
+    so it is available here. Absent it (no TLS, or fronted by a reverse
+    proxy that terminates TLS), the watcher simply does not start.
+    """
+    state: tls_reload.TlsReloadState | None = getattr(app.state, "tls_reload", None)
+    if state is not None:
+        state.task = asyncio.create_task(tls_reload.watch(state, log))
+        log.info(
+            "TLS listener hot-reload watcher started (cert=%s interval=%ss)",
+            state.cert_path, state.poll_interval,
+        )
+    try:
+        yield
+    finally:
+        if state is not None and state.task is not None:
+            state.task.cancel()
+            try:
+                await state.task
+            except asyncio.CancelledError:
+                pass
+
+
 def create_app(cfg: AgentConfig, config_path: str) -> FastAPI:
     app = FastAPI(
         title="Erocraft Agent",
@@ -95,6 +123,7 @@ def create_app(cfg: AgentConfig, config_path: str) -> FastAPI:
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=_lifespan,
     )
     auth = make_auth_dependency(cfg)
     snapshot = SnapshotProvider(cfg)
@@ -116,12 +145,18 @@ def create_app(cfg: AgentConfig, config_path: str) -> FastAPI:
     @app.get("/v1/cert/status", dependencies=[Depends(auth)])
     async def get_cert_status() -> Dict[str, Any]:
         try:
-            return await cert_collector.status_with_targets(
+            payload = await cert_collector.status_with_targets(
                 cfg.wings.config_path,
                 cfg.cert_install_targets,
             )
         except wings_config_collector.WingsConfigError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+        # The cert the agent itself serves on `bind` — invisible before, which
+        # is exactly how a stale listener went undetected until it expired.
+        payload["agent_listener"] = tls_reload.listener_status(
+            getattr(app.state, "tls_reload", None)
+        )
+        return payload
 
     @app.post("/v1/commands", response_model=CommandResponse, dependencies=[Depends(auth)])
     async def post_command(req: CommandRequest) -> CommandResponse:

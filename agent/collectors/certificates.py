@@ -111,6 +111,31 @@ def _cert_summary_from_cert(
     }
 
 
+def summarize_cert_file(cert_path: Path) -> dict[str, Any] | None:
+    """Return a JSON-friendly leaf summary for a PEM file, or ``None``.
+
+    Unlike :func:`_cert_summary` (which returns ``datetime`` objects for
+    internal comparisons), datetimes here are ISO strings so the result can be
+    dropped straight into an HTTP response. Returns ``None`` when the file is
+    missing or unparseable — callers treat that as "nothing to compare".
+    """
+    try:
+        if not cert_path.exists():
+            return None
+        summary = _cert_summary(cert_path)
+    except (CertificateError, OSError):
+        return None
+    not_before = summary.get("not_before")
+    not_after = summary.get("not_after")
+    return {
+        "fingerprint_sha256": summary.get("fingerprint_sha256"),
+        "subject": summary.get("subject"),
+        "san": summary.get("san"),
+        "not_before": not_before.isoformat() if not_before else None,
+        "not_after": not_after.isoformat() if not_after else None,
+    }
+
+
 def status(config_path: str) -> dict[str, Any]:
     """Return wings TLS paths and current leaf certificate metadata."""
     paths = wings_config.read_ssl_paths(config_path)
