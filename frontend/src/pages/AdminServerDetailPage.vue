@@ -161,13 +161,12 @@ const tabs = computed(() => {
     { key: 'admin-server-overview',  label: t('adminServer.tabs.overview'),  icon: 'dashboard' },
     { key: 'admin-server-settings',  label: t('adminServer.tabs.settings'),  icon: 'settings' },
   ]
-  // LLM tab only for LLM-capable eggs; disabled until a key is provisioned.
+  // LLM tab only for LLM-capable eggs.
   if (detail.value && hasLlmKey(detail.value.egg.name)) {
     list.push({
       key: 'admin-server-llm',
       label: t('adminServer.tabs.llm'),
       icon: 'smart_toy',
-      disabled: !llmProvisioned.value,
     })
   }
   list.push({ key: 'admin-server-lifecycle', label: t('adminServer.tabs.lifecycle'), icon: 'warning' })

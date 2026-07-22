@@ -20,7 +20,8 @@ from app.api.deps.db import get_db
 from app.core.runtime_settings import LLM_SPECS, defaults_for
 from app.core.settings_store import get_settings_store
 from app.core.time import to_iso_z
-from app.db.models.manager import ServerLlmKey
+from app.db.models.manager import ServerLlmKey, ServerMeta
+from app.db.models.billing import BillingPlan
 from app.db.models.pterodactyl import PteroServer, PteroUser
 from app.services.llm_provision import newapi_client, provision as llm_provision
 
@@ -161,6 +162,53 @@ async def get_server_llm(
     row = await db.get(ServerLlmKey, server_id)
     if row is None:
         return AdminLlmUsageResponse(provisioned=False)
+    return await _serialize(db, row)
+
+
+@router.post("/{server_id}/llm/provision", response_model=AdminLlmUsageResponse)
+async def provision_server_llm(
+    server_id: int,
+    current_user: PteroUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AdminLlmUsageResponse:
+    server = await _ensure_server(db, server_id)
+    meta = await db.get(ServerMeta, server_id)
+    if meta is None or meta.plan_id is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="该服务器未绑定套餐，无法开通 LLM 额度",
+        )
+    plan = await db.get(BillingPlan, meta.plan_id)
+    if plan is None or not plan.llm_enabled or plan.llm_quota_grant <= 0:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="该服务器绑定的套餐未启用 LLM 额度",
+        )
+    existing = await db.get(ServerLlmKey, server_id)
+    if existing is not None and existing.status == "active":
+        return await _serialize(db, existing)
+    snapshot = {
+        "llm_enabled": True,
+        "llm_quota_grant": plan.llm_quota_grant,
+        "newapi_plan_id": plan.newapi_plan_id,
+        "llm_group": plan.llm_group,
+    }
+    try:
+        row = await llm_provision.provision_for_server(
+            db, server_id, server.owner_id, snapshot
+        )
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail=f"LLM 开通失败: {exc}",
+        ) from exc
+    if row is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="LLM 全局开关未开启或套餐未配置 LLM 额度",
+        )
     return await _serialize(db, row)
 
 

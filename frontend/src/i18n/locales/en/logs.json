@@ -63,6 +63,7 @@
     "login_success": "User {username} logged in.",
     "logout": "User {username} logged out.",
     "create_server": "Administrator {actor} created server {server_name} (ID: {server_id}).",
+    "create_server_partial": "Server #{server_id} '{server_name}' created, but LLM quota provisioning failed ({llm_error}), manual retry required",
     "renew_server": "Administrator {actor} renewed server {server_name} (ID: {server_id}) to {date}.",
     "set_server_permanent": "Administrator {actor} set server {server_name} (ID: {server_id}) to permanent.",
     "set_expiry": "Administrator {actor} set server {server_name} (ID: {server_id}) expiration to {date}.",
@@ -223,6 +224,7 @@
     "llm.admin.status": "Admin set the LLM key enabled state for server #{server_id} to {enabled}.",
     "llm.admin.reset_usage": "Admin refilled this month's LLM quota for server #{server_id} (quota {quota_grant}).",
     "llm.admin.revoke": "Admin revoked the LLM quota for server #{server_id} (token #{token_id}).",
+    "llm.admin.provision": "Admin manually provisioned LLM quota for server #{server_id} (NewAPI user #{newapi_user_id})",
     "unknown": "Unknown log detail: {key}"
   },
   "pagination": {

@@ -30,9 +30,17 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT = 30.0
 _MAX_RETRIES = 5
 _RETRY_BASE_DELAY = 2.0  # seconds; doubles on each retry
+
+_RETRYABLE_TRANSPORT_ERRORS = (
+    httpx.RemoteProtocolError,
+    httpx.ConnectError,
+    httpx.ReadError,
+    httpx.WriteError,
+    httpx.TimeoutException,
+)
+"""Transport-layer errors that warrant a retry on a fresh connection."""
 
 _SETTINGS_TTL = 30.0  # seconds — LLM settings cache lifetime
 
@@ -57,7 +65,20 @@ class NewApiNotConfigured(NewApiError):
 def _get_client() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
-        _client = httpx.AsyncClient(timeout=DEFAULT_TIMEOUT, trust_env=False)
+        _client = httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                connect=10.0,
+                read=30.0,
+                write=10.0,
+                pool=5.0,
+            ),
+            limits=httpx.Limits(
+                max_connections=20,
+                max_keepalive_connections=5,
+                keepalive_expiry=30.0,
+            ),
+            trust_env=False,
+        )
     return _client
 
 
@@ -124,17 +145,18 @@ async def _request(
     for attempt in range(_MAX_RETRIES + 1):
         try:
             resp = await client.request(method, url, headers=headers, json=json_body)
-        except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadError) as exc:
-            # Stale keep-alive connection or transient network error —
-            # retry once; the connection pool will open a fresh connection.
-            if attempt < 2:
+        except _RETRYABLE_TRANSPORT_ERRORS as exc:
+            if attempt < _MAX_RETRIES:
+                delay = min(_RETRY_BASE_DELAY * (2 ** attempt), 10.0)
                 logger.warning(
-                    "NewAPI transport error on %s %s (attempt %d), retrying: %s",
-                    method, url.split("?")[0], attempt + 1, exc,
+                    "NewAPI transport error on %s %s (attempt %d/%d), retrying in %.1fs: %s",
+                    method, url.split("?")[0], attempt + 1, _MAX_RETRIES + 1, delay, exc,
                 )
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(delay)
                 continue
-            raise NewApiError(f"NewAPI request failed after retries: {exc}") from exc
+            raise NewApiError(
+                f"NewAPI request failed after {_MAX_RETRIES + 1} attempts: {exc}"
+            ) from exc
         except httpx.HTTPError as exc:
             raise NewApiError(f"NewAPI request failed: {exc}") from exc
 
@@ -142,7 +164,7 @@ async def _request(
             raise NewApiError("NewAPI authentication failed (401) — check tokens")
         if resp.status_code == 429:
             if attempt < _MAX_RETRIES:
-                delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                delay = min(_RETRY_BASE_DELAY * (2 ** attempt), 10.0)
                 logger.warning(
                     "NewAPI 429 on %s %s (attempt %d/%d), retrying in %.1fs",
                     method, url.split("?")[0], attempt + 1, _MAX_RETRIES + 1, delay,
@@ -267,7 +289,10 @@ async def login_and_gen_access_token(
     _check_configured(settings)
     base = _base_url(settings)
     try:
-        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT, trust_env=False) as client:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0),
+            trust_env=False,
+        ) as client:
             login_resp = await client.post(
                 f"{base}/api/user/login",
                 json={"username": username, "password": password},

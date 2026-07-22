@@ -225,6 +225,16 @@
   "llm": {
     "loadFailed": "Failed to load",
     "notProvisioned": "This server has no AI quota provisioned",
+    "provision": {
+      "title": "Provision LLM Quota",
+      "hint": "LLM quota is not provisioned for this server. This may be due to a failure during creation. You can manually retry.",
+      "btn": "Provision LLM Quota",
+      "confirmTitle": "Provision LLM Quota",
+      "confirmMessage": "This will create a NewAPI user, bind a subscription, and generate an API Key for this server. Continue?",
+      "confirm": "Confirm",
+      "toast": "LLM quota provisioned",
+      "failedToast": "Provision failed, please retry or check logs"
+    },
     "statusSection": "Status & Usage",
     "configSection": "API Config",
     "actionsSection": "Key Actions",

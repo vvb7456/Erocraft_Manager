@@ -337,12 +337,25 @@ async def create_server(
                         db, server_id, payload.user_id, snapshot
                     )
                     await db.commit()
-                except Exception:
+                except Exception as exc:
                     logger.warning(
                         "LLM provision failed for admin-created server %s (non-blocking)",
                         server_id, exc_info=True,
                     )
                     await db.rollback()
+                    await log_manager_activity(
+                        db,
+                        actor=actor_username,
+                        category="server",
+                        status="partial",
+                        detail_key="create_server_partial",
+                        detail_params={
+                            "actor": actor_username,
+                            "server_name": payload.server_name,
+                            "server_id": server_id,
+                            "llm_error": str(exc)[:200],
+                        },
+                    )
     except Exception as exc:
         await db.rollback()
         cleanup_succeeded = False

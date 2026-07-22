@@ -63,6 +63,7 @@
     "login_success": "用户 {username} 成功登录。",
     "logout": "用户 {username} 退出登录。",
     "create_server": "管理员 {actor} 创建了服务器 {server_name} (ID: {server_id})。",
+    "create_server_partial": "服务器 #{server_id}「{server_name}」已创建，但 LLM 额度开通失败（{llm_error}），需手动重试",
     "renew_server": "管理员 {actor} 将服务器 {server_name} (ID: {server_id}) 续期到 {date}。",
     "set_server_permanent": "管理员 {actor} 将服务器 {server_name} (ID: {server_id}) 设为永久。",
     "set_expiry": "管理员 {actor} 将服务器 {server_name} (ID: {server_id}) 日期设为 {date}。",
@@ -223,6 +224,7 @@
     "llm.admin.status": "管理员将服务器 #{server_id} 的 LLM 密钥启用状态设为 {enabled}。",
     "llm.admin.reset_usage": "管理员重发了服务器 #{server_id} 的本月 LLM 额度（额度 {quota_grant}）。",
     "llm.admin.revoke": "管理员吊销了服务器 #{server_id} 的 LLM 额度（token #{token_id}）。",
+    "llm.admin.provision": "管理员手动开通了服务器 #{server_id} 的 LLM 额度（NewAPI 用户 #{newapi_user_id}）",
     "unknown": "未知日志详情: {key}"
   },
   "pagination": {

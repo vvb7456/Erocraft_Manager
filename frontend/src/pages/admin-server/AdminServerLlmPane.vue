@@ -116,6 +116,25 @@ async function revokeKey() {
   }
 }
 
+async function provision() {
+  if (!serverId.value) return
+  const ok = await confirm({
+    title: t('adminServer.llm.provision.confirmTitle'),
+    message: t('adminServer.llm.provision.confirmMessage'),
+    confirmText: t('adminServer.llm.provision.confirm'),
+  })
+  if (!ok) return
+  const res = await post<AdminLlmUsage>(`/api/admin/servers/${serverId.value}/llm/provision`, {})
+  if (res) {
+    data.value = res
+    toast(t('adminServer.llm.provision.toast'), 'success')
+    await refreshTabState()
+  } else {
+    toast(t('adminServer.llm.provision.failedToast'), 'error')
+    await load()
+  }
+}
+
 const statusColor = computed(() => {
   switch (data.value?.status) {
     case 'active': return 'var(--ac)'
@@ -133,8 +152,16 @@ const statusColor = computed(() => {
       <EmptyState icon="error" :title="t('adminServer.llm.loadFailed')" />
     </BaseCard>
 
-    <BaseCard v-else-if="data && !data.provisioned" variant="bg2">
-      <EmptyState icon="smart_toy" :title="t('adminServer.llm.notProvisioned')" />
+    <BaseCard v-else-if="data && !data.provisioned" variant="bg2" class="llm-card">
+      <SectionHeader icon="smart_toy" flush>{{ t('adminServer.llm.provision.title') }}</SectionHeader>
+      <AlertBanner tone="warning">
+        {{ t('adminServer.llm.provision.hint') }}
+      </AlertBanner>
+      <div class="provision-actions">
+        <BaseButton @click="provision" :disabled="loading">
+          {{ t('adminServer.llm.provision.btn') }}
+        </BaseButton>
+      </div>
     </BaseCard>
 
     <template v-else-if="data">
@@ -332,5 +359,11 @@ const statusColor = computed(() => {
 
 .op-row--danger .op-row__title {
   color: var(--red);
+}
+
+.provision-actions {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-2) 0;
 }
 </style>

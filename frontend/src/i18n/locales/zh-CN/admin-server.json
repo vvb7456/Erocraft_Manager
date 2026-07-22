@@ -225,6 +225,16 @@
   "llm": {
     "loadFailed": "加载失败",
     "notProvisioned": "此服务器未开通 AI 额度",
+    "provision": {
+      "title": "开通 LLM 额度",
+      "hint": "此服务器的 LLM 额度尚未开通。可能是创建时自动开通失败，可手动重试。",
+      "btn": "开通 LLM 额度",
+      "confirmTitle": "开通 LLM 额度",
+      "confirmMessage": "将为该服务器创建 NewAPI 用户、绑定订阅并生成 API Key。确定继续？",
+      "confirm": "确认开通",
+      "toast": "LLM 额度已开通",
+      "failedToast": "开通失败，请稍后重试或检查日志"
+    },
     "statusSection": "状态与用量",
     "configSection": "接入信息",
     "actionsSection": "密钥操作",
