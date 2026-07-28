@@ -100,6 +100,9 @@
   "suspendedHint": "服务器已到期，请及时续费",
   "reconnectHint": "请检查网络或联系客服",
   "serverOfflineHint": "使用电源控制启动服务器",
+  "serverStopped": "服务器已停止",
+  "serverStarting": "服务器启动中",
+  "serverRunning": "服务器已启动",
   "power": {
     "title": "电源控制",
     "start": "开机",

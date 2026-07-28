@@ -100,6 +100,9 @@
   "suspendedHint": "Server has expired. Please renew to continue.",
   "reconnectHint": "Please check your network or contact support",
   "serverOfflineHint": "Use power controls to start the server",
+  "serverStopped": "Server stopped",
+  "serverStarting": "Server starting",
+  "serverRunning": "Server started",
   "power": {
     "title": "Power Controls",
     "start": "Start",

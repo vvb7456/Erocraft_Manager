@@ -421,6 +421,30 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
     term?.clear()
   }
 
+  /** Insert a visual separator that adapts to terminal width, marking the
+   *  boundary between server sessions to preserve crash logs. */
+  function markSessionBoundary(label?: string) {
+    if (!term) return
+    const cols = term.cols || 80
+    const tag = label ? ` ${label} ` : ''
+    // CJK and fullwidth chars occupy 2 terminal columns; count visual width.
+    const tagWidth = [...tag].reduce((w, ch) => {
+      const cp = ch.codePointAt(0) ?? 0
+      return w + (cp >= 0x1100 && (
+        cp <= 0x115f || (cp >= 0x2e80 && cp <= 0x303e) ||
+        (cp >= 0x3041 && cp <= 0x33ff) || (cp >= 0x3400 && cp <= 0x4dbf) ||
+        (cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 0xa000 && cp <= 0xa4cf) ||
+        (cp >= 0xac00 && cp <= 0xd7a3) || (cp >= 0xf900 && cp <= 0xfaff) ||
+        (cp >= 0xfe30 && cp <= 0xfe4f) || (cp >= 0xff00 && cp <= 0xff60) ||
+        (cp >= 0xffe0 && cp <= 0xffe6)
+      ) ? 2 : 1)
+    }, 0)
+    const pad = Math.max(0, cols - tagWidth)
+    const left = Math.floor(pad / 2)
+    const right = pad - left
+    term.writeln(`\x1b[2m\x1b[36m${'─'.repeat(left)}${tag}${'─'.repeat(right)}\x1b[0m`)
+  }
+
   /** Read terminal scrollback as plain text (for copy actions). */
   function getTerminalText(opts?: { lastLines?: number }): string {
     if (!term) return ''
@@ -477,6 +501,7 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
     fit,
     dispose,
     clearTerminal,
+    markSessionBoundary,
     getTerminalText,
     manualReconnect,
     /** Fetch a fresh wings token (for upload, etc.) */

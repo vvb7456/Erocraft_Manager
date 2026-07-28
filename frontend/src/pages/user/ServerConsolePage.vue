@@ -183,7 +183,7 @@ const {
   suspended,
   commandInput,
   connect: connectConsole, sendCommand, handleCommandKey,
-  loadHistory, fit, dispose, clearTerminal, getTerminalText, manualReconnect,
+  loadHistory, fit, dispose, clearTerminal, markSessionBoundary, getTerminalText, manualReconnect,
 } = useConsoleWs({ serverId, termEl })
 
 // ── Mobile copy: long-press terminal → ActionSheet ──
@@ -239,13 +239,21 @@ watch(suspended, () => {
   if (reloadServer) reloadServer()
 })
 
-// ── Offline: clear terminal + show EmptyState ──
+// ── Offline: show EmptyState overlay, keep old logs for debugging ──
 const isServerOff = computed(() => state.value === 'offline' || state.value === 'stopped')
 
-// Clear terminal on any transition: entering offline (hide stale output) and
-// leaving offline (remove old session logs before fresh output arrives).
-watch(isServerOff, () => {
-  clearTerminal()
+// Insert a visual separator when the server lifecycle changes, instead of
+// clearing the terminal. This preserves crash logs so users can see the
+// error that caused the restart.
+watch(state, (newVal, oldVal) => {
+  if (newVal === oldVal) return
+  if (newVal === 'offline' || newVal === 'stopped') {
+    markSessionBoundary(t('userServers.serverStopped'))
+  } else if (newVal === 'starting' || newVal === 'restarting') {
+    markSessionBoundary(t('userServers.serverStarting'))
+  } else if (newVal === 'running' && (oldVal === 'offline' || oldVal === 'stopped' || oldVal === 'starting' || oldVal === 'restarting')) {
+    markSessionBoundary(t('userServers.serverRunning'))
+  }
 })
 
 onMounted(() => {
