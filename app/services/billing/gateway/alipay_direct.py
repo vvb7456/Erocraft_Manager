@@ -352,13 +352,6 @@ class AlipayDirectGateway:
                     hashes.SHA256(),
                 )
             except InvalidSignature as exc:
-                logger.warning(
-                    "alipay_direct signature mismatch for %s: "
-                    "raw_body=%s extracted_inner=%s",
-                    method,
-                    response.text[:1000],
-                    raw_inner[:500] if raw_inner else None,
-                )
                 raise GatewaySignatureError(
                     "alipay_direct response signature mismatch"
                 ) from exc
