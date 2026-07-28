@@ -285,7 +285,7 @@ class AlipayDirectGateway:
         self, method: str, biz: dict[str, Any], notify_url: str | None = None
     ) -> dict[str, str]:
         params = self._common_params(method, notify_url)
-        params["biz_content"] = json.dumps(biz, ensure_ascii=False, separators=(",", ":"))
+        params["biz_content"] = json.dumps(biz, separators=(",", ":"))
         params["sign"] = _sign(params, self._private_key)
         return params
 
@@ -386,7 +386,7 @@ class AlipayDirectGateway:
             return_url=request.return_url,
         )
         params_pc["biz_content"] = json.dumps(
-            biz_pc, ensure_ascii=False, separators=(",", ":")
+            biz_pc, separators=(",", ":")
         )
         params_pc["sign"] = _sign(params_pc, self._private_key)
         pay_url_pc = (
@@ -410,7 +410,7 @@ class AlipayDirectGateway:
             return_url=request.return_url,
         )
         params_wap["biz_content"] = json.dumps(
-            biz_wap, ensure_ascii=False, separators=(",", ":")
+            biz_wap, separators=(",", ":")
         )
         params_wap["sign"] = _sign(params_wap, self._private_key)
         pay_url_wap = (
