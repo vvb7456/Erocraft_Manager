@@ -291,9 +291,9 @@
         "inherit": "未设置时使用全局默认：{v}",
         "recipients": "为空表示使用全局默认收件人列表。",
         "cooldown": "同一主机同一告警类型在冷却期内不重复发送。",
-        "pull": "Manager 向本节点 Agent 拉取 /v1/metrics 的超时与重试。跨境链路建议调高，内网节点保持默认即可。",
-        "pullTimeout": "单次 HTTP 请求超时。跨境节点（如新加坡）建议 10 秒，内网默认 5 秒。",
-        "pullAttempts": "失败后的总尝试次数（含首次）。调高可吸收偶发抖动，但会延长真实故障的告警延迟。"
+        "pull": "Manager 拉取本节点 Agent 指标的超时与重试次数。跨境链路延迟高可适当调大。",
+        "pullTimeout": "单次拉取请求的超时秒数。",
+        "pullAttempts": "拉取失败后的总尝试次数。"
       },
       "types": {
         "node_offline": "主机离线",
