@@ -271,6 +271,7 @@
       "channelSection": "Notification channel",
       "rulesSection": "Alert types & thresholds",
       "rulesTip": "Disabled types will not raise alerts on this host. Unmodified thresholds use global defaults.",
+      "pullSection": "Agent pull tuning",
       "threshold": "Threshold",
       "warningThreshold": "warning %",
       "criticalThreshold": "critical %",
@@ -282,12 +283,17 @@
         "recipients": "Recipients",
         "minSeverity": "Minimum severity",
         "notifyResolve": "Notify on resolve",
-        "cooldown": "Cooldown (minutes)"
+        "cooldown": "Cooldown (minutes)",
+        "pullTimeout": "Pull timeout (seconds)",
+        "pullAttempts": "Pull attempts"
       },
       "tips": {
         "inherit": "Inherits the global default when unset: {v}",
         "recipients": "Empty = use the global default recipient list.",
-        "cooldown": "Same alert type for the same host won't re-fire within the cooldown window."
+        "cooldown": "Same alert type for the same host won't re-fire within the cooldown window.",
+        "pull": "Timeout and retry count for the Manager's /v1/metrics pull against this host's agent. Raise for cross-border links; keep defaults for LAN hosts.",
+        "pullTimeout": "Per-attempt HTTP timeout. Cross-border hosts (e.g. Singapore) should use ~10s; LAN default is 5s.",
+        "pullAttempts": "Total attempts including the first. Raising absorbs transient jitter but delays real-outage alerts."
       },
       "types": {
         "node_offline": "Host offline",

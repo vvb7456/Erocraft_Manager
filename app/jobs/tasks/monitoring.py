@@ -50,12 +50,14 @@ RETRY_MAX_ATTEMPTS = 5
 RETRY_BACKOFF_FACTOR = 2
 
 # Agent /v1/metrics pull retry policy.
-# Total worst case = 5 + 2 + 5 + 4 + 5 = 21 s, well within the 60 s cycle.
-# Tighter than _probe_wings_public on purpose: a single missed pull must NOT
-# fire an "agent offline" alert (see audit 2026-05-22), but we also must not
-# delay a real-outage notification past the cycle window.
-AGENT_PULL_TIMEOUT = 5.0
-AGENT_PULL_ATTEMPTS = 3  # 1 initial + 2 retries
+# Per-host timeout / attempt count now live in HostAlertConfig (sourced from
+# manager_host_alert_settings; defaults in alert_defaults.DEFAULT_AGENT_PULL_*).
+# The retry base delay + backoff factor below remain global because they
+# govern inter-attempt spacing, not how long a single attempt waits.
+# Total worst case at default 3 attempts = 5 + 2 + 5 + 4 + 5 = 21 s, well
+# within the 60 s cycle. A single missed pull must NOT fire an "agent
+# offline" alert (see audit 2026-05-22 + the sustain gate added 2026-08-03),
+# but we also must not delay a real-outage notification past the cycle window.
 AGENT_PULL_RETRY_BASE_DELAY = 2.0
 AGENT_PULL_RETRY_BACKOFF_FACTOR = 2.0
 
@@ -119,6 +121,10 @@ class HostAlertConfig:
     min_severity: str
     notify_resolve: bool
     cooldown_min: int
+    # Per-host Manager -> Agent /v1/metrics pull tuning (NULL override =
+    # inherit DEFAULT_AGENT_PULL_*). Used by _pull() below.
+    agent_pull_timeout: float
+    agent_pull_attempts: int
     rules: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def rule(self, alert_type: str) -> dict[str, Any]:
@@ -147,6 +153,8 @@ async def _load_host_alert_config(
     min_severity: str = alert_defaults.DEFAULT_MIN_SEVERITY
     notify_resolve = alert_defaults.DEFAULT_NOTIFY_RESOLVE
     cooldown_min = alert_defaults.DEFAULT_COOLDOWN_MIN
+    agent_pull_timeout = alert_defaults.DEFAULT_AGENT_PULL_TIMEOUT
+    agent_pull_attempts = alert_defaults.DEFAULT_AGENT_PULL_ATTEMPTS
 
     if settings_row is not None:
         if settings_row.email_enabled is not None:
@@ -166,6 +174,10 @@ async def _load_host_alert_config(
             notify_resolve = bool(settings_row.notify_resolve)
         if settings_row.cooldown_min is not None:
             cooldown_min = int(settings_row.cooldown_min)
+        if settings_row.agent_pull_timeout is not None:
+            agent_pull_timeout = float(settings_row.agent_pull_timeout)
+        if settings_row.agent_pull_attempts is not None:
+            agent_pull_attempts = int(settings_row.agent_pull_attempts)
 
     rule_rows = (
         await db.execute(
@@ -195,6 +207,8 @@ async def _load_host_alert_config(
         min_severity=min_severity,
         notify_resolve=notify_resolve,
         cooldown_min=cooldown_min,
+        agent_pull_timeout=agent_pull_timeout,
+        agent_pull_attempts=agent_pull_attempts,
         rules=rules,
     )
 
@@ -297,24 +311,45 @@ async def _check_alerts(
 
     # --- reachability ---
     if is_wings:
+        # Wings reachability is an INDEPENDENT signal from agent reachability.
+        # Previously wings_online was derived solely from the agent payload's
+        # wings sub-dict, so an agent pull timeout falsely marked wings down
+        # too. Now the Manager's own public-side probe (public_reachable) is
+        # treated as authoritative: when it succeeds we consider wings online
+        # regardless of what the (possibly missing) agent payload says. This
+        # stops a single cross-border pull timeout from escalating to
+        # node_offline critical while wings is actually still serving users.
+        wings_reachable = metrics.wings_online or metrics.public_reachable
+
+        node_offline_rule = config.rule("node_offline")
+        agent_down_rule = config.rule("agent_only_down")
+        # max(1, ...) guards against negative sustain_min sneaking in via
+        # hand-edited DB rows (API validates ge=1, but dirty data bypasses
+        # it) - a negative window would put the cutoff in the future and
+        # silently disable the alert (audit m8).
+        node_offline_sustain = max(1, int(node_offline_rule.get("sustain_min") or alert_defaults.DEFAULT_OFFLINE_SUSTAIN_MIN))
+        agent_down_sustain = max(1, int(agent_down_rule.get("sustain_min") or alert_defaults.DEFAULT_OFFLINE_SUSTAIN_MIN))
+
         # 3 mutually-exclusive states for wings nodes
-        if not metrics.agent_online and not metrics.wings_online:
-            await _raise_or_skip(db, host_id, "node_offline", "critical",
-                                 f"Host {host_id} unreachable (agent + wings down)",
-                                 now, config=config, host_name=host_name)
+        if not metrics.agent_online and not wings_reachable:
+            if await _check_offline_sustained(db, host_id, field_name="agent_online", minutes=node_offline_sustain):
+                await _raise_or_skip(db, host_id, "node_offline", "critical",
+                                     f"Host {host_id} unreachable (agent + wings down) - sustained offline {node_offline_sustain}m window",
+                                     now, config=config, host_name=host_name)
             await _auto_resolve(db, host_id, "agent_only_down", now,
                                 config=config, host_name=host_name)
             await _auto_resolve(db, host_id, "wings_only_down", now,
                                 config=config, host_name=host_name)
         elif not metrics.agent_online:
-            await _raise_or_skip(db, host_id, "agent_only_down", "warning",
-                                 f"Host {host_id} agent unreachable (wings still online)",
-                                 now, config=config, host_name=host_name)
+            if await _check_offline_sustained(db, host_id, field_name="agent_online", minutes=agent_down_sustain):
+                await _raise_or_skip(db, host_id, "agent_only_down", "warning",
+                                     f"Host {host_id} agent unreachable (wings still online) - sustained offline {agent_down_sustain}m window",
+                                     now, config=config, host_name=host_name)
             await _auto_resolve(db, host_id, "node_offline", now,
                                 config=config, host_name=host_name)
             await _auto_resolve(db, host_id, "wings_only_down", now,
                                 config=config, host_name=host_name)
-        elif not metrics.wings_online:
+        elif not wings_reachable:
             await _raise_or_skip(db, host_id, "wings_only_down", "critical",
                                  f"Host {host_id} wings unreachable (agent still online)",
                                  now, config=config, host_name=host_name)
@@ -331,10 +366,13 @@ async def _check_alerts(
                                 config=config, host_name=host_name)
     else:
         # Non-wings: only agent matters, wings is intentionally offline.
+        agent_down_rule = config.rule("agent_only_down")
+        agent_down_sustain = max(1, int(agent_down_rule.get("sustain_min") or alert_defaults.DEFAULT_OFFLINE_SUSTAIN_MIN))
         if not metrics.agent_online:
-            await _raise_or_skip(db, host_id, "agent_only_down", "critical",
-                                 f"Host {host_id} agent unreachable",
-                                 now, config=config, host_name=host_name)
+            if await _check_offline_sustained(db, host_id, field_name="agent_online", minutes=agent_down_sustain):
+                await _raise_or_skip(db, host_id, "agent_only_down", "critical",
+                                     f"Host {host_id} agent unreachable - sustained offline {agent_down_sustain}m window",
+                                     now, config=config, host_name=host_name)
         else:
             await _auto_resolve(db, host_id, "agent_only_down", now,
                                 config=config, host_name=host_name)
@@ -449,6 +487,39 @@ async def _check_sustained_above(
         return False
     above = sum(1 for v, _ts in rows if v > threshold)
     return (above / len(rows)) >= 0.8
+
+
+async def _check_offline_sustained(
+    db: AsyncSession, host_id: int, *, field_name: str, minutes: int,
+) -> bool:
+    """Return True if the host has been sustainedly offline.
+
+    Availability sustain gate - mirrors ``_check_sustained_above`` but for
+    boolean ``agent_online`` columns where "down" is the alert condition
+    (value is False / 0 / None). Used to prevent a single dropped pull
+    (common on cross-border links with 500 ms+ RTT) from firing a critical
+    ``node_offline`` alert that self-resolves one cycle later.
+
+    Semantics ("last-N-samples" instead of a fixed wall-clock window so the
+    gate stays stable when the monitoring cycle overruns - see audit M1):
+      - N = max(2, ``minutes``) most recent samples (at the default 60 s
+        cycle this matches ``minutes``; under overrun it still looks back
+        the intended number of cycles rather than silently starving).
+      - Require >= 80% of those N samples to be falsy.
+    """
+    col = getattr(HostMetrics, field_name)
+    n = max(2, minutes)
+    result = await db.execute(
+        select(col)
+        .where(HostMetrics.host_id == host_id)
+        .order_by(HostMetrics.ts.desc())
+        .limit(n)
+    )
+    rows = result.scalars().all()
+    if len(rows) < 2:
+        return False
+    down = sum(1 for v in rows if not v)
+    return (down / len(rows)) >= 0.8
 
 
 _SEVERITY_TO_AUDIT_STATUS = {"critical": "failed", "warning": "partial", "info": "info"}
@@ -733,22 +804,26 @@ async def run_monitoring_collect() -> None:
                 continue
             host_metas.append((host, endpoint, token))
 
-        async def _pull(host: ManagerHost, endpoint: str, token: str) -> tuple[int, dict | None]:
+        async def _pull(
+            host: ManagerHost, endpoint: str, token: str, *, cfg: HostAlertConfig,
+        ) -> tuple[int, dict | None]:
             url = f"{endpoint}/v1/metrics"
             headers = {"Authorization": f"Bearer {token}"}
+            timeout = cfg.agent_pull_timeout
+            attempts = max(1, cfg.agent_pull_attempts)
             last_err: str | None = None
             delay = AGENT_PULL_RETRY_BASE_DELAY
-            for attempt in range(1, AGENT_PULL_ATTEMPTS + 1):
+            for attempt in range(1, attempts + 1):
                 try:
                     async with httpx.AsyncClient(
-                        timeout=AGENT_PULL_TIMEOUT, verify=True, trust_env=False
+                        timeout=timeout, verify=True, trust_env=False
                     ) as client:
                         resp = await client.get(url, headers=headers)
                     if resp.status_code >= 400:
                         last_err = f"HTTP {resp.status_code}"
                         logger.warning(
                             "agent pull host %d -> HTTP %d (attempt %d/%d)",
-                            host.id, resp.status_code, attempt, AGENT_PULL_ATTEMPTS,
+                            host.id, resp.status_code, attempt, attempts,
                         )
                     else:
                         if attempt > 1:
@@ -761,18 +836,24 @@ async def run_monitoring_collect() -> None:
                     last_err = str(exc) or exc.__class__.__name__
                     logger.warning(
                         "agent pull host %d transport: %s (attempt %d/%d)",
-                        host.id, last_err, attempt, AGENT_PULL_ATTEMPTS,
+                        host.id, last_err, attempt, attempts,
                     )
-                if attempt < AGENT_PULL_ATTEMPTS:
+                if attempt < attempts:
                     await asyncio.sleep(delay)
-                    delay *= AGENT_PULL_RETRY_BACKOFF_FACTOR
+                    # Cap the inter-attempt backoff so a high-attempt host
+                    # cannot block the whole gather for minutes on end
+                    # (audit M2). 30 s is plenty for transient jitter to
+                    # clear without letting one slow host starve the rest.
+                    delay = min(delay * AGENT_PULL_RETRY_BACKOFF_FACTOR, 30.0)
             logger.warning(
                 "agent pull host %d failed after %d attempts: %s",
-                host.id, AGENT_PULL_ATTEMPTS, last_err,
+                host.id, attempts, last_err,
             )
             return host.id, None
 
-        async def _collect(host: ManagerHost, endpoint: str, token: str) -> tuple[int, dict | None, dict | None]:
+        async def _collect(
+            host: ManagerHost, endpoint: str, token: str, *, cfg: HostAlertConfig,
+        ) -> tuple[int, dict | None, dict | None]:
             public_task = None
             node = None
             if host.kind == host_registry.KIND_WINGS_NODE and host.pterodactyl_node_id:
@@ -781,12 +862,12 @@ async def run_monitoring_collect() -> None:
                     public_task = asyncio.create_task(
                         _probe_wings_public(host.pterodactyl_node_id, node.fqdn, node.scheme, node.daemon_listen)
                     )
-            host_id, agent_payload = await _pull(host, endpoint, token)
+            host_id, agent_payload = await _pull(host, endpoint, token, cfg=cfg)
             pub_result = await public_task if public_task else None
             return host_id, agent_payload, pub_result
 
         raw_results = await asyncio.gather(
-            *[_collect(h, ep, tok) for h, ep, tok in host_metas],
+            *[_collect(h, ep, tok, cfg=host_configs[h.id]) for h, ep, tok in host_metas],
             return_exceptions=True,
         )
 

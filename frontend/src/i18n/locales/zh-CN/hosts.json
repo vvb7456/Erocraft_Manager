@@ -271,6 +271,7 @@
       "channelSection": "通知通道",
       "rulesSection": "告警类型与阈值",
       "rulesTip": "未启用的类型表示该主机不生成该告警。未修改的阈值使用全局默认。",
+      "pullSection": "Agent 拉取设置",
       "threshold": "阈值",
       "warningThreshold": "warning %",
       "criticalThreshold": "critical %",
@@ -282,12 +283,17 @@
         "recipients": "收件人",
         "minSeverity": "最低严重级别",
         "notifyResolve": "恢复后发送通知",
-        "cooldown": "冷却时间（分钟）"
+        "cooldown": "冷却时间（分钟）",
+        "pullTimeout": "拉取超时（秒）",
+        "pullAttempts": "拉取重试次数"
       },
       "tips": {
         "inherit": "未设置时使用全局默认：{v}",
         "recipients": "为空表示使用全局默认收件人列表。",
-        "cooldown": "同一主机同一告警类型在冷却期内不重复发送。"
+        "cooldown": "同一主机同一告警类型在冷却期内不重复发送。",
+        "pull": "Manager 向本节点 Agent 拉取 /v1/metrics 的超时与重试。跨境链路建议调高，内网节点保持默认即可。",
+        "pullTimeout": "单次 HTTP 请求超时。跨境节点（如新加坡）建议 10 秒，内网默认 5 秒。",
+        "pullAttempts": "失败后的总尝试次数（含首次）。调高可吸收偶发抖动，但会延长真实故障的告警延迟。"
       },
       "types": {
         "node_offline": "主机离线",

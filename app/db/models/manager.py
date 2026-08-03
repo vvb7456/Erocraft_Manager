@@ -191,6 +191,11 @@ class HostAlertSettings(Base):
     min_severity: Mapped[str | None] = mapped_column(String(20), nullable=True)
     notify_resolve: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     cooldown_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Per-host Manager -> Agent /v1/metrics pull tuning. NULL = inherit
+    # defaults from ``app.core.alert_defaults``. See migration
+    # 20260803_monitor_tuning for rationale (cross-border jitter).
+    agent_pull_timeout: Mapped[float | None] = mapped_column(Float, nullable=True)
+    agent_pull_attempts: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=_utc_now, onupdate=_utc_now,

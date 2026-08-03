@@ -407,6 +407,14 @@ class HostAlertSettingsSchema(BaseModel):
     min_severity: Literal["info", "warning", "critical"] | None = None
     notify_resolve: bool | None = None
     cooldown_min: int | None = Field(default=None, ge=1, le=1440)
+    # Manager -> Agent /v1/metrics pull tuning. NULL = inherit default.
+    # Cross-border hosts with high RTT should raise these to avoid
+    # spurious node_offline alerts on transient jitter. attempts is capped
+    # at 5 because each attempt blocks for `timeout` seconds and the whole
+    # pull loop runs inside one asyncio.gather - a single slow host must
+    # not starve the others (audit M2).
+    agent_pull_timeout: float | None = Field(default=None, ge=1.0, le=60.0)
+    agent_pull_attempts: int | None = Field(default=None, ge=1, le=5)
 
 
 class HostAlertRuleSchema(BaseModel):
@@ -465,6 +473,8 @@ def _defaults_payload() -> dict[str, object]:
         "min_severity": alert_defaults.DEFAULT_MIN_SEVERITY,
         "notify_resolve": alert_defaults.DEFAULT_NOTIFY_RESOLVE,
         "cooldown_min": alert_defaults.DEFAULT_COOLDOWN_MIN,
+        "agent_pull_timeout": alert_defaults.DEFAULT_AGENT_PULL_TIMEOUT,
+        "agent_pull_attempts": alert_defaults.DEFAULT_AGENT_PULL_ATTEMPTS,
         "rules": {
             atype: alert_defaults.default_rule(atype)
             for atype in alert_defaults.ALERT_TYPES
@@ -502,6 +512,8 @@ async def get_host_alerts(
             min_severity=settings_row.min_severity,  # type: ignore[arg-type]
             notify_resolve=settings_row.notify_resolve,
             cooldown_min=settings_row.cooldown_min,
+            agent_pull_timeout=settings_row.agent_pull_timeout,
+            agent_pull_attempts=settings_row.agent_pull_attempts,
         )
         if settings_row is not None
         else HostAlertSettingsSchema()
@@ -553,6 +565,8 @@ async def put_host_alerts(
     settings_row.min_severity = s.min_severity
     settings_row.notify_resolve = s.notify_resolve
     settings_row.cooldown_min = s.cooldown_min
+    settings_row.agent_pull_timeout = s.agent_pull_timeout
+    settings_row.agent_pull_attempts = s.agent_pull_attempts
 
     # --- rules full-replace ---
     existing_rules = (

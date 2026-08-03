@@ -39,6 +39,8 @@ interface ChannelSettings {
   min_severity: Severity | null
   notify_resolve: boolean | null
   cooldown_min: number | null
+  agent_pull_timeout: number | null
+  agent_pull_attempts: number | null
 }
 
 interface AlertRule {
@@ -59,6 +61,8 @@ interface AlertsResponse {
     min_severity: Severity
     notify_resolve: boolean
     cooldown_min: number
+    agent_pull_timeout: number
+    agent_pull_attempts: number
     rules: Record<string, Partial<AlertRule>>
   }
 }
@@ -74,6 +78,8 @@ const settings = ref<ChannelSettings>({
   min_severity: null,
   notify_resolve: null,
   cooldown_min: null,
+  agent_pull_timeout: null,
+  agent_pull_attempts: null,
 })
 const initialJson = ref<string>('')
 const defaults = ref<AlertsResponse['defaults'] | null>(null)
@@ -81,6 +87,8 @@ const rulesByType = ref<Record<string, AlertRule>>({})
 const adminOptions = ref<AdminOpt[]>([])
 
 const TOGGLE_ONLY = ['node_offline', 'agent_only_down', 'wings_only_down', 'network_down', 'clash_down', 'cert_source_expiring']
+const AVAILABILITY_WITH_SUSTAIN = ['node_offline', 'agent_only_down']
+const TOGGLE_ONLY_PLAIN = TOGGLE_ONLY.filter(at => !AVAILABILITY_WITH_SUSTAIN.includes(at))
 const WINGS_ONLY_ALERTS = ['node_offline', 'wings_only_down']
 const isWings = computed(() => props.hostKind === 'wings_node')
 const SINGLE_THRESHOLD = ['cpu_high', 'mem_high', 'swap_high', 'load_high']
@@ -178,6 +186,7 @@ function resetToDefaults() {
   settings.value = {
     email_enabled: null, email_recipients: null, min_severity: null,
     notify_resolve: null, cooldown_min: null,
+    agent_pull_timeout: null, agent_pull_attempts: null,
   }
   for (const at of ALL_TYPES) rulesByType.value[at] = emptyRule(at)
 }
@@ -290,6 +299,36 @@ const loadFmt = (v: number) => v.toFixed(1)
         />
       </FormField>
 
+      <!-- ── Agent pull tuning ── -->
+      <div class="st-sub">
+        {{ t('hosts.setting.alerting.pullSection') }}
+        <HelpTip :text="t('hosts.setting.alerting.tips.pull')" />
+      </div>
+
+      <FormField layout="horizontal" bordered>
+        <template #label>
+          {{ t('hosts.setting.alerting.fields.pullTimeout') }}
+          <HelpTip :text="t('hosts.setting.alerting.tips.pullTimeout')" />
+        </template>
+        <NumberInput
+          :modelValue="settings.agent_pull_timeout ?? defaults?.agent_pull_timeout ?? 5"
+          :min="1" :max="60" :step="1"
+          @update:modelValue="(v: number) => settings.agent_pull_timeout = v"
+        />
+      </FormField>
+
+      <FormField layout="horizontal" bordered>
+        <template #label>
+          {{ t('hosts.setting.alerting.fields.pullAttempts') }}
+          <HelpTip :text="t('hosts.setting.alerting.tips.pullAttempts')" />
+        </template>
+        <NumberInput
+          :modelValue="settings.agent_pull_attempts ?? defaults?.agent_pull_attempts ?? 3"
+          :min="1" :max="5" :step="1"
+          @update:modelValue="(v: number) => settings.agent_pull_attempts = v"
+        />
+      </FormField>
+
       <!-- ── Per-type rules ── -->
       <div class="st-sub">
         {{ t('hosts.setting.alerting.rulesSection') }}
@@ -297,7 +336,34 @@ const loadFmt = (v: number) => v.toFixed(1)
       </div>
 
       <FormField
-        v-for="at in TOGGLE_ONLY"
+        v-for="at in AVAILABILITY_WITH_SUSTAIN"
+        :key="at"
+        :label="t(`hosts.setting.alerting.types.${at}`)"
+        layout="horizontal"
+        bordered
+      >
+        <div class="alert-row">
+          <ToggleSwitch
+            :modelValue="!isWings && WINGS_ONLY_ALERTS.includes(at) ? false : ruleEnabled(at)"
+            :disabled="!isWings && WINGS_ONLY_ALERTS.includes(at)"
+            @update:modelValue="(v: boolean) => setRuleEnabled(at, v)"
+            size="sm"
+          />
+          <RangeField
+            class="alert-range"
+            :label="t('hosts.setting.alerting.sustainMin')"
+            :modelValue="ruleSustain(at, 2)"
+            :min="1" :max="60" :step="1"
+            :disabled="!isWings && WINGS_ONLY_ALERTS.includes(at)"
+            show-value editable
+            :value-format="minFmt"
+            @update:modelValue="(v: number) => setRuleSustain(at, v)"
+          />
+        </div>
+      </FormField>
+
+      <FormField
+        v-for="at in TOGGLE_ONLY_PLAIN"
         :key="at"
         :label="t(`hosts.setting.alerting.types.${at}`)"
         layout="horizontal"
