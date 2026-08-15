@@ -54,12 +54,24 @@ class QueryResult:
 
 @dataclass(frozen=True, slots=True)
 class NotifyEvent:
-    """Parsed + verified webhook payload."""
+    """Parsed + verified webhook payload.
+
+    ``status`` semantics:
+
+    * ``SUCCESS`` — funds settled (TRADE_SUCCESS / TRADE_FINISHED).
+    * ``CLOSED`` — trade closed WITHOUT payment (merchant-initiated
+      ``alipay.trade.close`` or timeout). Never produces a fund fact; the
+      webhook handler reconciles against existing transactions only.
+    * ``REFUNDED`` / ``REFUND_PROCESSING`` / ``REFUND_FAIL`` — refund-class
+      notifications (audit only; refund truth comes from §10.3 polling).
+    """
 
     out_trade_no: str
     transaction_id: str
     amount_fen: int
-    status: Literal["SUCCESS", "REFUNDED", "REFUND_PROCESSING", "REFUND_FAIL"]
+    status: Literal[
+        "SUCCESS", "CLOSED", "REFUNDED", "REFUND_PROCESSING", "REFUND_FAIL"
+    ]
     raw_form: dict[str, Any] = field(default_factory=dict)
 
 
@@ -101,6 +113,16 @@ class CreateInvoiceRequest:
     title: str
     notify_url: str
     return_url: str
+    due_at: datetime | None = None
+    """Local invoice deadline (UTC naive). Adapters with absolute-expiry
+    support (e.g. Alipay ``time_expire``) must map it onto the gateway-side
+    trade lifetime so that a locally-closed order can no longer be paid.
+    ``None`` means "no local deadline known" — adapters fall back to their
+    own defaults."""
+
+    # Note: ``code_url`` is intentionally NOT part of this request — it is
+    # a gateway response field. Hupijiao returns ``url_qrcode``; Alipay
+    # page.pay has no pre-rendered QR.
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +204,23 @@ class PaymentGateway(Protocol):
 
     async def query_by_out_trade_no(self, out_trade_no: str) -> QueryResult: ...
 
+    async def close_trade(self, out_trade_no: str) -> Literal[
+        "CLOSED", "NOTFOUND", "ALREADY_PAID"
+    ]:
+        """Close an unpaid gateway-side trade.
+
+        * ``CLOSED`` — gateway accepted and closed the trade (buyer can no
+          longer pay against this ``out_trade_no``).
+        * ``NOTFOUND`` — no trade has been created on the gateway side. This
+          does not prove that a previously issued cashier URL is revoked.
+        * ``ALREADY_PAID`` — trade already paid; caller should re-query and
+          route through the last-second payment branch.
+
+        Gateway errors bubble as :class:`GatewayError`; each caller decides
+        whether its deadline and business semantics permit a local close.
+        """
+        ...
+
     def parse_notify(self, raw_form: dict[str, Any]) -> NotifyEvent:
         """Synchronous: verify signature + map to NotifyEvent. No I/O."""
 
@@ -200,6 +239,17 @@ class GatewayError(Exception):
 
 class GatewaySignatureError(GatewayError):
     """Webhook or response failed signature verification."""
+
+
+class GatewayPayloadError(GatewayError):
+    """A signature-valid gateway payload is structurally invalid.
+
+    This is deliberately separate from :class:`GatewaySignatureError`: a
+    validly signed request with missing/invalid business fields is not an
+    authentication failure, but it must still be rejected before it reaches
+    payment bookkeeping (where a database constraint could otherwise turn it
+    into a 500 response).
+    """
 
 
 class GatewayBusinessError(GatewayError):

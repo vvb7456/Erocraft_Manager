@@ -46,8 +46,10 @@ import base64
 import json
 import logging
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 from urllib.parse import quote_plus
+from zoneinfo import ZoneInfo
 
 import httpx
 from cryptography.hazmat.primitives import hashes, serialization
@@ -63,6 +65,7 @@ from app.services.billing.gateway.base import (
     CreateRefundRequest,
     CreateRefundResult,
     GatewayBusinessError,
+    GatewayPayloadError,
     GatewaySignatureError,
     GatewayTransientError,
     NotifyEvent,
@@ -77,9 +80,11 @@ _SIGN_TYPE = "RSA2"
 _FORMAT = "JSON"
 _CHARSET = "utf-8"
 _VERSION = "1.0"
-# wap.pay redirect URLs are valid for the order's biz timeout; Alipay itself
-# enforces ~5min on the cashier, kept consistent with the billing timeout.
+# wap.pay redirect URLs are valid for the order's biz timeout. The cashier
+# timeout is now enforced via ``time_expire`` (absolute expiry) so Alipay
+# itself refuses payment after the local order deadline.
 _QR_VALID_MIN = 5
+_CN_TZ = ZoneInfo("Asia/Shanghai")
 
 # Alipay trade_status values (alipay.trade.query + notify)
 _TS_SUCCESS = "TRADE_SUCCESS"
@@ -87,10 +92,19 @@ _TS_FINISHED = "TRADE_FINISHED"
 _TS_WAIT = "WAIT_BUYER_PAY"
 _TS_CLOSED = "TRADE_CLOSED"
 
+# alipay.trade.close sub_codes meaning the trade already paid (or otherwise
+# not closable because it left WAIT_BUYER_PAY) — caller must re-query.
+_CLOSE_ALREADY_PAID_SUB_CODES = {
+    "ACQ.TRADE_HAS_SUCCESS",
+    "ACQ.TRADE_STATUS_ERROR",
+    "ACQ.REASON_ILLEGAL_STATUS",
+    "ACQ.REASON_TRADE_STATUS_INVALID",
+}
+
 # Alipay sub_code values meaning "no such trade on Alipay side" — the user
 # never opened the cashier / the order expired on Alipay's end / an unpaid
-# expired invoice is being cancelled. These must surface as NOTFOUND so the
-# cancel flow + close job can close out the order.
+# expired invoice is being reconciled. These surface as NOTFOUND; callers
+# must not confuse that with revocation of an already-issued cashier URL.
 _NOT_FOUND_SUB_CODES = {
     "ACQ.TRADE_NOT_EXIST",
     "ACQ.TRADE_HAS_CLOSE",
@@ -99,10 +113,29 @@ _NOT_FOUND_SUB_CODES = {
 }
 
 
-class _AlipayNotFound(GatewayBusinessError):
-    """Internal: Alipay business error indicates the trade is not found.
-    Caught by query_by_out_trade_no / query_refund to return NOTFOUND.
-    """
+class _AlipayBusinessFailure(GatewayBusinessError):
+    """Structured Alipay business failure returned by a signed response."""
+
+    def __init__(
+        self,
+        *,
+        method: str,
+        code: str,
+        sub_code: str,
+        message: str,
+    ) -> None:
+        self.method = method
+        self.code = code
+        self.sub_code = sub_code
+        self.sub_message = message
+        super().__init__(
+            f"alipay_direct {method} code={code} "
+            f"sub_code={sub_code!r} sub_msg={message!r}"
+        )
+
+
+class _AlipayNotFound(_AlipayBusinessFailure):
+    """Alipay reports that the referenced trade/refund does not exist."""
 
 
 # --------------------------------------------------------------------------- #
@@ -165,48 +198,157 @@ def _canonical_query(params: dict[str, str]) -> str:
     return "&".join(f"{k}={params[k]}" for k in sorted(params) if params[k] != "")
 
 
-def _extract_raw_response(text: str, response_key: str) -> str | None:
-    """Extract the raw JSON substring for ``response_key`` from the full
-    response text, preserving the exact byte sequence Alipay signed.
+def _required_notify_text(value: Any, field: str) -> str:
+    """Return a required scalar notify field, rejecting blank/malformed data."""
 
-    Alipay computes the response signature over the **raw JSON value** of
-    ``xxx_response`` as it appears in the HTTP body — including original
-    key ordering, ``\\uXXXX`` escapes, spacing, etc. Re-serialising a
-    parsed dict (``json.dumps``) produces a *different* byte sequence and
-    breaks verification. This function performs brace-matching on the raw
-    text to extract the exact substring.
-    """
-    prefix = f'"{response_key}":'
-    start = text.find(prefix)
-    if start < 0:
-        return None
-    start += len(prefix)
+    if not isinstance(value, str):
+        raise GatewayPayloadError(f"alipay_direct notify missing {field}")
+    text = value.strip()
+    if not text:
+        raise GatewayPayloadError(f"alipay_direct notify missing {field}")
+    return text
+
+
+def _parse_notify_amount_fen(value: Any) -> int:
+    """Parse Alipay's yuan amount without float rounding or non-finite values."""
+
+    if value is None or isinstance(value, (dict, list, tuple, set, bool)):
+        raise GatewayPayloadError("alipay_direct notify invalid total_amount")
+    text = str(value).strip()
+    if not text:
+        raise GatewayPayloadError("alipay_direct notify invalid total_amount")
+    try:
+        yuan = Decimal(text)
+    except (InvalidOperation, ValueError):
+        raise GatewayPayloadError(
+            "alipay_direct notify invalid total_amount"
+        ) from None
+    if not yuan.is_finite() or yuan <= 0:
+        raise GatewayPayloadError("alipay_direct notify total_amount must be positive")
+    fen = yuan * Decimal("100")
+    if fen != fen.to_integral_value():
+        raise GatewayPayloadError(
+            "alipay_direct notify total_amount must have at most 2 decimals"
+        )
+    amount_fen = int(fen)
+    if amount_fen <= 0:
+        raise GatewayPayloadError("alipay_direct notify total_amount must be positive")
+    return amount_fen
+
+
+def _skip_json_whitespace(text: str, start: int) -> int:
+    """Return the first non-whitespace index in a JSON string."""
+
     while start < len(text) and text[start] in " \t\n\r":
         start += 1
-    if start >= len(text) or text[start] != "{":
+    return start
+
+
+def _response_value_span(text: str, response_key: str) -> tuple[int, int] | None:
+    """Locate the top-level ``response_key`` JSON value in ``text``.
+
+    ``str.find``/brace matching is tempting here, but it can select a key
+    embedded in an unrelated string (or a nested object).  Parsing only the
+    outer object with :class:`json.JSONDecoder` keeps the original text and
+    therefore the exact whitespace/escaping needed for signature checks.
+    The final matching key wins, mirroring ``json.loads`` for duplicate keys.
+    """
+
+    decoder = json.JSONDecoder()
+    index = _skip_json_whitespace(text, 0)
+    if index >= len(text) or text[index] != "{":
         return None
-    depth = 0
-    in_string = False
-    escape = False
-    for i in range(start, len(text)):
-        c = text[i]
-        if escape:
-            escape = False
+    index += 1
+    found: tuple[int, int] | None = None
+    while True:
+        index = _skip_json_whitespace(text, index)
+        if index >= len(text):
+            return None
+        if text[index] == "}":
+            return found
+        try:
+            key, key_end = decoder.raw_decode(text, index)
+        except ValueError:
+            return None
+        if not isinstance(key, str):
+            return None
+        index = _skip_json_whitespace(text, key_end)
+        if index >= len(text) or text[index] != ":":
+            return None
+        value_start = _skip_json_whitespace(text, index + 1)
+        if value_start >= len(text):
+            return None
+        try:
+            _value, value_end = decoder.raw_decode(text, value_start)
+        except ValueError:
+            return None
+        if key == response_key and text[value_start] == "{":
+            found = (value_start, value_end)
+        index = _skip_json_whitespace(text, value_end)
+        if index >= len(text):
+            return None
+        if text[index] == ",":
+            index += 1
             continue
-        if c == "\\":
-            escape = True
+        if text[index] == "}":
+            return found
+        return None
+
+
+def _extract_raw_response_bytes(
+    raw: bytes, response_key: str, *, encoding: str
+) -> bytes | None:
+    """Extract the exact response-value bytes signed by Alipay.
+
+    The outer JSON is decoded solely to locate the top-level value; the return
+    value is sliced directly from ``raw``.  This preserves GBK/UTF-8 bytes,
+    JSON escapes, key order and whitespace exactly as sent by Alipay.
+    ``encoding`` must be the codec used to decode the body; a round-trip check
+    guards against accidentally slicing offsets derived from a wrong charset.
+    """
+
+    try:
+        text = raw.decode(encoding)
+    except (LookupError, UnicodeDecodeError):
+        return None
+    try:
+        # A valid JSON body should round-trip byte-for-byte.  Besides making
+        # the offsets below safe, this rejects a declared GBK charset on an
+        # actually UTF-8 body (and lets the caller try its fallback charset).
+        if text.encode(encoding) != raw:
+            return None
+        span = _response_value_span(text, response_key)
+        if span is None:
+            return None
+        # Re-encoding each prefix is only for offset calculation.  The bytes
+        # returned to the verifier are always the original ``raw`` slice.
+        start, end = span
+        byte_start = len(text[:start].encode(encoding))
+        byte_end = len(text[:end].encode(encoding))
+    except (LookupError, UnicodeEncodeError):
+        return None
+    return raw[byte_start:byte_end]
+
+
+def _decode_response_json(
+    raw: bytes, declared_encoding: str | None
+) -> tuple[str, dict[str, Any], str] | None:
+    """Decode a JSON response using its charset, with UTF-8/GBK fallbacks."""
+
+    candidates: list[str] = []
+    for candidate in (declared_encoding, "utf-8", "gb18030", "gbk"):
+        if candidate and candidate.lower() not in {item.lower() for item in candidates}:
+            candidates.append(candidate)
+    for encoding in candidates:
+        try:
+            text = raw.decode(encoding)
+            if text.encode(encoding) != raw:
+                continue
+            parsed = json.loads(text)
+        except (LookupError, UnicodeDecodeError, UnicodeEncodeError, ValueError):
             continue
-        if c == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : i + 1]
+        if isinstance(parsed, dict):
+            return text, parsed, encoding
     return None
 
 
@@ -225,6 +367,7 @@ class AlipayDirectGateway:
     _METHOD_PAGE_PAY = "alipay.trade.page.pay"
     _METHOD_WAP_PAY = "alipay.trade.wap.pay"
     _METHOD_QUERY = "alipay.trade.query"
+    _METHOD_CLOSE = "alipay.trade.close"
     _METHOD_REFUND = "alipay.trade.refund"
     _METHOD_REFUND_QUERY = "alipay.trade.fastpay.refund.query"
 
@@ -300,65 +443,77 @@ class AlipayDirectGateway:
                 ) from exc
         if response.status_code >= 500:
             raise GatewayTransientError(
-                f"alipay_direct gateway HTTP {response.status_code}: {response.text[:200]}"
+                f"alipay_direct gateway HTTP {response.status_code}"
             )
         if response.status_code >= 400:
             raise GatewayBusinessError(
-                f"alipay_direct HTTP {response.status_code}: {response.text[:200]}"
+                f"alipay_direct HTTP {response.status_code}"
             )
-        # Sandbox server sets charset=GBK; httpx.Response.json() decodes raw
-        # bytes as UTF-8 regardless of declared charset, crashing on GBK
-        # bytes for non-ASCII strings. Use .text (respects charset) + json.loads.
-        try:
-            body = json.loads(response.text)
-        except ValueError as exc:
+        # Sandbox server sets charset=GBK. Decode using that declaration (with
+        # UTF-8/GBK fallbacks), but retain ``response.content`` for signature
+        # verification: Alipay signs the exact bytes of ``xxx_response``.
+        decoded = _decode_response_json(response.content, response.encoding)
+        if decoded is None:
             raise GatewayBusinessError(
-                f"alipay_direct non-JSON: {response.text[:200]}"
-            ) from exc
+                "alipay_direct gateway returned invalid JSON"
+            )
+        _response_text, body, response_encoding = decoded
         response_key = method.replace(".", "_") + "_response"
         inner = body.get(response_key)
         if not isinstance(inner, dict):
-            raise GatewayBusinessError(f"alipay_direct missing {response_key}: {body!r}")
+            raise GatewayBusinessError(f"alipay_direct missing {response_key}")
         # Verify response signature against the RAW inner JSON substring.
         # Alipay signs the exact bytes of ``xxx_response``'s value as it
         # appears in the HTTP body (with \uXXXX escapes, original key
         # order, etc). Re-serialising a parsed dict would break verification.
-        sign = body.get("sign") or ""
+        sign_value = body.get("sign")
+        if not isinstance(sign_value, str) or not sign_value.strip():
+            # Alipay signs both successful and business-error responses. A
+            # response without a signature is never safe to interpret, even
+            # when its inner ``code`` looks like a harmless NOT_FOUND.
+            raise GatewaySignatureError("alipay_direct response missing sign")
+        sign = sign_value
         code = str(inner.get("code") or "")
         sub_code = str(inner.get("sub_code") or "")
-        # Not-found-class sub-codes: short-circuit to caller with NOTFOUND tag
-        if code != "10000" and sub_code in _NOT_FOUND_SUB_CODES:
-            raise _AlipayNotFound(
-                f"alipay_direct {method} sub_code={sub_code} "
-                f"sub_msg={inner.get('sub_msg')!r}"
+        raw_inner = _extract_raw_response_bytes(
+            response.content,
+            response_key,
+            encoding=response_encoding,
+        )
+        if raw_inner is None:
+            raise GatewaySignatureError(
+                f"alipay_direct: unable to extract raw {response_key} for verification"
             )
-        if sign:
-            raw_inner = _extract_raw_response(response.text, response_key)
-            if raw_inner is None:
-                raise GatewaySignatureError(
-                    f"alipay_direct: unable to extract raw {response_key} for verification"
-                )
-            try:
-                sig_bytes = base64.b64decode(sign)
-            except Exception as exc:  # noqa: BLE001
-                raise GatewaySignatureError(
-                    "alipay_direct response: bad sign encoding"
-                ) from exc
-            try:
-                self._public_key.verify(
-                    sig_bytes,
-                    raw_inner.encode("utf-8"),
-                    padding.PKCS1v15(),
-                    hashes.SHA256(),
-                )
-            except InvalidSignature as exc:
-                raise GatewaySignatureError(
-                    "alipay_direct response signature mismatch"
-                ) from exc
-        if code not in ("10000",):
-            raise GatewayBusinessError(
-                f"alipay_direct {method} code={code} msg={inner.get('msg')!r} "
-                f"sub_code={inner.get('sub_code')!r} sub_msg={inner.get('sub_msg')!r}"
+        try:
+            sig_bytes = base64.b64decode(sign, validate=True)
+        except Exception as exc:  # noqa: BLE001
+            raise GatewaySignatureError(
+                "alipay_direct response: bad sign encoding"
+            ) from exc
+        if not sig_bytes:
+            raise GatewaySignatureError("alipay_direct response: empty sign")
+        try:
+            self._public_key.verify(
+                sig_bytes,
+                raw_inner,
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        except InvalidSignature as exc:
+            raise GatewaySignatureError(
+                "alipay_direct response signature mismatch"
+            ) from exc
+        if code != "10000":
+            error_type = (
+                _AlipayNotFound
+                if sub_code in _NOT_FOUND_SUB_CODES
+                else _AlipayBusinessFailure
+            )
+            raise error_type(
+                method=method,
+                code=code,
+                sub_code=sub_code,
+                message=str(inner.get("sub_msg") or inner.get("msg") or ""),
             )
         return inner
 
@@ -371,6 +526,16 @@ class AlipayDirectGateway:
     ) -> CreateInvoiceResult:
         seller_id = await self._resolve_seller_id()
 
+        # Absolute expiry: Alipay refuses both cashier re-entry and payment
+        # after this instant (per official docs: "接口请求和用户支付都不可
+        # 超过 time_expire 时间"). Value = local invoice due_at converted to
+        # Beijing time (Alipay system clock). Without it the default trade
+        # lifetime is 15 DAYS, which let users pay long after local close.
+        time_expire: str | None = None
+        if request.due_at is not None:
+            due_cn = request.due_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(_CN_TZ)
+            time_expire = due_cn.strftime("%Y-%m-%d %H:%M:%S")
+
         # PC: alipay.trade.page.pay — desktop cashier
         biz_pc: dict[str, Any] = {
             "out_trade_no": request.invoice_no,
@@ -378,6 +543,8 @@ class AlipayDirectGateway:
             "subject": request.title,
             "product_code": "FAST_INSTANT_TRADE_PAY",
         }
+        if time_expire:
+            biz_pc["time_expire"] = time_expire
         if seller_id:
             biz_pc["seller_id"] = seller_id
         params_pc = self._common_params(
@@ -402,6 +569,8 @@ class AlipayDirectGateway:
             "subject": request.title,
             "product_code": "QUICK_WAP_WAY",
         }
+        if time_expire:
+            biz_wap["time_expire"] = time_expire
         if seller_id:
             biz_wap["seller_id"] = seller_id
         params_wap = self._common_params(
@@ -429,8 +598,34 @@ class AlipayDirectGateway:
                 "url_h5": pay_url_wap,
                 "method": self._METHOD_PAGE_PAY,
                 "biz": biz_pc,
+                "time_expire": time_expire,
             },
         )
+
+    async def close_trade(
+        self, out_trade_no: str
+    ) -> Literal["CLOSED", "NOTFOUND", "ALREADY_PAID"]:
+        """Close an unpaid Alipay trade (``alipay.trade.close``).
+
+        Only trades in ``WAIT_BUYER_PAY`` can be closed. A cashier that was
+        never opened (no trade yet) surfaces as ``ACQ.TRADE_NOT_EXIST`` and
+        is normalized to ``NOTFOUND``. Before ``time_expire``, that result
+        does not revoke a previously issued ``page.pay`` URL.
+        """
+        try:
+            await self._post(self._METHOD_CLOSE, {"out_trade_no": out_trade_no})
+        except _AlipayNotFound as exc:
+            # Already closed is as strong as a successful close. A genuinely
+            # absent trade is different: a previously issued page.pay URL can
+            # still create it later, up to time_expire.
+            if exc.sub_code == "ACQ.TRADE_HAS_CLOSE":
+                return "CLOSED"
+            return "NOTFOUND"
+        except _AlipayBusinessFailure as exc:
+            if exc.sub_code in _CLOSE_ALREADY_PAID_SUB_CODES:
+                return "ALREADY_PAID"
+            raise
+        return "CLOSED"
 
     async def query_by_out_trade_no(self, out_trade_no: str) -> QueryResult:
         try:
@@ -438,8 +633,8 @@ class AlipayDirectGateway:
                 self._METHOD_QUERY, {"out_trade_no": out_trade_no}
             )
         except _AlipayNotFound:
-            # 用户没开过收银台 / 超时 / 已被支付宝侧关闭。统一回 NOTFOUND,
-            # 让上层取消流程和 order_close 作业能干净地关单。
+            # 用户没开过收银台 / 超时 / 已被支付宝侧关闭。查询接口
+            # 不能在这些子状态中继续细分，需由 close_trade 确认。
             return QueryResult(
                 status="NOTFOUND", transaction_id=None, amount_fen=None, raw={}
             )
@@ -452,16 +647,28 @@ class AlipayDirectGateway:
             status = "CLOSED"
         else:
             status = "NOTFOUND"
+        transaction_id = str(inner.get("trade_no") or "").strip() or None
         total = inner.get("total_amount")
         amount_fen: int | None = None
         if total not in (None, ""):
             try:
-                amount_fen = int(round(float(total) * 100))
-            except (TypeError, ValueError):
+                yuan = Decimal(str(total))
+                fen = yuan * Decimal("100")
+                if yuan.is_finite() and yuan > 0 and fen == fen.to_integral_value():
+                    amount_fen = int(fen)
+            except (InvalidOperation, TypeError, ValueError):
                 amount_fen = None
+        if status == "SUCCESS" and (transaction_id is None or amount_fen is None):
+            # A paid query result without a stable gateway transaction id or
+            # exact positive amount cannot be recorded safely.  Deferring it
+            # lets a later query/webhook reconcile instead of inserting an
+            # empty transaction id or silently substituting the invoice sum.
+            raise GatewayPayloadError(
+                "alipay_direct query SUCCESS missing valid trade_no/total_amount"
+            )
         return QueryResult(
             status=status,
-            transaction_id=str(inner.get("trade_no") or "") or None,
+            transaction_id=transaction_id,
             amount_fen=amount_fen,
             raw=inner,
         )
@@ -489,27 +696,28 @@ class AlipayDirectGateway:
         except InvalidSignature as exc:
             raise GatewaySignatureError("alipay_direct notify signature mismatch") from exc
 
-        out_trade_no = str(raw_form.get("out_trade_no") or "")
-        if not out_trade_no:
-            raise GatewaySignatureError("alipay_direct notify missing out_trade_no")
-        trade_no = str(raw_form.get("trade_no") or "")
-        try:
-            amount_fen = int(round(float(raw_form.get("total_amount") or 0) * 100))
-        except (TypeError, ValueError) as exc:
-            raise GatewaySignatureError(
-                f"alipay_direct notify bad total_amount: {raw_form.get('total_amount')!r}"
-            ) from exc
+        out_trade_no = _required_notify_text(
+            raw_form.get("out_trade_no"), "out_trade_no"
+        )
+        # A payment fact must always carry the gateway transaction id. Keeping
+        # an empty id would violate the local unique/non-null constraints and
+        # could turn an otherwise rejectable callback into a 500.
+        trade_no = _required_notify_text(raw_form.get("trade_no"), "trade_no")
+        amount_fen = _parse_notify_amount_fen(raw_form.get("total_amount"))
 
         trade_status = str(raw_form.get("trade_status") or "").upper()
-        status: Literal["SUCCESS", "REFUNDED", "REFUND_PROCESSING", "REFUND_FAIL"]
+        status: Literal[
+            "SUCCESS", "CLOSED", "REFUNDED", "REFUND_PROCESSING", "REFUND_FAIL"
+        ]
         if trade_status in (_TS_SUCCESS, _TS_FINISHED):
             status = "SUCCESS"
         elif trade_status == _TS_CLOSED:
-            # TRADE_CLOSED can mean closed-by-timeout OR refund-ish closure; the
-            # authoritative refund truth comes from refund.notify (refund_fee /
-            # fund_change). Here we treat payment-notify TRADE_CLOSED as
-            # SUCCESS-settled-closed (non-refundable); surface as audit-only.
-            status = "SUCCESS"
+            # Trade closed WITHOUT settlement — either merchant-initiated
+            # ``alipay.trade.close`` or gateway-side timeout. Never a fund
+            # fact; the webhook handler only reconciles this against any
+            # existing succeeded transaction. (Refund truth stays with
+            # refund.notify + §10.3 polling.)
+            status = "CLOSED"
         else:
             # refund notify carries trade_status=TRADE_SUCCESS and a
             # out_refund_no/refund_fee. We only get here if we mis-detected;

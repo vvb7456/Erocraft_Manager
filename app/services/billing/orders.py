@@ -19,7 +19,7 @@ import logging
 import uuid
 from datetime import timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, NoReturn
 
 from sqlalchemy import delete, exists, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -43,7 +43,13 @@ from app.services.audit import log_manager_activity
 from app.services.billing import incidents
 from app.services.billing._ids import gen_invoice_no, gen_order_no
 from app.services.billing.gateway import registry as gateway_registry
-from app.services.billing.gateway.base import CreateInvoiceRequest, GatewayError
+from app.services.billing.gateway.base import (
+    CreateInvoiceRequest,
+    GatewayBusinessError,
+    GatewayError,
+    GatewayTransientError,
+    QueryResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +406,12 @@ async def create_order(
         }
 
     payable_total_fen = total_fen - coupon_discount_fen
+    # The billing schema intentionally rejects zero/negative invoice totals.
+    # Reject a fully-covered order before reserving the coupon or creating a
+    # placeholder server, so the caller receives a clean 400 and no state is
+    # left behind.
+    if payable_total_fen <= 0:
+        raise InvalidOrderRequest("优惠券抵扣后订单金额必须大于0")
     timeout_min = await _runtime_int(db, "BILLING_ORDER_PAY_TIMEOUT_MIN")
 
     # ── 4) Transaction: order + invoice + item (+ placeholder server) ─────
@@ -419,9 +431,7 @@ async def create_order(
             discount_pct=Decimal(str(period["discount_pct"])),
             total_fen=payable_total_fen,
             total_days=total_days,
-            coupon_discount_fen=(
-                coupon_discount_fen if coupon_code_norm else None
-            ),
+            coupon_discount_fen=coupon_discount_fen,
             target_server_id=(
                 payload.target_server_id if payload.kind in ("renew", "upgrade", "convert") else None
             ),
@@ -469,6 +479,7 @@ async def create_order(
         )
         db.add(invoice)
         await db.flush()
+        invoice_due_at = invoice.due_at
 
         item_desc = (
             f"{plan.display_name} ({total_days}天 = "
@@ -525,16 +536,17 @@ async def create_order(
         gw_result = await gateway.create_invoice(
             CreateInvoiceRequest(
                 invoice_no=invoice_no,
-                amount_fen=total_fen,
+                amount_fen=payable_total_fen,
                 title=plan.display_name,
                 notify_url=notify_url,
                 return_url=return_url,
+                due_at=invoice_due_at,
             )
         )
-    except (GatewayError, Exception) as exc:  # noqa: BLE001 — see comment
-        # Roll back the order + placeholder server. FK CASCADE on
-        # invoices/items handles the invoice row; placeholder server is
-        # NOT a child of the order so we delete it explicitly.
+    except GatewayBusinessError as exc:
+        # A deterministic gateway rejection means no remote trade was
+        # accepted. It is safe to remove the local order, invoice and
+        # placeholder (if any), and release the coupon reservation.
         logger.warning(
             "create_invoice failed for order %s: %s — rolling back",
             order_no, exc,
@@ -542,9 +554,38 @@ async def create_order(
         await _rollback_failed_order(
             db, order_id=order.id, placeholder_server_id=placeholder_server_id,
         )
-        if isinstance(exc, GatewayError):
-            raise GatewayUnavailable(str(exc)) from exc
-        raise
+        raise GatewayUnavailable(str(exc)) from exc
+    except (GatewayTransientError, GatewayError) as exc:
+        # A timeout/transport/signature/unknown gateway result is ambiguous:
+        # the provider may have accepted the trade even though no response
+        # reached us. Keep the pending order and make it queryable by its
+        # invoice number; deleting it here could leave a customer-paid trade
+        # with no local financial record.
+        await _mark_gateway_creation_uncertain(
+            db,
+            invoice_id=invoice.id,
+            order_id=order.id,
+            gateway_code=payload.gateway_code,
+            error=exc,
+        )
+        raise GatewayUnavailable(
+            "支付网关响应超时，订单已保留并将在后台核对，请稍后查看订单状态"
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 — unknown outcome is ambiguous
+        logger.exception(
+            "create_invoice raised unknown error for order %s; retaining order",
+            order_no,
+        )
+        await _mark_gateway_creation_uncertain(
+            db,
+            invoice_id=invoice.id,
+            order_id=order.id,
+            gateway_code=payload.gateway_code,
+            error=exc,
+        )
+        raise GatewayUnavailable(
+            "支付网关响应异常，订单已保留并将在后台核对，请稍后查看订单状态"
+        ) from exc
 
     # ── 6) Persist gateway fields on the invoice ──────────────────────────
     try:
@@ -574,7 +615,7 @@ async def create_order(
             "order_no": order_no,
             "order_kind": payload.kind,
             "plan_code": plan.code,
-            "amount_fen": total_fen,
+            "amount_fen": payable_total_fen,
             "period_count": period["count"],
             "placeholder_server_id": placeholder_server_id,
         },
@@ -582,6 +623,58 @@ async def create_order(
 
     await db.refresh(order)
     return order
+
+
+async def _mark_gateway_creation_uncertain(
+    db: AsyncSession,
+    *,
+    invoice_id: int,
+    order_id: int,
+    gateway_code: str,
+    error: Exception,
+) -> None:
+    """Retain an order when gateway invoice creation has an unknown outcome.
+
+    The order transaction is committed before the external gateway call. A
+    transport timeout (or an adapter exception whose outcome is unknown) may
+    therefore mean that the gateway accepted the trade while we did not
+    receive its response. Persist the gateway code and an operator-visible
+    marker so the query/close jobs can reconcile by ``invoice_no`` instead of
+    deleting a potentially payable/paid order.
+    """
+    error_text = str(error)[:500]
+    try:
+        await db.execute(
+            update(BillingInvoice)
+            .where(BillingInvoice.id == invoice_id)
+            .values(
+                gateway_code=gateway_code,
+                gateway_payload={
+                    "create_invoice_uncertain": True,
+                    "error": error_text,
+                },
+            )
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        # The order itself is deliberately kept even if this annotation
+        # fails; the caller still returns a transient gateway error and the
+        # existing pending row remains visible to operators.
+        logger.exception(
+            "failed to mark uncertain gateway creation for order %s",
+            order_id,
+        )
+    await incidents.log_incident(
+        "manual_review_required",
+        order_id=order_id,
+        invoice_id=invoice_id,
+        payload={
+            "subkind": "gateway_create_uncertain",
+            "gateway_code": gateway_code,
+            "error": error_text,
+        },
+    )
 
 
 async def _runtime_str(db: AsyncSession, key: str) -> str:
@@ -772,7 +865,8 @@ async def cancel_order(
 
     1. Atomic ``claim`` of ``lock_token`` (only succeeds if order is
        pending + owned by user + lock free or expired).
-    2. Outside-tx gateway query — abort if SUCCESS already came in.
+    2. Outside-tx gateway query + close — local cancellation is allowed only
+       after the gateway confirms that the trade can no longer be paid.
     3. Atomic ``transition to cancelled`` guarded by lock_token + status +
        absence of any succeeded/refunded transaction (the late-payment
        race tie-break).
@@ -831,7 +925,9 @@ async def cancel_order(
         except GatewayError as exc:
             raise GatewayUnavailable(str(exc)) from exc
 
-        if result.status == "SUCCESS":
+        async def record_paid_and_raise(
+            paid_result: QueryResult,
+        ) -> NoReturn:
             # Money landed — release lock then hand off to add_payment so
             # the apply pipeline picks it up. The user-facing response
             # still surfaces OrderAlreadyPaid.
@@ -846,17 +942,75 @@ async def cancel_order(
             await db.commit()
             from app.services.billing import payments  # late import: cycle
 
+            amount_fen = (
+                paid_result.amount_fen
+                if paid_result.amount_fen is not None
+                else invoice.total_fen
+            )
+            mismatch_expected = (
+                invoice.total_fen
+                if (
+                    paid_result.amount_fen is not None
+                    and paid_result.amount_fen != invoice.total_fen
+                )
+                else None
+            )
             await payments.safe_add_payment(
                 db,
                 invoice,
                 gateway_code=gateway_code,
-                transaction_id=result.transaction_id or "",
-                amount_fen=result.amount_fen or invoice.total_fen,
+                transaction_id=paid_result.transaction_id or "",
+                amount_fen=amount_fen,
                 raw_event_id=None,
+                amount_mismatch_expected=mismatch_expected,
             )
             raise OrderAlreadyPaid(
                 "订单已支付成功，无法取消；服务正在开通中"
             )
+
+        if result.status == "SUCCESS":
+            await record_paid_and_raise(result)
+
+        # A successful local cancellation must mean that the old cashier can
+        # no longer accept money. For page.pay, NOTFOUND is not sufficient:
+        # Alipay may not have created the trade yet while the already-issued
+        # signed URL remains usable until time_expire.
+        if result.status != "CLOSED":
+            try:
+                close_outcome = await gateway.close_trade(invoice.invoice_no)
+            except GatewayError as exc:
+                raise GatewayUnavailable(str(exc)) from exc
+
+            if close_outcome == "ALREADY_PAID":
+                try:
+                    result2 = await gateway.query_by_out_trade_no(
+                        invoice.invoice_no
+                    )
+                except GatewayError as exc:
+                    raise GatewayUnavailable(
+                        "支付状态正在确认，当前无法取消，请稍后重试"
+                    ) from exc
+                if result2.status == "SUCCESS":
+                    await record_paid_and_raise(result2)
+                raise GatewayUnavailable(
+                    "支付宝交易状态尚未稳定，当前无法取消，请稍后重试"
+                )
+
+            if close_outcome == "NOTFOUND":
+                gateway_payload = invoice.gateway_payload
+                has_absolute_expiry = (
+                    isinstance(gateway_payload, dict)
+                    and bool(gateway_payload.get("time_expire"))
+                )
+                deadline_elapsed = (
+                    invoice.due_at is not None
+                    and utc_naive_now() >= invoice.due_at
+                )
+                if not has_absolute_expiry or not deadline_elapsed:
+                    raise CannotCancel(
+                        "支付宝交易尚未创建，无法立即撤销已打开的收银台；"
+                        "请关闭收银台并等待订单自动过期"
+                    )
 
         # ── 3) Transition pending → cancelled
         no_payment_subq = ~exists().where(

@@ -26,7 +26,7 @@ from app.core.time import utc_naive_now
 from app.db.models.billing import BillingInvoice, BillingPaymentEvent
 from app.services.billing import incidents, payments
 from app.services.billing.gateway import registry as gateway_registry
-from app.services.billing.gateway.base import GatewaySignatureError
+from app.services.billing.gateway.base import GatewayPayloadError, GatewaySignatureError
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,63 @@ async def _handle_notify(
 
     try:
         event = gateway.parse_notify(raw_form)
+        # Keep this invariant at the dispatch boundary as well as in the
+        # Alipay adapter. It protects the shared bookkeeping path for any
+        # gateway adapter that accidentally returns an empty id/amount (and
+        # avoids a DB constraint turning malformed input into HTTP 500).
+        if (
+            not isinstance(event.out_trade_no, str)
+            or not event.out_trade_no.strip()
+            or not isinstance(event.transaction_id, str)
+            or not event.transaction_id.strip()
+            or isinstance(event.amount_fen, bool)
+            or not isinstance(event.amount_fen, int)
+            or event.amount_fen <= 0
+        ):
+            raise GatewayPayloadError("webhook payload has invalid payment fields")
+    except GatewayPayloadError as exc:
+        # Signature-valid but structurally invalid payload. Treat it as a
+        # client/gateway error and audit it separately from bad signatures;
+        # never let zero amounts/empty transaction ids reach the DB layer.
+        try:
+            await _record_event(
+                db,
+                gateway_code=gateway_code,
+                event_type=f"{gateway_code}.payment.invalid_payload",
+                signature_ok=True,
+                invoice_id=None,
+                transaction_id=str(raw_form.get("trade_no") or "") or None,
+                raw_headers=raw_headers,
+                raw_body=raw_body,
+                received_at=received_at,
+            )
+        except Exception:
+            logger.exception("failed to audit invalid %s payload", gateway_code)
+        logger.warning("%s webhook payload failure: %s", gateway_code, exc)
+        return PlainTextResponse("invalid payload", status_code=400)
+    except (TypeError, ValueError, OverflowError) as exc:
+        # Defensive boundary for adapters parsing untrusted form values. A
+        # malformed numeric value (for example ``nan``/``inf``) must be a
+        # clean 400 rather than an uncaught conversion exception.
+        try:
+            await _record_event(
+                db,
+                gateway_code=gateway_code,
+                event_type=f"{gateway_code}.payment.invalid_payload",
+                signature_ok=True,
+                invoice_id=None,
+                transaction_id=(
+                    str(raw_form.get("trade_no") or raw_form.get("transaction_id") or "")
+                    or None
+                ),
+                raw_headers=raw_headers,
+                raw_body=raw_body,
+                received_at=received_at,
+            )
+        except Exception:
+            logger.exception("failed to audit invalid %s payload", gateway_code)
+        logger.warning("%s webhook malformed payload: %s", gateway_code, exc)
+        return PlainTextResponse("invalid payload", status_code=400)
     except GatewaySignatureError as exc:
         try:
             await _record_event(
@@ -205,6 +262,22 @@ async def _handle_notify(
                 },
             )
             result_tag = "cross_invoice_transaction"
+    elif event.status == "CLOSED":
+        # Trade closed WITHOUT settlement (merchant close / gateway
+        # timeout). Never a fund fact. If a succeeded transaction already
+        # exists for this invoice we reconcile against it (e.g. a
+        # close-race after payment); otherwise it is a pure audit event.
+        from app.db.models.billing import BillingInvoiceTransaction
+
+        has_succeeded = await db.scalar(
+            select(BillingInvoiceTransaction.id).where(
+                BillingInvoiceTransaction.invoice_id == invoice.id,
+                BillingInvoiceTransaction.status.in_(["succeeded", "refunded"]),
+            ).limit(1)
+        )
+        result_tag = (
+            "closed_settled_reconciled" if has_succeeded else "closed_event"
+        )
     else:
         # REFUNDED / REFUND_PROCESSING / REFUND_FAIL — audit only.
         # Refund truth is established by §10.3 polling, not by webhook.

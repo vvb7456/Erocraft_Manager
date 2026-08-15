@@ -39,7 +39,7 @@ from app.services import server_lifecycle
 from app.services.billing import incidents, payments
 from app.services.billing.apply_engine import apply_paid_order
 from app.services.billing.gateway import registry as gateway_registry
-from app.services.billing.gateway.base import GatewayError
+from app.services.billing.gateway.base import GatewayError, QueryResult
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,27 @@ PLACEHOLDER_LEAK_JOB_ID = "billing_placeholder_leak_monitor"
 
 _BATCH_LIMIT = 100
 _CLOSE_LEASE = timedelta(minutes=2)
+
+
+def _query_payment_amount(
+    invoice: BillingInvoice, result: QueryResult
+) -> tuple[int, int | None]:
+    """Return (actual amount, expected-on-mismatch marker) for query results.
+
+    ``safe_add_payment`` treats a non-``None`` marker as an explicit amount
+    mismatch. Only pass it when the gateway supplied an amount that differs;
+    gateways that omit the amount retain the invoice total as the best local
+    value and follow the normal path.
+    """
+    amount_fen = (
+        result.amount_fen if result.amount_fen is not None else invoice.total_fen
+    )
+    mismatch_expected = (
+        invoice.total_fen
+        if result.amount_fen is not None and result.amount_fen != invoice.total_fen
+        else None
+    )
+    return amount_fen, mismatch_expected
 
 
 # --------------------------------------------------------------------------- #
@@ -139,6 +160,7 @@ async def _close_one_order(db: AsyncSession, order_id: int) -> None:
 
         if result.status == "SUCCESS":
             # Last-second payment — release lock then hand off to add_payment.
+            amount_fen, mismatch_expected = _query_payment_amount(invoice, result)
             await db.execute(
                 update(BillingOrder)
                 .where(
@@ -153,10 +175,71 @@ async def _close_one_order(db: AsyncSession, order_id: int) -> None:
                 invoice,
                 gateway_code=gateway_code,
                 transaction_id=result.transaction_id or "",
-                amount_fen=result.amount_fen or invoice.total_fen,
+                amount_fen=amount_fen,
                 raw_event_id=None,
+                amount_mismatch_expected=mismatch_expected,
             )
             return
+
+        # 2.5) Best-effort gateway close. A query that already reports CLOSED
+        # is definitive, so skip the close API and continue to local close.
+        if result.status != "CLOSED":
+            # At this point the absolute gateway deadline has already elapsed;
+            # closing an existing WAIT_BUYER_PAY trade makes the rejection
+            # immediate. ALREADY_PAID is the reachable query/close race.
+            try:
+                close_outcome = await gateway.close_trade(invoice.invoice_no)
+            except GatewayError as exc:
+                logger.warning(
+                    "order_close: trade close failed for order %s: %s — proceeding with local close",
+                    order_id, exc,
+                )
+                close_outcome = None
+            else:
+                if close_outcome == "ALREADY_PAID":
+                    try:
+                        result2 = await gateway.query_by_out_trade_no(invoice.invoice_no)
+                    except GatewayError as exc:
+                        logger.warning(
+                            "order_close: re-query after ALREADY_PAID failed for order %s: %s",
+                            order_id, exc,
+                        )
+                        # The trade may still be transitioning at the gateway;
+                        # do not turn an inconclusive ALREADY_PAID response into
+                        # a local close. The lease is released in ``finally``
+                        # and a later close/query cycle can reconcile it.
+                        return
+                    if result2.status == "SUCCESS":
+                        amount_fen, mismatch_expected = _query_payment_amount(
+                            invoice, result2
+                        )
+                        await db.execute(
+                            update(BillingOrder)
+                            .where(
+                                BillingOrder.id == order_id,
+                                BillingOrder.lock_token == my_token,
+                            )
+                            .values(lock_token=None, locked_until=None)
+                        )
+                        await db.commit()
+                        await payments.safe_add_payment(
+                            db,
+                            invoice,
+                            gateway_code=gateway_code,
+                            transaction_id=result2.transaction_id or "",
+                            amount_fen=amount_fen,
+                            raw_event_id=None,
+                            amount_mismatch_expected=mismatch_expected,
+                        )
+                        return
+                    if result2.status != "CLOSED":
+                        logger.warning(
+                            "order_close: re-query after ALREADY_PAID returned %s for order %s; "
+                            "deferring local close",
+                            result2.status,
+                            order_id,
+                        )
+                        return
 
         # 3) Confirmed unpaid — flip to closed (double-condition guard)
         no_payment_subq = ~exists().where(
@@ -180,7 +263,6 @@ async def _close_one_order(db: AsyncSession, order_id: int) -> None:
             )
         )
         if rc2.rowcount > 0:
-            closed_in_this_run = True
             await db.execute(
                 update(BillingInvoice)
                 .where(BillingInvoice.order_id == order_id)
@@ -191,9 +273,31 @@ async def _close_one_order(db: AsyncSession, order_id: int) -> None:
                     BillingOrder.id == order_id
                 )
             )
-        await db.commit()
+            # Keep the terminal transition and coupon release in one
+            # transaction.  ``release_for_order`` is status-guarded and
+            # idempotent; a retry after a crash therefore cannot consume or
+            # double-release the coupon.  If the release cannot be flushed,
+            # roll back the close so a later job can retry both operations.
+            try:
+                from app.services.billing import coupons as coupon_svc
 
-        # 4) Cleanup placeholder for new_purchase orders only
+                await coupon_svc.release_for_order(
+                    db, order_id=order_id, commit=False
+                )
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                logger.exception(
+                    "order_close: coupon release failed for order %s; "
+                    "close will be retried",
+                    order_id,
+                )
+                return
+            closed_in_this_run = True
+        else:
+            await db.commit()
+
+        # 4) Cleanup placeholder for new_purchase orders only.
         if closed_in_this_run and target_server_id is not None:
             order_kind = await db.scalar(
                 select(BillingOrder.kind).where(BillingOrder.id == order_id)
@@ -251,7 +355,15 @@ async def run_order_query() -> None:
                 .where(
                     BillingOrder.status == "pending",
                     BillingInvoice.due_at > now,
-                    BillingInvoice.gateway_prepay_id.is_not(None),
+                    # Normally a successful create_invoice stores the
+                    # gateway-side prepay id.  An ambiguous timeout has no
+                    # such id, but orders.py persists gateway_code and the
+                    # invoice number so this job can still reconcile a
+                    # provider-side trade accepted before the timeout.
+                    or_(
+                        BillingInvoice.gateway_prepay_id.is_not(None),
+                        BillingInvoice.gateway_code.is_not(None),
+                    ),
                 )
                 .limit(_BATCH_LIMIT)
             )
@@ -290,13 +402,15 @@ async def _query_one_order(
         return
 
     if result.status == "SUCCESS":
+        amount_fen, mismatch_expected = _query_payment_amount(invoice, result)
         await payments.safe_add_payment(
             db,
             invoice,
             gateway_code=code,
             transaction_id=result.transaction_id or "",
-            amount_fen=result.amount_fen or invoice.total_fen,
+            amount_fen=amount_fen,
             raw_event_id=None,
+            amount_mismatch_expected=mismatch_expected,
         )
     elif result.status == "CLOSED" and result.transaction_id:
         await payments.mark_transaction_failed(
@@ -383,8 +497,7 @@ async def run_placeholder_leak_monitor() -> None:
     order. Self-deduplicates: skips orders already with an *open*
     incident of this kind.
     """
-    from app.db.models.billing import BillingOrderEffect
-    from app.db.models.billing import BillingIncident
+    from app.db.models.billing import BillingIncident, BillingOrderEffect
     from app.db.models.pterodactyl import PteroServer
 
     session_factory = get_session_factory()
@@ -425,4 +538,3 @@ async def run_placeholder_leak_monitor() -> None:
                 "order_status_set": ["closed", "cancelled"],
             },
         )
-

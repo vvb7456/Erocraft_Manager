@@ -162,9 +162,15 @@ const filtered = computed(() => {
 })
 
 function statusBucket(status: string): string {
-  if (status === 'pending' || status === 'processing') return 'pending'
+  if (
+    status === 'pending' ||
+    status === 'processing' ||
+    status === 'apply_failed' ||
+    status === 'manual_review' ||
+    status === 'refunding'
+  ) return 'pending'
   if (status === 'closed' || status === 'cancelled') return 'closed'
-  if (status === 'refunded' || status === 'refunding' || status === 'manual_review') return 'refunded'
+  if (status === 'refunded') return 'refunded'
   if (status === 'applied') return 'applied'
   return status
 }

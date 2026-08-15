@@ -250,6 +250,16 @@ class HupijiaoGateway:
             raw=body,
         )
 
+    async def close_trade(
+        self, out_trade_no: str
+    ) -> Literal["CLOSED", "NOTFOUND", "ALREADY_PAID"]:
+        # Hupijiao exposes no trade-close API. The channel is not used in
+        # production; the local order_close job treats this as non-blocking
+        # and relies on the late-payment manual_review branch as backstop.
+        raise GatewayBusinessError(
+            "hupijiao does not support trade close"
+        )
+
     async def query_by_out_trade_no(self, out_trade_no: str) -> QueryResult:
         payload = self._build_payload(
             {

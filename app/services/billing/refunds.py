@@ -153,6 +153,27 @@ async def initiate_refund(
     )
     assert invoice is not None
 
+    # A synchronous gateway ``FAILED`` response restores the order to its
+    # previous status, but the failed refund row remains retryable.  Do not
+    # let a second admin request create another out_refund_no while that row
+    # is still pending/failed: the retry worker is the sole path allowed to
+    # continue the same gateway refund and this guard prevents double refunds
+    # when the gateway accepted the first request despite its failure reply.
+    existing_refund_id = await db.scalar(
+        select(BillingRefund.id)
+        .where(
+            BillingRefund.transaction_id == tx.id,
+            BillingRefund.status.in_(("pending", "failed")),
+        )
+        .limit(1)
+    )
+    if existing_refund_id is not None:
+        await _release_lock(db, order_id, my_token)
+        await db.commit()
+        raise CannotRefund(
+            "该笔交易已有退款任务，请等待自动重试完成后再操作"
+        )
+
     max_refundable = tx.amount_fen - (tx.refunded_fen or 0)
     if max_refundable <= 0:
         await _release_lock(db, order_id, my_token)
@@ -220,14 +241,30 @@ async def initiate_refund(
         )
         raise
 
-    # ── 3) Persist gateway_refund_id, release lock
+    # ── 3) Persist gateway_refund_id and reconcile the order lock
     await db.execute(
         update(BillingRefund)
         .where(BillingRefund.id == refund_id)
         .values(gateway_refund_id=result.gateway_refund_id, updated_at=utc_naive_now())
     )
-    await _release_lock(db, order_id, my_token)
-    await db.commit()
+
+    # Keep the order lock until the synchronous result has been persisted.
+    # A FAILED response is a definitive gateway-side failure, but it is still
+    # retryable by ``refund_retry``.  Releasing the lock while leaving the
+    # order in ``refunding`` strands the order forever because no other path
+    # is allowed to transition it out of that state.
+    if result.status == "FAILED":
+        await _mark_sync_refund_failed(
+            db,
+            refund_id,
+            order_id,
+            prev_status,
+            my_token,
+            "gateway returned synchronous FAILED status",
+        )
+    else:
+        await _release_lock(db, order_id, my_token)
+        await db.commit()
 
     # ── 4) Honor the gateway's synchronous status:
     #   SUCCEEDED → finalize immediately (no need to wait for webhook/poll).
@@ -244,9 +281,9 @@ async def initiate_refund(
                 "notify_order_refunded failed for refund_id=%s", refund_id
             )
     elif result.status == "FAILED":
-        await _bump_retry(
-            db, refund_id, "gateway returned synchronous FAILED status"
-        )
+        # ``_mark_sync_refund_failed`` already bumped the retry counter and
+        # restored the order status while releasing the lock.
+        pass
 
     refreshed = await db.scalar(select(BillingRefund).where(BillingRefund.id == refund_id))
     assert refreshed is not None
@@ -458,6 +495,69 @@ async def _rollback_failed_refund(
         .values(status=prev_status, lock_token=None, locked_until=None)
     )
     await db.commit()
+
+
+async def _mark_sync_refund_failed(
+    db: AsyncSession,
+    refund_id: int,
+    order_id: int,
+    prev_status: str,
+    my_token: str,
+    error_msg: str,
+) -> None:
+    """Persist a synchronous gateway failure and restore the order state.
+
+    ``create_refund`` may return ``FAILED`` without raising a
+    :class:`GatewayError`.  This is still a failed attempt and must follow the
+    same retry/incident policy as polling failures, while also undoing the
+    temporary ``refunding`` order status.  Keep this in one transaction so a
+    process crash cannot leave a failed refund with an order lock held.
+    """
+    now = utc_naive_now()
+    refund = await db.scalar(
+        select(BillingRefund)
+        .where(BillingRefund.id == refund_id)
+        .with_for_update()
+    )
+    if refund is None:
+        # The row is created immediately before the gateway call and should
+        # always exist.  Do not attempt to mutate an unrelated order if it was
+        # removed by an operator in the meantime.
+        await db.rollback()
+        return
+
+    refund.retry_count = (refund.retry_count or 0) + 1
+    refund.last_error = error_msg
+    refund.updated_at = now
+    refund.status = "failed"
+    exhausted = refund.retry_count >= _MAX_RETRY
+
+    await db.execute(
+        update(BillingOrder)
+        .where(
+            BillingOrder.id == order_id,
+            BillingOrder.status == "refunding",
+            BillingOrder.lock_token == my_token,
+        )
+        .values(
+            status=prev_status,
+            lock_token=None,
+            locked_until=None,
+            updated_at=now,
+        )
+    )
+    await db.commit()
+
+    if exhausted:
+        await incidents.log_incident(
+            "refund_retries_exhausted",
+            order_id=refund.order_id,
+            transaction_id=refund.transaction_id,
+            payload={
+                "refund_id": refund.id,
+                "last_error": error_msg,
+            },
+        )
 
 
 async def _bump_retry(
