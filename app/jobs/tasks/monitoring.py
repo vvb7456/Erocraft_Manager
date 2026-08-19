@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import alert_defaults
 from app.core.settings_store import get_settings_store
-from app.core.time import utc_naive_now
+from app.core.time import to_iso_z, utc_naive_now
 from app.db.models.manager import (
     HostAlertRule,
     HostAlertSettings,
@@ -549,10 +549,10 @@ def _audit_alert_event(
         "host_id": alert_obj.host_id,
         "host_name": host_name,
         "message": alert_obj.message or "",
-        "fired_at": alert_obj.created_at.isoformat() if alert_obj.created_at else None,
+        "fired_at": to_iso_z(alert_obj.created_at),
     }
     if kind == "resolved":
-        params["resolved_at"] = alert_obj.resolved_at.isoformat() if alert_obj.resolved_at else None
+        params["resolved_at"] = to_iso_z(alert_obj.resolved_at)
         if duration_seconds is not None:
             params["duration_seconds"] = duration_seconds
 

@@ -14,6 +14,8 @@ import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useClipboard } from '@/composables/useClipboard'
 import { useFormatDate } from '@/composables/useFormatDate'
+import { useToday } from '@/composables/useToday'
+import { useAppStore } from '@/stores/app'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
@@ -64,6 +66,8 @@ const { t } = useI18n({ useScope: 'global' })
 const { get } = useApiFetch()
 const { copy } = useClipboard()
 const { formatDate, formatDateTime } = useFormatDate()
+const appStore = useAppStore()
+const today = useToday()
 
 const loading = ref(true)
 const invite = ref<InviteSummary | null>(null)
@@ -139,9 +143,24 @@ const rewardCopy = computed<{ headline: string; detail: string }>(() => {
 
 // ── Helpers ──
 function daysLeft(iso: string): number {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return 0
-  return Math.max(0, Math.ceil((d.getTime() - Date.now()) / 86_400_000))
+  // Format the expiry instant as a system-timezone calendar date, then diff
+  // against today (also system-timezone) so the day count matches the
+  // backend's notion of "days remaining" rather than a raw UTC delta.
+  let expDate: string
+  try {
+    expDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: appStore.timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(iso))
+  } catch {
+    return 0
+  }
+  const expMs = new Date(`${expDate}T00:00:00Z`).getTime()
+  const todayMs = new Date(`${today.value}T00:00:00Z`).getTime()
+  if (Number.isNaN(expMs) || Number.isNaN(todayMs)) return 0
+  return Math.max(0, Math.round((expMs - todayMs) / 86_400_000))
 }
 
 function statusColor(s: string): string {

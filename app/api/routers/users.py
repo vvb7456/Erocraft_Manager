@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
+from app.core.time import to_iso_z
 from app.core.runtime_settings import SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.tokens import hash_token_async
@@ -151,8 +152,8 @@ async def list_users(
                 last_name=user.name_last,
                 root_admin=bool(user.root_admin),
                 language=user.language,
-                created_at=user.created_at.isoformat() if user.created_at else None,
-                updated_at=user.updated_at.isoformat() if user.updated_at else None,
+                created_at=to_iso_z(user.created_at),
+                updated_at=to_iso_z(user.updated_at),
                 server_count=server_count,
                 inviter_user_id=inviter_id,
                 inviter_username=inviter_username,

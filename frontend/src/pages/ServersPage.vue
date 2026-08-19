@@ -24,6 +24,7 @@ import FormField from '@/components/form/FormField.vue'
 import CreateServerModal from '@/components/servers/CreateServerModal.vue'
 import RenewBottomSheet from '@/components/servers/RenewBottomSheet.vue'
 import PlanChangeModal from '@/components/servers/PlanChangeModal.vue'
+import { useToday } from '@/composables/useToday'
 
 defineOptions({ name: 'ServersPage' })
 
@@ -33,6 +34,7 @@ const router = useRouter()
 const { get, post, del, loading } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
+const today = useToday()
 
 // ── Types ──
 interface ServerItem {
@@ -75,19 +77,17 @@ const perPage = ref(20)
 const renewDateMap = ref<Map<number, string>>(new Map())
 
 function calcDefaultRenewDate(s: ServerItem): string {
-  const addDays = (base: Date, n: number) => {
-    const d = new Date(base)
-    d.setDate(d.getDate() + n)
+  const addDays = (base: string, n: number) => {
+    const d = new Date(base + 'T00:00:00Z')
+    d.setUTCDate(d.getUTCDate() + n)
     return d.toISOString().slice(0, 10)
   }
-  const today = new Date()
   if (!s.expirationDate || (s.daysLeft !== null && s.daysLeft < 0)) {
-    // Expired or permanent — base = today
-    return addDays(today, 30)
+    // Expired or permanent — base = today (system timezone)
+    return addDays(today.value, 30)
   }
   // Not expired — base = current expiration date
-  const expDate = new Date(s.expirationDate + 'T00:00:00')
-  return addDays(expDate, 30)
+  return addDays(s.expirationDate, 30)
 }
 
 function getRenewDate(s: ServerItem): string {

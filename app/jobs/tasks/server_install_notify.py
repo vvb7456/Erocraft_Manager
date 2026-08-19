@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.runtime_settings import SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
+from app.core.time import to_iso_z
 from app.db.session import get_session_factory
 from app.services.audit import log_manager_activity
 from app.services.email import (
@@ -223,11 +224,7 @@ async def run_install_notify_scan() -> None:
                     continue
 
                 installed_at = row["installed_at"]
-                installed_str = (
-                    installed_at.strftime("%Y-%m-%d %H:%M:%S")
-                    if installed_at is not None
-                    else ""
-                )
+                installed_str = to_iso_z(installed_at) if installed_at is not None else ""
 
                 subject, body = render_template_body(
                     template,

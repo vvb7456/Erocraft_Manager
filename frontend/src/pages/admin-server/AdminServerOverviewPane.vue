@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useClipboard } from '@/composables/useClipboard'
 import { useFormatDate } from '@/composables/useFormatDate'
+import { useToday } from '@/composables/useToday'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
@@ -27,6 +28,7 @@ defineOptions({ name: 'AdminServerOverviewPane' })
 
 const { t } = useI18n({ useScope: 'global' })
 const { formatDate } = useFormatDate()
+const today = useToday()
 const router = useRouter()
 const { copy: copyToClipboard } = useClipboard()
 
@@ -89,11 +91,11 @@ const sftpString = computed(() => {
 const daysLeft = computed<number | null>(() => {
   const exp = detail.value?.server.expirationDate
   if (!exp) return null
-  const expDate = new Date(exp + 'T00:00:00')
-  if (Number.isNaN(expDate.getTime())) return null
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return Math.floor((expDate.getTime() - today.getTime()) / 86_400_000)
+  // Pure date-string difference (both YYYY-MM-DD), no timezone conversion.
+  const expMs = new Date(`${exp}T00:00:00Z`).getTime()
+  const todayMs = new Date(`${today.value}T00:00:00Z`).getTime()
+  if (Number.isNaN(expMs) || Number.isNaN(todayMs)) return null
+  return Math.round((expMs - todayMs) / 86_400_000)
 })
 const expirationColor = computed(() => {
   if (!detail.value || detail.value.server.expirationDate === null) return 'var(--t2)'

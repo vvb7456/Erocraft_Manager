@@ -25,12 +25,11 @@ from app.jobs.tasks.billing import (
 from app.jobs.tasks.certificates import (
     CERT_AUTO_DISPATCH_JOB_ID,
     CERT_DEPLOYMENT_SCAN_JOB_ID,
-    CERT_EXPIRY_ALERT_JOB_ID,
     CERT_SOURCE_SCAN_JOB_ID,
     run_cert_auto_dispatch,
     run_cert_deployment_scan,
-    run_cert_expiry_alert,
     run_cert_source_scan,
+    sync_cert_expiry_alert_job,
 )
 from app.jobs.tasks.cleanup import CLEANUP_JOB_ID, run_token_cleanup
 from app.jobs.tasks.daily_lifecycle import sync_daily_lifecycle_job
@@ -115,6 +114,7 @@ async def sync_managed_jobs(scheduler: AsyncIOScheduler) -> bool:
     sync_daily_lifecycle_job(scheduler, values)
     sync_reminder_jobs(scheduler, values)
     sync_install_notify_job(scheduler, values)
+    sync_cert_expiry_alert_job(scheduler, values)
     _last_settings_signature = signature
     logger.info("manager-jobs schedule updated from runtime settings")
     return True
@@ -193,17 +193,9 @@ def build_scheduler() -> AsyncIOScheduler:
         max_instances=1,
         misfire_grace_time=300,
     )
-    scheduler.add_job(
-        run_cert_expiry_alert,
-        id=CERT_EXPIRY_ALERT_JOB_ID,
-        trigger="cron",
-        hour=9,
-        minute=0,
-        replace_existing=True,
-        coalesce=True,
-        max_instances=1,
-        misfire_grace_time=3600,
-    )
+    # cert_expiry_alert is registered dynamically by sync_cert_expiry_alert_job
+    # (called from sync_managed_jobs) so it picks up the runtime TIMEZONE
+    # setting instead of the scheduler's UTC default.
     scheduler.add_job(
         run_order_close,
         id=ORDER_CLOSE_JOB_ID,

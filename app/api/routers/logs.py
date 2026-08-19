@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
+from app.core.time import to_iso_z
 from app.db.models.pterodactyl import PteroUser
 from app.db.repositories.activity_logs import activity_log_repository
 from app.schemas.logs import ActivityLogFilters, ActivityLogItem, ActivityLogsResponse
@@ -55,7 +56,7 @@ async def activity_logs(
         logs=[
             ActivityLogItem(
                 id=log.id,
-                timestamp=log.timestamp.isoformat() if log.timestamp else None,
+                timestamp=to_iso_z(log.timestamp),
                 actor=log.actor,
                 category=log.category,
                 status=log.status,

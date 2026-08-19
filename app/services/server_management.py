@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.time import utc_naive_now
 from app.db.models import Allocation, Egg, EggVariable, ManagerHost, Nest, PteroServer, PteroUser, ServerVariable
 from app.db.models.billing import BillingPlan
 from app.schemas.admin_server_detail import (
@@ -56,7 +57,7 @@ class ServerNotFoundError(ServerManagementValidationError):
 
 
 def _now() -> datetime:
-    return datetime.utcnow().replace(microsecond=0)
+    return utc_naive_now().replace(microsecond=0)
 
 
 async def _get_server(db: AsyncSession, server_id: int) -> PteroServer:

@@ -17,10 +17,11 @@ import uuid as _uuid
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, delete as sql_delete, func, literal, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.time import utc_naive_now
 from app.db.models import PteroServer, PteroUser
 from app.db.models.pterodactyl import (
     Allocation,
@@ -52,7 +53,7 @@ class PanelDBValidationError(PanelDBError):
 
 def _now() -> datetime:
     # Pterodactyl stores naive UTC datetimes
-    return datetime.utcnow().replace(microsecond=0)
+    return utc_naive_now().replace(microsecond=0)
 
 
 def _new_uuid() -> str:

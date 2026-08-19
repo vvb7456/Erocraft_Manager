@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
+import { useToday } from '@/composables/useToday'
 import BottomSheet from '@/components/ui/BottomSheet.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 
@@ -30,6 +31,7 @@ const emit = defineEmits<{
 const { t } = useI18n({ useScope: 'global' })
 const { post } = useApiFetch()
 const { toast } = useToast()
+const today = useToday()
 
 const renewDate = ref('')
 const quickDays = ref<number | null>(null)
@@ -42,27 +44,25 @@ watch(() => props.modelValue, (open) => {
   }
 })
 
+function addDays(base: string, n: number): string {
+  const d = new Date(base + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
 function calcDefaultRenewDate(s: ServerItem): string {
-  const addDays = (base: Date, n: number) => {
-    const d = new Date(base)
-    d.setDate(d.getDate() + n)
-    return d.toISOString().slice(0, 10)
-  }
-  const today = new Date()
   if (!s.expirationDate || (s.daysLeft !== null && s.daysLeft < 0)) {
-    return addDays(today, 30)
+    return addDays(today.value, 30)
   }
-  return addDays(new Date(s.expirationDate + 'T00:00:00'), 30)
+  return addDays(s.expirationDate, 30)
 }
 
 function quickRenew(days: number) {
   if (!props.server) return
   quickDays.value = days
-  const today = new Date()
   const isExpired = !props.server.expirationDate || (props.server.daysLeft !== null && props.server.daysLeft < 0)
-  const base = isExpired ? today : new Date(props.server.expirationDate! + 'T00:00:00')
-  base.setDate(base.getDate() + days)
-  renewDate.value = base.toISOString().slice(0, 10)
+  const base = isExpired ? today.value : props.server.expirationDate!
+  renewDate.value = addDays(base, days)
 }
 
 async function doRenew() {

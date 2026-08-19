@@ -7,9 +7,6 @@ standalone via ``run_suspend_task()``.
 from __future__ import annotations
 
 import logging
-from typing import Mapping
-
-from apscheduler.schedulers.base import BaseScheduler
 
 from app.db.repositories.servers import server_repository
 from app.db.session import get_session_factory
@@ -19,28 +16,6 @@ from app.services import server_lifecycle
 from app.services.server_lifecycle import LifecycleError
 
 logger = logging.getLogger(__name__)
-
-SUSPEND_JOB_ID = "auto_suspend_task"
-
-
-def sync_suspend_job(scheduler: BaseScheduler, settings: Mapping[str, object]) -> None:
-    if settings.get("AUTOMATION_SUSPEND_ENABLED"):
-        scheduler.add_job(
-            run_suspend_task,
-            id=SUSPEND_JOB_ID,
-            trigger="cron",
-            hour=int(str(settings["AUTOMATION_RUN_HOUR"])),
-            minute=int(str(settings["AUTOMATION_RUN_MINUTE"])),
-            timezone=str(settings["TIMEZONE"]),
-            replace_existing=True,
-            coalesce=True,
-            max_instances=1,
-            misfire_grace_time=300,
-        )
-        return
-
-    if scheduler.get_job(SUSPEND_JOB_ID):
-        scheduler.remove_job(SUSPEND_JOB_ID)
 
 
 async def run_suspend_task() -> None:

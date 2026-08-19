@@ -18,11 +18,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.time import utc_naive_now
 from app.db.models.pterodactyl import Allocation, PteroServer, PteroUser
 
 
 def _now() -> datetime:
-    return datetime.utcnow().replace(microsecond=0)
+    return utc_naive_now().replace(microsecond=0)
 
 
 class AllocationRepository:

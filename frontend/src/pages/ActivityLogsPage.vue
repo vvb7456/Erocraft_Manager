@@ -77,7 +77,10 @@ watch([filterActor, filterCategory, filterStatus], () => {
 
 // ── Helpers ──
 function formatTime(ts: string | null): string {
-  return formatDateTime(ts ? ts + 'Z' : null)
+  if (!ts) return formatDateTime(null)
+  // Backend now always sends Z; the endsWith check is a defensive fallback
+  // for any stale cache / older response.
+  return formatDateTime(ts.endsWith('Z') ? ts : ts + 'Z')
 }
 
 

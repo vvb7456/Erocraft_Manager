@@ -415,7 +415,7 @@ class AlipayDirectGateway:
             "format": _FORMAT,
             "charset": _CHARSET,
             "sign_type": _SIGN_TYPE,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "timestamp": datetime.now(_CN_TZ).strftime("%Y-%m-%d %H:%M:%S"),
             "version": _VERSION,
         }
         if notify_url:

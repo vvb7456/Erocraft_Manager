@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
 from app.core import alert_defaults
+from app.core.time import to_iso_z
 from app.db.models.manager import HostAlertRule, HostAlertSettings
 from app.db.models.pterodactyl import PteroUser
 from app.services import agent_client, host_registry
@@ -69,9 +70,9 @@ def _serialize(host) -> HostOut:
         pterodactyl_node_id=host.pterodactyl_node_id,
         extra_metadata=host.extra_metadata,
         enabled=host.enabled,
-        last_seen_at=host.last_seen_at.isoformat() if host.last_seen_at else None,
-        created_at=host.created_at.isoformat() if host.created_at else None,
-        updated_at=host.updated_at.isoformat() if host.updated_at else None,
+        last_seen_at=to_iso_z(host.last_seen_at),
+        created_at=to_iso_z(host.created_at),
+        updated_at=to_iso_z(host.updated_at),
     )
 
 

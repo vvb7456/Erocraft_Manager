@@ -10,9 +10,6 @@ today. See ``AGENTS.md`` trial-plan section.
 from __future__ import annotations
 
 import logging
-from typing import Mapping
-
-from apscheduler.schedulers.base import BaseScheduler
 
 from app.db.repositories.servers import server_repository
 from app.db.session import get_session_factory
@@ -22,26 +19,6 @@ from app.services import server_lifecycle
 from app.services.server_lifecycle import LifecycleError
 
 logger = logging.getLogger(__name__)
-
-TRIAL_EXPIRE_JOB_ID = "auto_trial_expire_task"
-
-
-def sync_trial_expire_job(scheduler: BaseScheduler, settings: Mapping[str, object]) -> None:
-    """Trial expiry always runs — it's not gated by AUTOMATION_DELETE_ENABLED
-    because trial plans have their own mandatory zero-grace deletion policy
-    independent of the global delete toggle."""
-    scheduler.add_job(
-        run_trial_expire_task,
-        id=TRIAL_EXPIRE_JOB_ID,
-        trigger="cron",
-        hour=int(str(settings["AUTOMATION_RUN_HOUR"])),
-        minute=int(str(settings["AUTOMATION_RUN_MINUTE"])),
-        timezone=str(settings["TIMEZONE"]),
-        replace_existing=True,
-        coalesce=True,
-        max_instances=1,
-        misfire_grace_time=300,
-    )
 
 
 async def run_trial_expire_task() -> None:

@@ -11,6 +11,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import PlanChangeModal from '@/components/servers/PlanChangeModal.vue'
+import { useToday } from '@/composables/useToday'
 import type { AdminServerDetailResponse } from '@/types/adminServer'
 
 defineOptions({ name: 'AdminServerLifecyclePane' })
@@ -33,29 +34,30 @@ const serverName = computed(() => server.value?.name ?? '')
 const isSuspended = computed(() => server.value?.isSuspended ?? false)
 const isInstalling = computed(() => server.value?.isInstalling ?? false)
 
+const today = useToday()
+
 const daysLeft = computed<number | null>(() => {
   const exp = server.value?.expirationDate
   if (!exp) return null
-  const expDate = new Date(`${exp}T00:00:00`)
-  if (Number.isNaN(expDate.getTime())) return null
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return Math.floor((expDate.getTime() - today.getTime()) / 86_400_000)
+  // Pure date-string difference (both YYYY-MM-DD), no timezone conversion.
+  const expMs = new Date(`${exp}T00:00:00Z`).getTime()
+  const todayMs = new Date(`${today.value}T00:00:00Z`).getTime()
+  if (Number.isNaN(expMs) || Number.isNaN(todayMs)) return null
+  return Math.round((expMs - todayMs) / 86_400_000)
 })
 
-function addDays(base: Date, days: number): string {
-  const next = new Date(base)
-  next.setDate(next.getDate() + days)
-  return next.toISOString().slice(0, 10)
+function addDays(base: string, days: number): string {
+  const d = new Date(base + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
 }
 
 function calcDefaultRenewDate(): string {
   const exp = server.value?.expirationDate
-  const today = new Date()
   if (!exp || (daysLeft.value !== null && daysLeft.value < 0)) {
-    return addDays(today, 30)
+    return addDays(today.value, 30)
   }
-  return addDays(new Date(`${exp}T00:00:00`), 30)
+  return addDays(exp, 30)
 }
 
 function resetRenewDate() {
@@ -64,10 +66,9 @@ function resetRenewDate() {
 
 function quickRenew(days: number) {
   const exp = server.value?.expirationDate
-  const today = new Date()
   const base = !exp || (daysLeft.value !== null && daysLeft.value < 0)
-    ? today
-    : new Date(`${exp}T00:00:00`)
+    ? today.value
+    : exp
   renewDate.value = addDays(base, days)
 }
 

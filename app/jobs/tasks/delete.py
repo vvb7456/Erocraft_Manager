@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
-from typing import Mapping
-
-from apscheduler.schedulers.base import BaseScheduler
 
 from app.core.settings_store import get_settings_store
 from app.db.repositories.servers import server_repository
@@ -17,28 +14,6 @@ from app.services import server_lifecycle
 from app.services.server_lifecycle import LifecycleError
 
 logger = logging.getLogger(__name__)
-
-DELETE_JOB_ID = "auto_delete_task"
-
-
-def sync_delete_job(scheduler: BaseScheduler, settings: Mapping[str, object]) -> None:
-    if settings.get("AUTOMATION_DELETE_ENABLED"):
-        scheduler.add_job(
-            run_delete_task,
-            id=DELETE_JOB_ID,
-            trigger="cron",
-            hour=int(str(settings["AUTOMATION_RUN_HOUR"])),
-            minute=int(str(settings["AUTOMATION_RUN_MINUTE"])),
-            timezone=str(settings["TIMEZONE"]),
-            replace_existing=True,
-            coalesce=True,
-            max_instances=1,
-            misfire_grace_time=300,
-        )
-        return
-
-    if scheduler.get_job(DELETE_JOB_ID):
-        scheduler.remove_job(DELETE_JOB_ID)
 
 
 async def run_delete_task() -> None:
