@@ -73,6 +73,8 @@ async function handleLogin() {
       switchLanguage(backendToFrontendLocale(data.language))
       if (data.is_admin) {
         router.replace({ name: 'dashboard' })
+      } else if (!data.has_owned_server) {
+        router.replace({ name: 'user-plans' })
       } else {
         router.replace({ name: 'user-servers' })
       }

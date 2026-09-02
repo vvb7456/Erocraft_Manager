@@ -270,7 +270,8 @@ router.beforeEach(async (to) => {
         if (data) {
           applyServerLanguage(data?.language)
           app.setIsAdmin(!!data.is_admin)
-          return data.is_admin ? { name: 'dashboard' } : { name: 'user-servers' }
+          if (data.is_admin) return { name: 'dashboard' }
+          return data.has_owned_server ? { name: 'user-servers' } : { name: 'user-plans' }
         }
       } catch {
         return true
@@ -286,13 +287,14 @@ router.beforeEach(async (to) => {
     }
     applyServerLanguage(data?.language)
     app.setIsAdmin(!!data.is_admin)
-    // Root path: pick destination by role
+    // Root path: pick destination by role & server ownership history
     if (to.name === 'home') {
-      return data.is_admin ? { name: 'dashboard' } : { name: 'user-servers' }
+      if (data.is_admin) return { name: 'dashboard' }
+      return data.has_owned_server ? { name: 'user-servers' } : { name: 'user-plans' }
     }
     // Admin routes require admin role
     if (to.meta.admin && !data.is_admin) {
-      return { name: 'user-servers' }
+      return data.has_owned_server ? { name: 'user-servers' } : { name: 'user-plans' }
     }
   } catch {
     app.setIsAdmin(false)
