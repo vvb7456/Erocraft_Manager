@@ -19,7 +19,7 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 defineOptions({ name: 'EmailTemplatesPage' })
 
 type TemplateKey =
-  | 'bulk' | 'reminder' | 'preDelete' | 'createUser' | 'passwordReset'
+  | 'bulk' | 'reminder' | 'expired' | 'preDelete' | 'createUser' | 'passwordReset'
   | 'emailChange' | 'registerVerify' | 'alertFired' | 'alertResolved'
   | 'orderPaid' | 'orderApplyFailed' | 'orderApplyAlert' | 'orderRefunded'
   | 'serverInstalled' | 'referralInviterRewarded' | 'referralInviteeRewarded'
@@ -27,7 +27,7 @@ type TemplateKey =
 interface TemplateData { subject: string; body: string }
 
 const KEYS: TemplateKey[] = [
-  'bulk', 'reminder', 'preDelete', 'createUser', 'passwordReset',
+  'bulk', 'reminder', 'expired', 'preDelete', 'createUser', 'passwordReset',
   'emailChange', 'registerVerify', 'alertFired', 'alertResolved',
   'orderPaid', 'orderApplyFailed', 'orderApplyAlert', 'orderRefunded',
   'serverInstalled', 'referralInviterRewarded', 'referralInviteeRewarded',
@@ -36,6 +36,7 @@ const KEYS: TemplateKey[] = [
 const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
   bulk: ['brand_name', 'username', 'email', 'server_name', 'server_id', 'expiration_date'],
   reminder: ['brand_name', 'username', 'server_count', 'expiration_date', 'server_list'],
+  expired: ['brand_name', 'username', 'server_count', 'expiration_date', 'server_list', 'grace_days', 'deletion_date'],
   preDelete: ['brand_name', 'username', 'server_name', 'server_id', 'deletion_date'],
   createUser: ['brand_name', 'username', 'email', 'password', 'reset_url'],
   passwordReset: ['brand_name', 'username', 'email', 'reset_url'],

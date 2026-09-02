@@ -77,6 +77,10 @@ def _list_item(
         plan_code=str(snap.get("plan_code", "")),
         plan_name=str(snap.get("plan_name", "")),
         kind=order.kind,
+        channel=getattr(order, "channel", "alipay") or "alipay",
+        external_order_id=order.external_order_id,
+        operator=getattr(order, "operator", "system") or "system",
+        channel_note=order.channel_note,
         period_count=order.period_count,
         total_fen=order.total_fen,
         total_days=order.total_days,
@@ -194,12 +198,13 @@ def _serialize_refund(refund: BillingRefund) -> RefundOut:
 @router.get("", response_model=OrderListResponse)
 async def list_orders_endpoint(
     status_filter: str | None = Query(None, alias="status", max_length=32),
+    channel_filter: str | None = Query(None, alias="channel", max_length=32),
     user_id: int | None = Query(None, gt=0),
     kind: str | None = Query(None, pattern=r"^(renew|new_purchase|upgrade|convert)$"),
     q: str | None = Query(
         None,
         max_length=64,
-        description="模糊搜索：订单号/订单ID/用户名/邮箱/用户UUID/服务器名/服务器ID/服务器UUID/服务器短UUID/发票号/网关交易号/网关预支付ID",
+        description="模糊搜索：订单号/外部订单号/订单ID/用户名/邮箱/用户UUID/服务器名/服务器ID/服务器UUID/服务器短UUID/发票号/网关交易号/网关预支付ID",
     ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -211,6 +216,9 @@ async def list_orders_endpoint(
     if status_filter:
         stmt = stmt.where(BillingOrder.status == status_filter)
         count_stmt = count_stmt.where(BillingOrder.status == status_filter)
+    if channel_filter:
+        stmt = stmt.where(BillingOrder.channel == channel_filter)
+        count_stmt = count_stmt.where(BillingOrder.channel == channel_filter)
     if user_id:
         stmt = stmt.where(BillingOrder.user_id == user_id)
         count_stmt = count_stmt.where(BillingOrder.user_id == user_id)
@@ -243,6 +251,7 @@ async def list_orders_endpoint(
             # 主表条件：直接字段模糊匹配，或经 outerjoin 用户/服务器匹配，或命中发票/交易子查询
             direct_or = or_(
                 BillingOrder.order_no.ilike(needle),
+                BillingOrder.external_order_id.ilike(needle),
                 cast(BillingOrder.id, String).ilike(needle),
                 cast(BillingOrder.user_id, String).ilike(needle),
                 cast(BillingOrder.target_server_id, String).ilike(needle),
@@ -392,6 +401,10 @@ async def get_order_endpoint(
         plan_id=order.plan_id,
         plan_snapshot=order.plan_snapshot or {},
         kind=order.kind,
+        channel=getattr(order, "channel", "alipay") or "alipay",
+        external_order_id=order.external_order_id,
+        operator=getattr(order, "operator", "system") or "system",
+        channel_note=order.channel_note,
         period_count=order.period_count,
         discount_pct=float(order.discount_pct),
         total_fen=order.total_fen,

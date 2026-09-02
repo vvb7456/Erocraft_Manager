@@ -163,6 +163,18 @@ class BillingOrder(Base):
     kind: Mapped[str] = mapped_column(
         Enum(*ORDER_KIND_VALUES, name="billing_order_kind"), nullable=False
     )
+    channel: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="alipay"
+    )
+    external_order_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    operator: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="system"
+    )
+    channel_note: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
     # v2 period / pricing fields (locked at order creation; apply reads these,
     # never re-derives from plan).
     period_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

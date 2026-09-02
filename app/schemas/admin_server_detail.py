@@ -106,9 +106,11 @@ class AdminServerSummary(CamelModel):
     updated_at: datetime | None = Field(alias="updatedAt")
     installed_at: datetime | None = Field(alias="installedAt")
     expiration_date: str | None = Field(alias="expirationDate")
+    is_trial: bool = Field(default=False, alias="isTrial")
     plan_id: int | None = Field(default=None, alias="planId")
     plan_code: str | None = Field(default=None, alias="planCode")
     plan_name: str | None = Field(default=None, alias="planName")
+    plan_type: str | None = Field(default=None, alias="planType")
 
 
 class AdminServerDetailResponse(CamelModel):

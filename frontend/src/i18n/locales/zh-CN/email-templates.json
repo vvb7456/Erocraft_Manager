@@ -18,6 +18,9 @@
   "reminder": {
     "title": "到期提醒"
   },
+  "expired": {
+    "title": "已到期停机提醒"
+  },
   "preDelete": {
     "title": "删除前提醒"
   },
@@ -69,6 +72,7 @@
     "expiration_date": "到期日期",
     "server_count": "服务器数量",
     "server_list": "服务器列表",
+    "grace_days": "宽限期天数",
     "deletion_date": "删除日期",
     "password": "初始密码",
     "new_email": "新邮箱地址",

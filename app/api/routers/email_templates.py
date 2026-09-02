@@ -43,6 +43,7 @@ async def get_email_templates(
     return EmailTemplatesResponse(
         bulk=_payload("bulk"),
         reminder=_payload("reminder"),
+        expired=_payload("expired"),
         preDelete=_payload("pre_delete"),
         createUser=_payload("create_user"),
         passwordReset=_payload("password_reset"),

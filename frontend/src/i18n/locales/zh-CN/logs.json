@@ -51,6 +51,7 @@
   },
   "reminderType": {
     "expiry": "到期提醒",
+    "expired": "已到期停机提醒",
     "pre_delete": "删除前提醒"
   },
   "language": {

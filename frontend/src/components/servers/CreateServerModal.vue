@@ -47,6 +47,10 @@ const createForm = ref({
   allocations: 1,
   expiration_days: 30,
   environment: {} as Record<string, string>,
+  channel: 'taobao' as 'taobao' | 'xianyu' | 'other',
+  external_order_id: '',
+  amount_yuan: 0,
+  channel_note: '',
 })
 
 // Dropdown data
@@ -61,6 +65,7 @@ const serverNamePrefix = ref('')
 interface PlanOption {
   id: number
   display_name: string
+  price_fen: number
   is_active: boolean
   nest_id: number
   egg_id: number
@@ -79,10 +84,30 @@ const planList = ref<PlanOption[]>([])
 
 const userOptions = computed(() => userList.value.map(u => ({ value: u.id, label: `${u.username} (${u.email})` })))
 const planOptions = computed(() => planList.value.map(p => ({ value: p.id, label: p.display_name })))
+const channelOptions = computed(() => [
+  { value: 'taobao', label: t('servers.channel.taobao') },
+  { value: 'xianyu', label: t('servers.channel.xianyu') },
+  { value: 'other', label: t('servers.channel.other') },
+])
 const nestOptions = computed(() => nestList.value.map(n => ({ value: n.id, label: n.name })))
 const eggOptions = computed(() => eggList.value.map(e => ({ value: e.id, label: e.name })))
 const nodeOptions = computed(() => nodeList.value.map(n => ({ value: n.id, label: n.name })))
 const allocationOptions = computed(() => allocationList.value.map(a => ({ value: a.id, label: `${a.ip}:${a.port}` })))
+
+const isEcommerce = computed(() => createForm.value.channel === 'taobao' || createForm.value.channel === 'xianyu')
+
+watch(() => createForm.value.channel, (ch) => {
+  if (ch === 'other') {
+    createForm.value.external_order_id = ''
+    createForm.value.amount_yuan = 0
+    createForm.value.channel_note = ''
+  } else if (createForm.value.plan_id) {
+    const plan = planList.value.find(p => p.id === createForm.value.plan_id)
+    if (plan && (!createForm.value.amount_yuan || createForm.value.amount_yuan === 0)) {
+      createForm.value.amount_yuan = plan.price_fen / 100
+    }
+  }
+})
 
 // Load eggs when nest changes.
 // Increment a per-watcher request token before each load and only commit the
@@ -168,6 +193,9 @@ async function applyPlan(plan: PlanOption) {
   createForm.value.allocations = plan.allocation_limit
   createForm.value.node_id = plan.node_id
   createForm.value.nest_id = plan.nest_id
+  if (isEcommerce.value) {
+    createForm.value.amount_yuan = plan.price_fen / 100
+  }
   // Wait for egg list to populate, then pick egg.
   const seq = ++planEggWaitSeq
   const waitForEggs = (tries: number) => {
@@ -230,6 +258,10 @@ watch(() => props.modelValue, async (open) => {
     allocations: 1,
     expiration_days: 30,
     environment: {},
+    channel: 'taobao',
+    external_order_id: '',
+    amount_yuan: 0,
+    channel_note: '',
   }
   eggList.value = []
   allocationList.value = []
@@ -289,6 +321,22 @@ async function doCreateServer() {
     toast(t('servers.create.validation.requiredFields'), 'error')
     return
   }
+
+  if (isEcommerce.value) {
+    if (!f.plan_id) {
+      toast(t('servers.create.validation.planRequiredForChannel'), 'error')
+      return
+    }
+    if (!f.external_order_id.trim()) {
+      toast(t('servers.create.validation.orderIdRequired'), 'error')
+      return
+    }
+    if (f.amount_yuan === undefined || isNaN(f.amount_yuan) || f.amount_yuan <= 0) {
+      toast(t('servers.create.validation.amountRequired'), 'error')
+      return
+    }
+  }
+
   createLoading.value = true
   const res = await post<{ message: string }>('/api/admin/servers', {
     user_id: Number(f.user_id),
@@ -307,6 +355,10 @@ async function doCreateServer() {
     allocations: f.allocations,
     expiration_days: f.expiration_days,
     plan_id: f.plan_id ? Number(f.plan_id) : null,
+    channel: f.channel,
+    external_order_id: isEcommerce.value ? f.external_order_id.trim() : null,
+    amount_yuan: isEcommerce.value && f.amount_yuan !== undefined ? Number(f.amount_yuan) : null,
+    channel_note: isEcommerce.value && f.channel_note.trim() ? f.channel_note.trim() : null,
   })
   createLoading.value = false
   if (res) {
@@ -324,7 +376,7 @@ function close() {
 <template>
   <BaseModal :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)" :title="t('servers.create.title')" icon="add" size="xl" scroll="body">
     <div class="create-form">
-      <!-- Plan + Owner -->
+      <!-- Row 1: Plan + Expiration (Swapped with User per requirement) -->
       <div class="create-row">
         <FormField :label="t('servers.create.plan')" density="compact" class="create-col">
           <BaseSelect
@@ -334,22 +386,22 @@ function close() {
             searchable
           />
         </FormField>
-        <FormField :label="t('servers.create.user')" required density="compact" class="create-col">
-          <BaseSelect v-model="createForm.user_id" :options="userOptions" :placeholder="t('servers.create.user_placeholder')" searchable />
-        </FormField>
-      </div>
-
-      <!-- Name + Expiration -->
-      <div class="create-row">
-        <FormField :label="t('servers.create.server_name')" required density="compact" class="create-col">
-          <BaseInput v-model="createForm.server_name" :placeholder="t('servers.create.server_name_placeholder')" />
-        </FormField>
         <FormField :label="t('servers.create.expiration_days')" required density="compact" class="create-col">
           <NumberInput v-model="createForm.expiration_days" :min="1" :max="3650" />
         </FormField>
       </div>
 
-      <!-- Node & Port -->
+      <!-- Row 2: Name + Owner -->
+      <div class="create-row">
+        <FormField :label="t('servers.create.server_name')" required density="compact" class="create-col">
+          <BaseInput v-model="createForm.server_name" :placeholder="t('servers.create.server_name_placeholder')" />
+        </FormField>
+        <FormField :label="t('servers.create.user')" required density="compact" class="create-col">
+          <BaseSelect v-model="createForm.user_id" :options="userOptions" :placeholder="t('servers.create.user_placeholder')" searchable />
+        </FormField>
+      </div>
+
+      <!-- Row 3: Node & Port -->
       <div class="create-row">
         <FormField :label="t('servers.create.node')" required density="compact" class="create-col">
           <BaseSelect v-model="createForm.node_id" :options="nodeOptions" :placeholder="t('servers.create.node_placeholder')" />
@@ -358,6 +410,41 @@ function close() {
           <BaseSelect v-model="createForm.allocation_id" :options="allocationOptions" :placeholder="allocationList.length === 0 && createForm.node_id ? t('servers.create.no_allocations') : t('servers.create.allocation_placeholder')" :disabled="!createForm.node_id" searchable />
         </FormField>
       </div>
+
+      <!-- Order Attribution (Collapsible, default open) -->
+      <CollapsibleGroup :title="t('servers.create.section_order')" icon="receipt_long" :default-open="true">
+        <div class="create-row">
+          <FormField :label="t('servers.channel.label')" required density="compact" class="create-col">
+            <BaseSelect v-model="createForm.channel" :options="channelOptions" />
+          </FormField>
+          <FormField :label="t('servers.channel.order_id')" :required="isEcommerce" density="compact" class="create-col">
+            <BaseInput
+              v-model="createForm.external_order_id"
+              :placeholder="t('servers.channel.order_id_placeholder')"
+              :disabled="!isEcommerce"
+            />
+          </FormField>
+        </div>
+
+        <div class="create-row">
+          <FormField :label="t('servers.channel.amount')" :required="isEcommerce" density="compact" class="create-col">
+            <NumberInput
+              v-model="createForm.amount_yuan"
+              :min="0"
+              :step="0.01"
+              :placeholder="t('servers.channel.amount_placeholder')"
+              :disabled="!isEcommerce"
+            />
+          </FormField>
+          <FormField :label="t('servers.channel.note')" density="compact" class="create-col">
+            <BaseInput
+              v-model="createForm.channel_note"
+              :placeholder="t('servers.channel.note_placeholder')"
+              :disabled="!isEcommerce"
+            />
+          </FormField>
+        </div>
+      </CollapsibleGroup>
 
       <!-- Preset & Image -->
       <CollapsibleGroup :title="t('servers.create.section_image')" icon="tune" :default-open="true">

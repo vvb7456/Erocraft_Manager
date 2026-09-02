@@ -19,6 +19,7 @@
     "panel_status": "Status",
     "egg": "Egg",
     "plan": "Plan",
+    "trial_badge": "Trial",
     "actions": "Actions"
   },
   "status": {
@@ -98,6 +99,7 @@
     "plan_placeholder": "Select a plan to auto-fill the fields below…",
     "plan_hint": "Selecting a plan auto-fills egg, node, resources, startup and env vars; you can still tweak any field manually.",
     "plan_clear": "No plan",
+    "section_order": "Order Attribution",
     "section_image": "Preset & Image",
     "section_resources": "Resources",
     "section_env": "Environment Variables",
@@ -128,7 +130,37 @@
     "creating": "Creating…",
     "success": "Server created successfully",
     "validation": {
-      "requiredFields": "Please fill in the required fields"
+      "requiredFields": "Please fill in the required fields",
+      "planRequiredForChannel": "A plan must be selected for e-commerce channels",
+      "orderIdRequired": "Please enter an external order ID",
+      "amountRequired": "Please enter a valid amount"
     }
+  },
+  "channel": {
+    "label": "Order Channel",
+    "taobao": "Taobao",
+    "xianyu": "Xianyu",
+    "other": "Other",
+    "order_id": "Order ID",
+    "order_id_placeholder": "External order ID",
+    "amount": "Amount",
+    "amount_placeholder": "0.00",
+    "note": "Note",
+    "note_placeholder": "Optional note"
+  },
+  "renew_modal": {
+    "title": "Renew Confirmation",
+    "convert_title": "Convert Trial Confirmation",
+    "convert_action": "Convert Trial",
+    "convert_badge": "Convert Plan",
+    "target_plan": "Effective Plan",
+    "convert_notice": "This server is currently on trial. Renewing will convert it to a standard plan, clear trial status, and apply standard resources.",
+    "server_name": "Server",
+    "current_expiration": "Current Expiration",
+    "new_expiration": "New Expiration",
+    "confirm_btn": "Confirm Renew",
+    "validation_plan_required": "This server is not bound to a plan. Please select 'Other' source.",
+    "validation_order_required": "External order ID is required for e-commerce channels.",
+    "validation_amount_required": "A valid positive amount is required for e-commerce channels."
   }
 }

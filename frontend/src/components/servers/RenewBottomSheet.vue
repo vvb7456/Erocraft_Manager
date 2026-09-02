@@ -7,6 +7,8 @@ import { useToday } from '@/composables/useToday'
 import BottomSheet from '@/components/ui/BottomSheet.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 
+import RenewConfirmModal from '@/components/servers/RenewConfirmModal.vue'
+
 defineOptions({ name: 'RenewBottomSheet' })
 
 interface ServerItem {
@@ -16,6 +18,8 @@ interface ServerItem {
   daysLeft: number | null
   statusLabel: string
   isSuspended: boolean
+  planId?: number | null
+  isTrial?: boolean
 }
 
 const props = defineProps<{
@@ -35,6 +39,7 @@ const today = useToday()
 
 const renewDate = ref('')
 const quickDays = ref<number | null>(null)
+const confirmModalOpen = ref(false)
 
 // Reset state when opening
 watch(() => props.modelValue, (open) => {
@@ -65,28 +70,25 @@ function quickRenew(days: number) {
   renewDate.value = addDays(base, days)
 }
 
-async function doRenew() {
+function doRenew() {
   if (!props.server) return
-  const res = await post<{ message: string }>(`/api/admin/servers/${props.server.pteroId}/renew`, { date: renewDate.value })
-  if (res) {
-    toast(res.message, 'success')
-    emit('update:modelValue', false)
-    emit('renewed')
-  }
+  emit('update:modelValue', false)
+  confirmModalOpen.value = true
+}
+
+function onRenewed() {
+  emit('update:modelValue', false)
+  emit('renewed')
 }
 
 function statusColor(s: ServerItem): string {
-  if (s.isSuspended) return 'var(--red)'
-  switch (s.statusLabel) {
-    case 'normal': return 'var(--green)'
-    case 'expiring_soon': return 'var(--amber)'
-    case 'expired': return 'var(--red)'
-    default: return 'var(--t3)'
-  }
+  if (s.daysLeft !== null && s.daysLeft < 0) return 'var(--red)'
+  if (s.daysLeft !== null && s.daysLeft <= 7) return 'var(--amber)'
+  return 'var(--green)'
 }
 
 function expirationText(s: ServerItem): string {
-  if (s.expirationDate === null) return t('servers.status.permanent')
+  if (!s.expirationDate) return t('servers.status.permanent')
   if (s.daysLeft !== null && s.daysLeft < 0) return `${s.expirationDate} (${t('servers.status.expired')})`
   if (s.daysLeft === 0) return `${s.expirationDate} (${t('servers.status.today')})`
   if (s.daysLeft !== null) return `${s.expirationDate} (${t('servers.status.days_left', { n: s.daysLeft })})`
@@ -95,7 +97,11 @@ function expirationText(s: ServerItem): string {
 </script>
 
 <template>
-  <BottomSheet :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)" :title="t('servers.action.renew')">
+  <BottomSheet
+    :model-value="modelValue"
+    @update:model-value="$emit('update:modelValue', $event)"
+    :title="server?.isTrial ? t('servers.renew_modal.convert_title') : t('servers.action.renew')"
+  >
     <div v-if="server" class="renew-sheet">
       <div class="renew-sheet__name">{{ server.name }}</div>
       <div class="renew-sheet__current">
@@ -109,9 +115,23 @@ function expirationText(s: ServerItem): string {
       </div>
       <div class="renew-sheet__label">{{ t('servers.action.custom_date') }}</div>
       <input type="date" class="renew-sheet__date" v-model="renewDate" @input="quickDays = null" />
-      <BaseButton variant="primary" block @click="doRenew">{{ t('servers.action.renew') }}</BaseButton>
+      <BaseButton variant="primary" block @click="doRenew">
+        {{ server?.isTrial ? t('servers.renew_modal.convert_action') : t('servers.action.renew') }}
+      </BaseButton>
     </div>
   </BottomSheet>
+
+  <RenewConfirmModal
+    v-if="server"
+    v-model="confirmModalOpen"
+    :server-id="server.pteroId"
+    :server-name="server.name"
+    :current-expiration-date="server.expirationDate"
+    :target-date="renewDate"
+    :plan-id="server.planId ?? null"
+    :is-trial="server.isTrial ?? false"
+    @renewed="onRenewed"
+  />
 </template>
 
 <style scoped>

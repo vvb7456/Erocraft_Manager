@@ -7,8 +7,10 @@ import logging
 from datetime import date, timedelta
 from typing import Any, cast
 
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -18,9 +20,9 @@ from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
 from app.core.runtime_settings import AUTOMATION_SPECS, SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
-from app.core.time import local_today
+from app.core.time import local_today, utc_naive_now
 from app.db.models import Egg, PteroServer, PteroUser, ServerMeta
-from app.db.models.billing import BillingPlan
+from app.db.models.billing import BillingOrder, BillingOrderEffect, BillingPlan
 from app.db.repositories.servers import exclude_placeholders, server_repository
 from app.schemas.servers import (
     BatchServersRequest,
@@ -36,12 +38,56 @@ from app.schemas.servers import (
     UpdateServerRequest,
 )
 from app.services.audit import log_manager_activity
+from app.services.billing._ids import gen_order_no
 from app.services.email import get_email_delay, get_site_url, load_template, render_template_body, send_email
 from app.services import server_lifecycle
 from app.services.server_lifecycle import LifecycleError, LifecycleValidationError
 
 router = APIRouter(prefix="/admin", tags=["servers"])
 logger = logging.getLogger(__name__)
+
+
+def _build_admin_plan_snapshot(
+    plan: BillingPlan,
+    total_fen: int,
+    total_days: int,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 2,
+        "plan_id": plan.id,
+        "plan_name": plan.display_name,
+        "plan_code": plan.code,
+        "price_fen": plan.price_fen,
+        "days": plan.days,
+        "currency_code": plan.currency_code,
+        "selected_period": {
+            "count": 1,
+            "discount_pct": 0,
+            "total_fen": total_fen,
+            "total_days": total_days,
+        },
+        "egg_id": plan.egg_id,
+        "nest_id": plan.nest_id,
+        "node_id": plan.node_id,
+        "docker_image": plan.docker_image,
+        "startup_command": plan.startup_command,
+        "env_snapshot": dict(plan.env_defaults or {}),
+        "cpu": plan.cpu,
+        "memory_mb": plan.memory_mb,
+        "disk_mb": plan.disk_mb,
+        "swap_mb": plan.swap_mb,
+        "io": plan.io,
+        "database_limit": plan.database_limit,
+        "backup_limit": plan.backup_limit,
+        "allocation_limit": plan.allocation_limit,
+        "oom_disabled": plan.oom_disabled,
+        "plan_type": plan.plan_type,
+        "linked_plan_id": plan.linked_plan_id,
+        "llm_enabled": plan.llm_enabled,
+        "llm_quota_grant": plan.llm_quota_grant,
+        "newapi_plan_id": plan.newapi_plan_id,
+        "llm_group": plan.llm_group,
+    }
 
 
 def _classify_server(expiration_date: date | None, today: date) -> tuple[int | None, str]:
@@ -234,6 +280,7 @@ async def list_servers(
         days_left, status_label = _classify_server(expiration_date, today)
         meta_plan_id = server.meta.plan_id if server.meta is not None else None
         plan_obj = plans.get(meta_plan_id) if meta_plan_id is not None else None
+        is_trial = bool(server.meta and server.meta.is_trial)
         items.append(
             ServerListItem(
                 pteroId=server.id,
@@ -247,9 +294,11 @@ async def list_servers(
                 daysLeft=days_left,
                 statusLabel=status_label,
                 isSuspended=server.is_suspended,
+                isTrial=is_trial,
                 planId=meta_plan_id,
                 planCode=plan_obj.code if plan_obj else None,
                 planName=plan_obj.display_name if plan_obj else None,
+                planType=plan_obj.plan_type if plan_obj else None,
             )
         )
 
@@ -266,6 +315,41 @@ async def create_server(
     defaults = await _server_defaults(db)
     today = await _get_today(db)
     expiration_date = today + timedelta(days=payload.expiration_days)
+
+    # Validate channel-order attribution rules
+    if payload.channel in ("taobao", "xianyu"):
+        if payload.plan_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="电商渠道开通必须选择套餐",
+            )
+        if not (payload.external_order_id or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="电商渠道开通必须填写外部订单号",
+            )
+        if payload.amount_yuan is None or payload.amount_yuan <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="电商渠道开通必须填写大于 0 的有效金额",
+            )
+        # 幂等检查：防止同一外部订单号重复创建服务器
+        ext_id = (payload.external_order_id or "").strip()
+        dup_order = (
+            await db.execute(
+                select(BillingOrder.order_no)
+                .where(
+                    BillingOrder.channel == payload.channel,
+                    BillingOrder.external_order_id == ext_id,
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if dup_order:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"外部订单号 '{ext_id}' 已在订单 #{dup_order} 中录入，请勿重复使用",
+            )
 
     # Resolve nest_id from egg (panel API used to derive it server-side)
     egg_row = await db.execute(select(Egg.nest_id).where(Egg.id == payload.egg_id))
@@ -303,6 +387,7 @@ async def create_server(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     server_id = int(created.id)
+    plan_obj: BillingPlan | None = None
 
     try:
         await _set_meta_expiration(db, server_id, expiration_date)
@@ -317,12 +402,58 @@ async def create_server(
             meta = await db.get(ServerMeta, server_id)
             if meta is not None:
                 meta.plan_id = payload.plan_id
+                meta.is_trial = (plan_obj.plan_type == "trial")
+
+        # Generate BillingOrder for e-commerce channels
+        if payload.channel in ("taobao", "xianyu") and payload.plan_id is not None and plan_obj is not None:
+            amount_yuan = payload.amount_yuan if payload.amount_yuan is not None else (plan_obj.price_fen / 100)
+            total_fen = int(round(amount_yuan * 100))
+            order_no = gen_order_no()
+            snap = _build_admin_plan_snapshot(plan_obj, total_fen, payload.expiration_days)
+            order = BillingOrder(
+                order_no=order_no,
+                user_id=payload.user_id,
+                plan_id=payload.plan_id,
+                plan_snapshot=snap,
+                kind="new_purchase",
+                channel=payload.channel,
+                external_order_id=payload.external_order_id.strip() if payload.external_order_id else None,
+                operator=actor_username,
+                channel_note=payload.channel_note.strip() if payload.channel_note else None,
+                period_count=1,
+                discount_pct=Decimal("0"),
+                total_fen=total_fen,
+                total_days=payload.expiration_days,
+                target_server_id=server_id,
+                status="applied",
+                received_fen=total_fen,
+                applied_at=utc_naive_now(),
+            )
+            db.add(order)
+            await db.flush()
+
+            effect = BillingOrderEffect(
+                order_id=order.id,
+                server_id=server_id,
+                effect_type="new_purchase",
+                days=payload.expiration_days,
+                prev_expiration_date=None,
+                new_expiration_date=expiration_date,
+                effect_committed_at=utc_naive_now(),
+                post_actions_done_at=utc_naive_now(),
+            )
+            db.add(effect)
+
+            await db.execute(
+                update(PteroServer)
+                .where(PteroServer.id == server_id)
+                .values(external_id=f"order:{order.id}")
+            )
+
         await db.commit()
 
         # LLM provision: if the bound plan has LLM enabled, provision a key
         # for this server (mirrors apply_engine._run_post_actions).
-        # ``plan_obj`` was loaded above and survives the commit
-        # (expire_on_commit=False), so no re-fetch is needed.
         if payload.plan_id is not None:
             if plan_obj is not None and plan_obj.llm_enabled and plan_obj.llm_quota_grant > 0:
                 try:
@@ -384,13 +515,24 @@ async def create_server(
         "allocation_id": created.allocation_id,
     }
 
+    log_params: dict[str, Any] = {
+        "actor": actor_username,
+        "server_name": payload.server_name,
+        "server_id": server_id,
+        "channel": payload.channel,
+    }
+    if payload.external_order_id:
+        log_params["external_order_id"] = payload.external_order_id
+    if payload.amount_yuan is not None:
+        log_params["amount_yuan"] = payload.amount_yuan
+
     await log_manager_activity(
         db,
         actor=actor_username,
         category="server",
         status="success",
         detail_key="create_server",
-        detail_params={"actor": actor_username, "server_name": payload.server_name, "server_id": server_id},
+        detail_params=log_params,
     )
     return CreateServerResponse(
         message=f"服务器 '{payload.server_name}' 创建成功",
@@ -423,23 +565,259 @@ async def renew_server(
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="日期格式无效，请使用 YYYY-MM-DD") from exc
 
+    # 1. 检查试用状态与确定有效套餐
+    is_trial = bool(server.meta and server.meta.is_trial)
+    meta_plan_id = server.meta.plan_id if server.meta else None
+    plan_obj: BillingPlan | None = None
+    if meta_plan_id is not None:
+        plan_obj = await db.get(BillingPlan, meta_plan_id)
+
+    effective_plan: BillingPlan | None = None
+    order_kind = "renew"
+    effect_type = "renew"
+
+    if is_trial:
+        order_kind = "convert"
+        effect_type = "convert"
+        if plan_obj is not None and plan_obj.plan_type == "trial":
+            if plan_obj.linked_plan_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="绑定的试用套餐未配置关联标准套餐，无法执行试用转正",
+                )
+            linked_plan = await db.get(BillingPlan, plan_obj.linked_plan_id)
+            if linked_plan is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"关联的标准套餐 (ID: {plan_obj.linked_plan_id}) 不存在",
+                )
+            effective_plan = linked_plan
+        elif plan_obj is not None and plan_obj.plan_type == "standard":
+            effective_plan = plan_obj
+    else:
+        effective_plan = plan_obj
+
+    # 2. 校验电商渠道规则与幂等性
+    ext_id = (payload.external_order_id or "").strip()
+    if payload.channel in ("taobao", "xianyu"):
+        if new_date is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="电商渠道续期必须指定具体到期日",
+            )
+        if effective_plan is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="该服务器未绑定有效套餐，无法生成电商订单，请选择“其他”来源或先绑定套餐",
+            )
+        if not ext_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="电商渠道续期必须填写外部订单号",
+            )
+        if payload.amount_yuan is None or payload.amount_yuan <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="电商渠道续期必须填写大于 0 的有效金额",
+            )
+        # 幂等检查：防止跨服务器盗用/重用外部订单号；同服务器重试支持幂等自愈后置动作
+        existing_order = (
+            await db.execute(
+                select(BillingOrder)
+                .where(
+                    BillingOrder.channel == payload.channel,
+                    BillingOrder.external_order_id == ext_id,
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+        if existing_order:
+            if existing_order.target_server_id != server_id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"外部订单号 '{ext_id}' 已在订单 #{existing_order.order_no} 中录入，请勿重复使用",
+                )
+            # 同一服务器同一外部单号的重试请求：检查 effect.post_actions_done_at
+            existing_effect = await db.get(BillingOrderEffect, existing_order.id)
+            if existing_effect and existing_effect.post_actions_done_at is None:
+                # 上次后置动作（如解冻或面板描述）失败了，尝试重新执行后置动作
+                post_retry_err: Exception | None = None
+                try:
+                    await server_lifecycle.update_server_expiration_description(
+                        db, server_id, existing_effect.new_expiration_date
+                    )
+                    if existing_effect.new_expiration_date is not None and was_suspended:
+                        await server_lifecycle.unsuspend_server(db, server_id)
+                except Exception as exc:
+                    post_retry_err = exc
+
+                if post_retry_err is None:
+                    existing_effect.post_actions_done_at = utc_naive_now()
+                    await db.commit()
+                    return MessageResponse(
+                        message=f"服务器 {server_name} 续期成功，节点解冻与同步已恢复（订单 #{existing_order.order_no}）"
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail=f"订单 #{existing_order.order_no} 已记录，但重试节点同步/解冻失败: {post_retry_err}，请稍后再试",
+                    )
+            return MessageResponse(
+                message=f"服务器 {server_name} 续期成功（已存在订单 #{existing_order.order_no}）"
+            )
+
+    # 3. 计算快照与天数（无论何种渠道，只要有 effective_plan 均生成完整 snapshot）
+    today = await _get_today(db)
+    base_date = old_expiration_date if (old_expiration_date and old_expiration_date >= today) else today
+    added_days = max(1, (new_date - base_date).days) if new_date is not None else 30
+    amount_yuan = payload.amount_yuan if payload.amount_yuan is not None else (
+        (effective_plan.price_fen / 100) if effective_plan else 0
+    )
+    total_fen = int(round(amount_yuan * 100))
+
+    snap: dict[str, Any] = {}
+    if effective_plan is not None:
+        snap = _build_admin_plan_snapshot(effective_plan, total_fen, added_days)
+
+    # 4. Step 1: 核心业务事实原子落地（在一个干净的事务中写入并 Commit）
+    created_order_id: int | None = None
+
+    if is_trial and effective_plan is not None:
+        # Convert: 必须先成功同步标准套餐规格 (update_build)，若失败抛错回滚
+        from app.services import server_management
+        try:
+            await server_management.update_build(
+                db,
+                server_id,
+                cpu=effective_plan.cpu,
+                memory=effective_plan.memory_mb,
+                disk=effective_plan.disk_mb,
+                swap=effective_plan.swap_mb,
+                io=effective_plan.io,
+                database_limit=effective_plan.database_limit,
+                backup_limit=effective_plan.backup_limit,
+                allocation_limit=effective_plan.allocation_limit,
+                oom_disabled=effective_plan.oom_disabled,
+            )
+        except Exception as exc:
+            await db.rollback()
+            logger.exception("Failed to sync build resources on convert for server %s", server_id)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"试用转正同步容器规格失败: {exc}",
+            ) from exc
+
+        # 清除试用标记、切换为标准套餐、更新到期日
+        if server.meta is None:
+            server.meta = ServerMeta(server_id=server_id)
+            db.add(server.meta)
+        server.meta.is_trial = False
+        server.meta.plan_id = effective_plan.id
+        server.meta.expiration_date = new_date
+    else:
+        # 普通续期 / 设为永久
+        await _set_meta_expiration(db, server_id, new_date)
+
+    # 若为电商渠道，生成订单与 effect
+    if payload.channel in ("taobao", "xianyu") and new_date is not None and effective_plan is not None:
+        order_no = gen_order_no()
+        order = BillingOrder(
+            order_no=order_no,
+            user_id=server.owner_id,
+            plan_id=effective_plan.id,
+            plan_snapshot=snap,
+            kind=order_kind,
+            channel=payload.channel,
+            external_order_id=payload.external_order_id.strip() if payload.external_order_id else None,
+            operator=actor_username,
+            channel_note=payload.channel_note.strip() if payload.channel_note else None,
+            period_count=1,
+            discount_pct=Decimal("0"),
+            total_fen=total_fen,
+            total_days=added_days,
+            target_server_id=server_id,
+            status="applied",
+            received_fen=total_fen,
+            applied_at=utc_naive_now(),
+        )
+        db.add(order)
+        await db.flush()
+        created_order_id = order.id
+
+        effect = BillingOrderEffect(
+            order_id=order.id,
+            server_id=server_id,
+            effect_type=effect_type,
+            days=added_days,
+            prev_expiration_date=old_expiration_date,
+            new_expiration_date=new_date,
+            effect_committed_at=utc_naive_now(),
+            post_actions_done_at=None,
+        )
+        db.add(effect)
+
+    # 原子提交核心业务主数据
     await db.commit()
+
+    # 5. Step 2: 外部后置动作
+    post_action_error: Exception | None = None
+
+    # 5.1 面板描述同步
     try:
         await server_lifecycle.update_server_expiration_description(db, server_id, new_date)
-        await db.commit()
-        if new_date is not None and was_suspended:
-            await server_lifecycle.unsuspend_server(db, server_id)
-    except LifecycleError as exc:
-        await db.rollback()
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except Exception as exc:
+        post_action_error = exc
+        logger.warning("Failed to update panel expiration description for server %s: %s", server_id, exc)
 
-    await _persist_expiration_after_remote(
-        db,
-        server_id=server_id,
-        new_date=new_date,
-        old_date=old_expiration_date,
-        resuspend_on_failure=(new_date is not None and was_suspended),
-    )
+    # 5.2 解冻
+    if new_date is not None and was_suspended:
+        try:
+            await server_lifecycle.unsuspend_server(db, server_id)
+        except Exception as exc:
+            post_action_error = exc
+            logger.warning("Failed to unsuspend server %s on Wings: %s", server_id, exc)
+
+    # 5.3 LLM 配额发放（如果是试用转正）
+    if is_trial and effective_plan is not None and effective_plan.llm_enabled and effective_plan.llm_quota_grant > 0:
+        try:
+            from app.services.llm_provision import provision as llm_provision
+            await llm_provision.update_for_upgrade(db, server_id, snap)
+        except Exception as exc:
+            logger.warning("Failed to provision LLM quota on convert for server %s: %s", server_id, exc)
+
+    # 5.4 标记 post_actions_done_at（仅当后置动作全部成功时）
+    if post_action_error is None:
+        if created_order_id is not None:
+            try:
+                await db.execute(
+                    update(BillingOrderEffect)
+                    .where(BillingOrderEffect.order_id == created_order_id)
+                    .values(post_actions_done_at=utc_naive_now())
+                )
+                await db.commit()
+            except Exception:
+                logger.warning("Failed to mark post_actions_done_at for order %s", created_order_id)
+    else:
+        # 后置动作失败：抛出 502 明确告知，由于 DB 核心数据已落库且 post_actions_done_at=None，重试可自愈
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"服务器到期日已更新，但节点同步/解冻失败: {post_action_error}，请重试",
+        )
+
+    log_params: dict[str, Any] = {
+        "actor": actor_username,
+        "server_name": server_name,
+        "server_id": server_id,
+        "channel": payload.channel,
+    }
+    if new_date is not None:
+        log_params["date"] = new_date.isoformat()
+    if payload.external_order_id:
+        log_params["external_order_id"] = payload.external_order_id
+    if payload.amount_yuan is not None:
+        log_params["amount_yuan"] = payload.amount_yuan
+
     if new_date is None:
         await log_manager_activity(
             db,
@@ -447,7 +825,7 @@ async def renew_server(
             category="server",
             status="success",
             detail_key="set_server_permanent",
-            detail_params={"actor": actor_username, "server_name": server_name, "server_id": server_id},
+            detail_params=log_params,
         )
         return MessageResponse(message=f"已将 {server_name} 设为永久")
 
@@ -457,7 +835,7 @@ async def renew_server(
         category="server",
         status="success",
         detail_key="renew_server",
-        detail_params={"actor": actor_username, "server_name": server_name, "server_id": server_id, "date": new_date.isoformat()},
+        detail_params=log_params,
     )
     return MessageResponse(message=f"已续期至 {new_date.isoformat()}")
 

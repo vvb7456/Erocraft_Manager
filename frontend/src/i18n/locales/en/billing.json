@@ -1,5 +1,11 @@
 {
   "pageTitle": "Billing",
+  "channel": {
+    "alipay": "Alipay",
+    "taobao": "Taobao",
+    "xianyu": "Xianyu",
+    "other": "Manual"
+  },
   "plans": {
     "pageTitle": "Buy a Server",
     "uncategorised": "Other plans",
@@ -258,7 +264,13 @@
       "refundStatus_pending": "Pending",
       "refundStatus_succeeded": "Succeeded",
       "refundStatus_failed": "Failed",
-      "refundInitiatedBy": "Initiated by"
+      "refundInitiatedBy": "Initiated by",
+      "externalOrder": "External Order Info",
+      "externalOrderNo": "External Order No",
+      "channel": "Channel",
+      "operator": "Operator",
+      "channelAmount": "Received Amount",
+      "channelNote": "Note"
     },
     "incidents": {
       "kind": {
@@ -287,8 +299,10 @@
       "searchPlaceholder": "Search orders",
       "filterAllStatus": "All statuses",
       "filterAllKind": "All types",
+      "filterAllChannel": "All channels",
       "filterStatusPrefix": "Status",
       "filterKindPrefix": "Type",
+      "filterChannelPrefix": "Channel",
       "kindNewPurchase": "New",
       "kindRenew": "Renew",
       "kindUpgrade": "Upgrade",
@@ -305,6 +319,7 @@
       "emptySearch": "No orders matching \"{q}\"",
       "col": {
         "orderNo": "Order No",
+        "channel": "Channel",
         "user": "User",
         "plan": "Plan",
         "kind": "Type",

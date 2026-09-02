@@ -11,6 +11,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import PlanChangeModal from '@/components/servers/PlanChangeModal.vue'
+import RenewConfirmModal from '@/components/servers/RenewConfirmModal.vue'
 import { useToday } from '@/composables/useToday'
 import type { AdminServerDetailResponse } from '@/types/adminServer'
 
@@ -27,6 +28,7 @@ const serverId = inject<Ref<number | null>>('adminServerId')!
 const reload = inject<() => Promise<void>>('reloadAdminServer', async () => {})
 
 const renewDate = ref('')
+const renewModalOpen = ref(false)
 const deleteSubmitting = ref(false)
 
 const server = computed(() => detail.value?.server ?? null)
@@ -43,34 +45,8 @@ const daysLeft = computed<number | null>(() => {
   const expMs = new Date(`${exp}T00:00:00Z`).getTime()
   const todayMs = new Date(`${today.value}T00:00:00Z`).getTime()
   if (Number.isNaN(expMs) || Number.isNaN(todayMs)) return null
-  return Math.round((expMs - todayMs) / 86_400_000)
+  return Math.round((expMs - todayMs) / (1000 * 60 * 60 * 24))
 })
-
-function addDays(base: string, days: number): string {
-  const d = new Date(base + 'T00:00:00Z')
-  d.setUTCDate(d.getUTCDate() + days)
-  return d.toISOString().slice(0, 10)
-}
-
-function calcDefaultRenewDate(): string {
-  const exp = server.value?.expirationDate
-  if (!exp || (daysLeft.value !== null && daysLeft.value < 0)) {
-    return addDays(today.value, 30)
-  }
-  return addDays(exp, 30)
-}
-
-function resetRenewDate() {
-  renewDate.value = calcDefaultRenewDate()
-}
-
-function quickRenew(days: number) {
-  const exp = server.value?.expirationDate
-  const base = !exp || (daysLeft.value !== null && daysLeft.value < 0)
-    ? today.value
-    : exp
-  renewDate.value = addDays(base, days)
-}
 
 function expirationText(): string {
   if (!server.value) return '—'
@@ -82,12 +58,42 @@ function expirationText(): string {
 }
 
 const expirationColor = computed(() => {
-  if (!server.value || server.value.expirationDate === null) return 'var(--t2)'
-  if (daysLeft.value === null) return 'var(--t2)'
-  if (daysLeft.value <= 0) return 'var(--red)'
+  if (daysLeft.value === null) return 'var(--t1)'
+  if (daysLeft.value < 0) return 'var(--red)'
   if (daysLeft.value <= 7) return 'var(--amber)'
   return 'var(--green)'
 })
+
+function resetRenewDate() {
+  const base = server.value?.expirationDate
+  if (!base || (daysLeft.value !== null && daysLeft.value < 0)) {
+    renewDate.value = addDays(today.value, 30)
+    return
+  }
+  renewDate.value = addDays(base, 30)
+}
+
+watch(
+  () => [detail.value?.server?.expirationDate, today.value] as const,
+  () => resetRenewDate(),
+  { immediate: true },
+)
+
+function addDays(baseDateIso: string, days: number): string {
+  const parsed = new Date(`${baseDateIso}T00:00:00Z`)
+  if (Number.isNaN(parsed.getTime())) return ''
+  parsed.setUTCDate(parsed.getUTCDate() + days)
+  return parsed.toISOString().slice(0, 10)
+}
+
+function quickRenew(days: number) {
+  const base = server.value?.expirationDate
+  if (!base || (daysLeft.value !== null && daysLeft.value < 0)) {
+    renewDate.value = addDays(today.value, days)
+    return
+  }
+  renewDate.value = addDays(base, days)
+}
 
 async function doToggleSuspend() {
   if (!server.value || !serverId.value) return
@@ -111,24 +117,12 @@ async function doToggleSuspend() {
   await reload()
 }
 
-async function doRenew() {
+function doRenew() {
   if (!server.value || !serverId.value) return
-  const trimmed = renewDate.value?.trim() ?? ''
-  if (!trimmed) {
-    const ok = await confirm({
-      title: t('adminServer.lifecycle.renew.clearConfirmTitle'),
-      message: t('adminServer.lifecycle.renew.clearConfirmMessage', { name: server.value.name }),
-      confirmText: t('adminServer.lifecycle.renew.clearAction'),
-      variant: 'danger',
-    })
-    if (!ok) return
-  }
-  const res = await post<{ message: string }>(
-    `/api/admin/servers/${serverId.value}/renew`,
-    { date: trimmed || null },
-  )
-  if (!res) return
-  toast(res.message, 'success')
+  renewModalOpen.value = true
+}
+
+async function onRenewed() {
   await reload()
   resetRenewDate()
 }
@@ -227,7 +221,14 @@ async function onPlanModalConfirmed(planId: number | null) {
     </BaseCard>
 
     <BaseCard variant="bg2" class="lifecycle-card">
-      <SectionHeader icon="update" flush>{{ t('adminServer.lifecycle.renew.sectionTitle') }}</SectionHeader>
+      <SectionHeader icon="update" flush>
+        {{ server?.isTrial ? t('adminServer.lifecycle.renew.convertSectionTitle') : t('adminServer.lifecycle.renew.sectionTitle') }}
+      </SectionHeader>
+      <div v-if="server?.isTrial" class="trial-banner">
+        <AlertBanner tone="warning" dense>
+          {{ t('adminServer.lifecycle.renew.trialNotice') }}
+        </AlertBanner>
+      </div>
       <div class="renew-current">
         <span class="renew-current__label">{{ t('adminServer.lifecycle.renew.currentExpiration') }}</span>
         <span class="renew-current__value" :style="{ color: expirationColor }">{{ expirationText() }}</span>
@@ -242,8 +243,8 @@ async function onPlanModalConfirmed(planId: number | null) {
       </div>
       <div class="card-actions">
         <BaseButton variant="primary" :loading="loading" @click="doRenew">
-          <MsIcon name="update" size="xs" />
-          {{ t('adminServer.lifecycle.renew.action') }}
+          <MsIcon :name="server?.isTrial ? 'autorenew' : 'update'" size="xs" />
+          {{ server?.isTrial ? t('adminServer.lifecycle.renew.convertAction') : t('adminServer.lifecycle.renew.action') }}
         </BaseButton>
       </div>
     </BaseCard>
@@ -300,6 +301,18 @@ async function onPlanModalConfirmed(planId: number | null) {
       :current-plan-id="currentPlanId"
       :current-plan-name="currentPlanName"
       @confirmed="onPlanModalConfirmed"
+    />
+
+    <RenewConfirmModal
+      v-if="serverId !== null"
+      v-model="renewModalOpen"
+      :server-id="serverId"
+      :server-name="serverName"
+      :current-expiration-date="server?.expirationDate"
+      :target-date="renewDate?.trim() || null"
+      :plan-id="server?.planId ?? null"
+      :is-trial="server?.isTrial ?? false"
+      @renewed="onRenewed"
     />
   </div>
 </template>

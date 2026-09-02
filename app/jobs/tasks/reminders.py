@@ -28,6 +28,7 @@ from app.services.email import (
 logger = logging.getLogger(__name__)
 
 EXPIRY_REMINDER_JOB_ID = "auto_expiry_reminder_task"
+EXPIRED_REMINDER_JOB_ID = "auto_expired_reminder_task"
 PRE_DELETE_REMINDER_JOB_ID = "auto_pre_delete_reminder_task"
 
 
@@ -48,6 +49,19 @@ def sync_reminder_jobs(scheduler: BaseScheduler, settings: Mapping[str, object])
         )
         scheduler.add_job(
             run_reminder_task,
+            id=EXPIRED_REMINDER_JOB_ID,
+            trigger="cron",
+            hour=int(str(settings["AUTOMATION_EMAIL_RUN_HOUR"])),
+            minute=int(str(settings["AUTOMATION_EMAIL_RUN_MINUTE"])),
+            timezone=str(settings["TIMEZONE"]),
+            args=("expired",),
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=300,
+        )
+        scheduler.add_job(
+            run_reminder_task,
             id=PRE_DELETE_REMINDER_JOB_ID,
             trigger="cron",
             hour=int(str(settings["AUTOMATION_EMAIL_RUN_HOUR"])),
@@ -61,7 +75,7 @@ def sync_reminder_jobs(scheduler: BaseScheduler, settings: Mapping[str, object])
         )
         return
 
-    for job_id in (EXPIRY_REMINDER_JOB_ID, PRE_DELETE_REMINDER_JOB_ID):
+    for job_id in (EXPIRY_REMINDER_JOB_ID, EXPIRED_REMINDER_JOB_ID, PRE_DELETE_REMINDER_JOB_ID):
         if scheduler.get_job(job_id):
             scheduler.remove_job(job_id)
 
@@ -73,6 +87,10 @@ async def run_reminder_task(reminder_type: str) -> None:
             task_name = "automated_expiry_reminder"
             target_date = await get_job_today(db) + timedelta(days=1)
             template = await load_template(db, "reminder")
+        elif reminder_type == "expired":
+            task_name = "automated_expired_reminder"
+            target_date = await get_job_today(db) - timedelta(days=1)
+            template = await load_template(db, "expired")
         elif reminder_type == "pre_delete":
             task_name = "automated_pre_delete_reminder"
             delete_days = int(await get_settings_store().get(db, "AUTOMATION_DELETE_DAYS", 14))
@@ -133,6 +151,19 @@ async def run_reminder_task(reminder_type: str) -> None:
                         action_url=action_url,
                         delay=delay,
                         target_date=target_date,
+                    )
+                elif reminder_type == "expired":
+                    delete_days = int(await get_settings_store().get(db, "AUTOMATION_DELETE_DAYS", 14))
+                    sent_count = await _send_expired_reminders(
+                        client,
+                        servers,
+                        template=template,
+                        brand_name=str(brand_name),
+                        action_text=action_text,
+                        action_url=action_url,
+                        delay=delay,
+                        target_date=target_date,
+                        delete_days=delete_days,
                     )
                 else:
                     sent_count = await _send_pre_delete_reminders(
@@ -197,6 +228,64 @@ async def _send_expiry_reminders(
                 "expiration_date": target_date.strftime("%Y-%m-%d"),
                 "server_count": len(owner_servers),
                 "server_list": server_list,
+            },
+        )
+        sent, _ = await client.send(
+            recipient_email=owner.email,
+            subject=subject,
+            main_content_raw=body,
+            greeting=f"您好, {owner.username}!",
+            action_text=action_text,
+            action_url=action_url,
+        )
+        if sent:
+            sent_count += 1
+        if delay > 0 and index < len(owner_groups) - 1:
+            await asyncio.sleep(delay)
+
+    return sent_count
+
+
+async def _send_expired_reminders(
+    client: EmailClient,
+    servers: list[PteroServer],
+    *,
+    template,
+    brand_name: str,
+    action_text: str | None,
+    action_url: str | None,
+    delay: int,
+    target_date,
+    delete_days: int,
+) -> int:
+    grouped: dict[int, list[PteroServer]] = {}
+    for server in servers:
+        if server.meta and server.meta.is_trial:
+            continue
+        # 仅对当前确实处于冻结状态的服务器发送已到期停机提醒
+        if not server.is_suspended:
+            continue
+        grouped.setdefault(server.owner_id, []).append(server)
+
+    sent_count = 0
+    owner_groups = list(grouped.values())
+    deletion_date = (target_date + timedelta(days=delete_days)).strftime("%Y-%m-%d")
+    for index, owner_servers in enumerate(owner_groups):
+        owner = owner_servers[0].owner
+        if owner is None or not owner.email:
+            continue
+
+        server_list = "\n".join(f"- {server.name} (ID: {server.id})" for server in owner_servers)
+        subject, body = render_template_body(
+            template,
+            {
+                "brand_name": brand_name,
+                "username": owner.username,
+                "expiration_date": target_date.strftime("%Y-%m-%d"),
+                "server_count": len(owner_servers),
+                "server_list": server_list,
+                "grace_days": delete_days,
+                "deletion_date": deletion_date,
             },
         )
         sent, _ = await client.send(

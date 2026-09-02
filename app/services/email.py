@@ -119,11 +119,13 @@ EMAIL_TEMPLATE_API_TO_INTERNAL = {
     "referral_invitee_rewarded": "referral_invitee_rewarded",
     "referralInviterRewarded": "referral_inviter_rewarded",
     "referralInviteeRewarded": "referral_invitee_rewarded",
+    "expired": "expired",
 }
 
 EMAIL_TEMPLATE_INTERNAL_KEYS = (
     "bulk",
     "reminder",
+    "expired",
     "pre_delete",
     "create_user",
     "password_reset",
@@ -143,6 +145,7 @@ EMAIL_TEMPLATE_INTERNAL_KEYS = (
 _TEMPLATE_FILES = {
     "bulk": _PROJECT_ROOT / "templates" / "email_template.json",
     "reminder": _PROJECT_ROOT / "templates" / "reminder_template.json",
+    "expired": _PROJECT_ROOT / "templates" / "expired_reminder_template.json",
     "pre_delete": _PROJECT_ROOT / "templates" / "pre_delete_reminder_template.json",
     "create_user": _PROJECT_ROOT / "templates" / "create_user_template.json",
     "password_reset": _PROJECT_ROOT / "templates" / "password_reset_template.json",
@@ -165,6 +168,7 @@ _PREVIEW_DUMMY_VALUES: dict[str, str] = {
     "server_name": "Paper Survival #1",
     "server_id": "12345",
     "expiration_date": "2026-04-30",
+    "grace_days": "7",
     "server_count": "2",
     "server_list": "- Paper Survival #1 (ID: 12345)\n- Velocity Proxy (ID: 12346)",
     "deletion_date": "2026-04-20",
@@ -211,6 +215,7 @@ _PREVIEW_DUMMY_VALUES: dict[str, str] = {
 _PREVIEW_ACTIONS: dict[str, tuple[str, str]] = {
     "bulk": ("登录系统查看", "/"),
     "reminder": ("登录系统处理", "/"),
+    "expired": ("登录系统处理", "/#/servers"),
     "pre_delete": ("登录系统处理", "/"),
     "create_user": ("设置您的账户密码", "/#/reset-password?token=preview-token&email=preview@example.com"),
     "password_reset": ("重置密码", "/#/reset-password?token=preview-token&email=preview@example.com"),

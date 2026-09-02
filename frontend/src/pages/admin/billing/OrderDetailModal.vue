@@ -54,7 +54,8 @@ interface OrderDetail {
   id: number; order_no: string; user_id: number
   owner_username: string | null
   plan_id: number | null; plan_snapshot: Record<string, any>
-  kind: string; period_count: number; discount_pct: number
+  kind: string; channel: string; external_order_id: string | null; operator: string; channel_note: string | null
+  period_count: number; discount_pct: number
   total_fen: number; total_days: number
   target_server_id: number | null; target_server_name: string | null
   reserved_node_id: number | null; reserved_allocation_id: number | null
@@ -162,9 +163,25 @@ function kindColor(k: string): string {
   return 'var(--t3)'
 }
 
+function channelLabel(ch: string): string {
+  if (ch === 'taobao') return t('billing.channel.taobao')
+  if (ch === 'xianyu') return t('billing.channel.xianyu')
+  if (ch === 'other') return t('billing.channel.other')
+  return t('billing.channel.alipay')
+}
+
+function channelColor(ch: string): string {
+  if (ch === 'taobao') return 'var(--amber)'
+  if (ch === 'xianyu') return 'var(--amber)'
+  if (ch === 'other') return 'var(--t3)'
+  return 'var(--green)'
+}
+
 // ── Action conditions ──
 function canRefund(): boolean {
   if (!order.value) return false
+  // 外部电商或人工订单（淘宝/闲鱼/其他）由外部平台处理交易退款，无系统网关交易记录，禁止系统退款
+  if (order.value.channel !== 'alipay') return false
   const s = order.value.status
   return (s === 'applied' || s === 'apply_failed' || s === 'manual_review')
     && order.value.received_fen > order.value.refunded_fen
@@ -301,6 +318,9 @@ async function doRefund() {
           <dt>{{ t('billing.admin.orders.col.kind') }}</dt>
           <dd><Badge :color="kindColor(order.kind)">{{ kindLabel(order.kind) }}</Badge></dd>
 
+          <dt>{{ t('billing.admin.orders.col.channel') }}</dt>
+          <dd><Badge :color="channelColor(order.channel)">{{ channelLabel(order.channel) }}</Badge></dd>
+
           <dt>{{ t('billing.admin.orders.col.user') }}</dt>
           <dd>
             <template v-if="order.user_id && order.owner_username">
@@ -360,8 +380,33 @@ async function doRefund() {
         <div v-if="order.last_apply_error" class="err-block">{{ order.last_apply_error }}</div>
       </div>
 
-      <!-- ═══ Invoices ═══ -->
-      <div v-if="order.invoices.length" class="sec">
+      <!-- ═══ External Order Transaction Info ═══ -->
+      <div v-if="order.channel !== 'alipay'" class="sec">
+        <h4 class="sec-title">{{ t('billing.admin.detail.externalOrder') }}</h4>
+        <div class="subcard">
+          <dl class="dl dl--dual">
+            <dt>{{ t('billing.admin.detail.externalOrderNo') }}</dt>
+            <dd><code>{{ order.external_order_id || '—' }}</code></dd>
+
+            <dt>{{ t('billing.admin.detail.channel') }}</dt>
+            <dd>
+              <Badge :color="channelColor(order.channel)">{{ channelLabel(order.channel) }}</Badge>
+            </dd>
+
+            <dt>{{ t('billing.admin.detail.operator') }}</dt>
+            <dd>{{ order.operator || '—' }}</dd>
+
+            <dt>{{ t('billing.admin.detail.channelAmount') }}</dt>
+            <dd class="mono">¥{{ fenToYuan(order.total_fen) }}</dd>
+
+            <dt>{{ t('billing.admin.detail.channelNote') }}</dt>
+            <dd>{{ order.channel_note || '—' }}</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- ═══ Invoices (Online Alipay only) ═══ -->
+      <div v-else-if="order.invoices.length" class="sec">
         <h4 class="sec-title">{{ t('billing.admin.detail.invoices') }}</h4>
         <div v-for="inv in order.invoices" :key="inv.id" class="subcard">
           <dl class="dl dl--dual">

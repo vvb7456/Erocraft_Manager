@@ -1,5 +1,11 @@
 {
   "pageTitle": "账单",
+  "channel": {
+    "alipay": "支付宝",
+    "taobao": "淘宝",
+    "xianyu": "闲鱼",
+    "other": "人工"
+  },
   "plans": {
     "pageTitle": "购买服务器",
     "uncategorised": "其他套餐",
@@ -258,7 +264,13 @@
       "refundStatus_pending": "处理中",
       "refundStatus_succeeded": "退款成功",
       "refundStatus_failed": "退款失败",
-      "refundInitiatedBy": "发起人"
+      "refundInitiatedBy": "发起人",
+      "externalOrder": "外部交易信息",
+      "externalOrderNo": "外部订单号",
+      "channel": "来源平台",
+      "operator": "操作者",
+      "channelAmount": "实收金额",
+      "channelNote": "客服备注"
     },
     "incidents": {
       "kind": {
@@ -287,8 +299,10 @@
       "searchPlaceholder": "搜索订单",
       "filterAllStatus": "全部",
       "filterAllKind": "全部",
+      "filterAllChannel": "全部",
       "filterStatusPrefix": "状态",
       "filterKindPrefix": "类型",
+      "filterChannelPrefix": "来源",
       "kindNewPurchase": "新购",
       "kindRenew": "续费",
       "kindUpgrade": "升级",
@@ -305,6 +319,7 @@
       "emptySearch": "未找到匹配 \"{q}\" 的订单",
       "col": {
         "orderNo": "订单号",
+        "channel": "来源",
         "user": "用户",
         "plan": "套餐",
         "kind": "类型",

@@ -1,0 +1,4 @@
+{
+    "subject": "【{{brand_name}}】服务器已到期暂停",
+    "body": "您在 {{brand_name}} 的 {{server_count}} 台服务器已于 {{expiration_date}} 到期并暂停运行。\n\n服务器列表：\n{{server_list}}\n\n数据将保留至 {{deletion_date}}，在此期间续费可立即恢复运行。如需保留，请尽快续费；如已不再使用，可忽略此邮件。"
+}

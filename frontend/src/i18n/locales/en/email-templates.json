@@ -18,6 +18,9 @@
   "reminder": {
     "title": "Expiration Reminder"
   },
+  "expired": {
+    "title": "Expired Server Reminder"
+  },
   "preDelete": {
     "title": "Pre-Delete Warning"
   },
@@ -69,6 +72,7 @@
     "expiration_date": "Expiration Date",
     "server_count": "Server Count",
     "server_list": "Server List",
+    "grace_days": "Grace Period Days",
     "deletion_date": "Deletion Date",
     "password": "Initial Password",
     "new_email": "New Email Address",

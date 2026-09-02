@@ -19,6 +19,7 @@
     "panel_status": "状态",
     "egg": "预设",
     "plan": "套餐",
+    "trial_badge": "试用",
     "actions": "操作"
   },
   "status": {
@@ -98,6 +99,7 @@
     "plan_placeholder": "选择套餐以自动填充以下字段…",
     "plan_hint": "选择套餐后预设、节点、资源、启动、环境变量均会同步为套餐配置，可手动调整。",
     "plan_clear": "不使用套餐",
+    "section_order": "订单溯源",
     "section_image": "预设 & 镜像",
     "section_resources": "资源配置",
     "section_env": "环境变量",
@@ -128,7 +130,37 @@
     "creating": "正在创建…",
     "success": "服务器创建成功",
     "validation": {
-      "requiredFields": "请填写必填项"
+      "requiredFields": "请填写必填项",
+      "planRequiredForChannel": "电商渠道开通必须选择套餐",
+      "orderIdRequired": "请输入外部订单号",
+      "amountRequired": "请输入有效金额"
     }
+  },
+  "channel": {
+    "label": "订单来源",
+    "taobao": "淘宝",
+    "xianyu": "闲鱼",
+    "other": "其他",
+    "order_id": "订单号",
+    "order_id_placeholder": "输入外部订单号",
+    "amount": "金额",
+    "amount_placeholder": "0.00",
+    "note": "备注",
+    "note_placeholder": "备注 (可选)"
+  },
+  "renew_modal": {
+    "title": "续期确认",
+    "convert_title": "试用转正确认",
+    "convert_action": "试用转正",
+    "convert_badge": "转正套餐",
+    "target_plan": "生效套餐",
+    "convert_notice": "当前服务器处于试用状态。续期将自动执行转正：清除试用标记、切换为标准套餐并同步对应资源配额，避免到期被试用清理任务删除。",
+    "server_name": "服务器",
+    "current_expiration": "当前到期",
+    "new_expiration": "续期后到期",
+    "confirm_btn": "确认续期",
+    "validation_plan_required": "该服务器未绑定套餐，无法生成电商订单，请选择“其他”来源",
+    "validation_order_required": "电商渠道续期必须填写外部订单号",
+    "validation_amount_required": "电商渠道续期必须填写有效金额"
   }
 }

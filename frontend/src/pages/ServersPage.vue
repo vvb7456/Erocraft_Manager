@@ -24,6 +24,7 @@ import FormField from '@/components/form/FormField.vue'
 import CreateServerModal from '@/components/servers/CreateServerModal.vue'
 import RenewBottomSheet from '@/components/servers/RenewBottomSheet.vue'
 import PlanChangeModal from '@/components/servers/PlanChangeModal.vue'
+import RenewConfirmModal from '@/components/servers/RenewConfirmModal.vue'
 import { useToday } from '@/composables/useToday'
 
 defineOptions({ name: 'ServersPage' })
@@ -49,9 +50,11 @@ interface ServerItem {
   daysLeft: number | null
   statusLabel: 'normal' | 'expiring_soon' | 'expired' | 'permanent'
   isSuspended: boolean
+  isTrial: boolean
   planId: number | null
   planCode: string | null
   planName: string | null
+  planType: string | null
 }
 
 interface BatchServersResult {
@@ -71,6 +74,11 @@ const searchTerm = ref((route.query.q as string) || '')
 const selectedIds = ref<Set<number>>(new Set())
 const page = ref(1)
 const perPage = ref(20)
+
+// Renew modal state
+const renewTargetServer = ref<ServerItem | null>(null)
+const renewTargetDate = ref<string | null>(null)
+const renewModalOpen = ref(false)
 
 // Renew inline — date picker
 // Default: expired → today+30, not expired → expirationDate+30, permanent → today+30
@@ -282,13 +290,10 @@ function panelStatusText(s: ServerItem): string {
 }
 
 // ── Actions ──
-async function doRenew(s: ServerItem) {
-  const targetDate = getRenewDate(s)
-  const res = await post<{ message: string }>(`/api/admin/servers/${s.pteroId}/renew`, { date: targetDate })
-  if (res) {
-    toast(res.message, 'success')
-    await loadServers(true)
-  }
+function doRenew(s: ServerItem) {
+  renewTargetServer.value = s
+  renewTargetDate.value = getRenewDate(s)
+  renewModalOpen.value = true
 }
 
 async function toggleSuspend(s: ServerItem) {
@@ -654,8 +659,11 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
           </a>
         </td>
         <td class="col-plan">
-          <span v-if="s.planName" class="plan-cell">{{ s.planName }}</span>
-          <span v-else class="plan-cell--none">—</span>
+          <div class="plan-cell-wrap">
+            <Badge v-if="s.isTrial" color="var(--amber)" size="xs">{{ t('servers.table.trial_badge') }}</Badge>
+            <span v-if="s.planName" class="plan-cell">{{ s.planName }}</span>
+            <span v-else class="plan-cell--none">—</span>
+          </div>
         </td>
         <td class="col-egg">{{ s.eggName || '—' }}</td>
         <td class="col-owner">
@@ -773,6 +781,19 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
     :current-plan-name="planModalServer?.planName ?? null"
     @confirmed="onPlanModalConfirmed"
   />
+
+  <!-- Renew Confirm Modal -->
+  <RenewConfirmModal
+    v-if="renewTargetServer"
+    v-model="renewModalOpen"
+    :server-id="renewTargetServer.pteroId"
+    :server-name="renewTargetServer.name"
+    :current-expiration-date="renewTargetServer.expirationDate"
+    :target-date="renewTargetDate"
+    :plan-id="renewTargetServer.planId"
+    :is-trial="renewTargetServer.isTrial"
+    @renewed="loadServers(true)"
+  />
 </template>
 
 <style scoped>
@@ -838,6 +859,16 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
   font-weight: 400;
   color: var(--t3);
   margin-left: var(--sp-1);
+}
+
+.plan-cell-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.plan-cell {
+  font-size: .88rem;
+  color: var(--t1);
 }
 
 .card-kv-label {

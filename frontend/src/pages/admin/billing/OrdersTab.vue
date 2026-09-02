@@ -35,7 +35,8 @@ interface OrderItem {
   id: number; order_no: string; user_id: number
   owner_username: string | null
   plan_id: number | null; plan_code: string; plan_name: string
-  kind: string; period_count: number; total_fen: number; total_days: number
+  kind: string; channel: string; external_order_id: string | null; operator: string; channel_note: string | null
+  period_count: number; total_fen: number; total_days: number
   target_server_id: number | null; target_server_name: string | null
   status: string; received_fen: number; refunded_fen: number
   created_at: string; updated_at: string
@@ -52,6 +53,7 @@ const { formatDateTime: formatTime } = useFormatDate()
 const searchTerm = ref('')
 const statusFilter = ref('')
 const kindFilter = ref('')
+const channelFilter = ref('')
 const page = ref(1)
 const perPage = ref(20)
 const sortBy = ref('created_at')
@@ -83,6 +85,14 @@ const kindOptions = [
   { value: 'convert',       label: t('billing.admin.orders.kindConvert') },
 ]
 
+const channelOptions = [
+  { value: '',        label: t('billing.admin.orders.filterAllChannel') },
+  { value: 'alipay',  label: t('billing.channel.alipay') },
+  { value: 'taobao',  label: t('billing.channel.taobao') },
+  { value: 'xianyu',  label: t('billing.channel.xianyu') },
+  { value: 'other',   label: t('billing.channel.other') },
+]
+
 // ── Fetch ──
 async function loadOrders() {
   loading.value = true
@@ -92,6 +102,7 @@ async function loadOrders() {
   if (searchTerm.value.trim()) params.set('q', searchTerm.value.trim())
   if (statusFilter.value) params.set('status', statusFilter.value)
   if (kindFilter.value) params.set('kind', kindFilter.value)
+  if (channelFilter.value) params.set('channel', channelFilter.value)
 
   const data = await get<{ items: OrderItem[]; total: number }>(
     `/api/admin/billing/orders?${params}`,
@@ -105,7 +116,7 @@ async function loadOrders() {
   loading.value = false
 }
 
-watch([searchTerm, statusFilter, kindFilter], () => {
+watch([searchTerm, statusFilter, kindFilter, channelFilter], () => {
   if (page.value === 1) {
     void loadOrders()
   } else {
@@ -208,6 +219,20 @@ function kindLabel(k: string): string {
   return t('billing.admin.orders.kindRenew')
 }
 
+function channelLabel(ch: string): string {
+  if (ch === 'taobao') return t('billing.channel.taobao')
+  if (ch === 'xianyu') return t('billing.channel.xianyu')
+  if (ch === 'other') return t('billing.channel.other')
+  return t('billing.channel.alipay')
+}
+
+function channelColor(ch: string): string {
+  if (ch === 'taobao') return 'var(--amber)'
+  if (ch === 'xianyu') return 'var(--amber)'
+  if (ch === 'other') return 'var(--t3)'
+  return 'var(--green)'
+}
+
 // ── Actions ──
 function canForceApply(o: OrderItem): boolean {
   return o.status === 'manual_review' || o.status === 'apply_failed'
@@ -266,6 +291,13 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
     <template #end>
       <div class="tb-select-group tb-desktop-only">
         <BaseSelect
+          v-model="channelFilter"
+          :options="channelOptions"
+          :prefix="t('billing.admin.orders.filterChannelPrefix') + ': '"
+          size="sm"
+          fit
+        />
+        <BaseSelect
           v-model="statusFilter"
           :options="statusOptions"
           :prefix="t('billing.admin.orders.filterStatusPrefix') + ': '"
@@ -319,6 +351,7 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
         {{ t('billing.admin.orders.col.orderNo') }}
         <MsIcon v-if="sortBy === 'order_no'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
       </th>
+      <th class="col-channel">{{ t('billing.admin.orders.col.channel') }}</th>
       <th class="col-kind">{{ t('billing.admin.orders.col.kind') }}</th>
       <th class="col-plan">{{ t('billing.admin.orders.col.plan') }}</th>
       <th class="col-amount sortable" @click="toggleSort('total_fen')">
@@ -337,6 +370,9 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
     <template #row="{ item: o }">
       <td class="col-time mono">{{ formatTime(o.created_at) }}</td>
       <td class="col-orderno"><a href="#" class="cell-link" @click.prevent="emit('selectOrder', o.id)"><code>{{ o.order_no }}</code></a></td>
+      <td class="col-channel">
+        <Badge :color="channelColor(o.channel)">{{ channelLabel(o.channel) }}</Badge>
+      </td>
       <td class="col-kind">
         <Badge :color="kindColor(o.kind)">{{ kindLabel(o.kind) }}</Badge>
       </td>
@@ -509,15 +545,16 @@ code {
   table-layout: fixed;
 }
 
-.orders-table-wrap .col-time     { width: 12%; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.orders-table-wrap .col-orderno  { width: 12%; }
-.orders-table-wrap .col-kind     { width: 6%;  white-space: nowrap; }
+.orders-table-wrap .col-time     { width: 11%; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.orders-table-wrap .col-orderno  { width: 13%; }
+.orders-table-wrap .col-channel  { width: 7%;  white-space: nowrap; }
+.orders-table-wrap .col-kind     { width: 7%;  white-space: nowrap; }
 .orders-table-wrap .col-plan     { width: 12%; }
 .orders-table-wrap .col-amount   { width: 7%;  white-space: nowrap; }
 .orders-table-wrap .col-status   { width: 8%;  white-space: nowrap; }
 .orders-table-wrap .col-user     { width: 10%; }
-.orders-table-wrap .col-server   { width: 11%; }
-.orders-table-wrap .col-actions  { width: 22%; }
+.orders-table-wrap .col-server   { width: 10%; }
+.orders-table-wrap .col-actions  { width: 15%; }
 
 .orders-table-wrap .cell-deleted {
   color: var(--t3);

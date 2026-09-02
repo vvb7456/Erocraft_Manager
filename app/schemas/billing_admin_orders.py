@@ -127,6 +127,10 @@ class AdminOrderListItem(BaseModel):
     plan_code: str
     plan_name: str
     kind: str
+    channel: str = "alipay"
+    external_order_id: str | None = None
+    operator: str = "system"
+    channel_note: str | None = None
     period_count: int
     total_fen: int
     total_days: int
@@ -179,6 +183,10 @@ class AdminOrderOut(BaseModel):
     plan_id: int | None
     plan_snapshot: PlanSnapshotOut
     kind: str
+    channel: str = "alipay"
+    external_order_id: str | None = None
+    operator: str = "system"
+    channel_note: str | None = None
     period_count: int
     discount_pct: float
     total_fen: int

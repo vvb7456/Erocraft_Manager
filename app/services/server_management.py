@@ -164,9 +164,11 @@ async def get_server_detail(db: AsyncSession, server_id: int) -> AdminServerDeta
             updated_at=server.updated_at,
             installed_at=server.installed_at,
             expiration_date=server.expiration_date.isoformat() if server.expiration_date else None,
+            is_trial=bool(server.meta and server.meta.is_trial),
             plan_id=plan_id,
             plan_code=plan_obj.code if plan_obj else None,
             plan_name=plan_obj.display_name if plan_obj else None,
+            plan_type=plan_obj.plan_type if plan_obj else None,
         ),
         owner=ServerOwnerSummary(
             id=int(server.owner.id),

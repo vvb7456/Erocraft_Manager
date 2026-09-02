@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ServerListItem(BaseModel):
@@ -19,9 +19,11 @@ class ServerListItem(BaseModel):
     daysLeft: int | None
     statusLabel: str
     isSuspended: bool
+    isTrial: bool = False
     planId: int | None = None
     planCode: str | None = None
     planName: str | None = None
+    planType: str | None = None
 
 
 class ServersListResponse(BaseModel):
@@ -45,6 +47,21 @@ class CreateServerRequest(BaseModel):
     backups: int | None = None
     allocations: int | None = None
     plan_id: int | None = None
+    channel: Literal["taobao", "xianyu", "other"] = "taobao"
+    external_order_id: str | None = None
+    amount_yuan: float | None = None
+    channel_note: str | None = None
+
+    @model_validator(mode="after")
+    def validate_channel_fields(self) -> Self:
+        if self.channel in ("taobao", "xianyu"):
+            if self.plan_id is None:
+                raise ValueError("电商渠道开通必须选择套餐")
+            if not (self.external_order_id or "").strip():
+                raise ValueError("电商渠道开通必须填写外部订单号")
+            if self.amount_yuan is None or self.amount_yuan <= 0:
+                raise ValueError("电商渠道开通必须填写大于 0 的有效金额")
+        return self
 
 
 class RenewServerRequest(BaseModel):
@@ -52,6 +69,21 @@ class RenewServerRequest(BaseModel):
     # server to “permanent”). Existing callers continue to pass a
     # YYYY-MM-DD string for the extend / renew flow.
     date: str | None = None
+    channel: Literal["taobao", "xianyu", "other"] = "taobao"
+    external_order_id: str | None = None
+    amount_yuan: float | None = None
+    channel_note: str | None = None
+
+    @model_validator(mode="after")
+    def validate_channel_fields(self) -> Self:
+        if self.channel in ("taobao", "xianyu"):
+            if self.date is None:
+                raise ValueError("电商渠道续期必须指定具体到期日")
+            if not (self.external_order_id or "").strip():
+                raise ValueError("电商渠道续期必须填写外部订单号")
+            if self.amount_yuan is None or self.amount_yuan <= 0:
+                raise ValueError("电商渠道续期必须填写大于 0 的有效金额")
+        return self
 
 
 class UpdateServerRequest(BaseModel):

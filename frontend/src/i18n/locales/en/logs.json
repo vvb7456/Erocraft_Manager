@@ -51,6 +51,7 @@
   },
   "reminderType": {
     "expiry": "expiry reminder",
+    "expired": "expired server notification",
     "pre_delete": "pre-delete reminder"
   },
   "language": {

@@ -186,10 +186,13 @@
     },
     "renew": {
       "sectionTitle": "Renew",
+      "convertSectionTitle": "Convert Trial / Renew",
+      "trialNotice": "This server is currently on a trial plan. Renewing will convert it to the standard plan and apply standard resources.",
       "currentExpiration": "Expiration:",
       "targetDate": "Target date",
       "quickDays": "+{n} days",
       "action": "Renew server",
+      "convertAction": "Convert Trial",
       "clearAction": "Set to permanent",
       "clearConfirmTitle": "Set to permanent",
       "clearConfirmMessage": "Target date is empty. Set server {name} to permanent (clear expiration date)?"

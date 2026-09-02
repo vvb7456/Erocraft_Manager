@@ -186,10 +186,13 @@
     },
     "renew": {
       "sectionTitle": "续期",
+      "convertSectionTitle": "试用转正 / 续期",
+      "trialNotice": "当前服务器处于试用状态。执行续期将自动转为标准正式版，重绑标准套餐并同步资源。",
       "currentExpiration": "到期时间：",
       "targetDate": "目标日期",
       "quickDays": "+{n}天",
       "action": "续期服务器",
+      "convertAction": "试用转正",
       "clearAction": "设为永久",
       "clearConfirmTitle": "设为永久",
       "clearConfirmMessage": "目标日期为空，确认将服务器 {name} 设为永久（清除到期时间）吗？"

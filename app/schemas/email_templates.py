@@ -10,7 +10,7 @@ from pydantic import BaseModel, EmailStr
 # Every editable template type is enumerated once so the FastAPI/Pydantic
 # Literal stays in lock-step with EMAIL_TEMPLATE_API_TO_INTERNAL.
 TemplateTypeLiteral = Literal[
-    "bulk", "reminder", "preDelete", "createUser",
+    "bulk", "reminder", "expired", "preDelete", "createUser",
     "passwordReset", "emailChange", "registerVerify",
     "alertFired", "alertResolved",
     "orderPaid", "orderApplyFailed", "orderApplyAlert", "orderRefunded",
@@ -39,6 +39,7 @@ class EmailTemplatePreviewResponse(BaseModel):
 class EmailTemplatesResponse(BaseModel):
     bulk: EmailTemplatePayload
     reminder: EmailTemplatePayload
+    expired: EmailTemplatePayload
     preDelete: EmailTemplatePayload
     createUser: EmailTemplatePayload
     passwordReset: EmailTemplatePayload
