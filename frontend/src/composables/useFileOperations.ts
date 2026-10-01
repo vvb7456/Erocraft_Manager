@@ -305,13 +305,17 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
 
   async function doMove() {
     if (!serverId.value || !moveTo.value.trim()) return
-    const destPath = sanitizeMovePath(moveTo.value)
+    // Wings joins `to` under `root` (path.Join(root, to)), so a leading "/"
+    // on `to` does NOT mean the server root. Send absolute paths with
+    // root="/" so the destination is really volume-absolute.
+    const srcDir = currentPath.value.replace(/\/$/, '')
+    const destDir = sanitizeMovePath(moveTo.value).replace(/\/$/, '')
     operating.value = true
     try {
       await post(`/api/user/servers/${serverId.value}/files/rename`, {
-        root: currentPath.value,
-        from: moveFrom.value,
-        to: destPath.replace(/\/$/, '') + '/' + moveFrom.value,
+        root: '/',
+        from: `${srcDir}/${moveFrom.value}`,
+        to: `${destDir}/${moveFrom.value}`,
       })
       moveOpen.value = false
       loadFiles()
@@ -533,12 +537,13 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
 
   async function doBatchMove() {
     if (!serverId.value || !moveTo.value.trim() || !selectedFiles.value.size) return
-    const destPath = moveTo.value.trim().replace(/\/$/, '')
+    const srcDir = currentPath.value.replace(/\/$/, '')
+    const destDir = sanitizeMovePath(moveTo.value).replace(/\/$/, '')
     for (const name of selectedFiles.value) {
       await post(`/api/user/servers/${serverId.value}/files/rename`, {
-        root: currentPath.value,
-        from: name,
-        to: destPath + '/' + name,
+        root: '/',
+        from: `${srcDir}/${name}`,
+        to: `${destDir}/${name}`,
       })
     }
     moveOpen.value = false
