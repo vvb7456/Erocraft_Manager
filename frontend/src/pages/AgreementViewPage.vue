@@ -1,96 +1,80 @@
 <script setup lang="ts">
-import { onMounted, ref, watch, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AuthShell from '@/components/auth/AuthShell.vue'
-import BaseButton from '@/components/ui/BaseButton.vue'
-import MsIcon from '@/components/ui/MsIcon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import { renderMarkdown } from '@/utils/markdown'
 import { resolveAgreementBody } from '@/utils/agreements'
 
 defineOptions({ name: 'AgreementViewPage' })
 
-const route = useRoute()
-const router = useRouter()
+const props = defineProps<{ slug: string }>()
 const { t, locale } = useI18n({ useScope: 'global' })
 
 const loading = ref(false)
 const bodyHtml = ref('')
-
-const slug = computed(() => String(route.params.slug || ''))
 
 const localeKey = computed<'zh' | 'en'>(() =>
   locale.value.startsWith('zh') ? 'zh' : 'en',
 )
 
 const title = computed(() => {
-  if (slug.value === 'privacy') return t('agreements.checkbox.open_privacy')
+  if (props.slug === 'privacy') return t('agreements.checkbox.open_privacy')
   return t('agreements.checkbox.open_tos')
 })
 
-async function load() {
-  if (!slug.value) return
+watch([() => props.slug, locale], async ([slug, language], _, onCleanup) => {
+  const controller = new AbortController()
+  onCleanup(() => controller.abort())
   loading.value = true
+  const bodyLocale = localeKey.value
+  let body = ''
   try {
     const res = await fetch(
-      `/api/public/agreements/${encodeURIComponent(slug.value)}?locale=${encodeURIComponent(locale.value)}`,
+      `/api/public/agreements/${encodeURIComponent(slug)}?locale=${encodeURIComponent(language)}`,
+      { signal: controller.signal },
     )
-    let body = ''
     if (res.ok) {
       const data = await res.json() as { body_md?: string }
       body = data.body_md || ''
     }
-    bodyHtml.value = renderMarkdown(
-      resolveAgreementBody(slug.value, body, localeKey.value),
-    )
   } catch {
-    bodyHtml.value = renderMarkdown(
-      resolveAgreementBody(slug.value, '', localeKey.value),
-    )
-  } finally {
-    loading.value = false
+    // Match the registration viewer's placeholder fallback when unavailable.
   }
-}
+  if (controller.signal.aborted) return
+  bodyHtml.value = renderMarkdown(resolveAgreementBody(slug, body, bodyLocale))
+  loading.value = false
+}, { immediate: true })
 
-watch(slug, load)
-onMounted(load)
-
-function goBack() {
-  if (window.history.length > 1) router.back()
-  else router.push({ name: 'login' })
-}
 </script>
 
 <template>
-  <AuthShell icon="gavel" :subtitle="title">
+  <AuthShell class="agreement-page" icon="gavel" :subtitle="title">
     <div class="agreement-view">
       <div v-if="loading" class="agreement-view__loading">
         <Spinner size="md" />
         <span>{{ t('agreements.viewer.loading') }}</span>
       </div>
-      <!-- eslint-disable-next-line vue/no-v-html -- markdown body is sanitized via DOMPurify in renderMarkdown -->
       <div v-else class="agreement-markdown" v-html="bodyHtml" />
-
-      <div class="agreement-view__footer">
-        <BaseButton variant="ghost" size="md" @click="goBack">
-          <MsIcon name="arrow_back" size="sm" />
-          {{ t('agreements.view_page.back') }}
-        </BaseButton>
-      </div>
     </div>
   </AuthShell>
 </template>
 
 <style scoped>
+.agreement-page :deep(.auth-main) {
+  padding-top: 64px;
+  align-items: flex-start;
+}
+
+.agreement-page :deep(.auth-card) {
+  max-width: 800px;
+  min-width: 0;
+}
+
 .agreement-view {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  max-height: 70vh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
 }
 
 .agreement-view__loading {
@@ -103,14 +87,8 @@ function goBack() {
   font-size: .85rem;
 }
 
-.agreement-view__footer {
-  display: flex;
-  justify-content: flex-start;
-  padding-top: var(--sp-2);
-  border-top: 1px solid var(--bd);
-}
-
 .agreement-markdown {
+  overflow-wrap: anywhere;
   color: var(--t2);
   font-size: .85rem;
   line-height: 1.7;
@@ -191,5 +169,16 @@ function goBack() {
 .agreement-markdown :deep(pre code) {
   background: none;
   padding: 0;
+}
+
+.agreement-markdown :deep(img) {
+  max-width: 100%;
+  height: auto;
+}
+
+.agreement-markdown :deep(table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 </style>
