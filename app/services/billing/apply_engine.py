@@ -147,32 +147,30 @@ async def apply_paid_order(
     await db.refresh(order)
 
     # ── Stage 3: business effect + post actions
-    effect = await db.get(BillingOrderEffect, order_id)
-    server_id: int | None = None
-    if effect is None:
-        # Path A
-        try:
+    try:
+        effect = await db.get(BillingOrderEffect, order_id)
+        if effect is None:
+            # Path A
             server_id = await _commit_business_effect(db, order)
-        except ApplyOrphanError as exc:
-            return await _terminate_apply(
-                db, order, exc, my_token, reason="orphan_resource"
-            )
-        except Exception as exc:  # noqa: BLE001
-            return await _record_failure_and_release(db, order, exc, my_token)
-
-        try:
             await _run_post_actions(db, order, server_id)
-        except Exception as exc:  # noqa: BLE001
-            return await _record_failure_and_release(db, order, exc, my_token)
-        await _mark_post_actions_done(db, order_id)
-    elif effect.post_actions_done_at is None:
-        # Path B
-        try:
+            await _mark_post_actions_done(db, order_id)
+        elif effect.post_actions_done_at is None:
+            # Path B
             await _run_post_actions(db, order, effect.server_id)
-        except Exception as exc:  # noqa: BLE001
-            return await _record_failure_and_release(db, order, exc, my_token)
-        await _mark_post_actions_done(db, order_id)
-    # Path C: nothing to do, just close out below.
+            await _mark_post_actions_done(db, order_id)
+        # Rollback expires ORM state even with expire_on_commit=False.
+        # Reload before finalizing so a failed refresh remains retryable.
+        await db.refresh(order)
+    except ApplyOrphanError as exc:
+        return await _terminate_apply(
+            db, order_id, exc, my_token, reason="orphan_resource"
+        )
+    except Exception as exc:  # noqa: BLE001
+        return await _record_failure_and_release(db, order_id, exc, my_token)
+
+    apply_retry_count = order.apply_retry_count
+    coupon_id = order.coupon_id
+    coupon_discount_fen = order.coupon_discount_fen or 0
 
     # ── Stage 4: processing → applied
     apply_now = utc_naive_now()
@@ -204,7 +202,7 @@ async def apply_paid_order(
         detail_params={
             "order_id": order_id,
             "source": source,
-            "retries": order.apply_retry_count,
+            "retries": apply_retry_count,
         },
     )
     # NOTE: 'orderPaid' email template lives in Phase B (post-MVP).
@@ -218,18 +216,14 @@ async def apply_paid_order(
     # ── Stage 4b: coupon consumption + referral reward (best-effort) ──────
     # Both are downstream of a successful apply and must NEVER reverse
     # the order state. Failures are logged but swallowed.
-    try:
-        await db.refresh(order)
-    except Exception:
-        logger.exception("apply_engine: refresh order %s failed", order_id)
-    if order.coupon_id is not None:
+    if coupon_id is not None:
         try:
             from app.services.billing import coupons as coupon_svc
 
             await coupon_svc.mark_used_for_order(
                 db,
                 order_id=order_id,
-                actual_discount_fen=order.coupon_discount_fen or 0,
+                actual_discount_fen=coupon_discount_fen,
             )
         except Exception as exc:  # noqa: BLE001
             await db.rollback()
@@ -244,13 +238,14 @@ async def apply_paid_order(
                 detail_key="billing.coupon.mark_used_failed",
                 detail_params={
                     "order_id": order_id,
-                    "coupon_id": order.coupon_id,
+                    "coupon_id": coupon_id,
                     "error": str(exc)[:200],
                 },
             )
     try:
         from app.services.billing import referral_rewards
 
+        await db.refresh(order)
         await referral_rewards.try_grant_for_order(db, order)
     except Exception as exc:  # noqa: BLE001
         await db.rollback()
@@ -616,9 +611,10 @@ async def _mark_user_owned_server(db: AsyncSession, user_id: int) -> None:
 async def _run_post_actions(
     db: AsyncSession, order: BillingOrder, server_id: int
 ) -> None:
-    effect = await db.get(BillingOrderEffect, order.id)
+    order_id = order.id
+    effect = await db.get(BillingOrderEffect, order_id)
     if effect is None:  # pragma: no cover — caller ensures effect exists
-        raise ApplyError(f"order {order.id} 后置动作: effect 行丢失")
+        raise ApplyError(f"order {order_id} 后置动作: effect 行丢失")
 
     # 1) Sync panel description's 到期 line.
     await server_lifecycle.update_server_expiration_description(
@@ -660,7 +656,7 @@ async def _run_post_actions(
         except Exception:
             logger.warning(
                 "LLM provision failed for order %s server %s (non-blocking)",
-                order.id, server_id, exc_info=True,
+                order_id, server_id, exc_info=True,
             )
             await db.rollback()
 
@@ -681,18 +677,19 @@ async def _mark_post_actions_done(db: AsyncSession, order_id: int) -> None:
 
 async def _record_failure_and_release(
     db: AsyncSession,
-    order: BillingOrder,
+    order_id: int,
     exc: Exception,
     my_token: str,
 ) -> ApplyResult:
-    logger.exception("apply failed for order %s", order.id)
+    logger.exception("apply failed for order %s", order_id)
+    await db.rollback()
     terminal = False
     last_error = str(exc)[:500]
 
     row = await db.scalar(
         select(BillingOrder)
         .where(
-            BillingOrder.id == order.id,
+            BillingOrder.id == order_id,
             BillingOrder.lock_token == my_token,
         )
         .with_for_update()
@@ -712,12 +709,14 @@ async def _record_failure_and_release(
     else:
         delay = RETRY_DELAYS[row.apply_retry_count - 1]
         row.next_apply_at = utc_naive_now() + timedelta(seconds=delay)
+    apply_retry_count = row.apply_retry_count
+    coupon_id = row.coupon_id
     await db.commit()
 
     if terminal:
         await incidents.log_incident(
             "apply_retries_exhausted",
-            order_id=order.id,
+            order_id=order_id,
             payload={"last_error": last_error},
         )
         await log_manager_activity(
@@ -726,62 +725,63 @@ async def _record_failure_and_release(
             category="billing",
             status="failed",
             detail_key="billing.order.apply_failed",
-            detail_params={"order_id": order.id, "error": last_error},
+            detail_params={"order_id": order_id, "error": last_error},
         )
         try:
             from app.services.billing import notify
 
-            await notify.notify_order_apply_failed(order.id)
-            await notify.notify_order_apply_alert(order.id)
+            await notify.notify_order_apply_failed(order_id)
+            await notify.notify_order_apply_alert(order_id)
         except Exception:  # noqa: BLE001 - email is best-effort
             logger.exception(
-                "notify apply_failed/alert failed for order %s", order.id
+                "notify apply_failed/alert failed for order %s", order_id
             )
         # Release reserved coupon — the order is dead, the user keeps the
         # coupon. Best-effort, swallow errors so we don't mask the
         # underlying apply failure.
-        if order.coupon_id is not None:
+        if coupon_id is not None:
             try:
                 from app.services.billing import coupons as coupon_svc
 
-                await coupon_svc.release_for_order(db, order_id=order.id)
+                await coupon_svc.release_for_order(db, order_id=order_id)
             except Exception:
                 await db.rollback()
                 logger.exception(
                     "apply_engine: coupon release on permanent failure "
-                    "failed for order %s", order.id,
+                    "failed for order %s", order_id,
                 )
         return ApplyResult.PERMANENT_FAILURE
     # First retry failure (apply_retry_count == 1) → admin alert per §14.
-    if (row.apply_retry_count or 0) == 1:
+    if apply_retry_count == 1:
         try:
             from app.services.billing import notify
 
-            await notify.notify_order_apply_alert(order.id)
+            await notify.notify_order_apply_alert(order_id)
         except Exception:  # noqa: BLE001 - email is best-effort
             logger.exception(
                 "notify apply_alert (first failure) failed for order %s",
-                order.id,
+                order_id,
             )
     return ApplyResult.RETRY_SCHEDULED
 
 
 async def _terminate_apply(
     db: AsyncSession,
-    order: BillingOrder,
+    order_id: int,
     exc: Exception,
     my_token: str,
     *,
     reason: str,
 ) -> ApplyResult:
     """Unrecoverable orphan — straight to apply_failed, no retry."""
-    logger.error("apply terminated for order %s: %s", order.id, exc)
+    logger.error("apply terminated for order %s: %s", order_id, exc)
+    await db.rollback()
     last_error = f"{reason}: {exc}"[:500]
 
     row = await db.scalar(
         select(BillingOrder)
         .where(
-            BillingOrder.id == order.id,
+            BillingOrder.id == order_id,
             BillingOrder.lock_token == my_token,
         )
         .with_for_update()
@@ -795,11 +795,12 @@ async def _terminate_apply(
     row.next_apply_at = None
     row.lock_token = None
     row.locked_until = None
+    coupon_id = row.coupon_id
     await db.commit()
 
     await incidents.log_incident(
         "apply_retries_exhausted",
-        order_id=order.id,
+        order_id=order_id,
         payload={"reason": reason, "error": last_error},
     )
     await log_manager_activity(
@@ -808,19 +809,19 @@ async def _terminate_apply(
         category="billing",
         status="failed",
         detail_key="billing.order.apply_terminated",
-        detail_params={"order_id": order.id, "reason": reason},
+        detail_params={"order_id": order_id, "reason": reason},
     )
     # Release coupon on terminate too — same rationale as the retry-
     # exhausted path above.
-    if order.coupon_id is not None:
+    if coupon_id is not None:
         try:
             from app.services.billing import coupons as coupon_svc
 
-            await coupon_svc.release_for_order(db, order_id=order.id)
+            await coupon_svc.release_for_order(db, order_id=order_id)
         except Exception:
             await db.rollback()
             logger.exception(
                 "apply_engine: coupon release on terminate failed for order %s",
-                order.id,
+                order_id,
             )
     return ApplyResult.PERMANENT_FAILURE

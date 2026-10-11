@@ -140,8 +140,10 @@ async def _request(
     *,
     headers: dict[str, str],
     json_body: dict[str, Any] | None = None,
+    client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
-    client = _get_client()
+    if client is None:
+        client = _get_client()
     for attempt in range(_MAX_RETRIES + 1):
         try:
             resp = await client.request(method, url, headers=headers, json=json_body)
@@ -288,52 +290,41 @@ async def login_and_gen_access_token(
     settings = await _read_llm_settings(db)
     _check_configured(settings)
     base = _base_url(settings)
-    try:
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0),
-            trust_env=False,
-        ) as client:
-            login_resp = await client.post(
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0),
+        trust_env=False,
+    ) as client:
+        try:
+            login_data = await _request(
+                "POST",
                 f"{base}/api/user/login",
-                json={"username": username, "password": password},
+                headers={},
+                json_body={"username": username, "password": password},
+                client=client,
             )
-            if login_resp.status_code >= 400:
-                raise NewApiError(
-                    f"NewAPI login failed ({login_resp.status_code}): "
-                    f"{login_resp.text[:200]}"
-                )
-            login_data = login_resp.json()
-            if not login_data.get("success", False):
-                raise NewApiError(
-                    f"NewAPI login failed: {login_data.get('message', 'unknown')}"
-                )
-            cookies = login_resp.cookies
+            if "success" not in login_data:
+                raise NewApiError("response missing success flag")
             login_user_id = login_data.get("data", {}).get("id")
             if not login_user_id:
-                raise NewApiError("NewAPI login response missing user id")
+                raise NewApiError("response missing user id")
+        except NewApiError as exc:
+            raise NewApiError(f"NewAPI login failed: {exc}") from exc
 
-            token_resp = await client.get(
+        try:
+            token_data = await _request(
+                "GET",
                 f"{base}/api/user/token",
-                cookies=cookies,
                 headers={"New-Api-User": str(login_user_id)},
+                client=client,
             )
-            if token_resp.status_code >= 400:
-                raise NewApiError(
-                    f"NewAPI gen token failed ({token_resp.status_code}): "
-                    f"{token_resp.text[:200]}"
-                )
-            token_data = token_resp.json()
-            if not token_data.get("success", False):
-                raise NewApiError(
-                    f"NewAPI gen token failed: "
-                    f"{token_data.get('message', 'unknown')}"
-                )
+            if "success" not in token_data:
+                raise NewApiError("response missing success flag")
             access_token = token_data.get("data")
             if not access_token:
-                raise NewApiError("NewAPI returned empty access token")
-            return str(access_token)
-    except httpx.HTTPError as exc:
-        raise NewApiError(f"NewAPI login/gen-token HTTP error: {exc}") from exc
+                raise NewApiError("response missing access token")
+        except NewApiError as exc:
+            raise NewApiError(f"NewAPI gen token failed: {exc}") from exc
+        return str(access_token)
 
 
 async def set_billing_preference(
