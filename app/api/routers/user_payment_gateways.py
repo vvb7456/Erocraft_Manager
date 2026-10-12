@@ -36,6 +36,7 @@ class PaymentGatewayOut(BaseModel):
     code: str
     display_name: str
     icon_name: str
+    logo_url: str | None
 
 
 @router.get("", response_model=list[PaymentGatewayOut])
@@ -59,6 +60,7 @@ async def list_payment_gateways(
                 code=gw.code,
                 display_name=display_name,
                 icon_name=icon_name,
+                logo_url=gw.logo_url,
             )
         )
     return out

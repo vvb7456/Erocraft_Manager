@@ -500,7 +500,7 @@ async def reconcile_refund_endpoint(
 
     Equivalent to a single tick of the ``billing_refund_retry`` job, but
     scoped to one refund row. Used when admins want immediate feedback
-    instead of waiting for the 15-minute retry interval.
+    instead of waiting for the next scheduled query.
     """
     refund = await db.scalar(
         select(BillingRefund).where(BillingRefund.id == refund_id)

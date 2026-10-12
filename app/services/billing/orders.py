@@ -21,7 +21,7 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import Any, NoReturn
 
-from sqlalchemy import delete, exists, or_, select, update
+from sqlalchemy import and_, delete, exists, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -182,9 +182,9 @@ def _build_snapshot(
 # --------------------------------------------------------------------------- #
 #
 # Database-side guarantee: a VIRTUAL generated column ``active_user_lock``
-# on ``manager_billing_orders`` equals ``user_id`` while status is one of
-# ``pending / processing / manual_review`` and NULL otherwise, with a
-# UNIQUE index on top. Two concurrent INSERTs cannot both win.
+# on ``manager_billing_orders`` reserves ``user_id`` for pending/processing
+# orders and manual reviews that did not originate from a cancelled/closed
+# order. Late payments on old orders must not conflict with a new purchase.
 #
 # The Python helper below is just a friendly fast-path: it skips the
 # expensive plan/gateway/snapshot work when we can already see the
@@ -192,16 +192,20 @@ def _build_snapshot(
 # The IntegrityError handling around the actual INSERT is what makes
 # the invariant correct under concurrency.
 
-_ACTIVE_ORDER_STATUSES = ("pending", "processing", "manual_review")
-
-
 async def _check_no_pending_order(db: AsyncSession, user: PteroUser) -> None:
     existing = (
         await db.execute(
             select(BillingOrder)
             .where(
                 BillingOrder.user_id == user.id,
-                BillingOrder.status.in_(_ACTIVE_ORDER_STATUSES),
+                or_(
+                    BillingOrder.status.in_(("pending", "processing")),
+                    and_(
+                        BillingOrder.status == "manual_review",
+                        BillingOrder.cancelled_at.is_(None),
+                        BillingOrder.closed_at.is_(None),
+                    ),
+                ),
             )
             .order_by(BillingOrder.created_at.asc())
             .limit(1)
@@ -427,6 +431,7 @@ async def create_order(
             plan_id=plan.id,
             plan_snapshot=snapshot,
             kind=payload.kind,
+            channel="wechat" if gateway.code == "wechat_pay" else "alipay",
             period_count=period["count"],
             discount_pct=Decimal(str(period["discount_pct"])),
             total_fen=payable_total_fen,
@@ -476,6 +481,7 @@ async def create_order(
             total_fen=payable_total_fen,
             currency_code=plan.currency_code,
             due_at=now + timedelta(minutes=timeout_min),
+            gateway_code=payload.gateway_code,
         )
         db.add(invoice)
         await db.flush()
@@ -527,6 +533,16 @@ async def create_order(
     except Exception:
         await db.rollback()
         raise
+
+    if gateway.code == "wechat_pay":
+        await log_manager_activity(
+            db, actor=user.username, category="billing", status="success",
+            detail_key="billing.order.created",
+            detail_params={"order_id": order.id, "order_no": order_no, "order_kind": payload.kind,
+                           "plan_code": plan.code, "amount_fen": payable_total_fen,
+                           "period_count": period["count"], "placeholder_server_id": placeholder_server_id},
+        )
+        return order
 
     # ── 5) Outside the transaction (I4): call gateway ──────────────────────
     try:
@@ -861,23 +877,11 @@ _CANCEL_LEASE = timedelta(minutes=2)
 async def cancel_order(
     db: AsyncSession, user: PteroUser, order_id: int,
 ) -> BillingOrder:
-    """User-initiated cancel of a pending order. Mirrors §8.2 exactly:
+    """Cancel a pending order under its lease after querying and closing upstream.
 
-    1. Atomic ``claim`` of ``lock_token`` (only succeeds if order is
-       pending + owned by user + lock free or expired).
-    2. Outside-tx gateway query + close — local cancellation is allowed only
-       after the gateway confirms that the trade can no longer be paid.
-    3. Atomic ``transition to cancelled`` guarded by lock_token + status +
-       absence of any succeeded/refunded transaction (the late-payment
-       race tie-break).
-    4. Best-effort placeholder cleanup outside the tx.
-    5. Lock release in ``finally`` (so a crash between 3 and 5 just lets
-       the lease expire naturally).
-
-    Note: §8.2's "已付款 → _safe_add_payment" branch is wired in Module 2;
-    here we surface :class:`OrderAlreadyPaid` so the user gets the right
-    message and the late payment is still picked up by the order_query
-    job (Module 2) on its next pass.
+    Alipay NOTFOUND permits local cancellation even before expiry. Previously
+    issued cashier links may still accept payment; add_payment routes any late
+    receipt to manual review instead of applying the cancelled order.
     """
     my_token = uuid.uuid4().hex
     now = utc_naive_now()
@@ -903,6 +907,8 @@ async def cancel_order(
         existing = await db.get(BillingOrder, order_id)
         if existing is None or existing.user_id != user.id:
             raise OrderNotFound("订单不存在")
+        if existing.status == "cancelled":
+            return existing
         raise CannotCancel("订单状态不可取消，请稍后刷新查看")
 
     target_server_id: int | None = None
@@ -921,7 +927,9 @@ async def cancel_order(
             raise GatewayUnavailable(f"支付方式 {gateway_code!r} 未启用")
 
         try:
-            result = await gateway.query_by_out_trade_no(invoice.invoice_no)
+            from app.services.billing.wechat_pay import query_invoice
+
+            result = await query_invoice(db, invoice, gateway)
         except GatewayError as exc:
             raise GatewayUnavailable(str(exc)) from exc
 
@@ -971,10 +979,6 @@ async def cancel_order(
         if result.status == "SUCCESS":
             await record_paid_and_raise(result)
 
-        # A successful local cancellation must mean that the old cashier can
-        # no longer accept money. For page.pay, NOTFOUND is not sufficient:
-        # Alipay may not have created the trade yet while the already-issued
-        # signed URL remains usable until time_expire.
         if result.status != "CLOSED":
             try:
                 close_outcome = await gateway.close_trade(invoice.invoice_no)
@@ -983,20 +987,19 @@ async def cancel_order(
 
             if close_outcome == "ALREADY_PAID":
                 try:
-                    result2 = await gateway.query_by_out_trade_no(
-                        invoice.invoice_no
-                    )
+                    result2 = await query_invoice(db, invoice, gateway)
                 except GatewayError as exc:
                     raise GatewayUnavailable(
                         "支付状态正在确认，当前无法取消，请稍后重试"
                     ) from exc
                 if result2.status == "SUCCESS":
                     await record_paid_and_raise(result2)
-                raise GatewayUnavailable(
-                    "支付宝交易状态尚未稳定，当前无法取消，请稍后重试"
-                )
+                if result2.status != "CLOSED":
+                    raise GatewayUnavailable(
+                        "支付交易状态尚未稳定，当前无法取消，请稍后重试"
+                    )
 
-            if close_outcome == "NOTFOUND":
+            if close_outcome == "NOTFOUND" and gateway_code != "alipay_direct":
                 gateway_payload = invoice.gateway_payload
                 has_absolute_expiry = (
                     isinstance(gateway_payload, dict)
@@ -1004,12 +1007,11 @@ async def cancel_order(
                 )
                 deadline_elapsed = (
                     invoice.due_at is not None
-                    and utc_naive_now() >= invoice.due_at
+                    and utc_naive_now() >= invoice.due_at + (timedelta(minutes=2) if gateway_code == "wechat_pay" else timedelta())
                 )
                 if not has_absolute_expiry or not deadline_elapsed:
                     raise CannotCancel(
-                        "支付宝交易尚未创建，无法立即撤销已打开的收银台；"
-                        "请关闭收银台并等待订单自动过期"
+                        "支付交易仍在确认中，暂时无法取消；请稍后重试或等待订单自动过期"
                     )
 
         # ── 3) Transition pending → cancelled
@@ -1047,18 +1049,10 @@ async def cancel_order(
                 select(BillingOrder.target_server_id).where(BillingOrder.id == order_id)
             )
         )
-        await db.commit()
+        from app.services.billing import coupons as coupon_svc
 
-        # Release coupon back to ``unused`` so the user can use it on
-        # their next order. Idempotent w.r.t. reservation state.
-        try:
-            from app.services.billing import coupons as coupon_svc
-            await coupon_svc.release_for_order(db, order_id=order_id)
-        except Exception:
-            await db.rollback()
-            logger.exception(
-                "cancel_order: coupon release failed for order %s", order_id
-            )
+        await coupon_svc.release_for_order(db, order_id=order_id, commit=False)
+        await db.commit()
 
         # ── 4) Cleanup placeholder (outside tx, Wings-404-idempotent)
         order_kind = await db.scalar(
@@ -1087,6 +1081,9 @@ async def cancel_order(
             detail_key="billing.order.cancelled",
             detail_params={"order_id": order_id},
         )
+    except Exception:
+        await db.rollback()
+        raise
     finally:
         # ── 5) Release lock if still held by us (idempotent: empty rowcount
         # if the cancel branch already cleared it).

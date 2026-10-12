@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from collections.abc import Mapping
 from typing import Any, Literal, Protocol
 
 
@@ -27,7 +28,7 @@ from typing import Any, Literal, Protocol
 class CreateInvoiceResult:
     """Result of placing an order at the gateway."""
 
-    gateway_order_id: str
+    gateway_order_id: str | None
     """Gateway-side internal order id (e.g. Hupijiao ``open_order_id``)."""
 
     code_url: str | None
@@ -46,7 +47,7 @@ class CreateInvoiceResult:
 class QueryResult:
     """Normalized status from gateway-side order query."""
 
-    status: Literal["SUCCESS", "PROCESSING", "CLOSED", "NOTFOUND"]
+    status: Literal["SUCCESS", "PROCESSING", "CLOSED", "NOTFOUND", "REFUNDED"]
     transaction_id: str | None
     amount_fen: int | None
     raw: dict[str, Any] = field(default_factory=dict)
@@ -120,6 +121,9 @@ class CreateInvoiceRequest:
     ``None`` means "no local deadline known" — adapters fall back to their
     own defaults."""
 
+    payment_appid: str | None = None
+    payer_openid: str | None = None
+
     # Note: ``code_url`` is intentionally NOT part of this request — it is
     # a gateway response field. Hupijiao returns ``url_qrcode``; Alipay
     # page.pay has no pre-rendered QR.
@@ -180,6 +184,7 @@ class QueryRefundRequest:
     out_refund_no: str
     gateway_refund_id: str | None
     invoice_no: str | None = None
+    amount_fen: int | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -197,6 +202,7 @@ class PaymentGateway(Protocol):
     """Stable lowercase identifier persisted to ``invoice.gateway_code``."""
 
     display_name: str
+    logo_url: str | None
 
     async def create_invoice(
         self, request: CreateInvoiceRequest
@@ -221,7 +227,10 @@ class PaymentGateway(Protocol):
         """
         ...
 
-    def parse_notify(self, raw_form: dict[str, Any]) -> NotifyEvent:
+    def parse_notify(
+        self, raw_form: dict[str, Any], *,
+        headers: Mapping[str, str] | None = None, body: bytes | None = None,
+    ) -> NotifyEvent:
         """Synchronous: verify signature + map to NotifyEvent. No I/O."""
 
     async def create_refund(
@@ -258,3 +267,7 @@ class GatewayBusinessError(GatewayError):
 
 class GatewayTransientError(GatewayError):
     """Network / 5xx / timeout — caller may retry / fall back."""
+
+
+class GatewayRefundAbnormalError(GatewayError):
+    """Refund needs merchant intervention; reissuing cannot resolve it."""

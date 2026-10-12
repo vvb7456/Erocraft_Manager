@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from app.services.billing.gateway.base import PaymentGateway
@@ -20,6 +21,7 @@ if TYPE_CHECKING:  # avoid circular at runtime
 _log = logging.getLogger(__name__)
 _REGISTRY: dict[str, PaymentGateway] = {}
 _loaded: bool = False
+_loaded_until = 0.0
 _lock = asyncio.Lock()
 
 
@@ -51,11 +53,11 @@ async def ensure_loaded(db: "AsyncSession", *, force: bool = False) -> None:
     Cheap when already loaded. Pass ``force=True`` after admin edits billing
     settings to rebuild.
     """
-    global _loaded
-    if _loaded and not force:
+    global _loaded, _loaded_until
+    if _loaded and time.monotonic() < _loaded_until and not force:
         return
     async with _lock:
-        if _loaded and not force:
+        if _loaded and time.monotonic() < _loaded_until and not force:
             return
         # Local imports to avoid circulars at module import time.
         from app.core.runtime_settings import BILLING_SPECS, defaults_for
@@ -101,4 +103,13 @@ async def ensure_loaded(db: "AsyncSession", *, force: bool = False) -> None:
                     "ALIPAY_DIRECT_ENABLED=true but APPID/PRIVATE_KEY/PUBLIC_KEY "
                     "missing — gateway not registered"
                 )
+        if values.get("WECHAT_PAY_ENABLED"):
+            from app.services.billing.gateway.wechat_pay import WechatPayGateway
+
+            try:
+                _REGISTRY["wechat_pay"] = WechatPayGateway.from_settings(values)
+            except (ValueError, TypeError):
+                _log.warning("微信支付配置不完整或密钥格式不正确，网关未启用")
         _loaded = True
+        # Web and jobs have separate registries; both must observe UI changes.
+        _loaded_until = time.monotonic() + 30

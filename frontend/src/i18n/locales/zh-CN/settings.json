@@ -75,8 +75,6 @@
   "payment": {
     "title": "支付设置",
     "gateways": {
-      "title": "支付网关",
-      "desc": "启用你要开放的支付方式。",
       "enabled": "启用网关",
       "hupijiao": "虎皮椒支付",
       "alipay_direct": "支付宝直连"

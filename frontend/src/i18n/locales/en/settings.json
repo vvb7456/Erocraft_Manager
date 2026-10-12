@@ -75,9 +75,7 @@
   "payment": {
     "title": "Payment",
     "gateways": {
-      "title": "Payment Gateways",
-      "desc": "Enable the payment methods you want to offer.",
-      "enabled": "Enabled Gateways",
+      "enabled": "Enable Gateway",
       "hupijiao": "Hupijiao (Alipay)",
       "alipay_direct": "Alipay (direct)"
     },

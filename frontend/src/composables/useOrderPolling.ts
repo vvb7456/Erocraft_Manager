@@ -4,18 +4,13 @@ import { useApiFetch } from '@/composables/useApiFetch'
 /**
  * useOrderPolling — polls ``GET /api/user/orders/:id`` on a tunable timer.
  *
- * - 3s while page is visible (covers payment-callback latency and the
- *   apply happy path — typically <5s, or ~65s after one retry).
- * - When the order has been ``processing`` for more than
- *   ``PROCESSING_TAIL_MS`` we assume the apply engine has entered its
- *   long retry chain (5min/15min/1h/4h) and downshift to 10s. There is
- *   nothing time-sensitive on the UI in that window.
+ * - 3s while page is visible to detect payment confirmation.
  * - When ``document.visibilityState === 'hidden'``, downshifts to 10s
  *   regardless of state, to conserve battery / quota.
  * - Returns to fast cadence on ``visibilitychange → visible`` and
  *   triggers one immediate fetch (covers the mobile flow where the
  *   user goes off to Alipay's app and comes back).
- * - Stops automatically when the order enters a terminal state.
+ * - Stops automatically when the invoice is paid or the order enters a terminal state.
  *
  * Returns reactive ``order`` / ``loading`` / ``error`` plus ``stop()`` /
  * ``refresh()`` helpers.
@@ -35,6 +30,7 @@ interface OrderInvoice {
   code_url: string | null
   pay_url: string | null
   pay_url_h5: string | null
+  payment_scene: string | null
 }
 
 export interface OrderDetail {
@@ -69,13 +65,6 @@ const TERMINAL_STATUSES = new Set([
 
 const VISIBLE_INTERVAL_MS = 3000
 const HIDDEN_INTERVAL_MS = 10000
-const PROCESSING_TAIL_MS = 30000
-/**
- * After the order has been seen in ``processing`` for this long, treat it
- * as having entered the apply-engine retry chain (``RETRY_DELAYS`` starts
- * at 60s) and stretch the polling interval. The happy path normally
- * resolves well under this threshold.
- */
 
 export function useOrderPolling(orderId: Ref<number | string | null>) {
   const { get } = useApiFetch()
@@ -86,7 +75,6 @@ export function useOrderPolling(orderId: Ref<number | string | null>) {
 
   let timer: ReturnType<typeof setTimeout> | null = null
   let stopped = false
-  let processingSince: number | null = null
 
   function clear() {
     if (timer !== null) {
@@ -96,6 +84,7 @@ export function useOrderPolling(orderId: Ref<number | string | null>) {
   }
 
   function isTerminal(): boolean {
+    if (data.value?.invoice?.status === 'paid') return true
     const status = data.value?.status
     return status ? TERMINAL_STATUSES.has(status) : false
   }
@@ -108,14 +97,10 @@ export function useOrderPolling(orderId: Ref<number | string | null>) {
         `/api/user/orders/${orderId.value}`,
         { silent: true },
       )
+      if (stopped) return
       if (res) {
         data.value = res
         error.value = null
-        if (res.status === 'processing') {
-          if (processingSince === null) processingSince = Date.now()
-        } else {
-          processingSince = null
-        }
       } else {
         error.value = 'fetch_failed'
       }
@@ -129,11 +114,7 @@ export function useOrderPolling(orderId: Ref<number | string | null>) {
     if (stopped || isTerminal()) return
     const hidden =
       typeof document !== 'undefined' && document.visibilityState === 'hidden'
-    const inProcessingTail =
-      data.value?.status === 'processing' &&
-      processingSince !== null &&
-      Date.now() - processingSince >= PROCESSING_TAIL_MS
-    const interval = hidden || inProcessingTail
+    const interval = hidden
       ? HIDDEN_INTERVAL_MS
       : VISIBLE_INTERVAL_MS
     timer = setTimeout(async () => {

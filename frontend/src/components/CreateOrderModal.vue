@@ -38,7 +38,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import Badge from '@/components/ui/Badge.vue'
-import ChipSelect, { type ChipOption } from '@/components/ui/ChipSelect.vue'
+import PaymentGatewaySelect, { type PaymentGatewayOption } from '@/components/billing/PaymentGatewaySelect.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
@@ -59,11 +59,6 @@ interface Plan {
   cpu: number
   memory_mb: number
   disk_mb: number
-}
-interface PaymentGateway {
-  code: string
-  display_name: string
-  icon_name: string
 }
 interface UpgradeOption {
   planCode: string
@@ -243,7 +238,7 @@ const diskLabel = computed(() =>
 )
 
 // ── Payment gateways ──
-const gateways = ref<PaymentGateway[]>([])
+const gateways = ref<PaymentGatewayOption[]>([])
 const gatewayLoading = ref(false)
 const gatewayFailed = ref(false)
 const selectedGateway = ref<string>('')
@@ -251,7 +246,7 @@ const selectedGateway = ref<string>('')
 async function loadGateways() {
   gatewayLoading.value = true
   gatewayFailed.value = false
-  const data = await get<PaymentGateway[]>('/api/user/payment-gateways', { silent: true })
+  const data = await get<PaymentGatewayOption[]>('/api/user/payment-gateways', { silent: true })
   gatewayLoading.value = false
   if (data && data.length > 0) {
     gateways.value = data
@@ -273,13 +268,6 @@ watch(
     if (v && isUpgrade.value) loadUpgradeOptions()
   },
   { immediate: true },
-)
-
-const gatewayOptions = computed<ChipOption[]>(() =>
-  gateways.value.map((g) => ({ value: g.code, label: g.display_name })),
-)
-const selectedGatewayMeta = computed<PaymentGateway | null>(() =>
-  gateways.value.find((g) => g.code === selectedGateway.value) ?? null,
 )
 
 // ── Coupons ──
@@ -514,12 +502,13 @@ function onCancel() {
           <AlertBanner v-else-if="gatewayFailed" tone="danger" :closable="false">
             {{ t('billing.cashier.gatewayLoadFailed') }}
           </AlertBanner>
-          <div v-else class="gateway-row">
-            <ChipSelect v-model="selectedGateway" :options="gatewayOptions" />
-            <span v-if="selectedGatewayMeta" class="gateway-icon">
-              <MsIcon :name="selectedGatewayMeta.icon_name" size="md" />
-            </span>
-          </div>
+          <PaymentGatewaySelect
+            v-else
+            v-model="selectedGateway"
+            :options="gateways"
+            :label="t('billing.cashier.gatewaySection')"
+            :disabled="submitting"
+          />
         </section>
 
         <BaseCard v-if="selectedUpgradeOption" variant="bg3" radius="md" class="summary-card">
@@ -617,15 +606,13 @@ function onCancel() {
         <AlertBanner v-else-if="gatewayFailed" tone="danger" :closable="false">
           {{ t('billing.cashier.gatewayLoadFailed') }}
         </AlertBanner>
-        <div v-else class="gateway-row">
-          <ChipSelect
-            v-model="selectedGateway"
-            :options="gatewayOptions"
-          />
-          <span v-if="selectedGatewayMeta" class="gateway-icon">
-            <MsIcon :name="selectedGatewayMeta.icon_name" size="md" />
-          </span>
-        </div>
+        <PaymentGatewaySelect
+          v-else
+          v-model="selectedGateway"
+          :options="gateways"
+          :label="t('billing.cashier.gatewaySection')"
+          :disabled="submitting"
+        />
       </section>
 
       <!-- Coupon picker -->
@@ -641,9 +628,6 @@ function onCancel() {
           />
           <p v-else class="coupon-empty">
             {{ t('billing.coupons.applyEmpty') }}
-            <RouterLink class="coupon-invite-link" :to="{ name: 'user-promotions' }">
-              {{ t('billing.coupons.inviteEntry') }} — {{ t('billing.coupons.inviteEntryLink') }}
-            </RouterLink>
           </p>
         </template>
       </section>
@@ -915,16 +899,6 @@ function onCancel() {
   display: flex;
   justify-content: center;
 }
-.gateway-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-}
-.gateway-icon {
-  color: var(--ac);
-  display: inline-flex;
-  align-items: center;
-}
 
 /* ── Coupon picker ── */
 .coupon-empty {
@@ -939,14 +913,6 @@ function onCancel() {
   flex-wrap: wrap;
   gap: var(--sp-2);
   align-items: center;
-}
-.coupon-invite-link {
-  color: var(--ac);
-  text-decoration: none;
-}
-.coupon-invite-link:hover {
-  color: var(--ac2);
-  text-decoration: underline;
 }
 
 /* ── Summary card ── */

@@ -230,11 +230,11 @@ def build_scheduler() -> AsyncIOScheduler:
         run_refund_retry,
         id=REFUND_RETRY_JOB_ID,
         trigger="interval",
-        minutes=15,
+        minutes=1,
         replace_existing=True,
         coalesce=True,
         max_instances=1,
-        misfire_grace_time=300,
+        misfire_grace_time=60,
     )
     scheduler.add_job(
         run_placeholder_leak_monitor,

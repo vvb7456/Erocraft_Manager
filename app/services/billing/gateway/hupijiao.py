@@ -23,6 +23,7 @@ import secrets
 import time
 from datetime import timedelta
 from typing import Any, Literal
+from collections.abc import Mapping
 from urllib.parse import unquote_plus, urlencode
 
 import httpx
@@ -96,6 +97,7 @@ class HupijiaoGateway:
 
     code = "hupijiao"
     display_name = "虎皮椒-支付宝"
+    logo_url: str | None = "/payment-logos/alipay.svg"
 
     # Hupijiao API paths (relative to endpoint root)
     _PATH_PAY = "/payment/do.html"
@@ -304,7 +306,7 @@ class HupijiaoGateway:
             raw=body,
         )
 
-    def parse_notify(self, raw_form: dict[str, Any]) -> NotifyEvent:
+    def parse_notify(self, raw_form: dict[str, Any], *, headers: Mapping[str, str] | None = None, body: bytes | None = None) -> NotifyEvent:
         if not verify(raw_form, self._app_secret):
             raise GatewaySignatureError("hupijiao webhook signature mismatch")
         out_trade_no = str(raw_form.get("trade_order_id") or "")

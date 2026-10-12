@@ -5,7 +5,7 @@
  * Desktop: BaseModal size="xl". Mobile: full-width.
  * Sections: 概览 / 发票与交易 / 业务效果 / 退款记录 / 操作按钮.
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
@@ -109,15 +109,31 @@ watch(() => props.modelValue, (v) => {
 
 async function loadOrder() {
   if (props.orderId == null) return
+  const id = props.orderId
   loadFailed.value = false
   const [orderData, incData] = await Promise.all([
-    get<OrderDetail>(`/api/admin/billing/orders/${props.orderId}`, { silent: true }),
-    get<Incident[]>(`/api/admin/billing/incidents?order_id=${props.orderId}&limit=20`, { silent: true }),
+    get<OrderDetail>(`/api/admin/billing/orders/${id}`, { silent: true }),
+    get<Incident[]>(`/api/admin/billing/incidents?order_id=${id}&limit=20`, { silent: true }),
   ])
-  if (orderData) order.value = orderData
-  else loadFailed.value = true
+  if (!props.modelValue || props.orderId !== id) return
+  if (orderData) {
+    const refundFinished = order.value?.id === id && order.value.status === 'refunding' && orderData.status !== 'refunding'
+    order.value = orderData
+    if (refundFinished) emit('saved')
+  } else loadFailed.value = true
   if (incData) incidents.value = incData
 }
+
+let refundPollTimer: ReturnType<typeof setInterval> | null = null
+watch(() => props.modelValue && order.value?.id === props.orderId && order.value?.status === 'refunding', (active) => {
+  if (refundPollTimer !== null) clearInterval(refundPollTimer)
+  refundPollTimer = active ? setInterval(() => {
+    if (document.visibilityState === 'visible' && !loading.value) void loadOrder()
+  }, 5000) : null
+})
+onBeforeUnmount(() => {
+  if (refundPollTimer !== null) clearInterval(refundPollTimer)
+})
 
 function incidentLabel(inc: Incident): string {
   const sub = inc.payload?.subkind
@@ -164,6 +180,7 @@ function kindColor(k: string): string {
 }
 
 function channelLabel(ch: string): string {
+  if (ch === 'wechat') return t('wechat.title')
   if (ch === 'taobao') return t('billing.channel.taobao')
   if (ch === 'xianyu') return t('billing.channel.xianyu')
   if (ch === 'other') return t('billing.channel.other')
@@ -178,10 +195,12 @@ function channelColor(ch: string): string {
 }
 
 // ── Action conditions ──
+const isGatewayOrder = computed(() => order.value?.channel === 'alipay' || order.value?.channel === 'wechat')
+
 function canRefund(): boolean {
   if (!order.value) return false
   // 外部电商或人工订单（淘宝/闲鱼/其他）由外部平台处理交易退款，无系统网关交易记录，禁止系统退款
-  if (order.value.channel !== 'alipay') return false
+  if (!isGatewayOrder.value) return false
   const s = order.value.status
   return (s === 'applied' || s === 'apply_failed' || s === 'manual_review')
     && order.value.received_fen > order.value.refunded_fen
@@ -381,7 +400,7 @@ async function doRefund() {
       </div>
 
       <!-- ═══ External Order Transaction Info ═══ -->
-      <div v-if="order.channel !== 'alipay'" class="sec">
+      <div v-if="!isGatewayOrder" class="sec">
         <h4 class="sec-title">{{ t('billing.admin.detail.externalOrder') }}</h4>
         <div class="subcard">
           <dl class="dl dl--dual">
@@ -405,7 +424,6 @@ async function doRefund() {
         </div>
       </div>
 
-      <!-- ═══ Invoices (Online Alipay only) ═══ -->
       <div v-else-if="order.invoices.length" class="sec">
         <h4 class="sec-title">{{ t('billing.admin.detail.invoices') }}</h4>
         <div v-for="inv in order.invoices" :key="inv.id" class="subcard">

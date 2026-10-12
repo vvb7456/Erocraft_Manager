@@ -71,6 +71,8 @@ const router = createRouter({
     { path: '/', name: 'home', meta: { layout: 'blank' }, component: () => import('@/pages/LoadingPage.vue') },
 
     // ── User routes ──
+    { path: '/support', name: 'user-support', component: () => import('@/pages/SupportPage.vue'), meta: { layout: 'user' } },
+    { path: '/admin/support', name: 'admin-support', component: () => import('@/pages/SupportPage.vue'), meta: { admin: true } },
     {
       path: '/servers',
       name: 'user-servers',
@@ -298,10 +300,11 @@ router.beforeEach(async (to) => {
     const data = await app.fetchSessionUser()
     if (!data) {
       app.setIsAdmin(false)
-      return { name: 'login' }
+      return { name: 'login', query: { redirect: to.fullPath } }
     }
     applyServerLanguage(data?.language)
     app.setIsAdmin(!!data.is_admin)
+    if (to.name === 'user-support' && data.is_admin) return { name: 'admin-support' }
     // Root path: pick destination by role & server ownership history
     if (to.name === 'home') {
       if (data.is_admin) return { name: 'dashboard' }
@@ -313,7 +316,7 @@ router.beforeEach(async (to) => {
     }
   } catch {
     app.setIsAdmin(false)
-    return { name: 'login' }
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
   return true
 })

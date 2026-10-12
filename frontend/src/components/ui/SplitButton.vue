@@ -17,10 +17,14 @@ const props = withDefaults(defineProps<{
   icon?: string
   variant?: 'primary' | 'danger' | 'success'
   disabled?: boolean
+  mainDisabled?: boolean
   loading?: boolean
+  menuLabel?: string
+  placement?: 'top' | 'bottom'
   options: SplitButtonOption[]
 }>(), {
   variant: 'primary',
+  placement: 'bottom',
 })
 
 const emit = defineEmits<{
@@ -50,10 +54,11 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 </script>
 
 <template>
-  <div class="split-button" :class="[`split-button--${variant}`]">
+  <div class="split-button" :class="[`split-button--${variant}`, `split-button--${placement}`]" @keydown.esc="open = false">
     <button
+      type="button"
       class="split-button__main"
-      :disabled="disabled || loading"
+      :disabled="disabled || mainDisabled || loading"
       @click="emit('click')"
     >
       <MsIcon v-if="loading" name="progress_activity" size="sm" color="none" class="split-button__spin" />
@@ -62,25 +67,30 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
     </button>
 
     <button
+      type="button"
       class="split-button__arrow"
       :disabled="disabled || loading"
+      :aria-label="menuLabel || label"
+      :aria-expanded="open"
       @click="toggle"
     >
       <MsIcon name="expand_more" size="xs" color="none" />
     </button>
 
     <div v-if="open" class="split-button__dropdown">
-      <div
+      <button
         v-for="opt in options"
         :key="opt.key"
+        type="button"
         class="split-button__option"
         :class="{ 'split-button__option--active': opt.active, 'split-button__option--disabled': opt.disabled }"
-        @click="!opt.disabled && select(opt.key)"
+        :disabled="disabled || loading || opt.disabled"
+        @click="select(opt.key)"
       >
         <MsIcon v-if="opt.icon" :name="opt.icon" size="sm" color="none" />
         <span class="split-button__option-label">{{ opt.label }}</span>
         <MsIcon v-if="opt.active" name="check" color="none" class="split-button__check" />
-      </div>
+      </button>
     </div>
   </div>
 </template>
@@ -178,6 +188,11 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 }
 
 .split-button__option {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -190,6 +205,11 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 
 .split-button__option:hover {
   background: var(--bg4);
+}
+
+.split-button--top .split-button__dropdown {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 
 .split-button__option--active {

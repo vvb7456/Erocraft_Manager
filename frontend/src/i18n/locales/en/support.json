@@ -1,0 +1,9 @@
+{
+  "title": "Online support", "inbox": "Support inbox",
+  "older": "Earlier messages", "loading": "Loading…",
+  "empty": "No messages yet", "agent": "Support", "customer": "Customer",
+  "image": "Screenshot", "read": "Read", "sent": "Sent", "retry": "Could not load. Retry", "remove": "Remove",
+  "placeholder": "Write a message. Ctrl / ⌘ + Enter to send", "attach": "Screenshot", "imageLimit": "Choose a PNG, JPEG or WebP image up to 4MB",
+  "sending": "Sending…", "send": "Send", "noConversations": "No conversations yet",
+  "more": "Load more", "back": "Conversations", "selectConversation": "Select a conversation to reply"
+}

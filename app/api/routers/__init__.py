@@ -41,6 +41,8 @@ from app.api.routers.user_payment_gateways import router as user_payment_gateway
 from app.api.routers.user_servers import router as user_servers_router
 from app.api.routers.user_servers_tunnel import router as user_servers_tunnel_router
 from app.api.routers.users import router as users_router
+from app.api.routers.support import router as support_router
+from app.api.routers.wechat_pay import router as wechat_pay_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -82,5 +84,7 @@ api_router.include_router(user_payment_gateways_router)
 api_router.include_router(user_servers_router)
 api_router.include_router(user_servers_tunnel_router)
 api_router.include_router(users_router)
+api_router.include_router(support_router)
+api_router.include_router(wechat_pay_router)
 
 __all__ = ["api_router"]

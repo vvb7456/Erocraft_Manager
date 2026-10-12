@@ -40,6 +40,7 @@ from app.services.billing import incidents, payments
 from app.services.billing.apply_engine import apply_paid_order
 from app.services.billing.gateway import registry as gateway_registry
 from app.services.billing.gateway.base import GatewayError, QueryResult
+from app.services.billing.wechat_pay import query_invoice
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ async def _close_one_order(db: AsyncSession, order_id: int) -> None:
 
         # 2) Gateway query (outside tx, I4)
         try:
-            result = await gateway.query_by_out_trade_no(invoice.invoice_no)
+            result = await query_invoice(db, invoice, gateway)
         except GatewayError as exc:
             logger.warning(
                 "order_close: gateway query failed for order %s: %s — retrying next round",
@@ -191,14 +192,18 @@ async def _close_one_order(db: AsyncSession, order_id: int) -> None:
                 close_outcome = await gateway.close_trade(invoice.invoice_no)
             except GatewayError as exc:
                 logger.warning(
-                    "order_close: trade close failed for order %s: %s — proceeding with local close",
+                    "order_close: trade close failed for order %s: %s",
                     order_id, exc,
                 )
                 close_outcome = None
+                if gateway_code == "wechat_pay":
+                    return
             else:
+                if close_outcome == "NOTFOUND" and gateway_code == "wechat_pay" and invoice.due_at and utc_naive_now() < invoice.due_at + timedelta(minutes=2):
+                    return
                 if close_outcome == "ALREADY_PAID":
                     try:
-                        result2 = await gateway.query_by_out_trade_no(invoice.invoice_no)
+                        result2 = await query_invoice(db, invoice, gateway)
                     except GatewayError as exc:
                         logger.warning(
                             "order_close: re-query after ALREADY_PAID failed for order %s: %s",
@@ -387,19 +392,18 @@ async def _query_one_order(
     gateway_code: str | None,
 ) -> None:
     code = gateway_code or "hupijiao"
+    invoice = await db.get(BillingInvoice, invoice_id)
+    if invoice is None:
+        return
     await gateway_registry.ensure_loaded(db)
     try:
         gateway = gateway_registry.get(code)
     except KeyError:
         return
     try:
-        result = await gateway.query_by_out_trade_no(invoice_no)
+        result = await query_invoice(db, invoice, gateway)
     except GatewayError:
         return  # retry next round
-
-    invoice = await db.get(BillingInvoice, invoice_id)
-    if invoice is None:
-        return
 
     if result.status == "SUCCESS":
         amount_fen, mismatch_expected = _query_payment_amount(invoice, result)
@@ -456,6 +460,10 @@ async def run_apply_retry() -> None:
                 await apply_paid_order(db, oid, source="retry")
             except Exception:
                 logger.exception("apply_retry failed for order %s", oid)
+
+    from app.services.billing.wechat_delivery import report_deliveries
+
+    await report_deliveries()
 
 
 # --------------------------------------------------------------------------- #

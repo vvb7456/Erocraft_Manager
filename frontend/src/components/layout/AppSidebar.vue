@@ -2,9 +2,12 @@
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { computed, ref } from 'vue'
+import { useApiFetch } from '@/composables/useApiFetch'
+import { useSupportEvents } from '@/composables/useSupportEvents'
+import { computed, onMounted, ref } from 'vue'
 import MsIcon from '../ui/MsIcon.vue'
 import BaseButton from '../ui/BaseButton.vue'
+import Badge from '../ui/Badge.vue'
 import LanguageToggle from '../ui/LanguageToggle.vue'
 import SupportModal from '@/components/billing/SupportModal.vue'
 
@@ -14,6 +17,7 @@ const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
 const route = useRoute()
 const app = useAppStore()
+const { get } = useApiFetch()
 
 // ── Layout mode ──
 const isUserLayout = computed(() => route.meta.layout === 'user')
@@ -30,6 +34,7 @@ const adminNavItems: NavItem[] = [
   { page: 'servers',         icon: 'dns',        labelKey: 'nav.servers' },
   { page: 'certificates',    icon: 'workspace_premium', labelKey: 'nav.certificates' },
   { page: 'users',           icon: 'group',      labelKey: 'nav.users' },
+  { page: 'admin-support',   icon: 'support_agent', labelKey: 'support.inbox' },
   { page: 'activity-logs',   icon: 'history',    labelKey: 'nav.activityLogs' },
   { page: 'email-templates', icon: 'mail',       labelKey: 'nav.emailTemplates' },
 ]
@@ -73,6 +78,13 @@ async function doLogout() {
 
 // ── Support modal ──
 const supportOpen = ref(false)
+const supportUnread = ref(0)
+async function refreshUnread() {
+  const data = await get<{ unread: number }>('/api/support/unread', { silent: true })
+  if (data) supportUnread.value = data.unread
+}
+useSupportEvents(() => void refreshUnread())
+onMounted(() => void refreshUnread())
 function openSupport() {
   supportOpen.value = true
   if (window.innerWidth <= 768) app.closeMobileSidebar()
@@ -168,6 +180,7 @@ function openTutorial() {
           >
             <span class="icon"><MsIcon :name="item.icon" size="md" /></span>
             <span class="nav-label">{{ t(item.labelKey) }}</span>
+            <Badge v-if="item.page === 'admin-support' && supportUnread" color="var(--ac)">{{ supportUnread > 99 ? '99+' : supportUnread }}</Badge>
           </button>
 
           <!-- Inject Hosts right after Servers so infra sits next to the things running on it. -->
@@ -202,6 +215,7 @@ function openTutorial() {
       >
         <span class="icon"><MsIcon name="support_agent" size="md" /></span>
         <span class="nav-label">{{ t('nav.contactSupport') }}</span>
+        <Badge v-if="supportUnread" color="var(--ac)">{{ supportUnread > 99 ? '99+' : supportUnread }}</Badge>
       </button>
 
       <button

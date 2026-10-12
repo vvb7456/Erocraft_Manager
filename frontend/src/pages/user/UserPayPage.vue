@@ -10,8 +10,6 @@
  * Visual shell: AuthShell (theme + language toggle in top-right, no
  * sidebar/exit) so the experience matches the login page.
  *
- * No self-service cancel/refund here — users with problems open the
- * SupportModal and contact a human.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -19,11 +17,13 @@ import { useRoute, useRouter } from 'vue-router'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import Badge from '@/components/ui/Badge.vue'
-import Spinner from '@/components/ui/Spinner.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import SupportModal from '@/components/billing/SupportModal.vue'
+import WechatPayPanel from '@/components/billing/WechatPayPanel.vue'
 import { useToast } from '@/composables/useToast'
-import { useOrderPolling } from '@/composables/useOrderPolling'
+import { useApiFetch } from '@/composables/useApiFetch'
+import { useConfirm } from '@/composables/useConfirm'
+import { useOrderPolling, type OrderDetail } from '@/composables/useOrderPolling'
 
 defineOptions({ name: 'UserPayPage' })
 
@@ -31,6 +31,11 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n({ useScope: 'global' })
 const { toast } = useToast()
+const { del } = useApiFetch()
+const { confirm } = useConfirm()
+const cancelling = ref(false)
+// Keep the OAuth failure flag after removing it from the address bar.
+const wechatAuthFailed = route.query.wechat === 'auth_failed'
 
 // ── Order id ──
 const orderId = computed(() => {
@@ -43,9 +48,10 @@ const { data, refresh, stop } = useOrderPolling(orderId)
 
 const order = computed(() => data.value ?? null)
 const invoice = computed(() => data.value?.invoice ?? null)
+const isWechatPay = computed(() => invoice.value?.gateway_code === 'wechat_pay')
 
 // ── State machine derived from order.status / countdown ──
-type Phase = 'loading' | 'pending' | 'processing' | 'paid' | 'expired' | 'closed'
+type Phase = 'loading' | 'pending' | 'paid' | 'expired' | 'closed'
 
 const now = ref(Date.now())
 let tickTimer: ReturnType<typeof setInterval> | null = null
@@ -67,10 +73,6 @@ const isExpired = computed(() => remainingMs.value === 0)
 const phase = computed<Phase>(() => {
   if (!order.value) return 'loading'
   const s = order.value.status
-  if (s === 'paid' || s === 'applied') return 'paid'
-  // 'processing' = 网关回调已到、apply_engine 正在为用户开通服务。
-  // 这个阶段资金已到账，倒计时完全不适用（不能误显“已过期”）。
-  if (s === 'processing') return 'processing'
   if (
     s === 'closed' ||
     s === 'cancelled' ||
@@ -80,6 +82,7 @@ const phase = computed<Phase>(() => {
   ) {
     return 'closed'
   }
+  if (invoice.value?.status === 'paid' || s === 'paid' || s === 'applied') return 'paid'
   if (isExpired.value) return 'expired'
   return 'pending'
 })
@@ -97,8 +100,6 @@ const statusColor = computed(() => {
   switch (phase.value) {
     case 'paid':
       return 'var(--green)'
-    case 'processing':
-      return 'var(--blue)'
     case 'pending':
       return 'var(--amber)'
     case 'expired':
@@ -114,8 +115,6 @@ const statusLabel = computed(() => {
   switch (phase.value) {
     case 'pending':
       return t('billing.pay.statusPending')
-    case 'processing':
-      return t('billing.pay.statusProcessing')
     case 'paid':
       return t('billing.pay.statusPaid')
     case 'expired':
@@ -166,7 +165,7 @@ const h5Launched = ref(false)
 const redirecting = ref(false)
 
 function launchH5Pay() {
-  if (!payUrl.value) return
+  if (!payUrl.value || phase.value !== 'pending' || cancelling.value) return
   h5Launched.value = true
   // PC: 新标签打开, 原页继续轮询, 付完自动捕获到账。
   // 移动端: iOS Safari 拦截 setTimeout 后的 window.open, 只能同窗口跳;
@@ -181,13 +180,14 @@ function launchH5Pay() {
 // 所有平台统一: 拿到 pay_url 后先显示「正在跳转到支付宝…」600ms 再跳,
 // 让用户有时间看清页面。手动按钮始终 enabled, 用户可随时点跳过等待。
 const REDIRECT_DELAY_MS = 600
+let launchTimer: ReturnType<typeof setTimeout> | null = null
 watch(payUrl, (url) => {
   if (!url) return
   if (h5Launched.value) return
   if (phase.value !== 'pending') return
   if (!isMobile && qrImageUrl.value) return  // hupijiao PC: 展示 QR 不跳
   redirecting.value = true
-  setTimeout(() => {
+  launchTimer = setTimeout(() => {
     if (!h5Launched.value && phase.value === 'pending' && payUrl.value) {
       launchH5Pay()
     }
@@ -196,13 +196,14 @@ watch(payUrl, (url) => {
 
 // 副标题: 唯一主提示, 按状态切换
 const subtitleText = computed(() => {
-  if (!order.value || redirecting.value) return t('billing.pay.redirecting')
+  if (!order.value) return t('billing.pay.redirecting')
   switch (phase.value) {
     case 'paid': return t('billing.pay.successTitle')
-    case 'processing': return t('billing.pay.processingTitle')
     case 'expired': return t('billing.pay.expiredTitle')
     case 'closed': return t('billing.pay.closedTitle')
     default:
+      if (isWechatPay.value) return t('wechat.title')
+      if (redirecting.value) return t('billing.pay.redirecting')
       return qrImageUrl.value
         ? t('billing.pay.subtitleQR')
         : t('billing.pay.subtitleRedirect')
@@ -213,8 +214,12 @@ const subtitleText = computed(() => {
 const redirectCountdown = ref(5)
 let redirectTimer: ReturnType<typeof setInterval> | null = null
 
-watch(phase, (p, prev) => {
-  if (p === 'paid' && prev !== 'paid') {
+watch(phase, (p) => {
+  if (redirectTimer !== null) {
+    clearInterval(redirectTimer)
+    redirectTimer = null
+  }
+  if (p === 'paid') {
     redirectCountdown.value = 5
     redirectTimer = setInterval(() => {
       redirectCountdown.value -= 1
@@ -235,6 +240,31 @@ function goToPlans() {
   router.push('/plans')
 }
 
+async function cancelOrder() {
+  if (!order.value || order.value.status !== 'pending' || cancelling.value) return
+  const id = order.value.id
+  cancelling.value = true
+  try {
+    const ok = await confirm({
+      title: t('billing.orderDetail.actions.cancelConfirmTitle'),
+      message: t('billing.orderDetail.actions.cancelConfirmMessage'),
+      confirmText: t('billing.orderDetail.actions.cancelConfirmBtn'),
+      variant: 'danger',
+    })
+    if (!ok) return
+    const result = await del<OrderDetail>(`/api/user/orders/${id}`)
+    if (result) {
+      stop()
+      data.value = result
+      toast(t('billing.orderDetail.actions.cancelOk'), 'success')
+    } else {
+      await refresh()
+    }
+  } finally {
+    cancelling.value = false
+  }
+}
+
 // ── Copy order no ──
 async function copyOrderNo() {
   if (!order.value?.order_no) return
@@ -251,6 +281,10 @@ const supportOpen = ref(false)
 
 // ── Lifecycle ──
 onMounted(() => {
+  if (wechatAuthFailed) {
+    toast(t('wechat.authFailed'), 'error')
+    void router.replace({ query: {} })
+  }
   tickTimer = setInterval(() => {
     now.value = Date.now()
   }, 1000)
@@ -259,6 +293,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (tickTimer !== null) clearInterval(tickTimer)
   if (redirectTimer !== null) clearInterval(redirectTimer)
+  if (launchTimer !== null) clearTimeout(launchTimer)
   stop()
 })
 
@@ -273,7 +308,16 @@ function fenToYuan(fen: number | null | undefined): string {
   <AuthShell icon="receipt_long" :subtitle="subtitleText">
     <div class="pay-content">
       <!-- QR (hupijiao PC, pending only) -->
-      <div v-if="phase === 'pending' && qrImageUrl && !isMobile" class="qr-wrap">
+      <WechatPayPanel
+        v-if="phase === 'pending' && isWechatPay && invoice"
+        :order-id="orderId"
+        :scene="invoice.payment_scene"
+        :code-url="invoice.code_url"
+        :auto-start="!wechatAuthFailed"
+        :disabled="cancelling"
+        @refresh="refresh"
+      />
+      <div v-else-if="phase === 'pending' && qrImageUrl && !isMobile" class="qr-wrap">
         <img v-if="!qrError" :src="qrImageUrl" alt="QR" class="qr-image" width="240" height="240" @load="onQrImageLoad" @error="onQrImageError" />
         <div v-else class="qr-error">
           <MsIcon name="error_outline" size="lg" />
@@ -284,7 +328,7 @@ function fenToYuan(fen: number | null | undefined): string {
 
       <!-- Button (loading + non-QR pending) -->
       <div v-else-if="phase === 'loading' || phase === 'pending'" class="pay-action">
-        <BaseButton variant="primary" :disabled="!payUrl || phase !== 'pending'" @click="launchH5Pay">
+        <BaseButton variant="primary" :disabled="!payUrl || phase !== 'pending' || cancelling" @click="launchH5Pay">
           <MsIcon name="open_in_new" size="sm" />
           {{ h5Launched ? t('billing.pay.buttonReopen') : t('billing.pay.buttonOpen') }}
         </BaseButton>
@@ -294,10 +338,6 @@ function fenToYuan(fen: number | null | undefined): string {
       <div v-else-if="phase === 'paid'" class="pay-status pay-status--success">
         <MsIcon name="check_circle" size="lg" />
         <p class="status-sub">{{ t('billing.pay.successCountdown', { n: redirectCountdown }) }}</p>
-      </div>
-      <div v-else-if="phase === 'processing'" class="pay-status pay-status--processing">
-        <Spinner />
-        <p class="status-sub">{{ t('billing.pay.processingSub') }}</p>
       </div>
       <div v-else-if="phase === 'expired'" class="pay-status pay-status--expired">
         <MsIcon name="error_outline" size="lg" />
@@ -362,6 +402,9 @@ function fenToYuan(fen: number | null | undefined): string {
         </BaseButton>
         <BaseButton v-else-if="phase === 'expired' || phase === 'closed'" variant="primary" @click="goToPlans">
           {{ t('billing.pay.btnReorder') }}
+        </BaseButton>
+        <BaseButton v-if="order?.status === 'pending'" variant="ghost" :disabled="cancelling" @click="cancelOrder">
+          {{ t('billing.orderDetail.actions.cancel') }}
         </BaseButton>
         <BaseButton variant="ghost" @click="goToServers">
           <MsIcon name="home" size="sm" />
@@ -442,7 +485,6 @@ function fenToYuan(fen: number | null | undefined): string {
   line-height: 1;
 }
 .pay-status--success :deep(.ms-icon) { color: var(--green); }
-.pay-status--processing :deep(.ms-icon) { color: var(--blue); }
 .pay-status--expired :deep(.ms-icon),
 .pay-status--closed :deep(.ms-icon) { color: var(--t3); }
 .status-sub {

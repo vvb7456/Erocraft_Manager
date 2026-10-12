@@ -16,6 +16,8 @@ from app.db.models.manager import (
     SystemSetting,
 )
 from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
+from app.db.models.support import SupportConversation, SupportMessage
+from app.db.models.wechat import WechatPaymentSession
 from app.db.models.pterodactyl import (
     ActivityLog,
     ActivityLogSubject,
@@ -33,6 +35,9 @@ from app.db.models.pterodactyl import (
 )
 
 __all__ = [
+    "WechatPaymentSession",
+    "SupportConversation",
+    "SupportMessage",
     "ActivityLog",
     "ActivityLogSubject",
     "Allocation",

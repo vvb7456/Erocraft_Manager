@@ -9,7 +9,7 @@
  *   - Badge colors use palette CSS variables
  *   - Server-side pagination (backend: GET /api/admin/billing/orders)
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -88,6 +88,7 @@ const kindOptions = [
 const channelOptions = [
   { value: '',        label: t('billing.admin.orders.filterAllChannel') },
   { value: 'alipay',  label: t('billing.channel.alipay') },
+  { value: 'wechat',  label: t('wechat.title') },
   { value: 'taobao',  label: t('billing.channel.taobao') },
   { value: 'xianyu',  label: t('billing.channel.xianyu') },
   { value: 'other',   label: t('billing.channel.other') },
@@ -124,6 +125,17 @@ watch([searchTerm, statusFilter, kindFilter, channelFilter], () => {
   }
 })
 watch([page, perPage], () => { void loadOrders() }, { immediate: true })
+
+let refundPollTimer: ReturnType<typeof setInterval> | null = null
+watch(() => rawOrders.value.some(order => order.status === 'refunding'), (active) => {
+  if (refundPollTimer !== null) clearInterval(refundPollTimer)
+  refundPollTimer = active ? setInterval(() => {
+    if (document.visibilityState === 'visible' && !loading.value) void loadOrders()
+  }, 10000) : null
+})
+onBeforeUnmount(() => {
+  if (refundPollTimer !== null) clearInterval(refundPollTimer)
+})
 
 // ── Client-side sort ──
 function toggleSort(col: string) {
@@ -220,6 +232,7 @@ function kindLabel(k: string): string {
 }
 
 function channelLabel(ch: string): string {
+  if (ch === 'wechat') return t('wechat.title')
   if (ch === 'taobao') return t('billing.channel.taobao')
   if (ch === 'xianyu') return t('billing.channel.xianyu')
   if (ch === 'other') return t('billing.channel.other')

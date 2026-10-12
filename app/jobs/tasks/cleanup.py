@@ -14,6 +14,7 @@ from app.db.models.manager import (
     ManagerPendingRegistration,
 )
 from app.db.models.monitoring import HostMetrics, HostProbeResult
+from app.db.models.wechat import WechatPaymentSession
 from app.db.session import get_session_factory
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,8 @@ async def run_token_cleanup() -> None:
                 res_pwd.rowcount,
                 res_eml.rowcount,
             )
+            await db.execute(delete(WechatPaymentSession).where(WechatPaymentSession.expires_at < cutoff))
+            await db.commit()
         except Exception:
             await db.rollback()
             logger.exception("token cleanup failed")
@@ -87,4 +90,3 @@ async def run_token_cleanup() -> None:
         except Exception:
             await db.rollback()
             logger.exception("monitoring cleanup failed")
-

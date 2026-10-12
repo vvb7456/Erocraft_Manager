@@ -45,9 +45,10 @@ async def billing_settings_get(
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Return all billing-related settings. Admin-only; credentials returned in plaintext."""
+    """Return billing settings with configured secrets masked."""
     store = get_settings_store()
-    return await store.get_many(db, defaults_for(BILLING_SPECS))
+    values = await store.get_many(db, defaults_for(BILLING_SPECS))
+    return {key: MASKED_SECRET_VALUE if BILLING_SPECS[key].sensitive and value else value for key, value in values.items()}
 
 
 @router.post("/settings", response_model=SettingsMessageResponse)
@@ -83,6 +84,19 @@ async def billing_settings_post(
         by_category.setdefault(spec.category, {})[key] = normalized
 
     store = get_settings_store()
+    candidate = await store.get_many(db, defaults_for(BILLING_SPECS))
+    candidate.update(by_category.get("billing", {}))
+    if candidate.get("WECHAT_PAY_ENABLED"):
+        from app.services.billing.gateway.wechat_pay import WechatPayGateway
+
+        try:
+            WechatPayGateway.from_settings(candidate)
+            if not candidate.get("WECHAT_PAY_APP_SECRET"):
+                raise ValueError("请填写服务号AppSecret")
+            if bool(candidate.get("WECHAT_PAY_MINIPROGRAM_APPID")) != bool(candidate.get("WECHAT_PAY_MINIPROGRAM_APP_SECRET")):
+                raise ValueError("小程序AppID和AppSecret必须同时填写")
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(400, f"微信支付配置错误：{exc}") from exc
     for category, items in by_category.items():
         if items:
             await store.set_values(db, items, category=category)
@@ -120,24 +134,6 @@ async def billing_setting_put(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"未知的计费配置项: {key}",
         )
-    try:
-        normalized = spec.normalize(payload.value)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
-
-    store = get_settings_store()
-    await store.set_values(db, {key: normalized}, category=spec.category)
-    # Rebuild gateway registry on credential/enabled changes.
-    from app.services.billing.gateway import registry as gateway_registry
-    await gateway_registry.ensure_loaded(db, force=True)
-    await log_manager_activity(
-        db,
-        actor=current_user.username,
-        category="billing",
-        status="success",
-        detail_key="billing.settings.update",
-        detail_params={"key": key},
+    return await billing_settings_post(
+        BillingSettingsBatchRequest(settings={key: payload.value}), current_user, db,
     )
-    return SettingsMessageResponse(message=f"已保存计费配置: {key}")

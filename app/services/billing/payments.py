@@ -77,6 +77,7 @@ async def add_payment(
     amount_fen: int,
     raw_event_id: int | None,
     amount_mismatch_expected: int | None = None,
+    defer_apply: bool = False,
 ) -> BillingInvoiceTransaction:
     """Record a successful payment fact and (if appropriate) trigger apply.
 
@@ -235,6 +236,9 @@ async def add_payment(
         and invoice.paid_at == now
     )
     order_id_for_apply = order.id
+    if invoice_paid_now and order.status == "pending":
+        order.status = "processing"
+        order.next_apply_at = now
 
     await db.commit()
 
@@ -257,7 +261,7 @@ async def add_payment(
         return tx
 
     # ── 7) Trigger apply (only when this call flipped invoice → paid)
-    if invoice_paid_now:
+    if invoice_paid_now and not defer_apply:
         # Late import to avoid circular dependency.
         from app.services.billing import apply_engine
 
@@ -349,6 +353,7 @@ async def safe_add_payment(
     amount_fen: int,
     raw_event_id: int | None = None,
     amount_mismatch_expected: int | None = None,
+    defer_apply: bool = False,
 ) -> BillingInvoiceTransaction | None:
     """Wrapper that converts :class:`CrossInvoiceTransactionError` into
     a manual_review incident — used by ``order_close`` / ``cancel_order``
@@ -365,6 +370,7 @@ async def safe_add_payment(
             amount_fen=amount_fen,
             raw_event_id=raw_event_id,
             amount_mismatch_expected=amount_mismatch_expected,
+            defer_apply=defer_apply,
         )
     except CrossInvoiceTransactionError as exc:
         await incidents.log_incident(

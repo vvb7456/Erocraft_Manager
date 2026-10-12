@@ -26,7 +26,7 @@ import uuid
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import and_, case, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utc_naive_now
@@ -42,6 +42,7 @@ from app.services.billing.gateway import registry as gateway_registry
 from app.services.billing.gateway.base import (
     CreateRefundRequest,
     GatewayBusinessError,
+    GatewayRefundAbnormalError,
     GatewayError,
     GatewayTransientError,
     InvoicePaymentRef,
@@ -55,7 +56,7 @@ logger = logging.getLogger(__name__)
 _MAX_RETRY = 5
 # Per §10.3 — "stuck in PROCESSING for N hours" alert threshold.
 _STUCK_HOURS_DEFAULT = 24
-# Per §10.3 — only retry rows older than this many minutes.
+# Failed requests and long-running refunds retain the slower retry cadence.
 _RETRY_INTERVAL_MIN = 15
 
 
@@ -235,6 +236,10 @@ async def initiate_refund(
                 reason=reason or "refund",
             )
         )
+    except GatewayRefundAbnormalError as exc:
+        await _release_lock(db, order_id, my_token)
+        await _record_abnormal_refund(db, refund_id, str(exc))
+        raise
     except GatewayError as exc:
         await _rollback_failed_refund(
             db, refund_id, order_id, prev_status, my_token, str(exc)[:500]
@@ -299,13 +304,25 @@ async def list_pending_refunds(
     db: AsyncSession, *, limit: int = 100
 ) -> list[BillingRefund]:
     """Return rows that the retry job should poll right now."""
-    cutoff = utc_naive_now() - timedelta(minutes=_RETRY_INTERVAL_MIN)
+    now = utc_naive_now()
+    # WeChat recommends one-minute queries initially, backing off after five minutes.
+    cutoff = case(
+        (
+            and_(BillingRefund.status == "pending", BillingRefund.created_at > now - timedelta(minutes=5)),
+            now - timedelta(minutes=1),
+        ),
+        (
+            and_(BillingRefund.status == "pending", BillingRefund.created_at > now - timedelta(minutes=30)),
+            now - timedelta(minutes=5),
+        ),
+        else_=now - timedelta(minutes=_RETRY_INTERVAL_MIN),
+    )
     rows = await db.execute(
         select(BillingRefund)
         .where(
             BillingRefund.status.in_(("pending", "failed")),
             BillingRefund.retry_count < _MAX_RETRY,
-            BillingRefund.updated_at < cutoff,
+            BillingRefund.updated_at <= cutoff,
         )
         .order_by(BillingRefund.id.asc())
         .limit(limit)
@@ -361,8 +378,12 @@ async def reconcile_refund_once(
                 out_refund_no=refund.refund_no,
                 gateway_refund_id=refund.gateway_refund_id,
                 invoice_no=invoice.invoice_no,
+                amount_fen=refund.amount_fen,
             )
         )
+    except GatewayRefundAbnormalError as exc:
+        await _record_abnormal_refund(db, refund_id, str(exc))
+        return "processing"
     except GatewayError as exc:
         exhausted = await _bump_retry(db, refund_id, str(exc)[:500])
         return "exhausted" if exhausted else "failed"
@@ -394,7 +415,7 @@ async def reconcile_refund_once(
                     "age_hours": round(age_hours, 1),
                 },
             )
-        # Bump updated_at so we don't re-poll for another _RETRY_INTERVAL_MIN.
+        # Anchor the next query to this attempt, using the age-based cadence above.
         await db.execute(
             update(BillingRefund)
             .where(BillingRefund.id == refund_id)
@@ -417,6 +438,9 @@ async def reconcile_refund_once(
                 reason=refund.reason or "retry",
             )
         )
+    except GatewayRefundAbnormalError as exc:
+        await _record_abnormal_refund(db, refund_id, str(exc))
+        return "processing"
     except GatewayError as exc:
         exhausted = await _bump_retry(db, refund_id, str(exc)[:500])
         return "exhausted" if exhausted else "failed"
@@ -459,6 +483,19 @@ async def reconcile_refund_once(
 # --------------------------------------------------------------------------- #
 # Internals
 # --------------------------------------------------------------------------- #
+
+
+async def _record_abnormal_refund(db: AsyncSession, refund_id: int, message: str) -> None:
+    refund = await db.get(BillingRefund, refund_id)
+    assert refund is not None
+    first = refund.last_error != message
+    refund.status = "pending"
+    refund.last_error = message
+    refund.updated_at = utc_naive_now()
+    await db.commit()
+    if first:
+        await incidents.log_incident("refund_retries_exhausted", order_id=refund.order_id, transaction_id=refund.transaction_id,
+                                     payload={"subkind": "wechat_abnormal_refund", "refund_id": refund.id, "last_error": message})
 
 
 async def _release_lock(

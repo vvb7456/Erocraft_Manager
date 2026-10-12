@@ -1,0 +1,10 @@
+{
+  "title": "微信支付", "pay": "微信付款", "preparing": "准备付款…", "reopen": "重新打开微信支付",
+  "officialAccount": "服务号", "miniProgram": "小程序",
+  "scan": "请用手机微信扫一扫付款", "scanOtherPhone": "此订单已生成扫码付款码，请用另一部手机微信扫一扫。", "check": "我已付款，查询结果",
+  "cancelled": "已取消本次付款，可以再次支付", "confirming": "正在向微信确认付款结果…", "failed": "本次付款未完成，请查询订单状态后重试",
+  "bridgeUnavailable": "无法调起微信支付，请在微信内重新打开订单", "originalBrowser": "请在原微信浏览器继续付款，或取消订单后重新下单", "authFailed": "微信授权未完成，请再次点击付款",
+  "MCHID": "商户号", "APPID": "服务号 AppID", "APP_SECRET": "服务号 AppSecret", "MINIPROGRAM_APPID": "小程序 AppID", "MINIPROGRAM_APP_SECRET": "小程序 AppSecret",
+  "MERCHANT_SERIAL_NO": "商户 API 证书序列号", "MERCHANT_PRIVATE_KEY": "商户私钥 PEM", "API_V3_KEY": "APIv3 密钥", "PUBLIC_KEY_ID": "微信支付公钥 ID", "PUBLIC_KEY": "微信支付公钥 PEM",
+  "configured": "已配置；输入新值可替换", "notify": "支付通知地址", "oauth": "网页授权回调地址", "directory": "JSAPI 支付授权目录 / 小程序服务器域名"
+}

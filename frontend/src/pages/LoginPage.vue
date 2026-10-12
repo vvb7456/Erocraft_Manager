@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { switchLanguage } from '@/i18n/vue-i18n'
 import { backendToFrontendLocale } from '@/i18n/locale-map'
@@ -17,6 +17,7 @@ import Spinner from '@/components/ui/Spinner.vue'
 defineOptions({ name: 'LoginPage' })
 
 const router = useRouter()
+const route = useRoute()
 const { t, te } = useI18n({ useScope: 'global' })
 const app = useAppStore()
 
@@ -71,7 +72,10 @@ async function handleLogin() {
       // destination view renders in the right locale.
       app.setSessionUser(data)
       switchLanguage(backendToFrontendLocale(data.language))
-      if (data.is_admin) {
+      const redirect = route.query.redirect
+      if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//') && !redirect.includes('\\') && router.resolve(redirect).matched.length) {
+        router.replace(redirect)
+      } else if (data.is_admin) {
         router.replace({ name: 'dashboard' })
       } else if (!data.has_owned_server) {
         router.replace({ name: 'user-plans' })

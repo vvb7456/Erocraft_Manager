@@ -27,7 +27,7 @@
       "alt": "前往我的服务器"
     },
     "supportHint": "需要帮助？",
-    "supportLink": "联系客服"
+    "supportLink": "在线客服"
   },
   "cashier": {
     "title": "确认订单",
@@ -68,7 +68,7 @@
     "periodValue": "{count} 个月·共 {days} 天",
     "perPage": "条/页",
     "supportHint": "有问题？",
-    "supportLink": "联系客服",
+    "supportLink": "在线客服",
     "filter": {
       "label": "状态",
       "all": "全部",
@@ -101,7 +101,6 @@
   "pay": {
     "statusPending": "等待支付",
     "statusPaid": "支付成功",
-    "statusProcessing": "开通中",
     "statusExpired": "订单已过期",
     "statusClosed": "订单已关闭",
     "statusLoading": "加载中…",
@@ -109,8 +108,6 @@
     "retry": "重试",
     "successTitle": "支付成功",
     "successCountdown": "{n} 秒后自动跳转到我的服务器",
-    "processingTitle": "支付成功，正在为您开通服务",
-    "processingSub": "请稍候，进度完成后页面将自动刷新",
     "expiredTitle": "订单已过期",
     "closedTitle": "订单已关闭",
     "summaryPlan": "套餐",
@@ -125,7 +122,7 @@
     "btnReorder": "重新下单",
     "btnDashboard": "返回我的服务器",
     "supportHint": "遇到问题？",
-    "supportLink": "联系客服",
+    "supportLink": "在线客服",
     "redirecting": "正在跳转到支付宝…",
     "subtitleQR": "使用支付宝扫描二维码",
     "subtitleRedirect": "前往支付宝付款",
@@ -188,11 +185,11 @@
       "cancelConfirmMessage": "确认取消订单？取消后无法恢复，已预留资源会被释放。",
       "cancelConfirmBtn": "确认取消",
       "cancelOk": "订单已取消",
-      "contactSupport": "联系客服"
+      "contactSupport": "在线客服"
     }
   },
   "support": {
-    "title": "联系客服",
+    "title": "在线客服",
     "intro": "如需协助，请通过以下方式联系我们：",
     "email": "客服邮箱",
     "qqGroup": "QQ 交流群",
@@ -593,8 +590,6 @@
     "applyNone": "不使用优惠券",
     "applyEmpty": "本次订单暂无可用优惠券",
     "applySelected": "已选：{name}（-¥{amount}）",
-    "inviteEntry": "💡 邀请新用户即可获得优惠券",
-    "inviteEntryLink": "查看邀请",
     "kinds": {
       "newPurchase": "新购",
       "renew": "续费",

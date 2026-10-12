@@ -25,6 +25,8 @@ import zhAdminServer from './locales/zh-CN/admin-server.json'
 import zhCertificates from './locales/zh-CN/certificates.json'
 import zhBilling from './locales/zh-CN/billing.json'
 import zhAgreements from './locales/zh-CN/agreements.json'
+import zhSupport from './locales/zh-CN/support.json'
+import zhWechat from './locales/zh-CN/wechat.json'
 
 import enCommon from './locales/en/common.json'
 import enNav from './locales/en/nav.json'
@@ -50,6 +52,8 @@ import enAdminServer from './locales/en/admin-server.json'
 import enCertificates from './locales/en/certificates.json'
 import enBilling from './locales/en/billing.json'
 import enAgreements from './locales/en/agreements.json'
+import enSupport from './locales/en/support.json'
+import enWechat from './locales/en/wechat.json'
 
 function detectLanguage(): string {
   const stored = localStorage.getItem('lang')
@@ -83,6 +87,8 @@ const i18n = createI18n({
       certificates: zhCertificates,
       billing: zhBilling,
       agreements: zhAgreements,
+      support: zhSupport,
+      wechat: zhWechat,
     },
     en: {
       common: enCommon, nav: enNav, dashboard: enDashboard,
@@ -104,6 +110,8 @@ const i18n = createI18n({
       certificates: enCertificates,
       billing: enBilling,
       agreements: enAgreements,
+      support: enSupport,
+      wechat: enWechat,
     },
   },
 })

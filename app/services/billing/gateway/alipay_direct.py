@@ -45,6 +45,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
@@ -362,6 +363,7 @@ class AlipayDirectGateway:
 
     code = "alipay_direct"
     display_name = "支付宝"
+    logo_url: str | None = "/payment-logos/alipay.svg"
 
     # open-platform method names
     _METHOD_PAGE_PAY = "alipay.trade.page.pay"
@@ -673,7 +675,7 @@ class AlipayDirectGateway:
             raw=inner,
         )
 
-    def parse_notify(self, raw_form: dict[str, Any]) -> NotifyEvent:
+    def parse_notify(self, raw_form: dict[str, Any], *, headers: Mapping[str, str] | None = None, body: bytes | None = None) -> NotifyEvent:
         sign_b64 = str(raw_form.get("sign") or "")
         if not sign_b64:
             raise GatewaySignatureError("alipay_direct notify missing sign")

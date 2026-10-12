@@ -1,0 +1,9 @@
+{
+  "title": "在线客服", "inbox": "客服消息",
+  "older": "查看更早消息", "loading": "加载中…",
+  "empty": "暂无消息", "agent": "客服", "customer": "用户",
+  "image": "截图", "read": "已读", "sent": "已发送", "retry": "加载失败，点击重试", "remove": "移除",
+  "placeholder": "请输入消息，Ctrl / ⌘ + Enter 发送", "attach": "添加截图", "imageLimit": "请选择不超过4MB的 PNG、JPEG 或 WebP 图片",
+  "sending": "发送中…", "send": "发送", "noConversations": "暂无客服会话",
+  "more": "加载更多", "back": "会话列表", "selectConversation": "选择一个会话开始接待"
+}

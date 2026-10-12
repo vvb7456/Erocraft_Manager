@@ -12,12 +12,13 @@ re-deliver up to 5 times over 6 hours.
 from __future__ import annotations
 
 import json
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,12 +94,19 @@ async def _mark_event_processed(
 
 async def _handle_notify(
     gateway_code: str, request: Request, db: AsyncSession
-) -> PlainTextResponse:
+) -> Response:
     received_at = utc_naive_now()
-    form = await request.form()
-    raw_form: dict[str, Any] = {k: v for k, v in form.items()}
+    is_wechat = gateway_code == "wechat_pay"
+    raw_bytes = await request.body() if is_wechat else None
+    raw_form: dict[str, Any] = {} if is_wechat else dict(await request.form())
     raw_headers = {k: v for k, v in request.headers.items()}
-    raw_body = json.dumps(raw_form, ensure_ascii=False)
+    raw_body = raw_bytes.decode("utf-8", errors="replace") if raw_bytes is not None else json.dumps(raw_form, ensure_ascii=False)
+
+    def ack() -> Response:
+        return Response(status_code=204) if is_wechat else PlainTextResponse(_SUCCESS_BODY)
+
+    def failure(message: str, status_code: int) -> Response:
+        return JSONResponse({"code": "FAIL", "message": message}, status_code=status_code) if is_wechat else PlainTextResponse(message, status_code=status_code)
 
     # ── 1) Verify signature
     await gateway_registry.ensure_loaded(db)
@@ -106,10 +114,10 @@ async def _handle_notify(
         gateway = gateway_registry.get(gateway_code)
     except KeyError:
         logger.error("%s webhook arrived but gateway not registered", gateway_code)
-        return PlainTextResponse("gateway not configured", status_code=503)
+        return failure("gateway not configured", 503)
 
     try:
-        event = gateway.parse_notify(raw_form)
+        event = gateway.parse_notify(raw_form, headers=raw_headers, body=raw_bytes)
         # Keep this invariant at the dispatch boundary as well as in the
         # Alipay adapter. It protects the shared bookkeeping path for any
         # gateway adapter that accidentally returns an empty id/amount (and
@@ -143,7 +151,7 @@ async def _handle_notify(
         except Exception:
             logger.exception("failed to audit invalid %s payload", gateway_code)
         logger.warning("%s webhook payload failure: %s", gateway_code, exc)
-        return PlainTextResponse("invalid payload", status_code=400)
+        return failure("invalid payload", 400)
     except (TypeError, ValueError, OverflowError) as exc:
         # Defensive boundary for adapters parsing untrusted form values. A
         # malformed numeric value (for example ``nan``/``inf``) must be a
@@ -166,7 +174,7 @@ async def _handle_notify(
         except Exception:
             logger.exception("failed to audit invalid %s payload", gateway_code)
         logger.warning("%s webhook malformed payload: %s", gateway_code, exc)
-        return PlainTextResponse("invalid payload", status_code=400)
+        return failure("invalid payload", 400)
     except GatewaySignatureError as exc:
         try:
             await _record_event(
@@ -184,7 +192,7 @@ async def _handle_notify(
             logger.exception("failed to audit invalid %s notify", gateway_code)
         logger.warning("%s webhook signature failure: %s", gateway_code, exc)
         # Non-200 so the gateway retries (give us another inspection shot).
-        return PlainTextResponse("invalid sign", status_code=400)
+        return failure("invalid sign", 400)
 
     # ── 2) Audit row
     evt_id = await _record_event(
@@ -219,7 +227,18 @@ async def _handle_notify(
             },
         )
         await _mark_event_processed(db, evt_id, "invoice_not_found")
-        return PlainTextResponse(_SUCCESS_BODY)
+        return ack()
+
+    if is_wechat:
+        from app.services.billing.wechat_pay import verify_invoice
+
+        try:
+            verify_invoice(invoice, event.raw_form)
+        except GatewayPayloadError:
+            await incidents.log_incident("manual_review_required", invoice_id=invoice.id, order_id=invoice.order_id,
+                                         payload={"subkind": "wechat_invoice_identity_mismatch", "event_id": evt_id})
+            await _mark_event_processed(db, evt_id, "invoice_identity_mismatch")
+            return ack()
 
     await db.execute(
         update(BillingPaymentEvent)
@@ -245,6 +264,7 @@ async def _handle_notify(
                 amount_fen=event.amount_fen,
                 raw_event_id=evt_id,
                 amount_mismatch_expected=mismatch_expected,
+                defer_apply=is_wechat,
             )
             result_tag = (
                 "amount_mismatch_recorded"
@@ -284,7 +304,7 @@ async def _handle_notify(
         result_tag = f"audit_only_{event.status.lower()}"
 
     await _mark_event_processed(db, evt_id, result_tag)
-    return PlainTextResponse(_SUCCESS_BODY)
+    return ack()
 
 
 # --------------------------------------------------------------------------- #
@@ -295,7 +315,7 @@ async def _handle_notify(
 @router.post("/webhook/hupijiao", response_class=PlainTextResponse)
 async def hupijiao_notify(
     request: Request, db: AsyncSession = Depends(get_db)
-) -> PlainTextResponse:
+) -> Response:
     """Hupijiao payment-success webhook.
 
     Implements §7.2 step-by-step. Always returns ``success`` (HTTP 200)
@@ -314,7 +334,7 @@ async def hupijiao_notify(
 @router.post("/webhook/alipay_direct", response_class=PlainTextResponse)
 async def alipay_direct_notify(
     request: Request, db: AsyncSession = Depends(get_db)
-) -> PlainTextResponse:
+) -> Response:
     """Alipay open-platform payment-success webhook.
 
     Alipay posts ``application/x-www-form-urlencoded`` and expects the literal
@@ -322,3 +342,14 @@ async def alipay_direct_notify(
     Signature is RSA2-verified inside the adapter against the Alipay public key.
     """
     return await _handle_notify("alipay_direct", request, db)
+
+
+@router.post("/webhook/wechat_pay")
+async def wechat_notify(request: Request, db: AsyncSession = Depends(get_db)) -> Response:
+    try:
+        async with asyncio.timeout(4):
+            return await _handle_notify("wechat_pay", request, db)
+    except Exception:
+        await db.rollback()
+        logger.exception("微信支付通知处理失败，等待微信重试")
+        return JSONResponse({"code": "FAIL", "message": "temporary processing failure"}, status_code=500)

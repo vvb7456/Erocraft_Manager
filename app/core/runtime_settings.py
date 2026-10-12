@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
@@ -486,6 +487,20 @@ BILLING_SPECS: dict[str, SettingSpec] = _register({
         lambda: _env_str("ALIPAY_DIRECT_DISPLAY_NAME", "支付宝"),
         _normalize_str,
     ),
+    "WECHAT_PAY_ENABLED": SettingSpec(
+        "WECHAT_PAY_ENABLED", "billing", lambda: _env_bool("WECHAT_PAY_ENABLED", False), _normalize_bool,
+    ),
+    "WECHAT_PAY_DISPLAY_NAME": SettingSpec(
+        "WECHAT_PAY_DISPLAY_NAME", "billing", lambda: _env_str("WECHAT_PAY_DISPLAY_NAME", "微信支付"), _normalize_str,
+    ),
+    **{key: SettingSpec(key, "billing", partial(_env_str, key, ""), _normalize_str, sensitive=secret)
+       for key, secret in (
+           ("WECHAT_PAY_MCHID", False), ("WECHAT_PAY_APPID", False),
+           ("WECHAT_PAY_APP_SECRET", True), ("WECHAT_PAY_MINIPROGRAM_APPID", False),
+           ("WECHAT_PAY_MINIPROGRAM_APP_SECRET", True), ("WECHAT_PAY_MERCHANT_SERIAL_NO", False),
+           ("WECHAT_PAY_MERCHANT_PRIVATE_KEY", True), ("WECHAT_PAY_API_V3_KEY", True),
+           ("WECHAT_PAY_PUBLIC_KEY_ID", False), ("WECHAT_PAY_PUBLIC_KEY", False),
+       )},
     # ---- Billing runtime parameters ----
     # 5 min hard cap — payment QR codes typically valid up to 5 min.
     "BILLING_ORDER_PAY_TIMEOUT_MIN": SettingSpec(
@@ -493,8 +508,7 @@ BILLING_SPECS: dict[str, SettingSpec] = _register({
         lambda: _env_int("BILLING_ORDER_PAY_TIMEOUT_MIN", 5),
         _int_clamper(3, 5, 5),
     ),
-    # refund_retry job runs every 15 min; if a refund stays PENDING beyond
-    # this many hours it becomes a manager incident.
+    # A refund still pending beyond this many hours becomes a manager incident.
     "BILLING_REFUND_STUCK_HOURS": SettingSpec(
         "BILLING_REFUND_STUCK_HOURS", "billing",
         lambda: _env_int("BILLING_REFUND_STUCK_HOURS", 24),
