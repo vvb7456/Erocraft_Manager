@@ -27,7 +27,7 @@
       "alt": "Go to My Servers"
     },
     "supportHint": "Need help?",
-    "supportLink": "Online support"
+    "supportLink": "Contact us"
   },
   "cashier": {
     "title": "Confirm Order",
@@ -68,7 +68,7 @@
     "periodValue": "{count} mo · {days} d",
     "perPage": "rows/page",
     "supportHint": "Need help?",
-    "supportLink": "Online support",
+    "supportLink": "Contact us",
     "filter": {
       "label": "Status",
       "all": "All",
@@ -122,7 +122,7 @@
     "btnReorder": "Reorder",
     "btnDashboard": "Back to my servers",
     "supportHint": "Need help?",
-    "supportLink": "Online support",
+    "supportLink": "Contact us",
     "redirecting": "Redirecting to Alipay…",
     "subtitleQR": "Scan QR with Alipay",
     "subtitleRedirect": "Open Alipay to pay",
@@ -131,6 +131,7 @@
     "amountLabel": "Amount"
   },
   "orderDetail": {
+    "notFound": "Order {id} no longer exists",
     "pageTitle": "Order detail",
     "loadFailed": "Failed to load order",
     "retry": "Retry",
@@ -185,11 +186,12 @@
       "cancelConfirmMessage": "Cancel this order? Reserved resources will be released. This cannot be undone.",
       "cancelConfirmBtn": "Confirm cancel",
       "cancelOk": "Order cancelled",
-      "contactSupport": "Online support"
+      "contactSupport": "Contact us"
     }
   },
   "support": {
-    "title": "Online support",
+    "title": "Contact us",
+    "startChat": "Start chat",
     "intro": "If you need assistance, please reach us through any of the following:",
     "email": "Support email",
     "qqGroup": "QQ group",
@@ -200,7 +202,7 @@
     "btnOk": "OK"
   },
   "admin": {
-    "title": "Billing",
+    "title": "Billing Management",
     "tabPlans": "Plans",
     "tabOrders": "Orders",
     "tabIncidents": "Incidents",

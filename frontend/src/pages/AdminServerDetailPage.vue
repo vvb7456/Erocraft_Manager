@@ -226,6 +226,7 @@ function onTabChange(key: string) {
 
   <template v-else>
     <PageHeader icon="dns" :title="headerTitle" :breadcrumbs="headerBreadcrumbs">
+      <TabSwitcher :tabs="tabs" :modelValue="activeTab" @update:modelValue="onTabChange" />
       <template v-if="detail" #badge>
         <Badge :color="statusColor">
           <StatusDot :status="statusDot" />
@@ -235,7 +236,6 @@ function onTabChange(key: string) {
     </PageHeader>
 
     <div class="page-body">
-      <TabSwitcher :tabs="tabs" :modelValue="activeTab" @update:modelValue="onTabChange" />
       <RouterView :key="serverId" />
     </div>
   </template>

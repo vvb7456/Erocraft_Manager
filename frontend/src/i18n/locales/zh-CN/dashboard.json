@@ -1,5 +1,5 @@
 {
-  "title": "仪表盘",
+  "title": "运行概览",
   "stats": {
     "totalServers": "服务器总数"
   },
@@ -38,12 +38,6 @@
     "expiring": "近 7 天无到期实例",
     "activity": "暂无活动记录",
     "trends": "暂无趋势数据"
-  },
-  "alerts": {
-    "resolve": "清除该告警",
-    "confirmTitle": "清除告警",
-    "confirmMessage": "是否清除该告警？",
-    "resolveFailed": "清除告警失败"
   },
   "host": {
     "add": "添加主机",

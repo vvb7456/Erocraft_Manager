@@ -1,11 +1,5 @@
 {
-  "title": "邮件模板",
   "saved": "模板已保存",
-  "unsavedTitle": "有未保存的更改",
-  "unsavedMessage": "当前模板有未保存的更改，是否保存？",
-  "unsavedSave": "保存并离开",
-  "unsavedDiscard": "丢弃并离开",
-  "unsavedStay": "继续编辑",
   "preview": "实时预览",
   "previewEmpty": "暂无预览内容",
   "subject": "邮件主题",

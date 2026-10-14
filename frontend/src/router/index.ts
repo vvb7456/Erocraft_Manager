@@ -71,6 +71,7 @@ const router = createRouter({
     { path: '/', name: 'home', meta: { layout: 'blank' }, component: () => import('@/pages/LoadingPage.vue') },
 
     // ── User routes ──
+    { path: '/welcome', name: 'user-home', component: () => import('@/pages/user/UserHomePage.vue'), meta: { layout: 'user' } },
     { path: '/support', name: 'user-support', component: () => import('@/pages/SupportPage.vue'), meta: { layout: 'user' } },
     { path: '/admin/support', name: 'admin-support', component: () => import('@/pages/SupportPage.vue'), meta: { admin: true } },
     {
@@ -131,6 +132,7 @@ const router = createRouter({
     },
 
     // ── Admin routes ──
+    { path: '/admin/account', name: 'admin-account', component: () => import('@/pages/user/AccountPage.vue'), meta: { admin: true } },
     { path: '/admin', redirect: '/admin/dashboard' },
     {
       path: '/admin/dashboard',
@@ -261,8 +263,12 @@ const router = createRouter({
     {
       path: '/admin/email-templates',
       name: 'email-templates',
-      component: () => import('@/pages/EmailTemplatesPage.vue'),
+      redirect: '/admin/notifications?tab=templates',
       meta: { admin: true },
+    },
+    {
+      path: '/admin/notifications', name: 'notifications',
+      component: () => import('@/pages/NotificationsPage.vue'), meta: { admin: true },
     },
     {
       path: '/admin/automation',
@@ -279,6 +285,13 @@ const router = createRouter({
 
 /** Check auth status before each navigation */
 router.beforeEach(async (to) => {
+  if (to.name === 'settings' && to.query.tab === 'account') return { name: 'admin-account' }
+  if (to.name === 'settings' && ['smtp', 'notifications'].includes(String(to.query.tab))) {
+    return { name: 'settings', query: { tab: 'channels', channel: to.query.tab === 'smtp' ? 'email' : 'wecom' } }
+  }
+  if (to.name === 'notifications' && ['channels', 'recipients'].includes(String(to.query.tab))) {
+    return { name: 'settings', query: { tab: to.query.tab, channel: to.query.channel } }
+  }
   const app = useAppStore()
   if (to.meta.public) {
     if (to.name === 'login' || to.name === 'forgot-password') {
@@ -288,7 +301,7 @@ router.beforeEach(async (to) => {
           applyServerLanguage(data?.language)
           app.setIsAdmin(!!data.is_admin)
           if (data.is_admin) return { name: 'dashboard' }
-          return data.has_owned_server ? { name: 'user-servers' } : { name: 'user-plans' }
+          return { name: 'user-home' }
         }
       } catch {
         return true
@@ -305,14 +318,14 @@ router.beforeEach(async (to) => {
     applyServerLanguage(data?.language)
     app.setIsAdmin(!!data.is_admin)
     if (to.name === 'user-support' && data.is_admin) return { name: 'admin-support' }
-    // Root path: pick destination by role & server ownership history
+    // Root path: pick destination by role.
     if (to.name === 'home') {
       if (data.is_admin) return { name: 'dashboard' }
-      return data.has_owned_server ? { name: 'user-servers' } : { name: 'user-plans' }
+      return { name: 'user-home' }
     }
     // Admin routes require admin role
     if (to.meta.admin && !data.is_admin) {
-      return data.has_owned_server ? { name: 'user-servers' } : { name: 'user-plans' }
+      return { name: 'user-home' }
     }
   } catch {
     app.setIsAdmin(false)

@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MsIcon from '@/components/ui/MsIcon.vue'
+import BaseButton from './BaseButton.vue'
 
 defineOptions({ name: 'FilterInput' })
 
@@ -10,28 +12,45 @@ const model = defineModel<string>({ default: '' })
 withDefaults(defineProps<{
   placeholder?: string
   clearable?: boolean
+  ariaLabel?: string
+  maxlength?: number | string
 }>(), {
   placeholder: '',
   clearable: true,
 })
+const input = ref<HTMLInputElement | null>(null)
+const focus = (options?: FocusOptions) => input.value?.focus(options)
+defineExpose({ focus })
+
+function clear() {
+  model.value = ''
+  focus()
+}
 </script>
 
 <template>
   <div class="filter-input">
     <MsIcon name="search" size="sm" color="none" class="filter-input__icon" />
     <input
+      ref="input"
       v-model="model"
       type="text"
       class="form-input filter-input__field"
       :placeholder="placeholder || t('common.filter_hint')"
+      :aria-label="ariaLabel || placeholder || t('common.filter_hint')"
+      :maxlength="maxlength"
     >
-    <button
+    <BaseButton
       v-if="clearable && model"
       class="filter-input__clear"
-      @click="model = ''"
+      variant="ghost"
+      size="xs"
+      square
+      :aria-label="t('common.btn.clear')"
+      @click="clear"
     >
       <MsIcon name="close" size="sm" color="none" />
-    </button>
+    </BaseButton>
   </div>
 </template>
 
@@ -57,30 +76,18 @@ withDefaults(defineProps<{
   width: 100%;
   padding-left: 34px;
   padding-right: 32px;
+  font-size: var(--filter-input-font, var(--input-font, .85rem));
 }
 
 .filter-input__clear {
   position: absolute;
   right: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 22px;
   height: 22px;
   border: none;
   border-radius: 50%;
   background: transparent;
   color: var(--t3);
-  cursor: pointer;
   padding: 0;
-}
-
-.filter-input__clear:hover {
-  background: var(--bg3);
-  color: var(--t2);
-}
-
-.filter-input__clear .ms {
-  font-size: 16px;
 }
 </style>

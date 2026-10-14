@@ -12,6 +12,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { useFormatDate } from '@/composables/useFormatDate'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
+import PageHeaderActions from '@/components/layout/PageHeaderActions.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
@@ -289,6 +290,9 @@ async function doGrant() {
 </script>
 
 <template>
+  <PageHeaderActions>
+    <BaseButton size="sm" variant="primary" @click="openGrant"><MsIcon name="card_giftcard" size="xs" />{{ t('billing.admin.coupons.grant') }}</BaseButton>
+  </PageHeaderActions>
   <SectionToolbar>
     <template #start>
       <div class="tb-search-row">
@@ -325,11 +329,6 @@ async function doGrant() {
           size="sm"
           fit
         />
-      </div>
-      <div class="tb-btn-group">
-        <BaseButton size="sm" variant="primary" @click="openGrant">
-          <MsIcon name="card_giftcard" size="xs" /> {{ t('billing.admin.coupons.grant') }}
-        </BaseButton>
       </div>
     </template>
   </SectionToolbar>
@@ -460,9 +459,9 @@ async function doGrant() {
 :deep(.col-expires)  { width: 13%; color: var(--t2); font-size: var(--text-sm); }
 :deep(.col-actions)  { width: 12%; }
 
-.mono { font-family: var(--font-mono, 'IBM Plex Mono', monospace); }
+.mono { font-family: var(--font-mono); }
 code {
-  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   background: var(--bg-in);
   padding: 2px 6px;

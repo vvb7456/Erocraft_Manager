@@ -55,6 +55,6 @@ const displayLabel = computed(() => {
   font-size: var(--text-xs);
   color: var(--t3);
   white-space: nowrap;
-  font-family: var(--mono, monospace);
+  font-family: var(--font-tabular);
 }
 </style>

@@ -10,7 +10,6 @@ from zoneinfo import ZoneInfo
 
 from app.core.config import get_settings
 
-MASKED_SECRET_VALUE = "********"
 
 
 def _env_str(name: str, default: str = "") -> str:
@@ -204,7 +203,7 @@ SETTINGS_SPECS: dict[str, SettingSpec] = _register({
         lambda: _env_bool("AGREEMENTS_DEFAULT_CHECKED", False),
         _normalize_bool,
     ),
-    # ---- Support contact info (shown in SupportModal, public-readable) ----
+    # ---- Support contact info and conversation greeting ----
     "SUPPORT_EMAIL": SettingSpec(
         "SUPPORT_EMAIL", "branding",
         lambda: _env_str("SUPPORT_EMAIL", ""),
@@ -228,6 +227,15 @@ SETTINGS_SPECS: dict[str, SettingSpec] = _register({
     "SUPPORT_FOOTER_NOTE": SettingSpec(
         "SUPPORT_FOOTER_NOTE", "branding",
         lambda: _env_str("SUPPORT_FOOTER_NOTE", ""),
+        _normalize_str,
+    ),
+    "SUPPORT_WELCOME_ENABLED": SettingSpec(
+        "SUPPORT_WELCOME_ENABLED", "branding",
+        lambda: _env_bool("SUPPORT_WELCOME_ENABLED", False), _normalize_bool,
+    ),
+    "SUPPORT_WELCOME_MESSAGE": SettingSpec(
+        "SUPPORT_WELCOME_MESSAGE", "branding",
+        lambda: _env_str("SUPPORT_WELCOME_MESSAGE", "你好，有什么可以帮你？\n请描述遇到的问题，也可以附上截图。"),
         _normalize_str,
     ),
     "DEFAULT_NEST_ID": SettingSpec(
@@ -399,6 +407,15 @@ CERTIFICATE_SPECS: dict[str, SettingSpec] = _register({
         lambda: _env_str("CERT_ALERT_EMAIL_ADMIN_IDS", ""),
         _normalize_id_list,
     ),
+})
+
+
+NOTIFICATION_SPECS: dict[str, SettingSpec] = _register({
+    "WECOM_ENABLED": SettingSpec("WECOM_ENABLED", "notifications", lambda: False, _normalize_bool),
+    "WECOM_CORP_ID": SettingSpec("WECOM_CORP_ID", "notifications", lambda: "", _normalize_str),
+    "WECOM_AGENT_ID": SettingSpec("WECOM_AGENT_ID", "notifications", lambda: "", _normalize_str),
+    "WECOM_SECRET": SettingSpec("WECOM_SECRET", "notifications", lambda: "", _normalize_str, sensitive=True),
+    "NOTIFY_SUPPORT_DELAY": SettingSpec("NOTIFY_SUPPORT_DELAY", "notifications", lambda: 20, _int_clamper(5, 300, 20)),
 })
 
 

@@ -76,6 +76,12 @@ async def log_manager_activity(
                 ),
             )
         )
+        from app.services.notifications.events import audit_failure
+
+        await audit_failure(
+            db, actor=actor, category=_normalize_category(category), status=_normalize_status(status),
+            detail_key=detail_key, params=detail_params or {},
+        )
         await db.commit()
     except Exception:
         await db.rollback()

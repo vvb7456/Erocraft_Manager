@@ -1,0 +1,20 @@
+{
+  "title": "Home",
+  "greeting": "Hello, {name}.",
+  "intro": "Manage your services and pick up your conversations.",
+  "viewAll": "View all",
+  "feature": {
+    "normal": { "title": "Server list", "description": "Check server status and manage settings and files.", "action": "View servers" },
+    "renewal": { "title": "Server renewal", "description": "Some servers are expiring soon or have expired. Renew them here.", "action": "Renew now" },
+    "empty": { "label": "Get started", "title": "Your own tavern,\non any device.", "action": "View plans" }
+  },
+  "emptyTitle": "No servers yet",
+  "emptyHint": "Choose a plan to set up SillyTavern.",
+  "quickLinks": "Quick links",
+  "ordersHint": "Payments and order history",
+  "promotionsHint": "Coupons and referral rewards",
+  "tutorialHint": "Setup, characters and API connections",
+  "help": "Need a hand?",
+  "loadFailed": "Could not load your servers",
+  "retry": "Try again"
+}

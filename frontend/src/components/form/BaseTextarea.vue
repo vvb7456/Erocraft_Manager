@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 
 defineOptions({ name: 'BaseTextarea' })
 
@@ -17,10 +18,13 @@ withDefaults(defineProps<{
 defineEmits<{
   'update:modelValue': [value: string]
 }>()
+const element = ref<HTMLTextAreaElement | null>(null)
+defineExpose({ element, focus: () => element.value?.focus() })
 </script>
 
 <template>
   <textarea
+    ref="element"
     :value="modelValue"
     :placeholder="placeholder"
     :rows="rows"

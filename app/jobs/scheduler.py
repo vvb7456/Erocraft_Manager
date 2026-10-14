@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED, EVENT_JOB_EXECUTED
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.base import JobLookupError
 
@@ -40,6 +42,9 @@ from app.jobs.tasks.force_reinstall_reset import (
 from app.jobs.tasks.monitoring import MONITORING_JOB_ID, run_monitoring_collect
 from app.jobs.tasks.reminders import sync_reminder_jobs
 from app.jobs.tasks.server_install_notify import sync_install_notify_job
+from app.services.notifications.queue import run_notifications
+from app.services.notifications.events import task_failure, task_recovered
+from app.core.time import utc_naive_now
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +52,18 @@ SYNC_JOBS_ID = "manager_jobs_sync"
 DEFAULT_MONITOR_INTERVAL = 60
 _last_settings_signature: tuple[tuple[str, object], ...] | None = None
 _last_monitor_interval: int | None = None
+_notification_tasks: set[asyncio.Task] = set()
+
+
+def _notify_job_failure(event) -> None:
+    if event.job_id == "manager_notifications":
+        return
+    task = asyncio.create_task(task_recovered(event.job_id) if event.code == EVENT_JOB_EXECUTED else task_failure(
+        event.job_id, utc_naive_now(),
+        type(event.exception).__name__ if getattr(event, "exception", None) else "任务错过计划执行时间",
+    ))
+    _notification_tasks.add(task)
+    task.add_done_callback(_notification_tasks.discard)
 
 
 def reset_scheduler_sync_state() -> None:
@@ -93,7 +110,11 @@ def _sync_monitor_job(scheduler: AsyncIOScheduler, interval: int) -> None:
 async def load_automation_settings() -> dict[str, object]:
     session_factory = get_session_factory()
     async with session_factory() as db:
-        return await get_settings_store().get_many(db, defaults_for(AUTOMATION_SPECS))
+        values = await get_settings_store().get_many(db, defaults_for(AUTOMATION_SPECS))
+        from app.services.notifications.policy import load_policy
+        policy = await load_policy(db)
+        values.update({f"NOTIFY_{key.upper()}": value for key, value in policy.lifecycle.model_dump().items()})
+        return values
 
 
 async def sync_managed_jobs(scheduler: AsyncIOScheduler) -> bool:
@@ -122,6 +143,9 @@ async def sync_managed_jobs(scheduler: AsyncIOScheduler) -> bool:
 
 def build_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="UTC")
+    scheduler.add_listener(_notify_job_failure, EVENT_JOB_ERROR | EVENT_JOB_MISSED | EVENT_JOB_EXECUTED)
+    scheduler.add_job(run_notifications, id="manager_notifications", trigger="interval", seconds=5,
+                      replace_existing=True, coalesce=True, max_instances=1, misfire_grace_time=30)
     scheduler.add_job(
         sync_managed_jobs,
         id=SYNC_JOBS_ID,

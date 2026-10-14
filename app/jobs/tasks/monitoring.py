@@ -8,10 +8,8 @@ Each cycle (60s by default):
   4. Evaluate alert rules and persist transitions.
   5. Cleanup data older than retention.
 
-Per-host alert configuration lives in ``manager_host_alert_settings`` +
-``manager_host_alert_rules`` and falls back to the hard-coded defaults in
-``app.core.alert_defaults``. There is no longer any global ``ALERT_*`` or
-``MONITOR_NODE_IDS`` runtime setting.
+Per-host overrides fall back to the shared notification policy. Static
+defaults seed installations without a saved policy.
 """
 
 
@@ -20,7 +18,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
@@ -38,7 +36,7 @@ from app.db.models.manager import (
 )
 from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
 from app.db.session import get_session_factory
-from app.services import agent_client, host_registry
+from app.services import host_registry
 from app.services.metrics_builder import build_metrics_row
 
 logger = logging.getLogger(__name__)
@@ -108,18 +106,11 @@ async def _probe_wings_public(
 # ---------------------------------------------------------------------------
 
 
-_SEVERITY_RANK: dict[str, int] = {"info": 0, "warning": 1, "critical": 2}
-
-
 @dataclass(frozen=True, slots=True)
 class HostAlertConfig:
     """Resolved per-host alert configuration (with defaults applied)."""
 
     host_id: int
-    email_enabled: bool
-    email_recipients: list[int]  # admin user ids; [] = use ALERT_DEFAULT_RECIPIENTS
-    min_severity: str
-    notify_resolve: bool
     cooldown_min: int
     # Per-host Manager -> Agent /v1/metrics pull tuning (NULL override =
     # inherit DEFAULT_AGENT_PULL_*). Used by _pull() below.
@@ -137,8 +128,6 @@ class HostAlertConfig:
 async def _load_host_alert_config(
     db: AsyncSession,
     host: ManagerHost,
-    *,
-    global_default_recipients: list[int],
 ) -> HostAlertConfig:
     """Load + merge per-host alert configuration, falling back to defaults."""
 
@@ -148,30 +137,13 @@ async def _load_host_alert_config(
         )
     ).scalar_one_or_none()
 
-    email_enabled = alert_defaults.DEFAULT_EMAIL_ENABLED
-    recipients: list[int] = list(global_default_recipients)
-    min_severity: str = alert_defaults.DEFAULT_MIN_SEVERITY
-    notify_resolve = alert_defaults.DEFAULT_NOTIFY_RESOLVE
-    cooldown_min = alert_defaults.DEFAULT_COOLDOWN_MIN
+    from app.services.notifications.policy import monitoring_defaults
+    defaults = await monitoring_defaults(db)
+    cooldown_min = defaults["cooldown_min"]
     agent_pull_timeout = alert_defaults.DEFAULT_AGENT_PULL_TIMEOUT
     agent_pull_attempts = alert_defaults.DEFAULT_AGENT_PULL_ATTEMPTS
 
     if settings_row is not None:
-        if settings_row.email_enabled is not None:
-            email_enabled = bool(settings_row.email_enabled)
-        if settings_row.email_recipients is not None:
-            # None on the column means "inherit global default"; an
-            # explicit empty list [] means "override to empty — send
-            # to no one". The admin UI should surface this distinction
-            # (design doc §4.4): clearing the field clears the
-            # override; saving an empty list saves an empty list.
-            raw = settings_row.email_recipients
-            if isinstance(raw, list):
-                recipients = [int(x) for x in raw if isinstance(x, (int, str)) and str(x).isdigit()]
-        if settings_row.min_severity:
-            min_severity = settings_row.min_severity
-        if settings_row.notify_resolve is not None:
-            notify_resolve = bool(settings_row.notify_resolve)
         if settings_row.cooldown_min is not None:
             cooldown_min = int(settings_row.cooldown_min)
         if settings_row.agent_pull_timeout is not None:
@@ -187,9 +159,9 @@ async def _load_host_alert_config(
 
     rules: dict[str, dict[str, Any]] = {}
     for atype in alert_defaults.ALERT_TYPES:
-        rules[atype] = alert_defaults.default_rule(atype)
+        rules[atype] = defaults["rules"].get(atype, alert_defaults.default_rule(atype))
     for row in rule_rows:
-        override: dict[str, Any] = {"enabled": row.enabled}
+        override: dict[str, Any] = {} if row.enabled is None else {"enabled": row.enabled}
         if row.threshold is not None:
             override["threshold"] = float(row.threshold)
         if row.warning_threshold is not None:
@@ -198,14 +170,15 @@ async def _load_host_alert_config(
             override["critical_threshold"] = float(row.critical_threshold)
         if row.sustain_min is not None:
             override["sustain_min"] = int(row.sustain_min)
-        rules[row.alert_type] = alert_defaults.merge_rule(row.alert_type, override)
+        rules[row.alert_type] = {**rules.get(row.alert_type, {}), **override}
+
+    disk_high = next((r for r in rule_rows if r.alert_type == "disk_high"), None)
+    disk_critical = next((r for r in rule_rows if r.alert_type == "disk_critical"), None)
+    if disk_high and disk_high.critical_threshold is not None and (not disk_critical or disk_critical.critical_threshold is None):
+        rules["disk_critical"]["critical_threshold"] = disk_high.critical_threshold
 
     return HostAlertConfig(
         host_id=host.id,
-        email_enabled=email_enabled,
-        email_recipients=recipients,
-        min_severity=min_severity,
-        notify_resolve=notify_resolve,
         cooldown_min=cooldown_min,
         agent_pull_timeout=agent_pull_timeout,
         agent_pull_attempts=agent_pull_attempts,
@@ -213,89 +186,26 @@ async def _load_host_alert_config(
     )
 
 
-async def _load_global_default_recipients(db: AsyncSession) -> list[int]:
-    """Read ``ALERT_DEFAULT_RECIPIENTS`` (comma-separated admin ids) from settings."""
-
-    store = get_settings_store()
-    raw = await store.get(db, "ALERT_DEFAULT_RECIPIENTS", "") or ""
-    return [int(x) for x in str(raw).split(",") if x.strip().isdigit()]
-
-
-async def _resolve_admin_emails(db: AsyncSession, admin_ids: list[int]) -> list[tuple[int, str]]:
-    """Resolve admin user IDs to (id, email) pairs. Empty list -> all admins."""
-    from app.db.models.pterodactyl import PteroUser
-
-    if admin_ids:
-        stmt = select(PteroUser.id, PteroUser.email).where(
-            PteroUser.id.in_(admin_ids), PteroUser.root_admin.is_(True),
-        )
-    else:
-        stmt = select(PteroUser.id, PteroUser.email).where(PteroUser.root_admin.is_(True))
-    result = await db.execute(stmt)
-    return [(rid, email) for rid, email in result.all() if email]
-
-
-def _severity_passes(config: HostAlertConfig, severity: str) -> bool:
-    min_rank = _SEVERITY_RANK.get(config.min_severity, 1)
-    cur_rank = _SEVERITY_RANK.get(severity, 1)
-    return cur_rank >= min_rank
-
-
 async def _maybe_notify(
     db: AsyncSession,
     config: HostAlertConfig,
     *,
     host_name: str,
-    host_id: int | None,
     alert_obj: HostAlert,
     kind: str,  # 'fired' | 'resolved'
     now: datetime,
 ) -> None:
-    """Apply gating (channel enabled / type / severity / cooldown) then send."""
-    if not config.email_enabled:
-        return
-    if kind == "resolved" and not config.notify_resolve:
-        return
+    """Apply rule, mute and cooldown gates before enqueueing a notification."""
     if not config.type_enabled(alert_obj.alert_type):
         return
-    if not _severity_passes(config, alert_obj.severity):
+    if kind == "fired" and alert_obj.muted_until and alert_obj.muted_until > now:
+        return
+    if kind == "fired" and alert_obj.last_notified_at and now - alert_obj.last_notified_at < timedelta(minutes=config.cooldown_min):
         return
 
-    if kind == "fired":
-        last_at = alert_obj.last_notified_at
-        if last_at and (now - last_at) < timedelta(minutes=config.cooldown_min):
-            return
+    from app.services.notifications.events import monitoring_alert
 
-    recipients = await _resolve_admin_emails(db, config.email_recipients)
-    if not recipients:
-        return
-
-    from app.services.email import send_alert_email
-    sent_any = False
-    for _uid, email in recipients:
-        ok, err = await send_alert_email(
-            db,
-            recipient_email=email,
-            host_name=host_name,
-            host_id=host_id,
-            alert_type=alert_obj.alert_type,
-            severity=alert_obj.severity,
-            message=alert_obj.message or "",
-            fired_at=alert_obj.created_at,
-            resolved_at=alert_obj.resolved_at,
-            kind=kind,
-        )
-        if ok:
-            sent_any = True
-        else:
-            logger.warning(
-                "alert email send failed (node=%s type=%s kind=%s recipient=%s): %s",
-                host_id, alert_obj.alert_type, kind, email, err,
-            )
-
-    if sent_any and kind == "fired":
-        alert_obj.notified = True
-        alert_obj.last_notified_at = now
+    await monitoring_alert(db, alert=alert_obj, host_name=host_name, kind=kind, cooldown_min=config.cooldown_min)
 
 
 async def _check_alerts(
@@ -308,6 +218,9 @@ async def _check_alerts(
 ) -> None:
     host_id = config.host_id
     now = utc_naive_now()
+    for alert_type in alert_defaults.ALERT_TYPES:
+        if not config.type_enabled(alert_type):
+            await _auto_resolve(db, host_id, alert_type, now, host_name=host_name)
 
     # --- reachability ---
     if is_wings:
@@ -332,7 +245,7 @@ async def _check_alerts(
 
         # 3 mutually-exclusive states for wings nodes
         if not metrics.agent_online and not wings_reachable:
-            if await _check_offline_sustained(db, host_id, field_name="agent_online", minutes=node_offline_sustain):
+            if await _check_offline_sustained(db, host_id, field_name="node_offline", minutes=node_offline_sustain):
                 await _raise_or_skip(db, host_id, "node_offline", "critical",
                                      f"Host {host_id} unreachable (agent + wings down) - sustained offline {node_offline_sustain}m window",
                                      now, config=config, host_name=host_name)
@@ -415,9 +328,10 @@ async def _check_alerts(
     if metrics.swap_total_mb and metrics.swap_total_mb > 0 and metrics.swap_used_mb is not None:
         swap_pct = round(metrics.swap_used_mb * 100.0 / metrics.swap_total_mb, 1)
     if swap_pct is not None and swap_pct > swap_threshold:
-        await _raise_or_skip(db, host_id, "swap_high", "warning",
-                             f"Swap {swap_pct}% > {swap_threshold}%",
-                             now, config=config, host_name=host_name)
+        if await _check_sustained_above(db, host_id, "swap_pct", swap_threshold, minutes=int(swap_rule.get("sustain_min") or 5)):
+            await _raise_or_skip(db, host_id, "swap_high", "warning",
+                                 f"Swap {swap_pct}% > {swap_threshold}%",
+                                 now, config=config, host_name=host_name)
     else:
         await _auto_resolve(db, host_id, "swap_high", now,
                             config=config, host_name=host_name)
@@ -443,11 +357,14 @@ async def _check_alerts(
     disk_rule = config.rule("disk_high")
     disk_warn = float(disk_rule.get("warning_threshold") or 85)
     disk_crit = float(disk_rule.get("critical_threshold") or 95)
+    critical_rule = config.rule("disk_critical")
+    disk_crit = float(critical_rule.get("critical_threshold") or disk_crit)
     if metrics.disk_pct is not None:
-        if metrics.disk_pct > disk_crit:
+        if metrics.disk_pct > disk_crit and config.type_enabled("disk_critical"):
             await _raise_or_skip(db, host_id, "disk_critical", "critical",
                                  f"Disk {metrics.disk_pct}% > {disk_crit}%",
                                  now, config=config, host_name=host_name)
+            await _auto_resolve(db, host_id, "disk_high", now, host_name=host_name)
         elif metrics.disk_pct > disk_warn:
             await _raise_or_skip(db, host_id, "disk_high", "warning",
                                  f"Disk {metrics.disk_pct}% > {disk_warn}%",
@@ -464,62 +381,32 @@ async def _check_alerts(
 async def _check_sustained_above(
     db: AsyncSession, host_id: int, field_name: str, threshold: float, minutes: int,
 ) -> bool:
-    """Return True if the field has been sustainedly above threshold.
-
-    New semantics (see CR M5 / 2.6):
-      - Look back `minutes` minutes.
-      - Require at least 3 non-null samples to avoid cold-start false positives.
-      - Require >= 80% of samples to be > threshold (allows brief dips).
-      - The previous `(rows[-1] - rows[0]) >= (minutes-1)*60s` span guard is
-        removed: it caused alert delay whenever the pull loop drifted a few
-        seconds, while adding no real safety (the sample-count gate already
-        prevents firing on a single spike).
-    """
-    col = getattr(HostMetrics, field_name)
-    cutoff = utc_naive_now() - timedelta(minutes=minutes)
-    result = await db.execute(
-        select(col, HostMetrics.ts)
-        .where(HostMetrics.host_id == host_id, col.isnot(None), HostMetrics.ts >= cutoff)
-        .order_by(HostMetrics.ts.asc())
-    )
-    rows = result.all()
-    if len(rows) < 3:
-        return False
-    above = sum(1 for v, _ts in rows if v > threshold)
-    return (above / len(rows)) >= 0.8
+    col = (HostMetrics.swap_used_mb * 100.0 / func.nullif(HostMetrics.swap_total_mb, 0)) if field_name == "swap_pct" else getattr(HostMetrics, field_name)
+    return await _condition_sustained(db, host_id, col > threshold, minutes)
 
 
 async def _check_offline_sustained(
     db: AsyncSession, host_id: int, *, field_name: str, minutes: int,
 ) -> bool:
-    """Return True if the host has been sustainedly offline.
+    condition: Any = HostMetrics.agent_online.is_not(True)
+    if field_name == "node_offline":
+        condition = condition & HostMetrics.wings_online.is_not(True) & HostMetrics.public_reachable.is_not(True)
+    return await _condition_sustained(db, host_id, condition, minutes)
 
-    Availability sustain gate - mirrors ``_check_sustained_above`` but for
-    boolean ``agent_online`` columns where "down" is the alert condition
-    (value is False / 0 / None). Used to prevent a single dropped pull
-    (common on cross-border links with 500 ms+ RTT) from firing a critical
-    ``node_offline`` alert that self-resolves one cycle later.
 
-    Semantics ("last-N-samples" instead of a fixed wall-clock window so the
-    gate stays stable when the monitoring cycle overruns - see audit M1):
-      - N = max(2, ``minutes``) most recent samples (at the default 60 s
-        cycle this matches ``minutes``; under overrun it still looks back
-        the intended number of cycles rather than silently starving).
-      - Require >= 80% of those N samples to be falsy.
-    """
-    col = getattr(HostMetrics, field_name)
-    n = max(2, minutes)
-    result = await db.execute(
-        select(col)
-        .where(HostMetrics.host_id == host_id)
-        .order_by(HostMetrics.ts.desc())
-        .limit(n)
-    )
-    rows = result.scalars().all()
-    if len(rows) < 2:
+async def _condition_sustained(db: AsyncSession, host_id: int, condition: Any, minutes: int) -> bool:
+    latest = await db.scalar(select(func.max(HostMetrics.ts)).where(HostMetrics.host_id == host_id))
+    if latest is None:
         return False
-    down = sum(1 for v in rows if not v)
-    return (down / len(rows)) >= 0.8
+    # Pull retries extend collection cycles; measure the window using samples,
+    # including the closest preceding sample, rather than the scheduler interval.
+    baseline = select(func.max(HostMetrics.ts)).where(
+        HostMetrics.host_id == host_id, HostMetrics.ts <= latest - timedelta(minutes=minutes),
+    ).scalar_subquery()
+    values = (await db.scalars(select(condition).where(
+        HostMetrics.host_id == host_id, HostMetrics.ts >= baseline,
+    ))).all()
+    return len(values) >= 2 and sum(bool(value) for value in values) / len(values) >= 0.8
 
 
 _SEVERITY_TO_AUDIT_STATUS = {"critical": "failed", "warning": "partial", "info": "info"}
@@ -593,7 +480,7 @@ async def _raise_or_skip(
         if config is not None:
             await _maybe_notify(
                 db, config,
-                host_name=host_name, host_id=host_id,
+                host_name=host_name,
                 alert_obj=open_row, kind="fired", now=now,
             )
         return
@@ -610,7 +497,7 @@ async def _raise_or_skip(
     if config is not None:
         await _maybe_notify(
             db, config,
-            host_name=host_name, host_id=host_id,
+            host_name=host_name,
             alert_obj=alert, kind="fired", now=now,
         )
 
@@ -641,15 +528,9 @@ async def _auto_resolve(
             db, alert_obj=row, kind="resolved",
             host_name=host_name, duration_seconds=duration,
         )
-
-    if config is not None and config.notify_resolve:
-        for row in open_rows:
-            if row.notified:
-                await _maybe_notify(
-                    db, config,
-                    host_name=host_name, host_id=host_id,
-                    alert_obj=row, kind="resolved", now=now,
-                )
+        if config is not None:
+            await _maybe_notify(db, config, host_name=host_name,
+                                alert_obj=row, kind="resolved", now=now)
 
 
 async def _check_probe_alerts(
@@ -788,15 +669,11 @@ async def run_monitoring_collect() -> None:
             nresult = await db.execute(select(PanelNode).where(PanelNode.id.in_(nids)))
             wings_nodes = {n.id: n for n in nresult.scalars().all()}
 
-        global_recipients = await _load_global_default_recipients(db)
-
         # Resolve credentials + alert config per host.
         host_metas: list[tuple[ManagerHost, str, str]] = []
         host_configs: dict[int, HostAlertConfig] = {}
         for host in hosts:
-            config = await _load_host_alert_config(
-                db, host, global_default_recipients=global_recipients,
-            )
+            config = await _load_host_alert_config(db, host)
             host_configs[host.id] = config
             try:
                 endpoint, token = host_registry.decrypt_credentials(host)
@@ -908,6 +785,7 @@ async def run_monitoring_collect() -> None:
                     ))
 
             host_config: HostAlertConfig | None = host_configs.get(host_id)
+            await db.flush()
             if host_config is not None:
                 host_row: ManagerHost | None = next((h for h in hosts if h.id == host_id), None)
                 host_name = host_row.name if host_row else f"host-{host_id}"

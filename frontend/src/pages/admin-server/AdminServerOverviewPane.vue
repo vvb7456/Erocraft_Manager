@@ -235,7 +235,7 @@ async function copy(text: string) {
             rel="noopener"
           >
             <MsIcon name="open_in_new" size="xxs" />
-            {{ t('adminServer.overview.openConsole') }}
+            <span class="console-link__label">{{ t('adminServer.overview.openConsole') }}</span>
           </a>
           <span v-else>—</span>
         </div>
@@ -482,7 +482,7 @@ async function copy(text: string) {
   min-width: 0;
 }
 .ident-card__value.mono {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-base);
   font-weight: 500;
 }
@@ -505,7 +505,7 @@ async function copy(text: string) {
   min-width: 0;
 }
 .ident-card__sub.mono {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 
 .ident-card__value--power {
@@ -524,7 +524,7 @@ async function copy(text: string) {
   cursor: pointer;
   transition: color .15s;
 }
-.console-link:hover { text-decoration: underline; }
+.console-link:hover .console-link__label { text-decoration: underline; }
 
 .mini-btn {
   display: inline-flex;
@@ -686,7 +686,7 @@ async function copy(text: string) {
 
 .hint { color: var(--t3); font-size: var(--text-xs); }
 .mono {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
 }
 .uuid {

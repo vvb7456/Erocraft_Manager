@@ -85,11 +85,11 @@ const dirtyForm = provideDirtyForm({
       title: t('serverSettings.unsavedTitle'),
       message: t('serverSettings.unsavedMessage'),
       confirmText: t('serverSettings.unsavedSave'),
-      cancelText: t('serverSettings.unsavedDiscard'),
-      altText: t('serverSettings.unsavedStay'),
+      cancelText: t('serverSettings.unsavedStay'),
+      altText: t('serverSettings.unsavedDiscard'),
     })
-    if (result === 'alt') return 'stay'
-    return result === true ? 'save' : 'discard'
+    if (result === 'alt') return 'discard'
+    return result === true ? 'save' : 'stay'
   },
 })
 dirtyForm.attachLeaveGuard()

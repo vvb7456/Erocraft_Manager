@@ -11,7 +11,7 @@
  */
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
@@ -47,10 +47,11 @@ const { get, post } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 const router = useRouter()
+const route = useRoute()
 const { formatDateTime: formatTime } = useFormatDate()
 
 // ── Filters ──
-const searchTerm = ref('')
+const searchTerm = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const statusFilter = ref('')
 const kindFilter = ref('')
 const channelFilter = ref('')
@@ -117,6 +118,7 @@ async function loadOrders() {
   loading.value = false
 }
 
+watch(() => route.query.q, value => { searchTerm.value = typeof value === 'string' ? value : '' })
 watch([searchTerm, statusFilter, kindFilter, channelFilter], () => {
   if (page.value === 1) {
     void loadOrders()
@@ -467,7 +469,7 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
 
 /* ── Cells ── */
 code {
-  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   background: var(--bg-in);
   padding: 2px 6px;
@@ -476,7 +478,7 @@ code {
 }
 
 .mono {
-  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-family: var(--font-mono);
 }
 
 .plan-name {
@@ -550,11 +552,7 @@ code {
     min-width: 0;
   }
 }
-</style>
-
-<style>
-/* ── OrdersTab column widths (non-scoped — must pierce DataTable slot boundary) ── */
-.orders-table-wrap .dt-table {
+.orders-table-wrap :deep(.dt-table) {
   table-layout: fixed;
 }
 

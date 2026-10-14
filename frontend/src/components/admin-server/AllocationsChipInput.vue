@@ -207,14 +207,14 @@ onBeforeUnmount(() => {
   border-radius: var(--r-pill);
   font-size: var(--text-xs);
   color: var(--t1);
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
 }
 .chip--primary {
   border-color: var(--bd-f);
   background: color-mix(in srgb, var(--ac) 15%, var(--bg3));
 }
 .chip__tag {
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: .03em;
@@ -284,7 +284,7 @@ onBeforeUnmount(() => {
   background: var(--bg4);
 }
 .aci__opt-addr {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   flex: 1;
   min-width: 0;
 }

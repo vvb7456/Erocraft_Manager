@@ -12,7 +12,8 @@ import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
-import SectionToolbar from '@/components/ui/SectionToolbar.vue'
+import ListToolbar from '@/components/ui/ListToolbar.vue'
+import PageHeaderActions from '@/components/layout/PageHeaderActions.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -106,6 +107,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.va
 // ── Selection (multi-select via custom checkbox column) ──
 // Only "free" allocations (server === null) can be selected for delete.
 const selectedIds = ref<Set<number>>(new Set())
+const batchBusy = ref(false)
 const selectableIds = computed(() => items.value.filter(a => !a.server).map(a => a.id))
 const allSelected = computed({
   get: () => {
@@ -151,7 +153,7 @@ async function load(silent = false) {
       summary.value = data.summary
       total.value = data.total
       // Drop any selection that no longer references a visible row.
-      const visible = new Set(data.items.map(i => i.id))
+      const visible = new Set(data.items.filter(i => !i.server).map(i => i.id))
       const next = new Set<number>()
       selectedIds.value.forEach(id => { if (visible.has(id)) next.add(id) })
       selectedIds.value = next
@@ -225,15 +227,17 @@ async function deleteOne(a: AllocationOut) {
 }
 
 async function bulkDelete() {
+  if (batchBusy.value) return
   const ids = Array.from(selectedIds.value)
   if (ids.length === 0) return
-  const ok = await confirm({
-    title: t('hosts.allocations.delete.bulkTitle'),
-    message: t('hosts.allocations.delete.bulkMsg', { n: ids.length }),
-    variant: 'danger',
-  })
-  if (!ok) return
+  batchBusy.value = true
   try {
+    const ok = await confirm({
+      title: t('hosts.allocations.delete.bulkTitle'),
+      message: t('hosts.allocations.delete.bulkMsg', { n: ids.length }),
+      variant: 'danger',
+    })
+    if (!ok) return
     const res = await raw(`/api/admin/hosts/${hostId.value}/allocations`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -262,7 +266,7 @@ async function bulkDelete() {
     }
   } catch {
     toast(t('hosts.allocations.delete.failed'), 'error')
-  }
+  } finally { batchBusy.value = false }
 }
 
 function onCreated() {
@@ -289,7 +293,10 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
   </AlertBanner>
 
   <div v-else class="alloc-pane">
-    <SectionToolbar>
+    <PageHeaderActions>
+      <BaseButton size="sm" variant="primary" :disabled="batchBusy" @click="createOpen = true"><MsIcon name="add" size="xs" />{{ t('hosts.allocations.actions.create') }}</BaseButton>
+    </PageHeaderActions>
+    <ListToolbar :selected-count="selectedIds.size" :busy="batchBusy" @clear="clearSelection">
       <template #start>
         <div class="tb-search-row">
           <FilterInput
@@ -321,27 +328,11 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
             @update:modelValue="page = 1"
           />
         </div>
-        <div class="tb-btn-group">
-          <BaseButton
-            v-if="selectedIds.size > 0"
-            size="sm"
-            variant="danger"
-            @click="bulkDelete"
-          >
-            <MsIcon name="delete" size="xs" />
-            {{ t('hosts.allocations.selection.bulkDelete') }} ({{ selectedIds.size }})
-          </BaseButton>
-          <BaseButton
-            size="sm"
-            variant="primary"
-            @click="createOpen = true"
-          >
-            <MsIcon name="add" size="xs" />
-            {{ t('hosts.allocations.actions.create') }}
-          </BaseButton>
-        </div>
       </template>
-    </SectionToolbar>
+      <template #selection-actions>
+        <BaseButton size="sm" variant="danger" :disabled="batchBusy" :aria-label="t('hosts.allocations.selection.bulkDelete')" :title="t('hosts.allocations.selection.bulkDelete')" @click="bulkDelete"><MsIcon name="delete" size="sm" /><span class="selection-action-label">{{ t('hosts.allocations.selection.bulkDelete') }}</span></BaseButton>
+      </template>
+    </ListToolbar>
 
     <MobileFilterSheet
       v-model:open="mobileFilterOpen"
@@ -352,6 +343,7 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
       @update:filter="onMobileFilter"
     />
 
+    <div :inert="batchBusy">
     <DataTable
       :items="items"
       :page="page"
@@ -435,6 +427,7 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
       <template #card="{ item: a }">
         <CardTap>
           <div class="card-row--main">
+            <input type="checkbox" :disabled="!!a.server" :checked="selectedIds.has(a.id)" :aria-label="t('common.selection.select', { name: `${a.ip}:${a.port}` })" @click.stop @change="toggleSelect(a.id)" />
             <span class="card-name mono">
               {{ a.ip }}:{{ a.port }}
             </span>
@@ -474,6 +467,7 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
         </CardTap>
       </template>
     </DataTable>
+    </div>
 
     <CreateAllocationsModal
       v-if="hostId"
@@ -502,8 +496,6 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
   white-space: nowrap;
 }
 
-/* SectionToolbar provides .tb-search / .tb-select-group / .tb-btn-group /
-   .tb-status / .tb-help / .tb-batch :slotted styles globally; no need to redefine here. */
 
 /* ── Table cells ── */
 .col-check { width: 36px; text-align: center !important; padding-right: 0 !important; }
@@ -543,7 +535,7 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
   vertical-align: bottom;
 }
 
-.mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.mono { font-family: var(--font-mono); }
 .tabular { font-variant-numeric: tabular-nums; }
 
 /* ── Mobile card slot ── */

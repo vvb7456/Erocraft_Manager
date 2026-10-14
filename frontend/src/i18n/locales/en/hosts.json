@@ -1,5 +1,5 @@
 {
-  "title": "Hosts",
+  "title": "Host Management",
   "summary": {
     "total": "{n} total"
   },
@@ -38,7 +38,6 @@
     "unconfigured": "Unconfigured"
   },
   "toolbar": {
-    "globalDefaults": "Global defaults",
     "create": "Add host",
     "filterKind": "Kind",
     "filterStatus": "Status",
@@ -84,23 +83,6 @@
     "label": "Agent Token",
     "copied": "Token copied",
     "done": "I have saved it"
-  },
-  "globalDefaults": {
-    "title": "Global defaults",
-    "fields": {
-      "interval": "Poll interval (seconds)",
-      "intervalHint": "Pull cadence shared by every host, 30 – 3600.",
-      "retention": "Monitoring retention (days)",
-      "retentionHint": "Older samples are pruned, 1 – 365.",
-      "recipients": "Default alert recipients",
-      "recipientsHint": "New hosts inherit this list; existing hosts can override per-host.",
-      "recipientsEmpty": "No admin accounts available"
-    },
-    "loading": "Loading…",
-    "save": "Save",
-    "saved": "Global defaults saved",
-    "saveFailed": "Save failed",
-    "cancel": "Cancel"
   },
   "time": {
     "never": "—"
@@ -196,6 +178,7 @@
     "probeOk": "Probe OK ({ms} ms)",
     "probeFail": "Probe failed: {err}",
     "agent": {
+      "desc": "Manage host identity, Agent connection address, and access credentials.",
       "title": "Agent connection",
       "kindLocked": "Kind cannot be changed after creation.",
       "panelNodeLocked": "Panel node binding is fixed; recreate the host to change it.",
@@ -209,7 +192,8 @@
       "probe": "Probe"
     },
     "wings": {
-      "desc": "Maintain this node's Wings and Panel node parameters, and restart Wings when needed.",
+      "title": "Wings Node Configuration",
+      "desc": "Manage node connectivity, resource capacity, and the server runtime.",
       "notWings": "This host is not a Wings node",
       "saved": "Saved ({n} field(s) changed)",
       "cancel": "Cancel",
@@ -271,7 +255,8 @@
       "channelSection": "Notification channel",
       "rulesSection": "Alert types & thresholds",
       "rulesTip": "Disabled types will not raise alerts on this host. Unmodified thresholds use global defaults.",
-      "pullSection": "Agent pull tuning",
+      "pullSection": "Monitoring Data Collection",
+      "pullDesc": "Set timeouts and retries for collecting monitoring data from this host's Agent.",
       "threshold": "Threshold",
       "warningThreshold": "warning %",
       "criticalThreshold": "critical %",
@@ -311,6 +296,7 @@
       }
     },
     "danger": {
+      "desc": "Remove host records that no longer need to be managed.",
       "title": "Danger zone",
       "deleteTitle": "Delete host",
       "deleteMsg": "Permanently removes this host record. The Pterodactyl Panel node is not affected."
@@ -378,6 +364,7 @@
     "notWings": "Allocations are only available for wings_node hosts."
   },
   "certs": {
+    "desc": "Manage certificate bindings, deployment, and synchronization for this host.",
     "title": "Certificate Deployment",
     "labelDomains": "Domains: ",
     "labelTarget": "Target: ",

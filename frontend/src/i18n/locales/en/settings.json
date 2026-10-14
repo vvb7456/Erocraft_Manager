@@ -1,5 +1,5 @@
 {
-  "title": "Settings",
+  "title": "System Settings",
   "save": "Save Settings",
   "saved": "Settings saved",
   "unsavedHint": "You have unsaved changes",
@@ -14,6 +14,12 @@
     "header": "{n} item(s) need to be fixed before saving",
     "invalidUrl": "Must start with http:// or https://",
     "invalidEmail": "Invalid email address"
+  },
+  "monitoring": {
+    "title": "Host monitoring",
+    "desc": "Set the collection interval and data retention period for all hosts.",
+    "interval": "Poll interval (seconds)",
+    "retention": "Monitoring retention (days)"
   },
   "smtp": {
     "title": "SMTP Email",
@@ -33,7 +39,7 @@
     "testInvalid": "Please enter a valid email address"
   },
   "branding": {
-    "title": "Appearance",
+    "title": "Site Appearance",
     "desc": "Customize system name, branding, and page elements.",
     "brandName": "Brand Name",
     "systemName": "System Name",
@@ -45,8 +51,8 @@
     "allowRegistration": "Allow public registration",
     "allowRegistration_tip": "When disabled, the sign-up button is hidden and only admins can create users.",
     "support": {
-      "title": "Support Contact Info",
-      "desc": "Configure contact info shown in the support modal. Empty fields are hidden.",
+      "title": "Online Support",
+      "desc": "Manage support contacts, service information, and chat welcome messages.",
       "email": "Support Email",
       "qqGroup": "QQ Group",
       "qq": "Support QQ",
@@ -57,9 +63,10 @@
   },
   "agreements": {
     "title": "User Agreements",
-    "desc": "Manage the body of agreements shown at registration.",
-    "subtitle_tos": "The Terms of Service shown on the registration page.",
-    "subtitle_privacy": "The Privacy Policy shown on the registration page.",
+    "registrationTitle": "Registration Agreements",
+    "desc": "Manage agreement acceptance during registration.",
+    "subtitle_tos": "Explain service scope, usage rules, and the rights and responsibilities of both parties.",
+    "subtitle_privacy": "Explain how personal information is collected, used, and protected.",
     "default_checked": "Check agreements by default at registration",
     "default_checked_tip": "When enabled, the registration form's agreement checkbox is checked by default. Users can still uncheck it.",
     "edit_zh": "Edit Chinese",
@@ -73,30 +80,39 @@
     "save_ok": "Saved and published"
   },
   "payment": {
-    "title": "Payment",
+    "title": "Payment Channels",
+    "gatewayDescriptions": {
+      "hupijiao": "Collect website order payments through Hupijiao.",
+      "alipay_direct": "Collect order payments directly with your Alipay merchant account.",
+      "wechat_pay": "Collect order payments by QR code, in WeChat, or through the payment mini program."
+    },
+    "wechat": {
+      "officialAccountDesc": "Service account credentials for payments within WeChat.",
+      "miniProgramDesc": "Mini program credentials for mobile order payments."
+    },
     "gateways": {
       "enabled": "Enable Gateway",
-      "hupijiao": "Hupijiao (Alipay)",
-      "alipay_direct": "Alipay (direct)"
+      "hupijiao": "Hupijiao",
+      "alipay_direct": "Alipay"
     },
     "credentials": {
       "title": "Gateway Credentials",
-      "desc": "Configure the AppID and AppSecret. Changes take effect immediately.",
+      "desc": "Application, merchant identity, and authentication details for the payment platform.",
       "displayName": "Display Name",
       "appid": "AppID",
       "appsecret": "AppSecret"
     },
     "urls": {
-      "title": "URL Configuration",
-      "desc": "Configure Referer and gateway endpoints. Notify/return URLs are auto-derived from the system Site URL (Appearance settings)."
+      "title": "Payment Endpoints",
+      "desc": "Request origin and endpoints for connecting to Hupijiao."
     },
     "referer": "Referer",
     "referer_tip": "Referer header sent with payment requests, usually your site root URL.",
     "gatewayEndpoints": "Gateway Endpoints",
     "gatewayEndpoints_tip": "Comma-separated fallback endpoints tried in order.",
     "quotas": {
-      "title": "Order Quotas & Policy",
-      "desc": "Configure order timeout and per-user limits."
+      "title": "Payment & Refund Time Limits",
+      "desc": "Set payment validity and the time limit for overdue refund alerts."
     },
     "payTimeout": "QR Code Validity (min)",
     "payTimeout_tip": "QR code validity is capped at 5 minutes. Keeping it at 5 is recommended.",
@@ -126,22 +142,22 @@
     "dockerImage": "Docker Image"
   },
   "automation": {
-    "title": "Automation",
+    "title": "Scheduled Tasks",
     "time": {
-      "title": "Timezone & Schedule Basis",
-      "desc": "Set the timezone used by automation jobs; all schedule times are interpreted in this timezone."
+      "title": "Task Timezone",
+      "desc": "The timezone for scheduled suspension, deletion, and email reminders."
     },
     "timezone": "Timezone",
     "suspend": {
       "title": "Auto Suspend",
-      "desc": "Automatically suspend servers after expiration",
+      "desc": "Schedule suspension of expired servers to manage access after service expiry.",
       "enabled": "Enable Auto Suspend",
       "runHour": "Run Hour",
       "runMinute": "Run Minute"
     },
     "delete": {
       "title": "Auto Delete",
-      "desc": "Automatically delete servers after being suspended for a certain number of days",
+      "desc": "Remove suspended servers past their retention period to release host resources.",
       "enabled": "Enable Auto Delete",
       "days": "Days After Suspend"
     },
@@ -154,7 +170,7 @@
     }
   },
   "marketing": {
-    "title": "Marketing",
+    "title": "Referral Rewards",
     "referral": {
       "title": "Referral Rewards",
       "desc": "Grant a coupon to both inviter and invitee after the invitee's first qualifying paid order.",
@@ -181,19 +197,22 @@
     "title": "Account Settings"
   },
   "llm": {
-    "title": "LLM Quota",
+    "title": "Model Services",
     "general": {
-      "title": "Global Toggle",
+      "title": "Included Plan Quota",
+      "desc": "Provide model usage quota with plans that include LLM benefits.",
       "enabled": "Enable LLM Free Quota",
       "enabledHint": "When enabled, users subscribing to plans with LLM quota will receive a free LLM API key, automatically injected into their SillyTavern container."
     },
     "connection": {
       "title": "NewAPI Connection",
+      "desc": "Connect to the NewAPI service that manages user keys and model quotas.",
       "baseUrl": "Base URL",
       "adminToken": "Admin Token"
     },
     "injection": {
-      "title": "SillyTavern Injection",
+      "title": "SillyTavern Endpoint",
+      "desc": "The API address SillyTavern uses to access model services.",
       "stEndpoint": "ST Endpoint URL"
     }
   }

@@ -8,6 +8,7 @@ import { provideDirtyForm } from '@/composables/useDirtyForm'
 import HostWingsSection from './sections/HostWingsSection.vue'
 import DirtyBar from '@/components/ui/DirtyBar.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
+import SectionHeader from '@/components/ui/SectionHeader.vue'
 import type { HostDetail } from '@/types/host'
 
 defineOptions({ name: 'HostWingsPane' })
@@ -27,8 +28,8 @@ dirtyForm.attachLeaveGuard()
   <div v-if="!host" class="muted">{{ t('hosts.detail.loading') }}</div>
   <div v-else-if="!isWings || !hostId" class="muted">{{ t('hosts.setting.wings.notWings') }}</div>
   <div v-else class="wings-panel">
-    <BaseCard variant="bg2" class="wings-card">
-      <p class="section-note">{{ t('hosts.setting.wings.desc') }}</p>
+    <BaseCard variant="bg2" density="compact">
+      <SectionHeader icon="dns" :subtitle="t('hosts.setting.wings.desc')" flush>{{ t('hosts.setting.wings.title') }}</SectionHeader>
       <HostWingsSection :hostId="hostId" />
     </BaseCard>
   </div>
@@ -53,14 +54,4 @@ dirtyForm.attachLeaveGuard()
   margin-right: auto;
 }
 
-.wings-card {
-  padding: var(--sp-2);
-}
-
-.section-note {
-  margin: 0 0 var(--sp-3);
-  color: var(--t2);
-  font-size: .84rem;
-  line-height: 1.5;
-}
 </style>

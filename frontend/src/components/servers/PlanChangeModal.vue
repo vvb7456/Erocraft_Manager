@@ -34,6 +34,7 @@ const props = defineProps<{
   currentPlanName?: string | null
   batchMode?: boolean
   batchCount?: number
+  busy?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -92,10 +93,12 @@ onMounted(() => {
 })
 
 function close() {
+  if (props.busy) return
   emit('update:modelValue', false)
 }
 
 async function onConfirm() {
+  if (props.busy || submitting.value) return
   submitting.value = true
   try {
     const planId = selectedPlanId.value === '' ? null : Number(selectedPlanId.value)
@@ -113,7 +116,7 @@ const title = computed(() =>
 </script>
 
 <template>
-  <BaseModal :model-value="modelValue" :title="title" @update:model-value="emit('update:modelValue', $event)">
+  <BaseModal :model-value="modelValue" :title="title" :persistent="busy" @update:model-value="emit('update:modelValue', $event)">
     <div class="plan-change">
       <div v-if="!batchMode" class="current-line">
         <span class="cb-label">{{ t('servers.modal.updatePlan.currentBinding') }}</span>
@@ -126,13 +129,13 @@ const title = computed(() =>
       </div>
 
       <FormField :label="t('servers.modal.updatePlan.targetPlan')">
-        <BaseSelect v-model="selectedPlanId" :options="planOptions" :placeholder="t('servers.modal.updatePlan.unbindOption')" teleport />
+        <BaseSelect v-model="selectedPlanId" :options="planOptions" :placeholder="t('servers.modal.updatePlan.unbindOption')" :disabled="busy" teleport />
       </FormField>
     </div>
 
     <template #footer>
-      <BaseButton variant="ghost" @click="close">{{ t('common.btn.cancel') }}</BaseButton>
-      <BaseButton variant="primary" :loading="submitting" @click="onConfirm">
+      <BaseButton variant="ghost" :disabled="busy" @click="close">{{ t('common.btn.cancel') }}</BaseButton>
+      <BaseButton variant="primary" :loading="submitting || busy" @click="onConfirm">
         {{ t('common.btn.confirm') }}
       </BaseButton>
     </template>

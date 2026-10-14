@@ -766,7 +766,7 @@ onBeforeUnmount(() => {
 
 .prompt {
   color: var(--ac);
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: var(--text-sm);
 }
@@ -777,7 +777,7 @@ onBeforeUnmount(() => {
   border: none;
   outline: none;
   color: var(--t1);
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
 
@@ -845,7 +845,7 @@ onBeforeUnmount(() => {
   font-weight: 500;
   color: var(--t1);
   margin-left: auto;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* Server info row separator end */
@@ -875,13 +875,13 @@ onBeforeUnmount(() => {
 }
 
 .lifecycle-value {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--t1);
 }
 
 .lifecycle-remaining {
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   font-weight: 600;
 }

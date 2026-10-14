@@ -21,6 +21,7 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import PageHeader from '@/components/layout/PageHeader.vue'
+import PageHeaderActions from '@/components/layout/PageHeaderActions.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -250,6 +251,9 @@ function openMobileAction(plan: AdminPlan) {
 
 <template>
   <PageHeader v-if="props.standalone" icon="local_offer" :title="t('billing.admin.plans.pageTitle')" />
+  <PageHeaderActions>
+    <BaseButton size="sm" variant="primary" @click="openCreate"><MsIcon name="add" size="xs" />{{ t('billing.admin.plans.create') }}</BaseButton>
+  </PageHeaderActions>
 
   <div :class="props.standalone ? 'page-body' : ''">
     <SectionToolbar>
@@ -283,11 +287,6 @@ function openMobileAction(plan: AdminPlan) {
             fit
             @update:modelValue="page = 1"
           />
-        </div>
-        <div class="tb-btn-group">
-          <BaseButton size="sm" variant="primary" @click="openCreate">
-            <MsIcon name="add" size="xs" /> {{ t('billing.admin.plans.create') }}
-          </BaseButton>
         </div>
       </template>
     </SectionToolbar>
@@ -432,11 +431,11 @@ function openMobileAction(plan: AdminPlan) {
 :deep(.col-actions) { width: 26%; }
 
 .mono {
-  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-family: var(--font-mono);
 }
 
 code {
-  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   background: var(--bg-in);
   padding: 2px 6px;

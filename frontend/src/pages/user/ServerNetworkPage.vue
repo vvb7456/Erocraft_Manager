@@ -441,7 +441,7 @@ useDirtyFormSection(
 }
 .sub-row :deep(.form-input) { flex: 1; min-width: 0; }
 .sub-suffix {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--t2);
   white-space: nowrap;

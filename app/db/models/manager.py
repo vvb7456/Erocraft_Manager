@@ -218,7 +218,7 @@ class HostAlertRule(Base):
         nullable=False,
     )
     alert_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
     warning_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
     critical_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -294,6 +294,7 @@ class ManagerCertDeployment(Base):
     deployed_fingerprint_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     deployed_not_after: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_check_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    unhealthy_since: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_check_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_deploy_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_deploy_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

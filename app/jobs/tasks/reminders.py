@@ -33,7 +33,7 @@ PRE_DELETE_REMINDER_JOB_ID = "auto_pre_delete_reminder_task"
 
 
 def sync_reminder_jobs(scheduler: BaseScheduler, settings: Mapping[str, object]) -> None:
-    if settings.get("AUTOMATION_EMAIL_ENABLED"):
+    if any(settings.get(f"NOTIFY_{key}", settings.get("AUTOMATION_EMAIL_ENABLED")) for key in ("EXPIRY", "EXPIRED", "PRE_DELETE")):
         scheduler.add_job(
             run_reminder_task,
             id=EXPIRY_REMINDER_JOB_ID,
@@ -83,6 +83,10 @@ def sync_reminder_jobs(scheduler: BaseScheduler, settings: Mapping[str, object])
 async def run_reminder_task(reminder_type: str) -> None:
     session_factory = get_session_factory()
     async with session_factory() as db:
+        from app.services.notifications.policy import load_policy
+        policy = await load_policy(db)
+        if not getattr(policy.lifecycle, reminder_type, False):
+            return
         if reminder_type == "expiry":
             task_name = "automated_expiry_reminder"
             target_date = await get_job_today(db) + timedelta(days=1)

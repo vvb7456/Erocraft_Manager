@@ -1,6 +1,6 @@
 {
   "title": "Certificate Management",
-  "addCard": "Add from acme.sh",
+  "addCard": "Add certificate",
   "common": {
     "none": "—",
     "unknown": "Unknown"

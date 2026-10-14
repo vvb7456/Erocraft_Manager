@@ -10,9 +10,7 @@
 import { computed, inject, onBeforeUnmount, onMounted, type Ref, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
-import { useConfirm } from '@/composables/useConfirm'
 import { useFormatDate } from '@/composables/useFormatDate'
-import { useToast } from '@/composables/useToast'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import HostStatusPanel from '@/components/hosts/HostStatusPanel.vue'
@@ -24,9 +22,7 @@ defineOptions({ name: 'HostOverviewPane' })
 const { t } = useI18n({ useScope: 'global' })
 const { formatDateTime } = useFormatDate()
 const host = inject<Ref<HostDetail | null>>('hostDetail')!
-const { get, post } = useApiFetch()
-const { confirm } = useConfirm()
-const { toast } = useToast()
+const { get } = useApiFetch()
 
 interface AlertItem {
   id: number
@@ -58,27 +54,6 @@ const activeAlerts = computed(() => {
   if (hid == null) return []
   return alerts.value.filter(a => a.hostId === hid)
 })
-
-const resolvingAlertIds = ref<Set<number>>(new Set())
-async function handleResolveAlert(alertId: number) {
-  const ok = await confirm({
-    title: t('dashboard.alerts.confirmTitle'),
-    message: t('dashboard.alerts.confirmMessage'),
-    variant: 'danger',
-  })
-  if (!ok) return
-  resolvingAlertIds.value.add(alertId)
-  try {
-    const res = await post(`/api/admin/monitoring/alerts/${alertId}/resolve`)
-    if (res !== null) {
-      alerts.value = alerts.value.filter(a => a.id !== alertId)
-    } else {
-      toast(t('dashboard.alerts.resolveFailed'), 'error')
-    }
-  } finally {
-    resolvingAlertIds.value.delete(alertId)
-  }
-}
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
@@ -147,8 +122,6 @@ const enabledLabel = computed(() => {
           :severity="a.severity"
           :message="a.message"
           :created-at="a.createdAt"
-          :resolving="resolvingAlertIds.has(a.id)"
-          @resolve="handleResolveAlert(a.id)"
         />
       </div>
       <EmptyState
@@ -208,7 +181,7 @@ const enabledLabel = computed(() => {
   min-width: 0;
 }
 .mono {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 .trunc {

@@ -78,6 +78,7 @@
     "invalidHint": "{n} field(s) need fixing",
     "details": {
       "title": "Basic info",
+      "desc": "Maintain the server name, purpose, and external system identifier.",
       "name": "Server name",
       "description": "Description",
       "externalId": "External ID",
@@ -85,6 +86,7 @@
     },
     "owner": {
       "title": "Owner",
+      "desc": "Manage the user account that owns this server.",
       "current": "Current owner",
       "select": "New owner",
       "placeholder": "Search username / email…",
@@ -98,6 +100,7 @@
     },
     "build": {
       "title": "Build limits",
+      "desc": "Set computing, storage, and additional resource quotas for the server.",
       "cpu": "CPU limit (%)",
       "cpuHint": "0 = unlimited",
       "memory": "Memory (MiB)",
@@ -115,6 +118,7 @@
     },
     "allocations": {
       "title": "Port allocations",
+      "desc": "Manage the IP addresses and ports used to access server services.",
       "current": "Current allocations",
       "hint": "The first chip marked as Primary is the primary port; remove all and re-add to swap. At least one port is required.",
       "primary": "Primary",
@@ -135,6 +139,7 @@
     },
     "startup": {
       "title": "Startup",
+      "desc": "Configure the runtime, container image, startup command, and application variables.",
       "nest": "Nest",
       "egg": "Egg",
       "image": "Docker image",

@@ -136,6 +136,7 @@ async def redeploy_deployment(
     deployment.last_deploy_at = now
     deployment.last_deploy_error = None
     deployment.status = "synced"
+    deployment.unhealthy_since = None
 
     # Keep source metadata fresh when a deployment successfully used it.
     cert.source_fingerprint_sha256 = material.parsed.fingerprint_sha256

@@ -1,7 +1,4 @@
 <script setup lang="ts">
-// C2 — host list: toolbar + filters + data table.
-// Create / global-defaults / per-row actions are deliberately wired as
-// stubs that surface a "coming in next step" toast; C3-C5 turn them on.
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -20,7 +17,6 @@ import CardTap from '@/components/ui/CardTap.vue'
 import CardKV from '@/components/ui/CardKV.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
 import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
-import GlobalDefaultsModal from '@/components/hosts/GlobalDefaultsModal.vue'
 import HostCreateModal from '@/components/hosts/HostCreateModal.vue'
 import { classifyHostStatus } from '@/utils/heartbeat'
 
@@ -188,7 +184,6 @@ function openHost(h: HostItem) {
 }
 
 // ── Modals ──
-const globalDefaultsOpen = ref(false)
 const createOpen = ref(false)
 
 const usedNodeIds = computed(() =>
@@ -197,8 +192,6 @@ const usedNodeIds = computed(() =>
     .filter((x): x is number => typeof x === 'number')
 )
 
-// ── Stubbed actions (wired up in C3 / C4 / C5) ──
-function openGlobalDefaults() { globalDefaultsOpen.value = true }
 function openCreate() { createOpen.value = true }
 function onCreated() { loadHosts() }
 
@@ -222,7 +215,11 @@ function handleMobile(action: 'open') {
 </script>
 
 <template>
-  <PageHeader icon="dvr" :title="t('hosts.title')" />
+  <PageHeader icon="dvr" :title="t('hosts.title')">
+    <template #controls>
+      <BaseButton size="sm" variant="primary" @click="openCreate"><MsIcon name="add" size="xs" />{{ t('hosts.toolbar.create') }}</BaseButton>
+    </template>
+  </PageHeader>
 
   <div class="page-body">
     <section class="stat-grid" aria-label="host summary">
@@ -280,16 +277,6 @@ function handleMobile(action: 'open') {
             size="sm"
             fit
           />
-        </div>
-        <div class="tb-btn-group">
-          <BaseButton size="sm" @click="openGlobalDefaults">
-            <MsIcon name="tune" size="xs" />
-            {{ t('hosts.toolbar.globalDefaults') }}
-          </BaseButton>
-          <BaseButton size="sm" variant="primary" @click="openCreate">
-            <MsIcon name="add" size="xs" />
-            {{ t('hosts.toolbar.create') }}
-          </BaseButton>
         </div>
       </template>
     </SectionToolbar>
@@ -388,7 +375,6 @@ function handleMobile(action: 'open') {
     </template>
   </ActionSheet>
 
-  <GlobalDefaultsModal v-model="globalDefaultsOpen" />
   <HostCreateModal v-model="createOpen" :usedNodeIds="usedNodeIds" @created="onCreated" />
 </template>
 
@@ -413,7 +399,7 @@ function handleMobile(action: 'open') {
 .col-actions   { width: 12%; text-align: right; }
 
 .mono {
-  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--t2);
   overflow: hidden;

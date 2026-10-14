@@ -99,7 +99,7 @@ const percentText = computed(() => {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: var(--font-tabular);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -125,7 +125,7 @@ const percentText = computed(() => {
 .tile__sub {
   color: var(--t3);
   font-size: var(--text-xs);
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: var(--font-tabular);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

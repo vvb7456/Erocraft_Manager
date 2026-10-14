@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
 .order-link:hover   { text-decoration: underline; }
 
 .mono {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
 
@@ -469,7 +469,7 @@ onBeforeUnmount(() => {
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--ac);
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .card-period {

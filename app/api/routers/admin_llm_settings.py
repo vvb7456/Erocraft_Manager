@@ -2,7 +2,7 @@
 
 All LLM-related keys (NewAPI base URL, admin token, ST endpoint URL)
 are DB-backed and UI-editable. The admin token is marked
-``sensitive=True`` and is masked in responses by the settings store.
+``sensitive=True`` and is encrypted at rest.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
-from app.core.runtime_settings import LLM_SPECS, MASKED_SECRET_VALUE, defaults_for
+from app.core.runtime_settings import LLM_SPECS, defaults_for
 from app.core.settings_store import get_settings_store
 from app.db.models.pterodactyl import PteroUser
 from app.schemas.settings import SettingsMessageResponse
@@ -62,8 +62,6 @@ async def llm_settings_post(
     for key, value in payload.settings.items():
         spec = LLM_SPECS.get(key)
         if spec is None:
-            continue
-        if spec.sensitive and isinstance(value, str) and value == MASKED_SECRET_VALUE:
             continue
         try:
             normalized = spec.normalize(value)

@@ -285,7 +285,7 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
       cursorStyle: 'underline',
       cursorInactiveStyle: 'none',
       fontSize: 13,
-      fontFamily: '"IBM Plex Mono", monospace',
+      fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim(),
       theme: {
         background: '#0b0f0f',
         foreground: '#e4ece8',

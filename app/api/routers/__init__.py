@@ -43,6 +43,7 @@ from app.api.routers.user_servers_tunnel import router as user_servers_tunnel_ro
 from app.api.routers.users import router as users_router
 from app.api.routers.support import router as support_router
 from app.api.routers.wechat_pay import router as wechat_pay_router
+from app.api.routers.notification_center import router as notification_center_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -86,5 +87,6 @@ api_router.include_router(user_servers_tunnel_router)
 api_router.include_router(users_router)
 api_router.include_router(support_router)
 api_router.include_router(wechat_pay_router)
+api_router.include_router(notification_center_router)
 
 __all__ = ["api_router"]

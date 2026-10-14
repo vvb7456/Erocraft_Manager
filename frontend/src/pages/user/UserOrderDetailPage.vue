@@ -359,7 +359,7 @@ onMounted(loadOrder)
           <div v-if="showLinkedServer" class="bill-meta-extra-row">
             <span class="ex-label">{{ t('billing.orderDetail.meta.linkedServer') }}：</span>
             <a class="ex-link" href="#" @click.prevent="goServer">
-              {{ order.target_server_name }}
+              <span class="ex-link__label">{{ order.target_server_name }}</span>
               <MsIcon name="arrow_forward" size="xs" />
             </a>
           </div>
@@ -425,7 +425,7 @@ onMounted(loadOrder)
 }
 
 .bill-title-id {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 1rem;
   font-weight: 500;
   letter-spacing: 0;
@@ -576,7 +576,7 @@ onMounted(loadOrder)
   gap: var(--sp-1);
 }
 
-.ex-link:hover {
+.ex-link:hover .ex-link__label {
   text-decoration: underline;
 }
 
@@ -589,7 +589,7 @@ onMounted(loadOrder)
 }
 
 .mono {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* ── Print mode (used by both window.print() and html2pdf) ── */

@@ -1,5 +1,5 @@
 {
-  "title": "Dashboard",
+  "title": "Operations Overview",
   "stats": {
     "totalServers": "Total Servers"
   },
@@ -38,12 +38,6 @@
     "expiring": "No expirations in the next 7 days",
     "activity": "No recent activity",
     "trends": "No trend data"
-  },
-  "alerts": {
-    "resolve": "Clear this alert",
-    "confirmTitle": "Clear alert",
-    "confirmMessage": "Clear this alert?",
-    "resolveFailed": "Failed to clear alert"
   },
   "host": {
     "add": "Add host",

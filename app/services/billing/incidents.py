@@ -46,17 +46,20 @@ async def log_incident(
     factory = get_session_factory()
     try:
         async with factory() as session:
-            session.add(
-                BillingIncident(
-                    kind=kind,
-                    order_id=order_id,
-                    invoice_id=invoice_id,
-                    transaction_id=transaction_id,
-                    server_id=server_id,
-                    payload=dict(payload),
-                    detected_at=utc_naive_now(),
-                )
+            incident = BillingIncident(
+                kind=kind,
+                order_id=order_id,
+                invoice_id=invoice_id,
+                transaction_id=transaction_id,
+                server_id=server_id,
+                payload=dict(payload),
+                detected_at=utc_naive_now(),
             )
+            session.add(incident)
+            await session.flush()
+            from app.services.notifications.events import billing_incident
+
+            await billing_incident(session, incident)
             await session.commit()
     except Exception:
         logger.exception(

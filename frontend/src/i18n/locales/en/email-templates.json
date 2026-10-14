@@ -1,11 +1,5 @@
 {
-  "title": "Email Templates",
   "saved": "Template saved",
-  "unsavedTitle": "Unsaved Changes",
-  "unsavedMessage": "This template has unsaved changes. Save before leaving?",
-  "unsavedSave": "Save & Leave",
-  "unsavedDiscard": "Discard & Leave",
-  "unsavedStay": "Keep Editing",
   "preview": "Live Preview",
   "previewEmpty": "No preview available",
   "subject": "Email Subject",

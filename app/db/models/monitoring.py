@@ -88,5 +88,7 @@ class HostAlert(Base):
     message: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utc_now)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    muted_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     notified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

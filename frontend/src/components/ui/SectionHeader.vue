@@ -5,6 +5,7 @@ defineOptions({ name: 'SectionHeader' })
 
 defineProps<{
   icon?: string
+  subtitle?: string
   flush?: boolean
   align?: 'left' | 'center'
   withLines?: boolean
@@ -19,9 +20,12 @@ defineProps<{
       `section-header--align-${align ?? 'left'}`,
     ]"
   >
-    <div class="section-title">
-      <MsIcon v-if="icon" :name="icon" />
-      <slot />
+    <div class="section-header__content">
+      <div class="section-title">
+        <MsIcon v-if="icon" :name="icon" />
+        <slot />
+      </div>
+      <p v-if="subtitle" class="section-header__subtitle">{{ subtitle }}</p>
     </div>
     <div v-if="$slots.actions" class="section-header__actions">
       <slot name="actions" />
@@ -40,6 +44,15 @@ defineProps<{
 
 .section-header--flush {
   margin-top: 0;
+}
+
+.section-header__content { min-width: 0; }
+.section-header__subtitle {
+  margin: var(--sp-2) 0 0;
+  color: var(--section-subtitle-color, var(--t2));
+  font-size: var(--text-base);
+  font-weight: 400;
+  line-height: 1.55;
 }
 
 .section-header--align-center {

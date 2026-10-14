@@ -12,11 +12,12 @@
 // chain aborts and the bar stays open so the user can react. `discard`
 // always runs every section unconditionally.
 import { computed, getCurrentInstance, inject, onBeforeUnmount, provide, ref, shallowReactive, type ComputedRef, type Ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, type RouteLocationNormalized } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useConfirm } from '@/composables/useConfirm'
 
 export interface DirtyFormSection {
+  busy?: Ref<boolean> | ComputedRef<boolean>
   // Reactive flag; the section is considered dirty whenever .value is true.
   isDirty: Ref<boolean> | ComputedRef<boolean>
   // Persist current edits. Resolve to true on success / no-op, false on
@@ -28,6 +29,10 @@ export interface DirtyFormSection {
   name?: string
 }
 
+interface LeaveGuardOptions {
+  update?: boolean | ((to: RouteLocationNormalized, from: RouteLocationNormalized) => boolean)
+}
+
 export interface DirtyFormGroup {
   isDirty: ComputedRef<boolean>
   saving: Ref<boolean>
@@ -35,7 +40,8 @@ export interface DirtyFormGroup {
   discard: () => Promise<void>
   register: (section: DirtyFormSection) => void
   unregister: (section: DirtyFormSection) => void
-  attachLeaveGuard: () => void
+  attachLeaveGuard: (options?: LeaveGuardOptions) => void
+  allowLeave: () => Promise<boolean>
   // Reusable three-outcome ConfirmDialog. Pages that intercept their own
   // navigation (e.g. SettingsPage's tab switcher) should call this to keep
   // the prompt UX identical to the route-leave guard.
@@ -50,6 +56,18 @@ export interface ProvideDirtyFormOptions {
 }
 
 const DIRTY_FORM_KEY = Symbol('DirtyFormGroup') as symbol
+const activeGuards = new Set<DirtyFormGroup>()
+
+export async function confirmPendingChanges(): Promise<boolean> {
+  for (const group of activeGuards) if (!await group.allowLeave()) return false
+  return true
+}
+
+export function useParentDirtyForm(): DirtyFormGroup {
+  const group = inject<DirtyFormGroup>(DIRTY_FORM_KEY)
+  if (!group) throw new Error('Missing dirty form provider')
+  return group
+}
 
 export function provideDirtyForm(options: ProvideDirtyFormOptions = {}): DirtyFormGroup {
   // shallowReactive avoids unwrapping the inner Ref<boolean> on isDirty.
@@ -69,7 +87,7 @@ export function provideDirtyForm(options: ProvideDirtyFormOptions = {}): DirtyFo
   }
 
   async function save(): Promise<boolean> {
-    if (saving.value) return false
+    if (saving.value || sections.some(section => section.busy?.value)) return false
     saving.value = true
     try {
       // Snapshot the array because a section's save may trigger a reload
@@ -80,13 +98,14 @@ export function provideDirtyForm(options: ProvideDirtyFormOptions = {}): DirtyFo
         const ok = await s.save()
         if (ok === false) return false
       }
-      return true
+      return !isDirty.value
     } finally {
       saving.value = false
     }
   }
 
   async function discard(): Promise<void> {
+    if (saving.value || sections.some(section => section.busy?.value)) return
     for (const s of sections.slice()) {
       if (!s.isDirty.value) continue
       await s.discard()
@@ -104,30 +123,54 @@ export function provideDirtyForm(options: ProvideDirtyFormOptions = {}): DirtyFo
       title: t('settings.unsavedTitle'),
       message: t('settings.unsavedMessage'),
       confirmText: t('settings.unsavedSave'),
-      cancelText: t('settings.unsavedDiscard'),
-      altText: t('settings.unsavedStay'),
+      cancelText: t('settings.unsavedStay'),
+      altText: t('settings.unsavedDiscard'),
     })
-    if (r === 'alt') return 'stay'
-    return r === true ? 'save' : 'discard'
+    if (r === 'alt') return 'discard'
+    return r === true ? 'save' : 'stay'
   }
 
-  function attachLeaveGuard() {
-    onBeforeRouteLeave(async () => {
-      if (!isDirty.value) return true
+  let deciding = false
+  async function allowLeave(): Promise<boolean> {
+    if (saving.value || deciding || sections.some(section => section.busy?.value)) return false
+    if (!isDirty.value) return true
+    deciding = true
+    try {
       const choice = await promptUnsaved()
       if (choice === 'stay') return false
-      if (choice === 'save') {
-        const ok = await save()
-        if (!ok) return false
-      } else {
-        await discard()
+      if (choice === 'save') return await save()
+      await discard()
+      return !isDirty.value
+    } catch {
+      return false
+    } finally { deciding = false }
+  }
+
+  let attached = false
+  function attachLeaveGuard(options: LeaveGuardOptions = {}) {
+    if (attached) return
+    attached = true
+    activeGuards.add(group)
+    onBeforeRouteLeave(allowLeave)
+    onBeforeRouteUpdate((to, from) => {
+      const update = typeof options.update === 'function' ? options.update(to, from) : options.update
+      return update || JSON.stringify(to.params) !== JSON.stringify(from.params) ? allowLeave() : true
+    })
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (isDirty.value || saving.value || sections.some(section => section.busy?.value)) {
+        event.preventDefault()
+        event.returnValue = ''
       }
-      return true
+    }
+    if (typeof window !== 'undefined') window.addEventListener('beforeunload', beforeUnload)
+    onBeforeUnmount(() => {
+      activeGuards.delete(group)
+      if (typeof window !== 'undefined') window.removeEventListener('beforeunload', beforeUnload)
     })
   }
 
   const group: DirtyFormGroup = {
-    isDirty, saving, save, discard, register, unregister, attachLeaveGuard, promptUnsaved,
+    isDirty, saving, save, discard, register, unregister, attachLeaveGuard, promptUnsaved, allowLeave,
   }
   provide(DIRTY_FORM_KEY, group)
   return group

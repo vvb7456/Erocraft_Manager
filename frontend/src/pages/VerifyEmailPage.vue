@@ -61,7 +61,7 @@ async function verify() {
     if (res.ok) {
       success.value = t('verifyEmail.success')
       const target = data?.auto_login
-        ? (data?.is_admin ? { name: 'dashboard' } : { name: 'user-plans' })
+        ? (data?.is_admin ? { name: 'dashboard' } : { name: 'user-home' })
         : { name: 'login' }
       queueRedirect(target)
       return

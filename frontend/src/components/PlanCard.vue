@@ -211,7 +211,7 @@ const descriptionHtml = computed(() => renderMarkdown(props.plan.description_md)
 .plan-card__amount {
   font-size: 1.85rem;
   font-weight: 700;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   letter-spacing: -0.02em;
 }
 
@@ -285,7 +285,7 @@ const descriptionHtml = computed(() => renderMarkdown(props.plan.description_md)
   border: 1px solid var(--bd);
   border-radius: var(--r-xs);
   padding: 0 4px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: .9em;
 }
 .plan-card__desc :deep(a) {

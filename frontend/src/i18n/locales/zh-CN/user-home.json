@@ -1,0 +1,20 @@
+{
+  "title": "首页",
+  "greeting": "你好，{name}。",
+  "intro": "管理你的服务，继续喜欢的对话。",
+  "viewAll": "查看全部",
+  "feature": {
+    "normal": { "title": "服务器列表", "description": "查看运行状态，管理服务器配置与文件。", "action": "查看服务器" },
+    "renewal": { "title": "服务器续费", "description": "有服务器即将到期或已过期，请及时续费。", "action": "立即续费" },
+    "empty": { "label": "开通服务器", "title": "你的专属酒馆，\n手机电脑都能用。", "action": "查看套餐" }
+  },
+  "emptyTitle": "还没有服务器",
+  "emptyHint": "选择套餐，开通你的 SillyTavern。",
+  "quickLinks": "常用入口",
+  "ordersHint": "付款与订单记录",
+  "promotionsHint": "优惠券与邀请奖励",
+  "tutorialHint": "首次启动、角色卡与 API 配置",
+  "help": "需要帮助？",
+  "loadFailed": "暂时无法加载服务器",
+  "retry": "重新加载"
+}

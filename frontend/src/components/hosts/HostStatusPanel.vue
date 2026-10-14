@@ -428,7 +428,7 @@ const loadOption = computed(() => {
 }
 .val {
   color: var(--t1);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -13,6 +13,7 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
+import PageHeaderActions from '@/components/layout/PageHeaderActions.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
@@ -170,6 +171,9 @@ function fmtScope(tpl: CouponTemplate): string {
 </script>
 
 <template>
+  <PageHeaderActions>
+    <BaseButton size="sm" variant="primary" @click="openCreate"><MsIcon name="add" size="xs" />{{ t('billing.admin.couponTemplates.create') }}</BaseButton>
+  </PageHeaderActions>
   <SectionToolbar>
     <template #start>
       <div class="tb-search-row">
@@ -201,11 +205,6 @@ function fmtScope(tpl: CouponTemplate): string {
           fit
           @update:modelValue="page = 1"
         />
-      </div>
-      <div class="tb-btn-group">
-        <BaseButton size="sm" variant="primary" @click="openCreate">
-          <MsIcon name="add" size="xs" /> {{ t('billing.admin.couponTemplates.create') }}
-        </BaseButton>
       </div>
     </template>
   </SectionToolbar>
@@ -335,9 +334,9 @@ function fmtScope(tpl: CouponTemplate): string {
 :deep(.col-valid)    { width: 8%;  white-space: nowrap; }
 :deep(.col-actions)  { width: 14%; }
 
-.mono { font-family: var(--font-mono, 'IBM Plex Mono', monospace); }
+.mono { font-family: var(--font-mono); }
 code {
-  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   background: var(--bg-in);
   padding: 2px 6px;

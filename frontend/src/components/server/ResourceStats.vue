@@ -166,7 +166,7 @@ function formatUptime(ms: number): string {
 }
 
 .stat-value {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-tabular);
   font-size: var(--text-xs);
   color: var(--t1);
 }
@@ -203,7 +203,7 @@ function formatUptime(ms: number): string {
 }
 
 .mobile-stat-value {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-tabular);
   font-size: var(--text-xs);
   color: var(--t1);
 }

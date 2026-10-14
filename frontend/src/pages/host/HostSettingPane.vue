@@ -210,8 +210,8 @@ const isWings = computed(() => host.value?.kind === 'wings_node')
 
   <div v-else class="setting-panel">
     <!-- ── Agent connection ── -->
-    <BaseCard variant="bg2" class="settings-card">
-      <CollapsibleGroup :title="t('hosts.setting.agent.title')" icon="cable" :defaultOpen="true">
+    <BaseCard variant="bg2" density="compact">
+      <CollapsibleGroup :title="t('hosts.setting.agent.title')" :subtitle="t('hosts.setting.agent.desc')" icon="cable" :defaultOpen="true">
         <div class="form">
           <FormField layout="horizontal" bordered>
             <template #label>
@@ -295,14 +295,14 @@ const isWings = computed(() => host.value?.kind === 'wings_node')
     </BaseCard>
 
     <!-- ── Alerting ── -->
-    <HostAlertingSection :hostId="host.id" :hostKind="host.kind" />
+    <HostAlertingSection :hostId="host.id" :hostKind="host.kind" connection-only />
 
     <!-- ── Certificates ── -->
     <HostCertSection v-if="host" :hostId="host.id" :hostKind="host.kind" />
 
     <!-- ── Danger zone ── -->
-    <BaseCard variant="bg2" class="settings-card">
-      <CollapsibleGroup :title="t('hosts.setting.danger.title')" icon="warning" :defaultOpen="false">
+    <BaseCard variant="bg2" density="compact">
+      <CollapsibleGroup :title="t('hosts.setting.danger.title')" :subtitle="t('hosts.setting.danger.desc')" icon="warning" :defaultOpen="false">
         <div class="danger-row">
           <div class="danger-title">
             {{ t('hosts.setting.danger.deleteTitle') }}

@@ -98,7 +98,7 @@ async function initCodeMirror(doc: string, fName: string) {
     ]),
     EditorView.theme({
       '&': { height: '100%', fontSize: '13px' },
-      '.cm-scroller': { fontFamily: "'IBM Plex Mono', monospace" },
+      '.cm-scroller': { fontFamily: 'var(--font-mono)' },
       '.cm-content': { caretColor: 'var(--ac)' },
     }),
   ]

@@ -419,7 +419,7 @@ function couponConstraint(c: Coupon): string {
   background: color-mix(in srgb, var(--ac) 6%, var(--bg-in));
 }
 .stat-num {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 1.4rem; font-weight: 700; color: var(--t1);
 }
 .stat-tile--accent .stat-num { color: var(--ac); }
@@ -545,7 +545,7 @@ function couponConstraint(c: Coupon): string {
   color: var(--t1);
 }
 .ref-table tbody tr:last-child td { border-bottom: none; }
-.mono { font-family: 'IBM Plex Mono', monospace; }
+.mono { font-family: var(--font-mono); }
 
 .ref-list { display: none; list-style: none; padding: 0; margin: 0; }
 .ref-row {
@@ -575,4 +575,3 @@ function couponConstraint(c: Coupon): string {
   .ref-list  { display: block; }
 }
 </style>
-

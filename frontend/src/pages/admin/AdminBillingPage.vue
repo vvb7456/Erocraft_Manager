@@ -10,7 +10,7 @@
  *
  * Selects active tab from ``?tab=…`` query and keeps the URL in sync.
  */
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/layout/PageHeader.vue'
@@ -31,15 +31,26 @@ type TabKey = 'orders' | 'plans' | 'coupon-templates' | 'coupons'
 const VALID_TABS: TabKey[] = ['orders', 'plans', 'coupon-templates', 'coupons']
 
 function pickInitial(): TabKey {
+  if (detailOrderId.value !== null) return 'orders'
   const q = route.query.tab
   const raw = Array.isArray(q) ? q[0] : q
   if (raw && (VALID_TABS as string[]).includes(raw)) return raw as TabKey
   return 'orders'
 }
 
-const activeTab = ref<TabKey>(pickInitial())
-const detailOrderId = ref<number | null>(null)
-const detailOpen = ref(false)
+const activeTab = computed<TabKey>({
+  get: pickInitial,
+  set: tab => { void router.push({ query: { ...route.query, tab, action: undefined, order: undefined } }) },
+})
+const detailOrderId = computed(() => {
+  const value = route.query.order
+  const id = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : 0
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+})
+const detailOpen = computed({
+  get: () => detailOrderId.value !== null,
+  set: open => { if (!open) void router.replace({ query: { ...route.query, order: undefined } }) },
+})
 
 // Whether the coupons tab should auto-open the grant modal on mount.
 const couponsInitialAction = computed<'grant' | null>(() =>
@@ -47,12 +58,7 @@ const couponsInitialAction = computed<'grant' | null>(() =>
 )
 
 function onSelectOrder(orderId: number) {
-  detailOrderId.value = orderId
-  detailOpen.value = true
-}
-
-function onDetailSaved() {
-  // refresh orders list after an action
+  void router.push({ query: { ...route.query, tab: 'orders', order: orderId, action: undefined } })
 }
 
 const tabs = computed(() => [
@@ -62,28 +68,14 @@ const tabs = computed(() => [
   { key: 'coupons',          icon: 'card_giftcard',       label: t('billing.admin.tabCoupons') },
 ])
 
-watch(activeTab, (next) => {
-  const current = route.query.tab
-  if (current !== next) {
-    void router.replace({
-      query: { ...route.query, tab: next, action: undefined },
-    })
-  }
-})
-
-onMounted(() => {
-  if (route.query.tab !== activeTab.value) {
-    void router.replace({ query: { ...route.query, tab: activeTab.value } })
-  }
-})
 </script>
 
 <template>
-  <PageHeader icon="receipt_long" :title="t('billing.admin.title')" />
+  <PageHeader icon="receipt_long" :title="t('billing.admin.title')">
+    <TabSwitcher v-model="activeTab" :tabs="tabs" />
+  </PageHeader>
 
   <div class="page-body">
-    <TabSwitcher v-model="activeTab" :tabs="tabs" />
-
     <div class="tab-content">
       <OrdersTab v-if="activeTab === 'orders'" @select-order="onSelectOrder" />
       <AdminPlansPage v-else-if="activeTab === 'plans'" :standalone="false" />
@@ -95,12 +87,5 @@ onMounted(() => {
   <OrderDetailModal
     v-model="detailOpen"
     :order-id="detailOrderId"
-    @saved="onDetailSaved"
   />
 </template>
-
-<style scoped>
-.tab-content {
-  margin-top: var(--sp-4);
-}
-</style>

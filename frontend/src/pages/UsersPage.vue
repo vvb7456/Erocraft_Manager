@@ -7,7 +7,7 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useFormatDate } from '@/composables/useFormatDate'
 import PageHeader from '@/components/layout/PageHeader.vue'
-import SectionToolbar from '@/components/ui/SectionToolbar.vue'
+import ListToolbar from '@/components/ui/ListToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -67,11 +67,7 @@ const page = ref(1)
 const perPage = ref(20)
 
 // Batch operations
-const batchActionType = ref('')
-const batchActionOptions = computed(() => [
-  { value: 'email', label: t('users.batch.email') },
-  { value: 'delete', label: t('users.batch.delete') },
-])
+const batchBusy = ref(false)
 
 // Create modal
 const createModalOpen = ref(false)
@@ -171,9 +167,6 @@ function pruneSelectionToCurrentPage() {
   if (next.size !== selectedIds.value.size) {
     selectedIds.value = next
   }
-  if (selectedIds.value.size === 0) {
-    batchActionType.value = ''
-  }
 }
 
 watch(paginated, pruneSelectionToCurrentPage, { immediate: true })
@@ -200,39 +193,39 @@ function toggleSelect(id: number) {
 }
 
 // ── Batch ──
-async function executeBatchAction() {
-  const action = batchActionType.value
-  if (!action) return
+async function executeBatchAction(action: 'email' | 'delete') {
+  if (batchBusy.value) return
   const ids = [...selectedIds.value]
   if (!ids.length) return
+  batchBusy.value = true
+  try {
+    if (action === 'delete') {
+      const ok = await confirm({
+        title: t('users.confirm.batch_delete_title'),
+        message: t('users.confirm.batch_delete_msg', { n: ids.length }),
+        variant: 'danger',
+        confirmText: t('common.btn.delete'),
+      })
+      if (!ok) return
+    }
 
-  if (action === 'delete') {
-    const ok = await confirm({
-      title: t('users.confirm.batch_delete_title'),
-      message: t('users.confirm.batch_delete_msg', { n: ids.length }),
-      variant: 'danger',
-      confirmText: t('common.btn.delete'),
-    })
-    if (!ok) return
-  }
+    if (action === 'email') {
+      const ok = await confirm({
+        title: t('users.confirm.batch_email_title'),
+        message: t('users.confirm.batch_email_msg', { n: ids.length }),
+        confirmText: t('common.btn.confirm'),
+      })
+      if (!ok) return
+    }
 
-  if (action === 'email') {
-    const ok = await confirm({
-      title: t('users.confirm.batch_email_title'),
-      message: t('users.confirm.batch_email_msg', { n: ids.length }),
-      confirmText: t('common.btn.confirm'),
-    })
-    if (!ok) return
-  }
-
-  const res = await post<BatchUsersResult>('/api/admin/users/batch', { action, userIds: ids })
-  if (res) {
-    const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
-    toast(res.message, tone)
-    selectedIds.value = new Set()
-    batchActionType.value = ''
-    await loadUsers()
-  }
+    const res = await post<BatchUsersResult>('/api/admin/users/batch', { action, userIds: ids })
+    if (res) {
+      const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
+      toast(res.message, tone)
+      selectedIds.value = new Set()
+      await loadUsers()
+    }
+  } finally { batchBusy.value = false }
 }
 
 // ── Sort toggle (client-side, no reload) ──
@@ -372,11 +365,17 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 </script>
 
 <template>
-  <PageHeader icon="group" :title="t('users.title')" />
+  <PageHeader icon="group" :title="t('users.title')">
+    <template #controls>
+      <BaseButton size="sm" variant="primary" :disabled="batchBusy" @click="openCreate">
+        <MsIcon name="person_add" size="xs" />{{ t('users.action.create') }}
+      </BaseButton>
+    </template>
+  </PageHeader>
 
   <div class="page-body">
     <!-- Toolbar -->
-    <SectionToolbar>
+    <ListToolbar :selected-count="selectedIds.size" :busy="batchBusy" @clear="selectedIds = new Set()">
       <template #start>
         <div class="tb-search-row">
           <FilterInput
@@ -393,25 +392,21 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
           </button>
         </div>
         <span class="toolbar-status tb-status">{{ t('users.total', { n: rawUsers.length }) }}</span>
-        <span v-if="selectedIds.size > 0" class="toolbar-status tb-status">{{ t('users.batch.selected', { n: selectedIds.size }) }}</span>
       </template>
       <template #end>
         <div class="tb-select-group tb-desktop-only">
           <BaseSelect v-model="filterServer" :options="serverFilterOptions" :prefix="t('users.filter.label') + ': '" size="sm" fit />
         </div>
-        <div class="batch-controls tb-batch">
-          <BaseSelect v-model="batchActionType" :options="batchActionOptions" :placeholder="t('users.batch.select_action')" size="sm" fit :disabled="selectedIds.size === 0" />
-          <BaseButton size="sm" :disabled="selectedIds.size === 0 || !batchActionType" @click="executeBatchAction">
-            <MsIcon name="play_arrow" size="xs" /> {{ t('users.batch.execute') }}
-          </BaseButton>
-        </div>
-        <div class="tb-btn-group">
-          <BaseButton size="sm" variant="primary" @click="openCreate">
-            <MsIcon name="person_add" size="xs" /> {{ t('users.action.create') }}
-          </BaseButton>
-        </div>
       </template>
-    </SectionToolbar>
+      <template #selection-actions>
+        <BaseButton size="sm" variant="ghost" :disabled="batchBusy" :aria-label="t('users.batch.email')" :title="t('users.batch.email')" @click="executeBatchAction('email')">
+          <MsIcon name="mail" size="sm" /><span class="selection-action-label">{{ t('users.batch.email') }}</span>
+        </BaseButton>
+        <BaseButton size="sm" variant="danger" :disabled="batchBusy" :aria-label="t('users.batch.delete')" :title="t('users.batch.delete')" @click="executeBatchAction('delete')">
+          <MsIcon name="delete" size="sm" /><span class="selection-action-label">{{ t('users.batch.delete') }}</span>
+        </BaseButton>
+      </template>
+    </ListToolbar>
 
     <!-- Mobile filter & sort sheet -->
     <MobileFilterSheet
@@ -425,6 +420,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
     />
 
     <!-- Table -->
+    <div :inert="batchBusy">
     <DataTable
       :items="paginated"
       :page="page"
@@ -438,7 +434,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       @update:per-page="perPage = $event; page = 1"
     >
       <template #header>
-        <th class="col-check"><input type="checkbox" v-model="allSelected" /></th>
+        <th class="col-check"><input type="checkbox" v-model="allSelected" :aria-label="t('common.selection.selectAll')" /></th>
         <th class="col-id sortable" @click="toggleSort('id')">
           {{ t('users.table.id') }}
           <MsIcon v-if="sortBy === 'id'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
@@ -461,7 +457,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
         <th class="col-actions">{{ t('users.table.actions') }}</th>
       </template>
       <template #row="{ item: u }">
-        <td class="col-check"><input type="checkbox" :checked="selectedIds.has(u.id)" @change="toggleSelect(u.id)" /></td>
+        <td class="col-check"><input type="checkbox" :checked="selectedIds.has(u.id)" :aria-label="t('common.selection.select', { name: u.username })" @change="toggleSelect(u.id)" /></td>
         <td class="col-id">{{ u.id }}</td>
         <td class="col-username">{{ u.username }}</td>
         <td class="col-email">{{ u.email }}</td>
@@ -497,6 +493,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       <template #card="{ item: u }">
         <CardTap @tap="openMobileAction(u)">
           <div class="card-row--main">
+            <input type="checkbox" :checked="selectedIds.has(u.id)" :aria-label="t('common.selection.select', { name: u.username })" @click.stop @change="toggleSelect(u.id)" />
             <span class="card-name">{{ u.username }} <span class="card-id-inline">#{{ u.id }}</span></span>
             <Badge :color="u.root_admin ? 'var(--amber)' : undefined" size="sm">
               {{ u.root_admin ? t('users.role.admin') : t('users.role.user') }}
@@ -513,6 +510,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
         </CardTap>
       </template>
     </DataTable>
+    </div>
   </div>
 
   <!-- Mobile Action Sheet -->

@@ -1,7 +1,9 @@
 {
   "pageDesc": "管理 SillyTavern 的认证方式、网络代理与版本设置",
-  "genericDesc": "管理服务器启动变量",
+  "genericTitle": "启动参数",
+  "genericDesc": "配置服务器运行所需的环境变量与应用参数。",
   "authSection": "认证",
+  "authSectionDesc": "管理 SillyTavern 的登录方式与访问凭据。",
   "authMode": "认证模式",
   "authModeTip": "基础认证：使用一组简单的账号密码登录 SillyTavern\n多用户模式：开启 SillyTavern 内置的账号系统",
   "basicAuthLabel": "基础认证",
@@ -24,6 +26,7 @@
   "passwordNeedLetter": "密码必须包含字母",
   "passwordNeedDigit": "密码必须包含数字",
   "networkSection": "API 代理",
+  "networkSectionDesc": "为 SillyTavern 连接模型服务提供网络代理。",
   "apiProxy": "API 代理",
   "apiProxyTip": "启用后通过代理转发 API 请求。使用国内 API（硅基、火山、DeepSeek 官网等）时请关闭",
   "versionSection": "版本与更新",

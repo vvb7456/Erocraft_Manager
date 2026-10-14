@@ -78,6 +78,7 @@
     "invalidHint": "{n} 个字段需要修正",
     "details": {
       "title": "基础信息",
+      "desc": "维护服务器名称、用途说明与外部系统标识。",
       "name": "服务器名称",
       "description": "描述",
       "externalId": "外部 ID",
@@ -85,6 +86,7 @@
     },
     "owner": {
       "title": "所有者",
+      "desc": "管理服务器所属的用户账户。",
       "current": "当前所有者",
       "select": "新所有者",
       "placeholder": "搜索用户名 / 邮箱…",
@@ -98,6 +100,7 @@
     },
     "build": {
       "title": "资源配置",
+      "desc": "设置服务器的计算、存储与附加资源配额。",
       "cpu": "CPU 限制 (%)",
       "cpuHint": "0 表示不限",
       "memory": "内存 (MiB)",
@@ -115,6 +118,7 @@
     },
     "allocations": {
       "title": "端口分配",
+      "desc": "管理服务器对外提供服务的 IP 地址与端口。",
       "current": "当前分配",
       "hint": "首个标记为「主」的端口为主端口；删除全部并重新添加即可切换主端口。至少保留一个端口。",
       "primary": "主",
@@ -135,6 +139,7 @@
     },
     "startup": {
       "title": "启动配置",
+      "desc": "配置运行环境、容器镜像、启动命令与应用变量。",
       "nest": "Nest",
       "egg": "Egg",
       "image": "Docker 镜像",

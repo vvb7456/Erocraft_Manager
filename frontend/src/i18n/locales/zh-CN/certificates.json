@@ -1,6 +1,6 @@
 {
   "title": "证书管理",
-  "addCard": "从 acme.sh 添加证书",
+  "addCard": "添加证书",
   "common": {
     "none": "—",
     "unknown": "未知"

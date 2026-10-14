@@ -15,6 +15,7 @@ from app.db.models.manager import (
 )
 from app.db.models.monitoring import HostMetrics, HostProbeResult
 from app.db.models.wechat import WechatPaymentSession
+from app.db.models.notifications import NotificationDelivery, NotificationIssue
 from app.db.session import get_session_factory
 
 logger = logging.getLogger(__name__)
@@ -25,12 +26,6 @@ CLEANUP_JOB_ID = "manager_token_cleanup"
 # for audit then drop. Old rows accumulate as "used" or "expired" otherwise.
 TOKEN_RETENTION = timedelta(hours=24)
 
-# Monitoring time-series: the admin UI only exposes windows up to 7d
-# (see app/api/routers/monitoring.py::_WINDOW_TO_SECONDS). Keep 14d of
-# raw 1-minute samples as buffer for ad-hoc SQL debugging, then drop.
-# At 5 hosts × 1/min daily cleanup removes ~7200 rows — single-shot
-# DELETE is fast enough.
-METRICS_RETENTION = timedelta(days=14)
 
 
 async def run_token_cleanup() -> None:
@@ -38,8 +33,9 @@ async def run_token_cleanup() -> None:
     plus monitoring time-series older than the retention window."""
     session_factory = get_session_factory()
     cutoff = utc_naive_now() - TOKEN_RETENTION
-    metrics_cutoff = utc_naive_now() - METRICS_RETENTION
     async with session_factory() as db:
+        from app.core.settings_store import get_settings_store
+        metrics_cutoff = utc_naive_now() - timedelta(days=int(await get_settings_store().get(db, "MONITOR_RETENTION_DAYS", 30)))
         try:
             res_reg = await db.execute(
                 delete(ManagerPendingRegistration).where(
@@ -64,6 +60,11 @@ async def run_token_cleanup() -> None:
                 res_eml.rowcount,
             )
             await db.execute(delete(WechatPaymentSession).where(WechatPaymentSession.expires_at < cutoff))
+            await db.execute(delete(NotificationDelivery).where(
+                NotificationDelivery.created_at < utc_naive_now() - timedelta(days=90),
+                NotificationDelivery.status.in_(("sent", "skipped", "failed")),
+            ))
+            await db.execute(delete(NotificationIssue).where(NotificationIssue.resolved_at < utc_naive_now() - timedelta(days=90)))
             await db.commit()
         except Exception:
             await db.rollback()

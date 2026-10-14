@@ -122,7 +122,7 @@ const footerText = computed(() => {
 .auth-title {
   display: inline-block;
   max-width: 100%;
-  font-family: 'IBM Plex Sans', 'IBM Plex Sans SC', -apple-system, sans-serif;
+  font-family: var(--font-sans);
   font-size: 1.56rem;
   font-weight: 700;
   line-height: 1.2;

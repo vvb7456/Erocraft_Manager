@@ -5,16 +5,18 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 import ConfirmProvider from '@/components/ui/ConfirmProvider.vue'
 import RenewFlowProvider from '@/components/billing/RenewFlowProvider.vue'
+import SupportWidget from '@/components/support/SupportWidget.vue'
+import SupportNotificationProvider from '@/components/support/SupportNotificationProvider.vue'
 import { provideToast } from '@/composables/useToast'
 import { useTheme } from '@/composables/useTheme'
-import { useHeaderHeight } from '@/composables/useHeaderHeight'
+import { providePageHeader } from '@/composables/usePageHeader'
 import { useAppStore } from '@/stores/app'
 
 defineOptions({ name: 'App' })
 
 provideToast()
 useTheme()
-useHeaderHeight()
+providePageHeader()
 
 const app = useAppStore()
 const route = useRoute()
@@ -32,6 +34,7 @@ function onOverlayClick() {
 
 <template>
   <ConfirmProvider>
+  <SupportNotificationProvider>
   <!-- Blank layout for login -->
   <template v-if="isBlankLayout">
     <RouterView />
@@ -54,5 +57,14 @@ function onOverlayClick() {
 
   <ToastContainer />
   <RenewFlowProvider />
+  <SupportWidget v-if="app.sessionUser && !app.isAdmin && !route.meta.public && route.name !== 'user-support'" :key="app.sessionUser.username" />
+  </SupportNotificationProvider>
   </ConfirmProvider>
 </template>
+
+<style scoped>
+.content { margin-left: var(--sidebar-w); min-width: 0; flex: 1; height: 100dvh; overflow-y: auto; transition: margin-left .25s ease; }
+.content.sidebar-collapsed { margin-left: 56px; }
+.content :deep(.page-header + .page-body) { padding-top: var(--sp-3); }
+@media (max-width: 768px) { .content, .content.sidebar-collapsed { margin-left: 0; } }
+</style>

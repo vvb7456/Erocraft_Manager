@@ -79,7 +79,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, post, loading } = useApiFetch()
+const { get, post, raw, loading } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 const router = useRouter()
@@ -98,40 +98,57 @@ interface Incident {
 const order = ref<OrderDetail | null>(null)
 const incidents = ref<Incident[]>([])
 const loadFailed = ref(false)
+const orderMissing = ref(false)
+const detailLoading = ref(false)
+let loadRequest = 0
 
-watch(() => props.orderId, (id) => {
-  if (id != null && props.modelValue) loadOrder()
-})
-
-watch(() => props.modelValue, (v) => {
-  if (v && props.orderId != null) loadOrder()
-})
+watch(() => [props.modelValue, props.orderId] as const, ([open, id]) => {
+  loadRequest++
+  order.value = null
+  incidents.value = []
+  loadFailed.value = false
+  orderMissing.value = false
+  detailLoading.value = false
+  if (open && id !== null) void loadOrder()
+}, { immediate: true })
 
 async function loadOrder() {
-  if (props.orderId == null) return
+  if (props.orderId == null || !props.modelValue) return
   const id = props.orderId
+  const request = ++loadRequest
+  detailLoading.value = true
   loadFailed.value = false
-  const [orderData, incData] = await Promise.all([
-    get<OrderDetail>(`/api/admin/billing/orders/${id}`, { silent: true }),
-    get<Incident[]>(`/api/admin/billing/incidents?order_id=${id}&limit=20`, { silent: true }),
-  ])
-  if (!props.modelValue || props.orderId !== id) return
-  if (orderData) {
-    const refundFinished = order.value?.id === id && order.value.status === 'refunding' && orderData.status !== 'refunding'
-    order.value = orderData
-    if (refundFinished) emit('saved')
-  } else loadFailed.value = true
-  if (incData) incidents.value = incData
+  orderMissing.value = false
+  try {
+    const [response, incData] = await Promise.all([
+      raw(`/api/admin/billing/orders/${id}`, { silent: true }),
+      get<Incident[]>(`/api/admin/billing/incidents?order_id=${id}&limit=20`, { silent: true }),
+    ])
+    const orderData = response?.ok ? await response.json() as OrderDetail : null
+    if (request !== loadRequest || !props.modelValue || props.orderId !== id) return
+    if (orderData) {
+      const refundFinished = order.value?.id === id && order.value.status === 'refunding' && orderData.status !== 'refunding'
+      order.value = orderData
+      if (refundFinished) emit('saved')
+    } else {
+      loadFailed.value = true
+      orderMissing.value = response?.status === 404
+    }
+    if (incData) incidents.value = incData
+  } catch {
+    if (request === loadRequest) loadFailed.value = true
+  } finally { if (request === loadRequest) detailLoading.value = false }
 }
 
 let refundPollTimer: ReturnType<typeof setInterval> | null = null
 watch(() => props.modelValue && order.value?.id === props.orderId && order.value?.status === 'refunding', (active) => {
   if (refundPollTimer !== null) clearInterval(refundPollTimer)
   refundPollTimer = active ? setInterval(() => {
-    if (document.visibilityState === 'visible' && !loading.value) void loadOrder()
+    if (document.visibilityState === 'visible' && !loading.value && !detailLoading.value) void loadOrder()
   }, 5000) : null
 })
 onBeforeUnmount(() => {
+  loadRequest++
   if (refundPollTimer !== null) clearInterval(refundPollTimer)
 })
 
@@ -317,14 +334,14 @@ async function doRefund() {
       </div>
     </template>
 
-    <LoadingCenter v-if="loading && !order" />
+    <LoadingCenter v-if="detailLoading && !order" />
 
     <EmptyState
       v-else-if="loadFailed"
       icon="error_outline"
-      :text="t('billing.orderDetail.loadFailed')"
+      :title="orderMissing ? t('billing.orderDetail.notFound', { id: orderId }) : t('billing.orderDetail.loadFailed')"
     >
-      <BaseButton size="sm" variant="primary" @click="loadOrder">
+      <BaseButton v-if="!orderMissing" size="sm" variant="primary" @click="loadOrder">
         {{ t('billing.orderDetail.retry') }}
       </BaseButton>
     </EmptyState>
@@ -664,11 +681,11 @@ async function doRefund() {
 
 /* ── Shared ── */
 code {
-  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-xs); background: var(--bg-in);
   padding: 1px 5px; border-radius: var(--r-xs); color: var(--t1);
 }
-.mono  { font-family: var(--font-mono, 'IBM Plex Mono', monospace); }
+.mono  { font-family: var(--font-mono); }
 .muted { color: var(--t3); }
 .link  { color: var(--ac); text-decoration: none; }
 .link:hover { text-decoration: underline; }

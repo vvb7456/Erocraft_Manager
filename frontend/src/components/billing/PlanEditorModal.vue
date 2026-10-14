@@ -1132,7 +1132,7 @@ function onDockerImageSelectChange(v: string | number | boolean | (string | numb
 }
 
 .mono {
-  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-family: var(--font-mono);
   color: var(--t1);
 }
 

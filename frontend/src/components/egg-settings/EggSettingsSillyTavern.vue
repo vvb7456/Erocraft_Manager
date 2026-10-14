@@ -317,9 +317,8 @@ defineExpose({ save, discard, validationErrors })
 
 <template>
   <div class="st-panel">
-    <BaseCard variant="bg2" class="st-card">
-      <SectionHeader icon="lock" flush>{{ t('serverSettings.authSection') }}</SectionHeader>
-      <p class="section-note">{{ t('serverSettings.pageDesc') }}</p>
+    <BaseCard variant="bg2" density="compact">
+      <SectionHeader icon="lock" :subtitle="t('serverSettings.authSectionDesc')" flush>{{ t('serverSettings.authSection') }}</SectionHeader>
 
       <FormField layout="horizontal">
         <template #label>
@@ -382,9 +381,8 @@ defineExpose({ save, discard, validationErrors })
     </BaseCard>
 
     <!-- ─── LLM free quota (only when provisioned) ─── -->
-    <BaseCard v-if="server?.llmEnabled" variant="bg2" class="st-card">
-      <SectionHeader icon="smart_toy" flush>{{ t('serverSettings.llm.section') }}</SectionHeader>
-      <p class="section-note">{{ t('serverSettings.llm.desc') }}</p>
+    <BaseCard v-if="server?.llmEnabled" variant="bg2" density="compact">
+      <SectionHeader icon="smart_toy" :subtitle="t('serverSettings.llm.desc')" flush>{{ t('serverSettings.llm.section') }}</SectionHeader>
 
       <!-- How-to hint (static, shown immediately) -->
       <div class="llm-hint">
@@ -438,8 +436,8 @@ defineExpose({ save, discard, validationErrors })
       </template>
     </BaseCard>
 
-    <BaseCard variant="bg2" class="st-card">
-      <SectionHeader icon="compare_arrows" flush>{{ t('serverSettings.networkSection') }}</SectionHeader>
+    <BaseCard variant="bg2" density="compact">
+      <SectionHeader icon="compare_arrows" :subtitle="t('serverSettings.networkSectionDesc')" flush>{{ t('serverSettings.networkSection') }}</SectionHeader>
       <FormField layout="horizontal" keep-horizontal>
         <template #label>
           {{ t('serverSettings.apiProxy') }}
@@ -449,9 +447,8 @@ defineExpose({ save, discard, validationErrors })
       </FormField>
     </BaseCard>
 
-    <BaseCard variant="bg2" class="st-card">
-      <SectionHeader icon="update" flush>{{ t('serverSettings.versionSection') }}</SectionHeader>
-      <p class="section-note">{{ t('serverSettings.versionSectionDesc') }}</p>
+    <BaseCard variant="bg2" density="compact">
+      <SectionHeader icon="update" :subtitle="t('serverSettings.versionSectionDesc')" flush>{{ t('serverSettings.versionSection') }}</SectionHeader>
 
       <FormField layout="horizontal">
         <template #label>
@@ -484,9 +481,8 @@ defineExpose({ save, discard, validationErrors })
       </FormField>
     </BaseCard>
 
-    <BaseCard variant="bg2" class="st-card">
-      <SectionHeader icon="warning" flush>{{ t('serverSettings.reinstallSection') }}</SectionHeader>
-      <p class="section-note section-note--danger">{{ t('serverSettings.reinstallSectionDesc') }}</p>
+    <BaseCard variant="bg2" density="compact">
+      <SectionHeader icon="warning" :subtitle="t('serverSettings.reinstallSectionDesc')" class="reinstall-header" flush>{{ t('serverSettings.reinstallSection') }}</SectionHeader>
 
       <FormField layout="horizontal">
         <template #label>&nbsp;</template>
@@ -511,10 +507,6 @@ defineExpose({ save, discard, validationErrors })
   gap: var(--sp-4);
 }
 
-.st-card {
-  padding: var(--sp-2);
-}
-
 .section-note {
   margin: 0 0 var(--sp-3);
   font-size: .84rem;
@@ -525,6 +517,7 @@ defineExpose({ save, discard, validationErrors })
 .section-note--danger {
   color: var(--red);
 }
+.reinstall-header { --section-subtitle-color: var(--red); }
 
 .auth-mode-switch {
   display: flex;

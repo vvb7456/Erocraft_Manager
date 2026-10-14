@@ -1,483 +1,160 @@
 <script setup lang="ts">
-// HostAlertingSection — per-host 告警 channel + 规则覆盖
-//
-// GET /api/admin/hosts/{hostId}/alerts → { settings, rules, defaults }
-// PUT /api/admin/hosts/{hostId}/alerts (full replacement: { settings, rules })
-//
-// settings 字段为 null 时表示"继承全局默认"。
-// rules 为完整替换：未列出的 alert_type 即"使用默认"；列出但字段为 null
-// 表示该字段使用默认。本组件采用 SettingsPage 的「alert-row + alert-sub」
-// 视觉语言保持一致（toggle + RangeField 阈值 + RangeField sustain）。
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
-import { useToast } from '@/composables/useToast'
 import { useDirtyFormSection } from '@/composables/useDirtyForm'
-import CollapsibleGroup from '@/components/ui/CollapsibleGroup.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
-import FormField from '@/components/form/FormField.vue'
-import NumberInput from '@/components/form/NumberInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
-import RangeField from '@/components/form/RangeField.vue'
-import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
+import NumberInput from '@/components/form/NumberInput.vue'
+import FormField from '@/components/form/FormField.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import HelpTip from '@/components/ui/HelpTip.vue'
-import Spinner from '@/components/ui/Spinner.vue'
+import LoadingCenter from '@/components/ui/LoadingCenter.vue'
+import SectionHeader from '@/components/ui/SectionHeader.vue'
+import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
+import MetricRulesEditor from '@/components/notifications/MetricRulesEditor.vue'
+import type { MetricRule } from '@/types/notifications'
+import { formSnapshot, sameFormValue } from '@/utils/formState'
 
-defineOptions({ name: 'HostAlertingSection' })
-
-const props = defineProps<{ hostId: number; hostKind: string }>()
-const { t } = useI18n({ useScope: 'global' })
-const { get, raw } = useApiFetch()
-const { toast } = useToast()
-
-type Severity = 'info' | 'warning' | 'critical'
-
-interface ChannelSettings {
-  email_enabled: boolean | null
-  email_recipients: number[] | null
-  min_severity: Severity | null
-  notify_resolve: boolean | null
-  cooldown_min: number | null
-  agent_pull_timeout: number | null
-  agent_pull_attempts: number | null
+const props = withDefaults(defineProps<{ hostId: number; hostKind: string; connectionOnly?: boolean; wecom?: { enabled: boolean; resolved: boolean; group: string } }>(), { connectionOnly: false })
+const { t } = useI18n()
+const { get, put } = useApiFetch()
+interface HostSettings {
+  email_enabled: boolean | null; email_recipients: number[] | null; min_severity: string | null
+  notify_resolve: boolean | null; cooldown_min: number | null; agent_pull_timeout: number | null; agent_pull_attempts: number | null
 }
-
-interface AlertRule {
-  alert_type: string
-  enabled: boolean | null
-  threshold: number | null
-  warning_threshold: number | null
-  critical_threshold: number | null
-  sustain_min: number | null
-}
-
-interface AlertsResponse {
-  settings: ChannelSettings
-  rules: AlertRule[]
-  defaults: {
-    email_enabled: boolean
-    email_recipients: number[]
-    min_severity: Severity
-    notify_resolve: boolean
-    cooldown_min: number
-    agent_pull_timeout: number
-    agent_pull_attempts: number
-    rules: Record<string, Partial<AlertRule>>
-  }
-}
-
-interface AdminOpt { value: string; label: string }
-
+interface Payload { settings: HostSettings; rules: (MetricRule & { alert_type: string })[]; defaults: HostSettings & { rules: Record<string, MetricRule> } }
+const data = ref<Payload | null>(null)
+const baseline = ref('')
+const original = computed<Payload | null>(() => baseline.value ? JSON.parse(baseline.value) : null)
 const loading = ref(true)
-const submitting = ref(false)
-const syncing = ref(true)
-const settings = ref<ChannelSettings>({
-  email_enabled: null,
-  email_recipients: null,
-  min_severity: null,
-  notify_resolve: null,
-  cooldown_min: null,
-  agent_pull_timeout: null,
-  agent_pull_attempts: null,
+const saving = ref(false)
+const admins = ref<{ value: number; label: string }[]>([])
+const severityOptions = computed(() => ['info', 'warning', 'critical'].map(value => ({ value, label: t(`notifications.severity.${value}`) })))
+const selectingRecipients = ref(false)
+const recipientMode = computed({
+  get: () => selectingRecipients.value || data.value?.settings.email_recipients?.length ? 'selected' : data.value?.settings.email_recipients === null ? 'inherit' : 'all',
+  set: (value: string) => {
+    if (!data.value) return
+    selectingRecipients.value = value === 'selected'
+    data.value.settings.email_recipients = value === 'inherit' ? null : value === 'all' ? [] : data.value.settings.email_recipients || []
+  },
 })
-const initialJson = ref<string>('')
-const defaults = ref<AlertsResponse['defaults'] | null>(null)
-const rulesByType = ref<Record<string, AlertRule>>({})
-const adminOptions = ref<AdminOpt[]>([])
-
-const TOGGLE_ONLY = ['node_offline', 'agent_only_down', 'wings_only_down', 'network_down', 'clash_down', 'cert_source_expiring']
-const AVAILABILITY_WITH_SUSTAIN = ['node_offline', 'agent_only_down']
-const TOGGLE_ONLY_PLAIN = TOGGLE_ONLY.filter(at => !AVAILABILITY_WITH_SUSTAIN.includes(at))
-const WINGS_ONLY_ALERTS = ['node_offline', 'wings_only_down']
-const isWings = computed(() => props.hostKind === 'wings_node')
-const SINGLE_THRESHOLD = ['cpu_high', 'mem_high', 'swap_high', 'load_high']
-const DUAL_THRESHOLD = ['disk_high', 'disk_critical']
-const ALL_TYPES = [...SINGLE_THRESHOLD, ...DUAL_THRESHOLD, ...TOGGLE_ONLY]
-
-function emptyRule(alert_type: string): AlertRule {
-  return { alert_type, enabled: null, threshold: null, warning_threshold: null, critical_threshold: null, sustain_min: null }
+const recipientModes = computed(() => [
+  { value: 'inherit', label: t('notifications.center.globalRecipients') }, { value: 'all', label: t('notifications.center.allAdmins') },
+  { value: 'selected', label: t('notifications.center.selectedAdmins') },
+])
+const invalidRecipients = computed(() => recipientMode.value === 'selected' && !data.value?.settings.email_recipients?.length)
+function setSetting<K extends Exclude<keyof HostSettings, 'email_recipients'>>(key: K, value: NonNullable<HostSettings[K]>) {
+  if (!data.value || !original.value) return
+  const previous = original.value.settings[key]
+  const fallback = data.value.defaults[key] ?? (key === 'min_severity' ? 'warning' : key === 'cooldown_min' ? 30 : key.startsWith('agent_pull_') ? 1 : false)
+  data.value.settings[key] = value === (previous ?? fallback) ? previous : value
 }
-
-async function loadAdmins() {
-  const r = await get<{ users: any[] }>('/api/admin/users?page=1&perPage=200')
-  if (!r) return
-  adminOptions.value = (r.users || [])
-    .filter((u: any) => u.root_admin || u.rootAdmin)
-    .map((u: any) => ({ value: String(u.id), label: `${u.username} (${u.email || '—'})` }))
+function setRecipients(value: unknown) {
+  if (!data.value) return
+  const next = Array.isArray(value) ? value.map(Number) : []
+  const previous = original.value?.settings.email_recipients
+  data.value.settings.email_recipients = previous && sameFormValue([...previous].sort(), [...next].sort()) ? [...previous] : next
 }
-
+const rules = computed<Record<string, MetricRule>>({
+  get: () => Object.fromEntries((data.value?.rules || []).map(({ alert_type, ...rule }) => [alert_type, rule])),
+  set: value => {
+    if (!data.value || !original.value) return
+    const restored = Object.entries(value).flatMap(([alert_type, rule]) => {
+      const previous = original.value!.rules.find(item => item.alert_type === alert_type)
+      const fields = Object.fromEntries(Object.entries(rule).flatMap(([field, next]) => {
+        const key = field as keyof MetricRule
+        const old = previous?.[key]
+        if (next !== (old ?? data.value!.defaults.rules[alert_type]?.[key])) return [[field, next]]
+        return old === undefined ? [] : [[field, old]]
+      }))
+      return previous || Object.keys(fields).length ? [{ alert_type, ...fields }] : []
+    })
+    data.value.rules = restored.sort((a, b) => a.alert_type.localeCompare(b.alert_type))
+  },
+})
+const dirty = computed(() => !!data.value && (formSnapshot(data.value) !== baseline.value || invalidRecipients.value))
 async function load() {
   loading.value = true
-  syncing.value = true
-  // Keep a stable baseline even if request fails, so initial mount
-  // and error paths never emit a transient dirty state.
-  initialJson.value = serialize()
+  const [result, center] = await Promise.all([get<Payload>(`/api/admin/hosts/${props.hostId}/alerts`), props.connectionOnly ? null : get<{ admins: typeof admins.value }>('/api/admin/notifications/center')])
+  if (result) { result.rules.sort((a, b) => a.alert_type.localeCompare(b.alert_type)); data.value = result; baseline.value = formSnapshot(result); selectingRecipients.value = false }
+  if (center) admins.value = center.admins
+  loading.value = false
+}
+async function save() {
+  if (!data.value || saving.value || invalidRecipients.value) return false
+  saving.value = true
+  const edited = JSON.parse(JSON.stringify(data.value)) as Payload
+  const submitted = JSON.parse(JSON.stringify(data.value)) as Payload
   try {
-    const data = await get<AlertsResponse>(`/api/admin/hosts/${props.hostId}/alerts`)
-    if (!data) return
-    settings.value = { ...data.settings }
-    defaults.value = data.defaults
-    rulesByType.value = {}
-    for (const r of data.rules) rulesByType.value[r.alert_type] = { ...r }
-    for (const at of ALL_TYPES) {
-      if (!rulesByType.value[at]) rulesByType.value[at] = emptyRule(at)
+    if (props.connectionOnly) {
+      const latest = await get<Payload>(`/api/admin/hosts/${props.hostId}/alerts`)
+      if (!latest) return false
+      submitted.rules = latest.rules
+      submitted.settings = { ...latest.settings, agent_pull_timeout: submitted.settings.agent_pull_timeout, agent_pull_attempts: submitted.settings.agent_pull_attempts }
     }
-    initialJson.value = serialize()
-  } finally {
-    syncing.value = false
-    loading.value = false
-  }
+    const result = await put<Payload>(`/api/admin/hosts/${props.hostId}/alerts`, { settings: submitted.settings, rules: submitted.rules })
+    if (!result) return false
+    const later = Object.fromEntries((['settings', 'rules'] as const)
+      .filter(key => !sameFormValue(data.value![key], edited[key]))
+      .map(key => [key, data.value![key]]))
+    result.rules.sort((a, b) => a.alert_type.localeCompare(b.alert_type))
+    baseline.value = formSnapshot(result)
+    data.value = { ...result, ...later }
+    return !dirty.value
+  } finally { saving.value = false }
 }
-
-onMounted(async () => {
-  await loadAdmins()
-  await load()
-})
-
-function serialize(): string {
-  return JSON.stringify({ settings: settings.value, rules: rulesByType.value })
-}
-const isDirty = computed(() => !syncing.value && serialize() !== initialJson.value)
-
-const recipientIds = computed<string[]>({
-  get: () => (settings.value.email_recipients ?? []).map(String),
-  set: (v) => { settings.value.email_recipients = v.length ? v.map(Number) : null },
-})
-
-async function save(): Promise<boolean> {
-  if (!isDirty.value) return true
-  submitting.value = true
-  try {
-    const outRules: AlertRule[] = []
-    for (const at of ALL_TYPES) {
-      const r = rulesByType.value[at]
-      if (r.enabled !== null || r.threshold !== null || r.warning_threshold !== null
-          || r.critical_threshold !== null || r.sustain_min !== null) {
-        outRules.push(r)
-      }
-    }
-    const body = { settings: settings.value, rules: outRules }
-    const res = await raw(`/api/admin/hosts/${props.hostId}/alerts`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!res) return false
-    toast(t('hosts.setting.alerting.saved'), 'success')
-    await load()
-    return true
-  } finally {
-    submitting.value = false
-  }
-}
-
-function discard() { load() }
-
-// Register into the page-wide DirtyBar / leave-guard owned by the parent
-// (HostSettingPane). The parent renders the bar and orchestrates the save.
-useDirtyFormSection({ name: 'host-alerting', isDirty, save, discard })
-
-// Mirrors SettingsPage / HostSettingPane leave-guard: ConfirmDialog with
-// three outcomes (save / discard / stay) so leaving the page never silently
-// drops in-progress edits to per-host alert overrides.
-
-function resetToDefaults() {
-  settings.value = {
-    email_enabled: null, email_recipients: null, min_severity: null,
-    notify_resolve: null, cooldown_min: null,
-    agent_pull_timeout: null, agent_pull_attempts: null,
-  }
-  for (const at of ALL_TYPES) rulesByType.value[at] = emptyRule(at)
-}
-
-const severityOptions = [
-  { value: 'info', label: 'info' },
-  { value: 'warning', label: 'warning' },
-  { value: 'critical', label: 'critical' },
-]
-
-function defaultRule(at: string): Partial<AlertRule> {
-  return defaults.value?.rules[at] ?? {}
-}
-
-function ruleEnabled(at: string): boolean {
-  return rulesByType.value[at].enabled ?? Boolean(defaultRule(at).enabled)
-}
-function setRuleEnabled(at: string, v: boolean) { rulesByType.value[at].enabled = v }
-
-function ruleThreshold(at: string, fallback: number): number {
-  return rulesByType.value[at].threshold ?? Number(defaultRule(at).threshold ?? fallback)
-}
-function setRuleThreshold(at: string, v: number) { rulesByType.value[at].threshold = v }
-
-function ruleSustain(at: string, fallback: number): number {
-  return rulesByType.value[at].sustain_min ?? Number(defaultRule(at).sustain_min ?? fallback)
-}
-function setRuleSustain(at: string, v: number) { rulesByType.value[at].sustain_min = v }
-
-function ruleWarning(at: string, fallback: number): number {
-  return rulesByType.value[at].warning_threshold ?? Number(defaultRule(at).warning_threshold ?? fallback)
-}
-function setRuleWarning(at: string, v: number) { rulesByType.value[at].warning_threshold = v }
-
-function ruleCritical(at: string, fallback: number): number {
-  return rulesByType.value[at].critical_threshold ?? Number(defaultRule(at).critical_threshold ?? fallback)
-}
-function setRuleCritical(at: string, v: number) { rulesByType.value[at].critical_threshold = v }
-
-const pctFmt = (v: number) => `${v}%`
-const minFmt = (v: number) => `${v}m`
-const loadFmt = (v: number) => v.toFixed(1)
+function discard() { if (baseline.value) data.value = JSON.parse(baseline.value); selectingRecipients.value = false }
+useDirtyFormSection({ name: 'host-alerting', isDirty: dirty, save, discard })
+onMounted(load)
 </script>
 
 <template>
-  <BaseCard variant="bg2" class="settings-card">
-    <CollapsibleGroup :title="t('hosts.setting.alerting.title')" icon="notifications" :defaultOpen="false">
-      <div v-if="loading" class="loading-row"><Spinner size="md" /></div>
-
-      <template v-else>
-        <p class="section-hint">{{ t('hosts.setting.alerting.intro') }}</p>
-
-      <!-- ── Channel ── -->
-      <div class="st-sub">{{ t('hosts.setting.alerting.channelSection') }}</div>
-
-      <FormField layout="horizontal" bordered>
-        <template #label>
-          {{ t('hosts.setting.alerting.fields.emailEnabled') }}
-          <HelpTip :text="t('hosts.setting.alerting.tips.inherit', { v: defaults?.email_enabled ? t('hosts.setting.alerting.on') : t('hosts.setting.alerting.off') })" />
-        </template>
-        <ToggleSwitch
-          :modelValue="settings.email_enabled ?? defaults?.email_enabled ?? false"
-          @update:modelValue="(v: boolean) => settings.email_enabled = v"
-          size="sm"
-        />
-      </FormField>
-
-      <FormField layout="horizontal" bordered>
-        <template #label>
-          {{ t('hosts.setting.alerting.fields.recipients') }}
-          <HelpTip :text="t('hosts.setting.alerting.tips.recipients')" />
-        </template>
-        <BaseSelect
-          v-if="adminOptions.length"
-          multiple
-          :options="adminOptions"
-          :modelValue="recipientIds"
-          :placeholder="t('hosts.setting.alerting.recipientsEmpty')"
-          @update:modelValue="(v: any) => recipientIds = v as string[]"
-        />
-      </FormField>
-
-      <FormField layout="horizontal" bordered>
-        <template #label>{{ t('hosts.setting.alerting.fields.minSeverity') }}</template>
-        <BaseSelect
-          :modelValue="settings.min_severity ?? defaults?.min_severity ?? 'warning'"
-          :options="severityOptions"
-          @update:modelValue="(v: any) => settings.min_severity = v as Severity"
-        />
-      </FormField>
-
-      <FormField layout="horizontal" bordered>
-        <template #label>{{ t('hosts.setting.alerting.fields.notifyResolve') }}</template>
-        <ToggleSwitch
-          :modelValue="settings.notify_resolve ?? defaults?.notify_resolve ?? false"
-          @update:modelValue="(v: boolean) => settings.notify_resolve = v"
-          size="sm"
-        />
-      </FormField>
-
-      <FormField layout="horizontal" bordered>
-        <template #label>
-          {{ t('hosts.setting.alerting.fields.cooldown') }}
-          <HelpTip :text="t('hosts.setting.alerting.tips.cooldown')" />
-        </template>
-        <NumberInput
-          :modelValue="settings.cooldown_min ?? defaults?.cooldown_min ?? 30"
-          :min="1" :max="1440"
-          @update:modelValue="(v: number) => settings.cooldown_min = v"
-        />
-      </FormField>
-
-      <!-- ── Agent pull tuning ── -->
-      <div class="st-sub">
-        {{ t('hosts.setting.alerting.pullSection') }}
-        <HelpTip :text="t('hosts.setting.alerting.tips.pull')" />
-      </div>
-
-      <FormField layout="horizontal" bordered>
-        <template #label>
-          {{ t('hosts.setting.alerting.fields.pullTimeout') }}
-          <HelpTip :text="t('hosts.setting.alerting.tips.pullTimeout')" />
-        </template>
-        <NumberInput
-          :modelValue="settings.agent_pull_timeout ?? defaults?.agent_pull_timeout ?? 5"
-          :min="1" :max="60" :step="1"
-          @update:modelValue="(v: number) => settings.agent_pull_timeout = v"
-        />
-      </FormField>
-
-      <FormField layout="horizontal" bordered>
-        <template #label>
-          {{ t('hosts.setting.alerting.fields.pullAttempts') }}
-          <HelpTip :text="t('hosts.setting.alerting.tips.pullAttempts')" />
-        </template>
-        <NumberInput
-          :modelValue="settings.agent_pull_attempts ?? defaults?.agent_pull_attempts ?? 3"
-          :min="1" :max="5" :step="1"
-          @update:modelValue="(v: number) => settings.agent_pull_attempts = v"
-        />
-      </FormField>
-
-      <!-- ── Per-type rules ── -->
-      <div class="st-sub">
-        {{ t('hosts.setting.alerting.rulesSection') }}
-        <HelpTip :text="t('hosts.setting.alerting.rulesTip')" />
-      </div>
-
-      <FormField
-        v-for="at in AVAILABILITY_WITH_SUSTAIN"
-        :key="at"
-        :label="t(`hosts.setting.alerting.types.${at}`)"
-        layout="horizontal"
-        bordered
-      >
-        <div class="alert-row">
-          <ToggleSwitch
-            :modelValue="!isWings && WINGS_ONLY_ALERTS.includes(at) ? false : ruleEnabled(at)"
-            :disabled="!isWings && WINGS_ONLY_ALERTS.includes(at)"
-            @update:modelValue="(v: boolean) => setRuleEnabled(at, v)"
-            size="sm"
-          />
-          <RangeField
-            class="alert-range"
-            :label="t('hosts.setting.alerting.sustainMin')"
-            :modelValue="ruleSustain(at, 2)"
-            :min="1" :max="60" :step="1"
-            :disabled="!isWings && WINGS_ONLY_ALERTS.includes(at)"
-            show-value editable
-            :value-format="minFmt"
-            @update:modelValue="(v: number) => setRuleSustain(at, v)"
-          />
-        </div>
-      </FormField>
-
-      <FormField
-        v-for="at in TOGGLE_ONLY_PLAIN"
-        :key="at"
-        :label="t(`hosts.setting.alerting.types.${at}`)"
-        layout="horizontal"
-        bordered
-      >
-        <ToggleSwitch
-          :modelValue="!isWings && WINGS_ONLY_ALERTS.includes(at) ? false : ruleEnabled(at)"
-          :disabled="!isWings && WINGS_ONLY_ALERTS.includes(at)"
-          @update:modelValue="(v: boolean) => setRuleEnabled(at, v)"
-          size="sm"
-        />
-      </FormField>
-
-      <FormField v-for="at in SINGLE_THRESHOLD" :key="at" layout="horizontal" bordered>
-        <template #label>{{ t(`hosts.setting.alerting.types.${at}`) }}</template>
-        <div class="alert-row">
-          <ToggleSwitch :modelValue="ruleEnabled(at)" @update:modelValue="(v: boolean) => setRuleEnabled(at, v)" size="sm" />
-          <RangeField
-            class="alert-range"
-            :label="t('hosts.setting.alerting.threshold')"
-            :modelValue="ruleThreshold(at, at === 'load_high' ? 1.5 : 90)"
-            :min="at === 'load_high' ? 0.5 : 50"
-            :max="at === 'load_high' ? 5 : 100"
-            :step="at === 'load_high' ? 0.1 : 1"
-            show-value editable
-            :value-format="at === 'load_high' ? loadFmt : pctFmt"
-            @update:modelValue="(v: number) => setRuleThreshold(at, v)"
-          />
-          <RangeField
-            class="alert-range"
-            :label="t('hosts.setting.alerting.sustainMin')"
-            :modelValue="ruleSustain(at, 5)"
-            :min="1" :max="60" :step="1"
-            show-value editable
-            :value-format="minFmt"
-            @update:modelValue="(v: number) => setRuleSustain(at, v)"
-          />
-        </div>
-      </FormField>
-
-      <FormField v-for="at in DUAL_THRESHOLD" :key="at" layout="horizontal" bordered>
-        <template #label>{{ t(`hosts.setting.alerting.types.${at}`) }}</template>
-        <div class="alert-row">
-          <ToggleSwitch :modelValue="ruleEnabled(at)" @update:modelValue="(v: boolean) => setRuleEnabled(at, v)" size="sm" />
-          <RangeField
-            class="alert-range"
-            :label="t('hosts.setting.alerting.warningThreshold')"
-            :modelValue="ruleWarning(at, 85)"
-            :min="50" :max="100" :step="1"
-            show-value editable
-            :value-format="pctFmt"
-            @update:modelValue="(v: number) => setRuleWarning(at, v)"
-          />
-          <RangeField
-            class="alert-range"
-            :label="t('hosts.setting.alerting.criticalThreshold')"
-            :modelValue="ruleCritical(at, 95)"
-            :min="50" :max="100" :step="1"
-            show-value editable
-            :value-format="pctFmt"
-            @update:modelValue="(v: number) => setRuleCritical(at, v)"
-          />
-        </div>
-      </FormField>
-
-        <div class="actions">
-          <BaseButton size="sm" variant="ghost" @click="resetToDefaults">
-            {{ t('hosts.setting.alerting.resetDefaults') }}
-          </BaseButton>
-        </div>
-      </template>
-    </CollapsibleGroup>
-  </BaseCard>
+  <LoadingCenter v-if="loading" />
+  <BaseButton v-else-if="!data" @click="load">{{ t('notifications.reload') }}</BaseButton>
+  <fieldset v-else :disabled="saving" :inert="saving" class="host-alert-settings">
+    <BaseCard v-if="connectionOnly" variant="bg2" density="compact">
+        <SectionHeader icon="monitoring" :subtitle="t('hosts.setting.alerting.pullDesc')" flush>{{ t('hosts.setting.alerting.pullSection') }}</SectionHeader>
+        <FormField v-for="key in (['agent_pull_timeout', 'agent_pull_attempts'] as const)" :key="key" :label="t(key === 'agent_pull_timeout' ? 'hosts.setting.alerting.fields.pullTimeout' : 'hosts.setting.alerting.fields.pullAttempts')" layout="horizontal">
+          <NumberInput :model-value="data.settings[key] ?? data.defaults[key] ?? 1" :min="1" :max="key === 'agent_pull_timeout' ? 60 : 5" @update:model-value="setSetting(key, $event)" />
+        </FormField>
+    </BaseCard>
+    <template v-else>
+      <BaseCard variant="bg2" density="compact">
+        <SectionHeader icon="notifications" :subtitle="t('notifications.center.subtitles.hostDelivery')" flush>{{ t('notifications.center.delivery') }}</SectionHeader>
+        <FormField :label="t('notifications.center.email')" layout="horizontal">
+          <ToggleSwitch :model-value="data.settings.email_enabled ?? data.defaults.email_enabled ?? false" size="sm" @update:model-value="setSetting('email_enabled', $event)" />
+        </FormField>
+        <FormField :label="t('notifications.center.emailRecipients')" layout="horizontal"><BaseSelect v-model="recipientMode" :options="recipientModes" teleport /></FormField>
+        <FormField v-if="recipientMode === 'selected'" :label="t('notifications.center.selectedAdmins')" :error="invalidRecipients ? t('notifications.center.selectAdmin') : undefined" layout="horizontal">
+          <BaseSelect :model-value="data.settings.email_recipients || []" multiple searchable teleport :options="admins" @update:model-value="setRecipients" />
+        </FormField>
+        <FormField :label="t('notifications.center.emailResolved')" layout="horizontal">
+          <ToggleSwitch :model-value="data.settings.notify_resolve ?? data.defaults.notify_resolve ?? false" size="sm" @update:model-value="setSetting('notify_resolve', $event)" />
+        </FormField>
+        <FormField v-if="wecom" :label="t('notifications.center.wecom')" layout="horizontal">
+          <span class="field-value">{{ t(wecom.enabled ? 'hosts.setting.alerting.on' : 'hosts.setting.alerting.off') }}<template v-if="wecom.enabled"> · {{ wecom.group }}</template></span>
+        </FormField>
+        <FormField v-if="wecom?.enabled" :label="t('notifications.center.wecomResolved')" layout="horizontal"><span class="field-value">{{ t(wecom.resolved ? 'hosts.setting.alerting.on' : 'hosts.setting.alerting.off') }}</span></FormField>
+      </BaseCard>
+      <BaseCard variant="bg2" density="compact">
+        <SectionHeader icon="tune" :subtitle="t('notifications.center.subtitles.reminderPolicy')" flush>{{ t('notifications.center.reminderPolicy') }}</SectionHeader>
+        <FormField :label="t('notifications.minSeverity')" layout="horizontal">
+          <BaseSelect :model-value="data.settings.min_severity ?? data.defaults.min_severity ?? 'warning'" :options="severityOptions" teleport @update:model-value="setSetting('min_severity', String($event))" />
+        </FormField>
+        <FormField :label="t('notifications.center.cooldown')" layout="horizontal">
+          <NumberInput :model-value="data.settings.cooldown_min ?? data.defaults.cooldown_min ?? 30" :min="1" :max="1440" @update:model-value="setSetting('cooldown_min', $event)" />
+        </FormField>
+      </BaseCard>
+      <BaseCard variant="bg2" density="compact">
+        <SectionHeader icon="monitoring" :subtitle="t('notifications.center.subtitles.conditions')" flush>{{ t('notifications.center.conditions') }}</SectionHeader>
+        <MetricRulesEditor v-model="rules" :defaults="data.defaults.rules" :host-kind="hostKind" />
+      </BaseCard>
+    </template>
+  </fieldset>
 </template>
 
 <style scoped>
-.loading-row {
-  display: flex;
-  justify-content: center;
-  padding: var(--sp-4) 0;
-}
-.section-hint {
-  color: var(--t2);
-  font-size: var(--text-sm);
-  margin: var(--sp-2) 0 0;
-}
-
-.st-sub {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  font-size: .95rem;
-  font-weight: 600;
-  color: var(--t1);
-  padding: var(--sp-5) 0 var(--sp-2);
-}
-
-.alert-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  flex-wrap: nowrap;
-  width: 100%;
-}
-.alert-range {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-top: var(--sp-4);
-}
-.spacer { flex: 1; }
+.host-alert-settings { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-4); }
+.field-value { font-size: var(--text-base); color: var(--t2); }
 </style>

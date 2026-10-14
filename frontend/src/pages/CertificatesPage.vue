@@ -10,7 +10,6 @@ import StatCard from '@/components/ui/StatCard.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
-import AddCard from '@/components/ui/AddCard.vue'
 import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
@@ -242,7 +241,11 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
 </script>
 
 <template>
-  <PageHeader icon="workspace_premium" :title="t('certificates.title')" />
+  <PageHeader icon="workspace_premium" :title="t('certificates.title')">
+    <template #controls>
+      <BaseButton size="sm" variant="primary" @click="addOpen = true"><MsIcon name="add" size="xs" />{{ t('certificates.addCard') }}</BaseButton>
+    </template>
+  </PageHeader>
 
   <LoadingCenter v-if="loading && certificates.length === 0" />
 
@@ -345,7 +348,6 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
         <p v-if="cert.source_last_error" class="cert-error">{{ cert.source_last_error }}</p>
       </BaseCard>
 
-      <AddCard class="cert-add-card" :label="t('certificates.addCard')" @click="addOpen = true" />
     </section>
 
     <section class="deployment-section" aria-label="deployment statuses">
@@ -517,8 +519,7 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
   margin-bottom: 0;
 }
 
-.cert-card,
-.cert-add-card {
+.cert-card {
   min-height: 260px;
 }
 
@@ -683,7 +684,7 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
 }
 
 .mono {
-  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
 
@@ -794,8 +795,7 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
     grid-template-columns: 1fr;
   }
 
-  .cert-card,
-  .cert-add-card {
+  .cert-card {
     min-height: 0;
   }
 

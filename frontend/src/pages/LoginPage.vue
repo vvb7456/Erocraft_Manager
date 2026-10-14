@@ -77,10 +77,8 @@ async function handleLogin() {
         router.replace(redirect)
       } else if (data.is_admin) {
         router.replace({ name: 'dashboard' })
-      } else if (!data.has_owned_server) {
-        router.replace({ name: 'user-plans' })
       } else {
-        router.replace({ name: 'user-servers' })
+        router.replace({ name: 'user-home' })
       }
     } else {
       error.value = translateApiText(data.error) || t('login.error.invalid')

@@ -1,11 +1,19 @@
 {
   "listSep": "、",
+  "selection": {
+    "count": "已选择 {count} 项",
+    "clear": "取消选择",
+    "actions": "批量操作",
+    "select": "选择 {name}",
+    "selectAll": "选择本页全部"
+  },
   "clipboard": {
     "copied": "已复制",
     "failed": "复制失败",
     "empty": "没有可复制的内容"
   },
   "btn": {
+    "clear": "清空",
     "save": "保存",
     "saveDirty": "保存更改",
     "discard": "放弃更改",

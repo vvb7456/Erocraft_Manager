@@ -1,6 +1,8 @@
 {
   "title": "账户设置",
   "loading": "正在加载账户信息...",
+  "otherSettings": "其他设置",
+  "otherSettingsDesc": "设置界面语言与聊天消息提示音。",
   "profile": {
     "title": "基本信息",
     "desc": "查看当前账户的基本资料。",
@@ -11,6 +13,9 @@
       "admin": "管理员",
       "user": "普通用户"
     }
+  },
+  "notifications": {
+    "sound": "聊天提示音"
   },
   "email": {
     "title": "修改邮箱",
@@ -39,14 +44,10 @@
     }
   },
   "language": {
-    "title": "界面语言",
-    "desc": "选择默认界面语言，登录后将自动应用。",
-    "label": "默认语言",
+    "label": "界面语言",
     "options": {
       "zh": "简体中文",
       "en": "English"
-    },
-    "submit": "保存语言",
-    "success": "语言偏好已保存"
+    }
   }
 }

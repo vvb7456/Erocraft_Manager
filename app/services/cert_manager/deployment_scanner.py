@@ -43,6 +43,7 @@ async def scan_deployment(
     cert = await db.get(ManagerCertificate, deployment.certificate_id)
     if cert is None:
         deployment.status = "unknown"
+        deployment.unhealthy_since = deployment.unhealthy_since or utc_naive_now()
         deployment.last_check_at = utc_naive_now()
         deployment.last_check_error = "certificate row not found"
         if commit:
@@ -56,6 +57,7 @@ async def scan_deployment(
         payload = await agent_client.get_cert_status(endpoint, token, timeout=10.0)
     except host_registry.HostRegistryError as exc:
         deployment.status = "unreachable"
+        deployment.unhealthy_since = deployment.unhealthy_since or now
         deployment.last_check_error = str(exc)
         if commit:
             await db.commit()
@@ -67,6 +69,7 @@ async def scan_deployment(
         }
     except agent_client.AgentClientError as exc:
         deployment.status = "unreachable"
+        deployment.unhealthy_since = deployment.unhealthy_since or now
         deployment.last_check_error = str(exc)
         if commit:
             await db.commit()
@@ -88,6 +91,7 @@ async def scan_deployment(
         )
         if target_status is None:
             deployment.status = "unknown"
+            deployment.unhealthy_since = deployment.unhealthy_since or now
             deployment.last_check_error = f"agent target not found: {deployment.target_name}"
             if commit:
                 await db.commit()
@@ -119,6 +123,7 @@ async def scan_deployment(
             deployment.status = "outdated"
             deployment.last_check_error = None
 
+    deployment.unhealthy_since = None if deployment.status == "synced" else (deployment.unhealthy_since or now)
     if commit:
         await db.commit()
     return {

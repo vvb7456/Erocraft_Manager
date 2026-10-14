@@ -1,9 +1,20 @@
 {
-  "title": "在线客服", "inbox": "客服消息",
+  "title": "在线客服", "inbox": "客服接待",
   "older": "查看更早消息", "loading": "加载中…",
   "empty": "暂无消息", "agent": "客服", "customer": "用户",
   "image": "截图", "read": "已读", "sent": "已发送", "retry": "加载失败，点击重试", "remove": "移除",
-  "placeholder": "请输入消息，Ctrl / ⌘ + Enter 发送", "attach": "添加截图", "imageLimit": "请选择不超过4MB的 PNG、JPEG 或 WebP 图片",
+  "placeholder": "输入消息…", "attach": "添加截图", "imageLimit": "请选择不超过4MB的 PNG、JPEG 或 WebP 图片",
   "sending": "发送中…", "send": "发送", "noConversations": "暂无客服会话",
-  "more": "加载更多", "back": "会话列表", "selectConversation": "选择一个会话开始接待"
+  "more": "加载更多", "back": "会话", "selectConversation": "选择一个会话开始接待",
+  "startConversation": "有什么可以帮你？", "history": "聊天记录", "today": "今天", "yesterday": "昨天",
+  "automated": "自动回复", "viewImage": "查看完整截图", "newMessages": "{count} 条新消息",
+  "sendFailed": "发送失败，内容已保留，请重试。",
+  "minimize": "收起为聊天气泡",
+  "connection": { "connecting": "连接中", "connected": "已连接", "reconnecting": "正在重连", "offline": "网络已断开", "disconnected": "连接已断开" },
+  "search": "搜索用户名", "all": "全部会话", "unread": "未读", "noResults": "没有匹配的会话",
+  "preSales": "售前", "afterSales": "售后", "customerActions": "{name} 的相关页面", "viewUser": "查看用户", "viewServers": "查看服务器", "viewOrders": "查看订单",
+  "recentMessages": "最近消息", "clearFilters": "清除筛选", "clearSearch": "清空搜索",
+  "unreadMessages": "{count} 条未读消息", "userId": "用户 ID {id}", "selectConversationHint": "从左侧选择会话，查看历史消息并回复。",
+  "copyContact": "复制{name}", "welcomeEnabled": "自动发送欢迎语", "welcomeMessage": "欢迎语",
+  "welcomeHint": "仅在用户首次开启会话时发送一次，支持链接。"
 }

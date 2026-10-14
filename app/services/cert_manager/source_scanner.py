@@ -30,6 +30,10 @@ async def scan_certificate_source(
     except CertPemError as exc:
         cert.source_last_seen_at = now
         cert.source_last_error = str(exc)
+        if cert.enabled:
+            from app.services.notifications.events import certificate_alert
+
+            await certificate_alert(db, cert=cert, alert_type="cert_source_unknown", severity="warning", message="无法读取证书源文件，请检查证书签发、续签结果及文件路径。")
         if commit:
             try:
                 await db.commit()

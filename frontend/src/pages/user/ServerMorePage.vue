@@ -151,7 +151,7 @@ const clients = computed<ClientLink[]>(() => [
     <div v-for="c in clients" :key="c.platform" class="kv-row">
       <span class="kv-row__label">{{ c.platform }}</span>
       <a class="kv-row__value kv-row__link kv-row__link--right" :href="c.url" target="_blank" rel="noopener">
-        {{ c.name }}
+        <span class="kv-row__link-label">{{ c.name }}</span>
         <MsIcon name="open_in_new" size="sm" />
       </a>
     </div>
@@ -222,7 +222,7 @@ const clients = computed<ClientLink[]>(() => [
 }
 
 .kv-row__value--mono {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
 }
 
 .kv-row__value--hint {
@@ -260,7 +260,7 @@ const clients = computed<ClientLink[]>(() => [
   text-align: right;
 }
 
-.kv-row__link:hover {
+.kv-row__link:hover .kv-row__link-label {
   text-decoration: underline;
 }
 

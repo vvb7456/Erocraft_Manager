@@ -426,9 +426,9 @@ class HostAlertRuleSchema(BaseModel):
 
     alert_type: str
     enabled: bool | None = None
-    threshold: float | None = None
-    warning_threshold: float | None = None
-    critical_threshold: float | None = None
+    threshold: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    warning_threshold: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    critical_threshold: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
     sustain_min: int | None = Field(default=None, ge=1, le=60)
 
     @field_validator("alert_type")
@@ -467,20 +467,9 @@ class HostAlertsUpdate(BaseModel):
     rules: list[HostAlertRuleSchema] = Field(default_factory=list)
 
 
-def _defaults_payload() -> dict[str, object]:
-    return {
-        "email_enabled": alert_defaults.DEFAULT_EMAIL_ENABLED,
-        "email_recipients": list(alert_defaults.DEFAULT_EMAIL_RECIPIENTS),
-        "min_severity": alert_defaults.DEFAULT_MIN_SEVERITY,
-        "notify_resolve": alert_defaults.DEFAULT_NOTIFY_RESOLVE,
-        "cooldown_min": alert_defaults.DEFAULT_COOLDOWN_MIN,
-        "agent_pull_timeout": alert_defaults.DEFAULT_AGENT_PULL_TIMEOUT,
-        "agent_pull_attempts": alert_defaults.DEFAULT_AGENT_PULL_ATTEMPTS,
-        "rules": {
-            atype: alert_defaults.default_rule(atype)
-            for atype in alert_defaults.ALERT_TYPES
-        },
-    }
+async def _runtime_alert_defaults(db: AsyncSession) -> dict[str, object]:
+    from app.services.notifications.policy import monitoring_defaults
+    return await monitoring_defaults(db)
 
 
 @router.get("/{host_id}/alerts", response_model=HostAlertsResponse)
@@ -532,10 +521,22 @@ async def get_host_alerts(
         for r in rule_rows
     ]
 
+    high = next((r for r in rules_out if r.alert_type == "disk_high"), None)
+    critical = next((r for r in rules_out if r.alert_type == "disk_critical"), None)
+    if high and high.critical_threshold is not None:
+        if critical is None:
+            critical = HostAlertRuleSchema(alert_type="disk_critical")
+            rules_out.append(critical)
+        if critical.critical_threshold is None:
+            critical.critical_threshold = high.critical_threshold
+        high.critical_threshold = None
+    if critical:
+        critical.warning_threshold = None
+
     return HostAlertsResponse(
         settings=settings_out,
         rules=rules_out,
-        defaults=_defaults_payload(),
+        defaults=await _runtime_alert_defaults(db),
     )
 
 
@@ -552,6 +553,17 @@ async def put_host_alerts(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
     # --- settings upsert ---
+    incoming = {r.alert_type: r for r in body.rules}
+    if len(incoming) != len(body.rules):
+        raise HTTPException(400, "告警类型重复")
+    from app.services.notifications.policy import load_policy
+    policy = await load_policy(db)
+    warning = incoming.get("disk_high")
+    critical = incoming.get("disk_critical")
+    warning_value = warning.warning_threshold if warning and warning.warning_threshold is not None else policy.monitoring["disk_high"].warning_threshold
+    critical_value = critical.critical_threshold if critical and critical.critical_threshold is not None else (warning.critical_threshold if warning and warning.critical_threshold is not None else policy.monitoring["disk_critical"].critical_threshold)
+    if warning_value is not None and critical_value is not None and warning_value >= critical_value:
+        raise HTTPException(400, "磁盘严重阈值必须大于警告阈值")
     s = body.settings
     settings_row = (
         await db.execute(
@@ -582,10 +594,9 @@ async def put_host_alerts(
         incoming_types.add(rule.alert_type)
         row = existing_by_type.get(rule.alert_type)
         if row is None:
-            row = HostAlertRule(host_id=host_id, alert_type=rule.alert_type, enabled=True)
+            row = HostAlertRule(host_id=host_id, alert_type=rule.alert_type)
             db.add(row)
-        if rule.enabled is not None:
-            row.enabled = rule.enabled
+        row.enabled = rule.enabled
         row.threshold = rule.threshold
         row.warning_threshold = rule.warning_threshold
         row.critical_threshold = rule.critical_threshold

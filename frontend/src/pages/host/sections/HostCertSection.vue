@@ -214,8 +214,8 @@ function statusColor(s: string): string {
 </script>
 
 <template>
-  <BaseCard variant="bg2" class="settings-card">
-    <CollapsibleGroup :title="t('hosts.certs.title')" icon="verified_user" :defaultOpen="false">
+  <BaseCard variant="bg2" density="compact">
+    <CollapsibleGroup :title="t('hosts.certs.title')" :subtitle="t('hosts.certs.desc')" icon="verified_user" :defaultOpen="false">
       <Spinner v-if="loading" />
 
       <template v-else>

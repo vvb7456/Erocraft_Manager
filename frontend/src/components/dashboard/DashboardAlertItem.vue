@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MsIcon from '@/components/ui/MsIcon.vue'
+import { useRouter } from 'vue-router'
 
 defineOptions({ name: 'DashboardAlertItem' })
 
@@ -12,12 +13,10 @@ const props = defineProps<{
   message?: string | null
   hostName?: string | null
   createdAt: string
-  resolving?: boolean
 }>()
 
-const emit = defineEmits<{ (e: 'resolve'): void }>()
-
 const { t, te } = useI18n({ useScope: 'global' })
+const router = useRouter()
 
 const timeAgo = computed(() => {
   const hasTz = /Z|[+-]\d{2}:?\d{2}$/.test(props.createdAt)
@@ -54,13 +53,12 @@ const severityClass = computed(() => `sev-${props.severity}`)
     <button
       v-if="id != null"
       type="button"
-      class="resolve-btn"
-      :disabled="resolving"
-      :title="t('dashboard.alerts.resolve')"
-      :aria-label="t('dashboard.alerts.resolve')"
-      @click.stop="emit('resolve')"
+      class="details-btn"
+      :title="t('notifications.center.details')"
+      :aria-label="t('notifications.center.details')"
+      @click.stop="router.push({ name: 'notifications', query: { category: 'monitoring' } })"
     >
-      <MsIcon name="close" size="xs" />
+      <MsIcon name="notifications" size="xs" />
     </button>
   </div>
 </template>
@@ -136,7 +134,7 @@ const severityClass = computed(() => `sev-${props.severity}`)
   flex: 1;
   min-width: 0;
 }
-.resolve-btn {
+.details-btn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -151,13 +149,9 @@ const severityClass = computed(() => `sev-${props.severity}`)
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
   align-self: center;
 }
-.resolve-btn:hover:not(:disabled) {
+.details-btn:hover {
   background: var(--bg4);
   color: var(--red);
   border-color: var(--bd);
-}
-.resolve-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

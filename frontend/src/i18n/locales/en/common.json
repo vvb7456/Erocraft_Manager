@@ -1,11 +1,19 @@
 {
   "listSep": ", ",
+  "selection": {
+    "count": "{count} selected",
+    "clear": "Cancel selection",
+    "actions": "Bulk actions",
+    "select": "Select {name}",
+    "selectAll": "Select all on this page"
+  },
   "clipboard": {
     "copied": "Copied",
     "failed": "Copy failed",
     "empty": "Nothing to copy"
   },
   "btn": {
+    "clear": "Clear",
     "save": "Save",
     "saveDirty": "Save changes",
     "discard": "Discard changes",

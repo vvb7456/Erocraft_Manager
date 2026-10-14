@@ -21,6 +21,7 @@ const props = withDefaults(defineProps<{
   totalPages: number
   /** Items per page */
   perPage: number
+  maxPerPage?: number
   /** Label for the per-page input (e.g. "条/页") */
   perPageLabel?: string
   /** Current sort column key */
@@ -37,6 +38,7 @@ const props = withDefaults(defineProps<{
   rowKey?: string
 }>(), {
   perPageLabel: '',
+  maxPerPage: 500,
   sortBy: '',
   sortOrder: 'asc',
   loading: false,
@@ -53,7 +55,9 @@ const emit = defineEmits<{
 }>()
 
 function onPerPageChange(e: Event) {
-  const v = Math.max(1, Math.min(500, Number((e.target as HTMLInputElement).value) || 20))
+  const input = e.target as HTMLInputElement
+  const v = Math.max(1, Math.min(props.maxPerPage, Math.floor(Number(input.value)) || 20))
+  input.value = String(v)
   emit('update:perPage', v)
   emit('update:page', 1)
 }
@@ -117,6 +121,7 @@ function submitJump() {
     <!-- Desktop table view -->
     <div v-else class="dt-table-wrap">
       <table class="dt-table">
+        <slot name="colgroup" />
         <thead>
           <tr>
             <slot name="header" :sort-by="sortBy" :sort-order="sortOrder" :sort-icon="sortIcon" />
@@ -180,7 +185,7 @@ function submitJump() {
           class="dt-per-page-input"
           :value="perPage"
           min="1"
-          max="500"
+          :max="maxPerPage"
           @change="onPerPageChange"
         />
         <span v-if="perPageLabel" class="dt-per-page-label">{{ perPageLabel }}</span>

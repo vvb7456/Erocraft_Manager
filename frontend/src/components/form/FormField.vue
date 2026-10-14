@@ -19,11 +19,12 @@ defineProps<{
   bordered?: boolean
   /** Keep horizontal layout on mobile (useful for small controls like toggles) */
   keepHorizontal?: boolean
+  controlFit?: boolean
 }>()
 </script>
 
 <template>
-  <div class="form-field" :class="[`form-field--${density ?? 'default'}`, layout === 'horizontal' && 'form-field--h', bordered && 'form-field--bordered', keepHorizontal && 'form-field--keep-h']">
+  <div class="form-field" :class="[`form-field--${density ?? 'default'}`, layout === 'horizontal' && 'form-field--h', bordered && 'form-field--bordered', keepHorizontal && 'form-field--keep-h', controlFit && 'form-field--fit']">
     <!-- Horizontal layout: label+hint on left, control on right -->
     <template v-if="layout === 'horizontal'">
       <div class="form-field__h-left">
@@ -103,7 +104,7 @@ export default { components: { FieldLabel } }
 }
 /* Single block-level controls fill the row */
 .form-field__control > :only-child {
-  width: 100%;
+  width: var(--control-width, 100%);
 }
 
 /* Horizontal layout: label+hint on left, control on right */
@@ -114,7 +115,7 @@ export default { components: { FieldLabel } }
 }
 .form-field__h-left {
   flex-shrink: 0;
-  min-width: 160px;
+  min-width: var(--field-label-width, 160px);
 }
 .form-field__h-left .form-field__hint,
 .form-field__h-left .form-field__error {
@@ -128,8 +129,10 @@ export default { components: { FieldLabel } }
   gap: 6px;
 }
 .form-field__h-right > :only-child {
-  width: 100%;
+  width: var(--control-width, 100%);
 }
+.form-field--fit .form-field__h-left { flex: 1; min-width: 0; }
+.form-field--fit .form-field__h-right { flex: 0 0 auto; }
 
 /* Bordered variant — settings rows */
 .form-field--bordered {

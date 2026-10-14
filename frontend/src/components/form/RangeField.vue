@@ -174,7 +174,7 @@ function cancelEdit() {
 .range-field__value {
   color: var(--ac);
   font-weight: 600;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-tabular);
   font-size: .78rem;
   min-width: 30px;
   text-align: right;

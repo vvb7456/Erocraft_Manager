@@ -1,9 +1,20 @@
 {
-  "title": "Online support", "inbox": "Support inbox",
+  "title": "Online support", "inbox": "Support Desk",
   "older": "Earlier messages", "loading": "Loading…",
   "empty": "No messages yet", "agent": "Support", "customer": "Customer",
   "image": "Screenshot", "read": "Read", "sent": "Sent", "retry": "Could not load. Retry", "remove": "Remove",
-  "placeholder": "Write a message. Ctrl / ⌘ + Enter to send", "attach": "Screenshot", "imageLimit": "Choose a PNG, JPEG or WebP image up to 4MB",
+  "placeholder": "Write a message…", "attach": "Attach screenshot", "imageLimit": "Choose a PNG, JPEG or WebP image up to 4MB",
   "sending": "Sending…", "send": "Send", "noConversations": "No conversations yet",
-  "more": "Load more", "back": "Conversations", "selectConversation": "Select a conversation to reply"
+  "more": "Load more", "back": "Conversations", "selectConversation": "Select a conversation to reply",
+  "startConversation": "How can we help?", "history": "Chat history", "today": "Today", "yesterday": "Yesterday",
+  "automated": "Automatic reply", "viewImage": "View full screenshot", "newMessages": "{count} new messages",
+  "sendFailed": "Message not sent. Your draft is saved — please retry.",
+  "minimize": "Minimize to chat bubble",
+  "connection": { "connecting": "Connecting", "connected": "Connected", "reconnecting": "Reconnecting", "offline": "Offline", "disconnected": "Disconnected" },
+  "search": "Search usernames", "all": "All conversations", "unread": "Unread", "noResults": "No matching conversations",
+  "preSales": "Pre-sales", "afterSales": "After-sales", "customerActions": "Pages for {name}", "viewUser": "View user", "viewServers": "View servers", "viewOrders": "View orders",
+  "recentMessages": "Latest messages", "clearFilters": "Clear filters", "clearSearch": "Clear search",
+  "unreadMessages": "{count} unread messages", "userId": "User ID {id}", "selectConversationHint": "Choose a conversation on the left to read its history and reply.",
+  "copyContact": "Copy {name}", "welcomeEnabled": "Send a welcome message", "welcomeMessage": "Welcome message",
+  "welcomeHint": "Sent once when a customer first opens a conversation. Links are supported."
 }

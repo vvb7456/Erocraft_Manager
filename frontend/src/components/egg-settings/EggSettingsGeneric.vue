@@ -11,6 +11,7 @@ import BaseSelect from '@/components/form/BaseSelect.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
+import SectionHeader from '@/components/ui/SectionHeader.vue'
 
 const props = defineProps<EggSettingsProps>()
 const emit = defineEmits<{
@@ -103,8 +104,8 @@ defineExpose<EggSettingsExpose>({ save, discard })
 
 <template>
   <div class="generic-settings">
-    <BaseCard variant="bg2" class="generic-card">
-      <p class="generic-desc">{{ t('serverSettings.genericDesc') }}</p>
+    <BaseCard variant="bg2" density="compact">
+      <SectionHeader icon="tune" :subtitle="t('serverSettings.genericDesc')" flush>{{ t('serverSettings.genericTitle') }}</SectionHeader>
 
       <FormField
         v-for="f in fields"
@@ -156,14 +157,4 @@ defineExpose<EggSettingsExpose>({ save, discard })
   margin-right: auto;
 }
 
-.generic-card {
-  padding: var(--sp-2);
-}
-
-.generic-desc {
-  font-size: var(--text-lg);
-  font-weight: 600;
-  color: var(--t1);
-  margin: 0 0 var(--sp-4);
-}
 </style>

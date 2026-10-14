@@ -3,7 +3,7 @@
 All billing-related keys (gateway credentials, gateway display names, gateway
 URLs, billing quotas, refund policy) are now B-class (DB-backed, UI-editable).
 Sensitive keys (e.g. ``HUPIJIAO_APPSECRET``) are marked ``sensitive=True`` on
-their :class:`SettingSpec` and are masked in responses by the settings store.
+their :class:`SettingSpec` and are encrypted at rest.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
-from app.core.runtime_settings import BILLING_SPECS, MASKED_SECRET_VALUE, defaults_for
+from app.core.runtime_settings import BILLING_SPECS, defaults_for
 from app.core.settings_store import get_settings_store
 from app.db.models.pterodactyl import PteroUser
 from app.schemas.settings import SettingsMessageResponse
@@ -45,10 +45,8 @@ async def billing_settings_get(
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Return billing settings with configured secrets masked."""
     store = get_settings_store()
-    values = await store.get_many(db, defaults_for(BILLING_SPECS))
-    return {key: MASKED_SECRET_VALUE if BILLING_SPECS[key].sensitive and value else value for key, value in values.items()}
+    return await store.get_many(db, defaults_for(BILLING_SPECS))
 
 
 @router.post("/settings", response_model=SettingsMessageResponse)
@@ -70,9 +68,6 @@ async def billing_settings_post(
         if spec is None:
             # Silently ignore unknown keys (e.g. removed/legacy settings still
             # held in stale frontend state). Avoids 404 storms after spec changes.
-            continue
-        # Skip writing the masking sentinel back for sensitive keys.
-        if spec.sensitive and isinstance(value, str) and value == MASKED_SECRET_VALUE:
             continue
         try:
             normalized = spec.normalize(value)

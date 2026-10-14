@@ -33,11 +33,6 @@
     "expiry": "Expiration",
     "actions": "Actions"
   },
-  "summary": {
-    "total": "Total Servers",
-    "running": "Running",
-    "needRenew": "Need Renewal"
-  },
   "address": {
     "label": "Server Address",
     "copy": "Copy Address"
@@ -70,7 +65,7 @@
     "clientSection": "SFTP Clients",
     "supportSection": "Need help",
     "sftpTip": "SFTP lets you manage server files like a local folder. Great for uploading/downloading large files or batch edits. Log in with your account password on this system.",
-    "debugTip": "Provide the following info when contacting support or reporting issues.",
+    "debugTip": "Provide the following info when contacting us or reporting issues.",
     "host": "Host",
     "port": "Port",
     "username": "Username",
@@ -98,7 +93,7 @@
   "reconnecting": "Connection failed ({current}/{max}), retrying in {seconds}s...",
   "reconnectFailed": "Cannot connect to server node",
   "suspendedHint": "Server has expired. Please renew to continue.",
-  "reconnectHint": "Please check your network or contact support",
+  "reconnectHint": "Please check your network or contact us",
   "serverOfflineHint": "Use power controls to start the server",
   "serverStopped": "Server stopped",
   "serverStarting": "Server starting",

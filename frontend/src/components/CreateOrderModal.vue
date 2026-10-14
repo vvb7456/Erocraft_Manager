@@ -809,7 +809,7 @@ function onCancel() {
   font-size: var(--text-base);
   font-weight: 600;
   color: var(--t1);
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
 }
 .renew-hint__sub {
   margin-top: 2px;
@@ -882,7 +882,7 @@ function onCancel() {
 }
 .period-unit {
   color: var(--t2);
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
 .period-saved {
@@ -937,7 +937,7 @@ function onCancel() {
   color: var(--amber);
 }
 .mono {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
 }
 .summary-divider {
   height: 1px;

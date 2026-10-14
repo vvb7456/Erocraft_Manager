@@ -10,7 +10,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
-import SectionToolbar from '@/components/ui/SectionToolbar.vue'
+import ListToolbar from '@/components/ui/ListToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import FileTreeNode from '@/components/ui/FileTreeNode.vue'
 import Spinner from '@/components/ui/Spinner.vue'
@@ -241,73 +241,47 @@ async function onCreateFile() {
     </aside>
 
     <!-- Right top: Toolbar (standalone) -->
-    <SectionToolbar class="files-toolbar">
+    <ListToolbar class="files-toolbar" :selected-count="ops.selectedFiles.value.size" :busy="ops.operating.value || ops.compressing.value" @clear="ops.clearSelection">
       <template #start>
-        <template v-if="ops.hasSelection.value">
-          <button class="clear-selection-btn" :title="t('common.btn.cancel')" @click="ops.clearSelection">
-            <MsIcon name="close" size="sm" />
-          </button>
-          <span class="selection-count">{{ t('userServers.file.selected', { n: ops.selectedFiles.value.size }) }}</span>
+        <FilterInput
+          v-model="ops.searchTerm.value"
+          :placeholder="t('userServers.file.searchPlaceholder')"
+          class="file-search-input"
+        />
+        <div v-if="!isMobile" class="breadcrumbs">
           <button
-            class="clear-selection-btn"
-            :title="ops.allSelected.value ? t('userServers.file.deselectAll') : t('userServers.file.selectAll')"
-            @click="ops.toggleSelectAll"
-          >
-            <MsIcon :name="ops.allSelected.value ? 'deselect' : 'select_all'" size="sm" />
-          </button>
-        </template>
-        <template v-else>
-          <FilterInput
-            v-model="ops.searchTerm.value"
-            :placeholder="t('userServers.file.searchPlaceholder')"
-            class="file-search-input"
-          />
-          <div v-if="!isMobile" class="breadcrumbs">
-            <button
-              v-for="(crumb, i) in ops.breadcrumbs.value"
-              :key="crumb.path"
-              class="breadcrumb"
-              :class="{ active: i === ops.breadcrumbs.value.length - 1 }"
-              @click="navigateTo(crumb.path)"
-            >{{ crumb.label }}</button>
-          </div>
-        </template>
+            v-for="(crumb, i) in ops.breadcrumbs.value"
+            :key="crumb.path"
+            class="breadcrumb"
+            :class="{ active: i === ops.breadcrumbs.value.length - 1 }"
+            @click="navigateTo(crumb.path)"
+          >{{ crumb.label }}</button>
+        </div>
       </template>
       <template #end>
-        <template v-if="ops.hasSelection.value">
-          <BaseButton size="sm" @click="ops.moveSelected">
-            <MsIcon name="drive_file_move" size="xs" />
-            <span class="btn-label">{{ t('userServers.file.move') }}</span>
-          </BaseButton>
-          <BaseButton size="sm" :loading="ops.compressing.value" :disabled="ops.compressing.value" @click="ops.compressSelected">
-            <MsIcon name="folder_zip" size="xs" />
-            <span class="btn-label">{{ t('userServers.file.compress') }}</span>
-          </BaseButton>
-          <BaseButton size="sm" variant="danger" @click="ops.deleteSelected(refreshTree)">
-            <MsIcon name="delete" size="xs" />
-            <span class="btn-label">{{ t('userServers.file.delete') }}</span>
-          </BaseButton>
-        </template>
-        <template v-else>
-          <BaseButton size="sm" @click="ops.openNewFile">
-            <MsIcon name="note_add" size="xs" />
-            <span class="btn-label">{{ t('userServers.file.newFile') }}</span>
-          </BaseButton>
-          <BaseButton size="sm" @click="ops.openNewFolder">
-            <MsIcon name="create_new_folder" size="xs" />
-            <span class="btn-label">{{ t('userServers.file.newFolder') }}</span>
-          </BaseButton>
-          <BaseButton size="sm" @click="ops.triggerUpload">
-            <MsIcon name="upload" size="xs" />
-            <span class="btn-label">{{ t('userServers.file.upload') }}</span>
-          </BaseButton>
-        </template>
+        <BaseButton size="sm" :disabled="ops.operating.value" @click="ops.openNewFile"><MsIcon name="note_add" size="xs" />{{ t('userServers.file.newFile') }}</BaseButton>
+        <BaseButton size="sm" :disabled="ops.operating.value" @click="ops.openNewFolder"><MsIcon name="create_new_folder" size="xs" />{{ t('userServers.file.newFolder') }}</BaseButton>
+        <BaseButton size="sm" :disabled="ops.operating.value" @click="ops.triggerUpload"><MsIcon name="upload" size="xs" />{{ t('userServers.file.upload') }}</BaseButton>
       </template>
-    </SectionToolbar>
+      <template #selection-actions>
+        <BaseButton size="sm" variant="ghost" :aria-label="ops.allSelected.value ? t('userServers.file.deselectAll') : t('userServers.file.selectAll')" :title="ops.allSelected.value ? t('userServers.file.deselectAll') : t('userServers.file.selectAll')" @click="ops.toggleSelectAll">
+          <MsIcon :name="ops.allSelected.value ? 'deselect' : 'select_all'" size="sm" />
+        </BaseButton>
+        <BaseButton size="sm" variant="ghost" :aria-label="t('userServers.file.move')" :title="t('userServers.file.move')" @click="ops.moveSelected">
+          <MsIcon name="drive_file_move" size="xs" />
+          <span class="selection-action-label">{{ t('userServers.file.move') }}</span>
+        </BaseButton>
+        <BaseButton size="sm" variant="ghost" :loading="ops.compressing.value" :disabled="ops.compressing.value" :aria-label="t('userServers.file.compress')" :title="t('userServers.file.compress')" @click="ops.compressSelected">
+          <MsIcon name="folder_zip" size="xs" />
+          <span class="selection-action-label">{{ t('userServers.file.compress') }}</span>
+        </BaseButton>
+        <BaseButton size="sm" variant="danger" :aria-label="t('userServers.file.delete')" :title="t('userServers.file.delete')" @click="ops.deleteSelected(refreshTree)">
+          <MsIcon name="delete" size="xs" />
+          <span class="selection-action-label">{{ t('userServers.file.delete') }}</span>
+        </BaseButton>
+      </template>
+    </ListToolbar>
 
-    <!-- Mobile-only standalone breadcrumbs row, placed below the toolbar
-         (which itself wraps to "search row + buttons row" on mobile) so
-         the path appears under the action buttons. -->
     <div
       v-if="isMobile && !ops.hasSelection.value"
       class="breadcrumbs breadcrumbs--standalone"
@@ -546,33 +520,6 @@ async function onCreateFile() {
   flex-shrink: 0;
 }
 
-.clear-selection-btn {
-  background: none;
-  border: none;
-  color: var(--t2);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: var(--r-xs);
-  display: flex;
-  align-items: center;
-}
-
-.clear-selection-btn:hover {
-  color: var(--t1);
-  background: var(--bg4);
-}
-
-.selection-count {
-  font-size: var(--text-sm);
-  color: var(--ac);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.btn-label {
-  display: inline;
-}
-
 /* ── Breadcrumbs ── */
 .breadcrumbs {
   display: flex;
@@ -621,8 +568,8 @@ async function onCreateFile() {
   grid-template-rows: auto 1fr;
   gap: var(--sp-3);
   position: relative;
-  height: calc(100vh - 180px);
-  height: calc(100dvh - 180px);
+  height: calc(100vh - var(--app-header-h, 66px) - var(--sp-3) - clamp(20px, 2vw, 32px));
+  height: calc(100dvh - var(--app-header-h, 66px) - var(--sp-3) - clamp(20px, 2vw, 32px));
   min-height: 360px;
 }
 
@@ -1020,8 +967,6 @@ async function onCreateFile() {
     grid-template-columns: 1fr;
     /* 3 rows on mobile: toolbar / breadcrumbs / file list */
     grid-template-rows: auto auto 1fr;
-    height: calc(100vh - 130px);
-    height: calc(100dvh - 130px);
   }
 
   .tree-panel {
@@ -1038,13 +983,22 @@ async function onCreateFile() {
     grid-row: 3;
   }
 
-  /* Toolbar: search full width, buttons equal width on second row */
   .files-toolbar :deep(.section-toolbar) {
     flex-wrap: wrap;
   }
 
   .files-toolbar :deep(.section-toolbar-start) {
     width: 100%;
+  }
+
+  .files-toolbar :deep(.section-toolbar-end) {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .files-toolbar :deep(.section-toolbar-end .base-btn) {
+    flex: 1;
+    justify-content: center;
   }
 
   .breadcrumbs {
@@ -1059,19 +1013,9 @@ async function onCreateFile() {
     min-height: 28px;
   }
 
-  .files-toolbar :deep(.section-toolbar-end) {
-    width: 100%;
-    margin-left: 0;
-  }
-
   .file-search-input {
     width: 100% !important;
     flex: 1;
-  }
-
-  .files-toolbar :deep(.section-toolbar-end) .base-btn {
-    flex: 1;
-    justify-content: center;
   }
 
   .col-date {

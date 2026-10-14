@@ -139,7 +139,7 @@ const lastValue = computed(() => {
   color: var(--t1);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 .spark__chart {
   width: 100%;

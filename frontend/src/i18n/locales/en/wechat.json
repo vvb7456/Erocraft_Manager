@@ -6,5 +6,5 @@
   "bridgeUnavailable": "Please reopen the order in WeChat", "originalBrowser": "Continue in the original WeChat browser, or cancel and place a new order", "authFailed": "WeChat authorization was not completed. Please try again.",
   "MCHID": "Merchant ID", "APPID": "Official account AppID", "APP_SECRET": "Official account AppSecret", "MINIPROGRAM_APPID": "Mini program AppID", "MINIPROGRAM_APP_SECRET": "Mini program AppSecret",
   "MERCHANT_SERIAL_NO": "Merchant certificate serial", "MERCHANT_PRIVATE_KEY": "Merchant private key PEM", "API_V3_KEY": "APIv3 key", "PUBLIC_KEY_ID": "WeChat Pay public key ID", "PUBLIC_KEY": "WeChat Pay public key PEM",
-  "configured": "Configured; enter a value to replace", "notify": "Payment notification URL", "oauth": "OAuth callback URL", "directory": "JSAPI authorized directory / mini program server domain"
+  "configured": "Configured; enter a value to replace"
 }

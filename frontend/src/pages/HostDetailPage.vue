@@ -158,6 +158,7 @@ function onTabChange(key: string) {
       :title="host?.name || t('hosts.detail.title')"
       :breadcrumbs="headerBreadcrumbs"
     >
+      <TabSwitcher :tabs="tabs" :modelValue="activeTab" @update:modelValue="onTabChange" />
       <template v-if="host" #badge>
         <Badge :color="statusBadgeColor" size="sm">
           <StatusDot :status="statusDotKey(statusKey)" size="sm" />
@@ -167,7 +168,6 @@ function onTabChange(key: string) {
     </PageHeader>
 
     <div class="page-body">
-      <TabSwitcher :tabs="tabs" :modelValue="activeTab" @update:modelValue="onTabChange" />
       <RouterView :key="hostId" />
     </div>
   </template>

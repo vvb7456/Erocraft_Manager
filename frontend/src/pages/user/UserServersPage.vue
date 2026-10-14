@@ -16,7 +16,6 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import Badge from '@/components/ui/Badge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import StatCard from '@/components/ui/StatCard.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
@@ -62,15 +61,6 @@ const initialLoading = ref(true)
 const searchTerm = ref('')
 const page = ref(1)
 const perPage = ref(20)
-
-// ── Summary stats ──
-const totalServers = computed(() => servers.value.length)
-const runningCount = computed(() =>
-  servers.value.filter(s => resourceStore.getState(s.id) === 'running').length
-)
-const needRenewCount = computed(() =>
-  servers.value.filter(s => s.daysLeft !== null && s.daysLeft <= 7).length
-)
 
 // ── Filtered & paginated list ──
 const filteredServers = computed(() => {
@@ -365,19 +355,6 @@ function openMobileAction(s: Server) {
   <PageHeader icon="dns" :title="t('userServers.title')" />
 
   <div class="page-body">
-    <!-- Summary cards -->
-    <div class="summary-row">
-      <StatCard :label="t('userServers.summary.total')">
-        <template #value>{{ totalServers }}</template>
-      </StatCard>
-      <StatCard :label="t('userServers.summary.running')" status="running">
-        <template #value>{{ runningCount }}</template>
-      </StatCard>
-      <StatCard :label="t('userServers.summary.needRenew')" status="error">
-        <template #value>{{ needRenewCount }}</template>
-      </StatCard>
-    </div>
-
     <!-- Toolbar -->
     <SectionToolbar>
       <template #start>
@@ -602,13 +579,6 @@ function openMobileAction(s: Server) {
   flex-direction: column;
 }
 
-.summary-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-4);
-}
-
 /* ── Table columns ── */
 .col-dot { width: 1%; text-align: center !important; vertical-align: middle; }
 .col-name { width: 13%; }
@@ -632,7 +602,7 @@ function openMobileAction(s: Server) {
 }
 
 .mono {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: .82rem;
   color: var(--t2);
 }
@@ -655,7 +625,7 @@ function openMobileAction(s: Server) {
 }
 
 .expiry-date {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: .82rem;
   color: var(--t2);
 }
@@ -817,15 +787,6 @@ function openMobileAction(s: Server) {
 }
 
 @media (max-width: 768px) {
-  .summary-row {
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--sp-2);
-  }
-
-  .summary-row :deep(.stat-card) {
-    padding: var(--sp-2) var(--sp-3);
-  }
-
   :deep(.dt-footer) {
     border-top: none;
     margin-top: var(--sp-2);

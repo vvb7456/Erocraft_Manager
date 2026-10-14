@@ -125,8 +125,8 @@ useDirtyFormSection({ name: 'build', isDirty, save, discard })
 </script>
 
 <template>
-  <BaseCard variant="bg2" class="settings-card">
-    <CollapsibleGroup :title="t('adminServer.settings.build.title')" icon="memory" :defaultOpen="false">
+  <BaseCard variant="bg2" density="compact">
+    <CollapsibleGroup :title="t('adminServer.settings.build.title')" :subtitle="t('adminServer.settings.build.desc')" icon="memory" :defaultOpen="false">
       <div class="form">
         <FormField layout="horizontal" bordered>
           <template #label>

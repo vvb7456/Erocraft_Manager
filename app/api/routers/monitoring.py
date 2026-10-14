@@ -470,18 +470,19 @@ async def list_alerts(
 
 
 @router.post("/admin/monitoring/alerts/{alert_id}/resolve")
+@router.post("/admin/monitoring/alerts/{alert_id}/acknowledge")
 async def resolve_alert(
     alert_id: int,
     _admin: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """Manually resolve an alert."""
+    """Acknowledge without changing the detected health state."""
     result = await db.execute(select(HostAlert).where(HostAlert.id == alert_id))
     alert = result.scalar_one_or_none()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     if alert.resolved_at:
         return {"status": "already_resolved"}
-    alert.resolved_at = datetime.now(UTC).replace(tzinfo=None)
+    alert.acknowledged_at = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
-    return {"status": "resolved"}
+    return {"status": "acknowledged"}

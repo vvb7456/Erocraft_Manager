@@ -1,5 +1,5 @@
 {
-  "title": "设置",
+  "title": "系统设置",
   "save": "保存设置",
   "saved": "设置已保存",
   "unsavedHint": "有未保存的更改",
@@ -14,6 +14,12 @@
     "header": "有 {n} 项需要修正才能保存",
     "invalidUrl": "必须以 http:// 或 https:// 开头",
     "invalidEmail": "邮箱格式不正确"
+  },
+  "monitoring": {
+    "title": "主机监控",
+    "desc": "设置所有主机的监控数据采集间隔与保留时间。",
+    "interval": "采集间隔（秒）",
+    "retention": "监控保留（天）"
   },
   "smtp": {
     "title": "SMTP 邮件",
@@ -33,7 +39,7 @@
     "testInvalid": "请输入有效的邮箱地址"
   },
   "branding": {
-    "title": "外观",
+    "title": "站点外观",
     "desc": "自定义系统名称、品牌与页面元素。",
     "brandName": "品牌名称",
     "systemName": "系统名称",
@@ -45,8 +51,8 @@
     "allowRegistration": "允许公开注册",
     "allowRegistration_tip": "关闭后登录页隐藏注册按钮，用户仅能由管理员创建。",
     "support": {
-      "title": "客服联系方式",
-      "desc": "配置联系客服弹窗中展示的信息，留空的字段不会显示。",
+      "title": "在线客服",
+      "desc": "设置客服联系方式、服务说明与聊天欢迎语。",
       "email": "客服邮箱",
       "qqGroup": "QQ 群号",
       "qq": "客服 QQ",
@@ -57,9 +63,10 @@
   },
   "agreements": {
     "title": "用户协议",
-    "desc": "管理注册时展示的协议正文。",
-    "subtitle_tos": "注册页展示的用户服务条款。",
-    "subtitle_privacy": "注册页展示的隐私政策。",
+    "registrationTitle": "注册协议设置",
+    "desc": "设置用户注册时的协议确认方式。",
+    "subtitle_tos": "向用户说明服务范围、使用规则与双方权利义务。",
+    "subtitle_privacy": "向用户说明个人信息的收集、使用与保护方式。",
     "default_checked": "注册时默认勾选协议",
     "default_checked_tip": "开启后，注册页的协议复选框默认处于勾选状态，用户仍可取消。",
     "edit_zh": "编辑中文",
@@ -73,30 +80,39 @@
     "save_ok": "已保存并生效"
   },
   "payment": {
-    "title": "支付设置",
+    "title": "支付渠道",
+    "gatewayDescriptions": {
+      "hupijiao": "通过虎皮椒支付为网站订单收款。",
+      "alipay_direct": "使用支付宝商户账户直接收取订单款项。",
+      "wechat_pay": "通过扫码、微信内支付和付款小程序收取订单款项。"
+    },
+    "wechat": {
+      "officialAccountDesc": "用于微信内网页付款的服务号身份。",
+      "miniProgramDesc": "用于手机端订单付款的小程序身份。"
+    },
     "gateways": {
       "enabled": "启用网关",
-      "hupijiao": "虎皮椒支付",
-      "alipay_direct": "支付宝直连"
+      "hupijiao": "虎皮椒",
+      "alipay_direct": "支付宝"
     },
     "credentials": {
       "title": "网关凭据",
-      "desc": "配置网关的应用 ID 与密钥。保存后立即生效。",
+      "desc": "支付平台的应用、商户身份与认证信息。",
       "displayName": "前端展示名称",
       "appid": "AppID",
       "appsecret": "AppSecret"
     },
     "urls": {
-      "title": "URL 配置",
-      "desc": "配置 Referer 与备用接口地址。支付回调/跳转地址由系统根据「外观 - 系统地址」自动拼接。"
+      "title": "支付接口",
+      "desc": "连接虎皮椒支付服务的请求来源与接口地址。"
     },
     "referer": "Referer",
     "referer_tip": "发起支付请求时携带的 Referer，通常为站点根 URL。",
     "gatewayEndpoints": "网关接口地址",
     "gatewayEndpoints_tip": "逗号分隔的备用接口，依次尝试直到成功。",
     "quotas": {
-      "title": "订单与配额",
-      "desc": "配置订单超时策略与用户配额。"
+      "title": "支付与退款时限",
+      "desc": "设置付款有效期与退款异常提醒时限。"
     },
     "payTimeout": "二维码有效期 (分钟)",
     "payTimeout_tip": "支付 QR 码有效期上限为 5 分钟，建议保持 5。",
@@ -126,22 +142,22 @@
     "dockerImage": "Docker 镜像"
   },
   "automation": {
-    "title": "自动化",
+    "title": "自动化任务",
     "time": {
-      "title": "时区与调度基准",
-      "desc": "设置自动化任务使用的时区，所有计划时间均按该时区解释。"
+      "title": "任务时区",
+      "desc": "自动暂停、删除和邮件提醒使用的时区。"
     },
     "timezone": "时区",
     "suspend": {
       "title": "自动暂停",
-      "desc": "到期后自动暂停服务器",
+      "desc": "定时暂停到期服务器，管理服务到期后的使用状态。",
       "enabled": "启用自动暂停",
       "runHour": "执行时间 (时)",
       "runMinute": "执行时间 (分)"
     },
     "delete": {
       "title": "自动删除",
-      "desc": "暂停超过指定天数后自动删除服务器",
+      "desc": "清理超过保留期限的已暂停服务器，释放主机资源。",
       "enabled": "启用自动删除",
       "days": "暂停后删除天数"
     },
@@ -154,7 +170,7 @@
     }
   },
   "marketing": {
-    "title": "营销",
+    "title": "邀请奖励",
     "referral": {
       "title": "邀请奖励",
       "desc": "被邀请人完成首笔合格订单后，向双方各发放一张优惠券。",
@@ -181,19 +197,22 @@
     "title": "账户设置"
   },
   "llm": {
-    "title": "LLM 额度",
+    "title": "模型服务",
     "general": {
-      "title": "全局开关",
+      "title": "套餐赠送额度",
+      "desc": "为包含 LLM 权益的套餐提供模型调用额度。",
       "enabled": "启用 LLM 免费额度",
       "enabledHint": "启用后，订购含 LLM 额度套餐的用户将获得免费 LLM API 密钥，自动注入 SillyTavern 容器。"
     },
     "connection": {
       "title": "NewAPI 连接",
+      "desc": "连接用于管理用户密钥与模型额度的 NewAPI 服务。",
       "baseUrl": "Base URL",
       "adminToken": "Admin Token"
     },
     "injection": {
-      "title": "SillyTavern 注入",
+      "title": "SillyTavern 接口",
+      "desc": "SillyTavern 调用模型服务使用的 API 地址。",
       "stEndpoint": "ST 端点 URL"
     }
   }

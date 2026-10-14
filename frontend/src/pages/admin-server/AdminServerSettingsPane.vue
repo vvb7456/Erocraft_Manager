@@ -47,11 +47,11 @@ const dirtyForm = provideDirtyForm({
       title: t('adminServer.settings.unsavedTitle'),
       message: t('adminServer.settings.unsavedMessage'),
       confirmText: t('adminServer.settings.unsavedSave'),
-      cancelText: t('adminServer.settings.unsavedDiscard'),
-      altText: t('adminServer.settings.unsavedStay'),
+      cancelText: t('adminServer.settings.unsavedStay'),
+      altText: t('adminServer.settings.unsavedDiscard'),
     })
-    if (r === 'alt') return 'stay'
-    return r === true ? 'save' : 'discard'
+    if (r === 'alt') return 'discard'
+    return r === true ? 'save' : 'stay'
   },
 })
 dirtyForm.attachLeaveGuard()

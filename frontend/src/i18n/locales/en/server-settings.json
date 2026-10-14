@@ -1,7 +1,9 @@
 {
   "pageDesc": "Manage SillyTavern authentication, network proxy and version settings",
-  "genericDesc": "Manage server startup variables",
+  "genericTitle": "Startup Parameters",
+  "genericDesc": "Configure environment variables and application parameters for the server.",
   "authSection": "Authentication",
+  "authSectionDesc": "Manage SillyTavern sign-in methods and access credentials.",
   "authMode": "Auth Mode",
   "authModeTip": "Basic Auth: everyone shares one set of credentials\nMulti-User: each user has independent character cards and chat history",
   "basicAuthLabel": "Basic Auth",
@@ -24,6 +26,7 @@
   "passwordNeedLetter": "Password must contain a letter",
   "passwordNeedDigit": "Password must contain a digit",
   "networkSection": "API Proxy",
+  "networkSectionDesc": "Provide a network proxy for SillyTavern connections to model services.",
   "apiProxy": "API Proxy",
   "apiProxyTip": "Proxy API requests through a relay. Disable when using domestic APIs (SiliconFlow, Volcengine, DeepSeek, etc.)",
   "versionSection": "Version & Updates",

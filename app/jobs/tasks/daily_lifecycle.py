@@ -17,6 +17,8 @@ from apscheduler.schedulers.base import BaseScheduler
 from app.db.session import get_session_factory
 from app.jobs.tasks.common import get_job_today
 from app.services.audit import log_manager_activity
+from app.services.notifications.events import task_failure, task_recovered
+from app.core.time import utc_naive_now
 
 logger = logging.getLogger(__name__)
 
@@ -69,22 +71,31 @@ async def run_daily_lifecycle_batch() -> None:
     try:
         from app.jobs.tasks.suspend import run_suspend_task
         await run_suspend_task()
-    except Exception:
+    except Exception as exc:
         logger.warning("daily lifecycle: suspend stage failed", exc_info=True)
+        await task_failure("daily_lifecycle:suspend", utc_naive_now(), type(exc).__name__)
+    else:
+        await task_recovered("daily_lifecycle:suspend")
 
     # ── Stage 2: delete long-expired servers (if enabled) ──
     try:
         from app.jobs.tasks.delete import run_delete_task
         await run_delete_task()
-    except Exception:
+    except Exception as exc:
         logger.warning("daily lifecycle: delete stage failed", exc_info=True)
+        await task_failure("daily_lifecycle:delete", utc_naive_now(), type(exc).__name__)
+    else:
+        await task_recovered("daily_lifecycle:delete")
 
     # ── Stage 3: expire trial servers (always runs) ──
     try:
         from app.jobs.tasks.trial_expire import run_trial_expire_task
         await run_trial_expire_task()
-    except Exception:
+    except Exception as exc:
         logger.warning("daily lifecycle: trial_expire stage failed", exc_info=True)
+        await task_failure("daily_lifecycle:trial_expire", utc_naive_now(), type(exc).__name__)
+    else:
+        await task_recovered("daily_lifecycle:trial_expire")
 
     # ── Stage 4: LLM daily sync (always runs) ──
     # Runs after all server lifecycle changes so key states align with
@@ -93,8 +104,11 @@ async def run_daily_lifecycle_batch() -> None:
         from app.services.llm_provision import sync as llm_sync
         async with session_factory() as llm_db:
             await llm_sync.run_llm_daily_sync(llm_db)
-    except Exception:
+    except Exception as exc:
         logger.warning("daily lifecycle: LLM sync stage failed", exc_info=True)
+        await task_failure("daily_lifecycle:llm_sync", utc_naive_now(), type(exc).__name__)
+    else:
+        await task_recovered("daily_lifecycle:llm_sync")
 
     async with session_factory() as db:
         await log_manager_activity(

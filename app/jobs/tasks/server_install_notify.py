@@ -72,7 +72,7 @@ _RETRY_DELAYS = [60, 5 * 60, 15 * 60, 60 * 60, 4 * 60 * 60]
 
 def sync_install_notify_job(scheduler: BaseScheduler, settings: Mapping[str, object]) -> None:
     """Wire up the job to APScheduler. Driven by ``AUTOMATION_EMAIL_ENABLED``."""
-    if settings.get("AUTOMATION_EMAIL_ENABLED"):
+    if settings.get("NOTIFY_INSTALLED", settings.get("AUTOMATION_EMAIL_ENABLED")):
         scheduler.add_job(
             run_install_notify_scan,
             id=INSTALL_NOTIFY_JOB_ID,
@@ -181,6 +181,9 @@ async def _record_notify_failure(
 async def run_install_notify_scan() -> None:
     session_factory = get_session_factory()
     async with session_factory() as db:
+        from app.services.notifications.policy import load_policy
+        if not (await load_policy(db)).lifecycle.installed:
+            return
         rows = (await db.execute(_SCAN_SQL)).mappings().all()
         if not rows:
             return
@@ -288,4 +291,3 @@ async def run_install_notify_scan() -> None:
                     "scanned": len(rows),
                 },
             )
-

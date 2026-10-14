@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
-import { useConfirm } from '@/composables/useConfirm'
+import { useDirtyFormSection, useParentDirtyForm } from '@/composables/useDirtyForm'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseTextarea from '@/components/form/BaseTextarea.vue'
@@ -51,7 +51,7 @@ const emit = defineEmits<{
 const { t } = useI18n({ useScope: 'global' })
 const { get, raw } = useApiFetch()
 const { toast } = useToast()
-const { confirm } = useConfirm()
+const dirtyForm = useParentDirtyForm()
 
 const bodyZh = ref('')
 const bodyEn = ref('')
@@ -61,7 +61,7 @@ const snapshot = ref('')
 
 const show = computed({
   get: () => props.modelValue !== null,
-  set: (v) => emit('update:modelValue', v ? { slug: props.slug, lang: props.lang } : null),
+  set: (v) => { if (!v) void onCloseAttempt() },
 })
 
 const docName = computed(() =>
@@ -129,23 +129,19 @@ async function loadInitial() {
 }
 
 async function onCloseAttempt() {
-  if (!isDirty()) { show.value = false; return }
-  const ok = await confirm({
-    title: t('settings.unsavedTitle'),
-    message: t('settings.unsavedMessage'),
-    confirmText: t('settings.unsavedDiscard'),
-    cancelText: t('settings.unsavedStay'),
-    variant: 'danger',
-  })
-  if (ok) show.value = false
+  if (submitLoading.value) return
+  if (!isDirty()) { emit('update:modelValue', null); return }
+  const choice = await dirtyForm.promptUnsaved()
+  if (choice === 'save') await submit()
+  if (choice === 'discard') discard()
 }
 
 async function submit() {
-  if (!canSave.value) return
+  if (!canSave.value) return false
   const a = props.agreement
   if (!a) {
     toast('agreement not found', 'error')
-    return
+    return false
   }
   submitLoading.value = true
   const bump = a.current_version === 0
@@ -163,11 +159,14 @@ async function submit() {
     silent: true,
   })
   submitLoading.value = false
-  if (res == null) return
+  if (res == null) return false
   if (res.status === 201) {
     toast(t('settings.agreements.save_ok'), 'success')
     emit('saved')
-    show.value = false
+    snapshot.value = JSON.stringify({ bodyZh: payload.body_zh, bodyEn: payload.body_en })
+    if (isDirty()) return false
+    emit('update:modelValue', null)
+    return true
   } else {
     let msg = `HTTP ${res.status}`
     try {
@@ -175,8 +174,19 @@ async function submit() {
       msg = body.error || body.message || msg
     } catch { /* ignore */ }
     toast(msg, 'error')
+    return false
   }
 }
+
+function discard() {
+  if (snapshot.value) {
+    const saved = JSON.parse(snapshot.value)
+    bodyZh.value = saved.bodyZh
+    bodyEn.value = saved.bodyEn
+  }
+  emit('update:modelValue', null)
+}
+useDirtyFormSection({ name: 'agreement-editor', isDirty: computed(() => show.value && !initLoading.value && isDirty()), busy: submitLoading, save: submit, discard })
 
 watch(() => props.modelValue, (open) => {
   if (open) loadInitial()
@@ -190,6 +200,7 @@ watch(() => props.modelValue, (open) => {
     icon="edit"
     size="xxl"
     :close-on-overlay="false"
+    :persistent="submitLoading"
     scroll="content"
   >
     <template #footer>

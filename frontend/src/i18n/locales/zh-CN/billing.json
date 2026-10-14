@@ -27,7 +27,7 @@
       "alt": "前往我的服务器"
     },
     "supportHint": "需要帮助？",
-    "supportLink": "在线客服"
+    "supportLink": "联系我们"
   },
   "cashier": {
     "title": "确认订单",
@@ -68,7 +68,7 @@
     "periodValue": "{count} 个月·共 {days} 天",
     "perPage": "条/页",
     "supportHint": "有问题？",
-    "supportLink": "在线客服",
+    "supportLink": "联系我们",
     "filter": {
       "label": "状态",
       "all": "全部",
@@ -122,7 +122,7 @@
     "btnReorder": "重新下单",
     "btnDashboard": "返回我的服务器",
     "supportHint": "遇到问题？",
-    "supportLink": "在线客服",
+    "supportLink": "联系我们",
     "redirecting": "正在跳转到支付宝…",
     "subtitleQR": "使用支付宝扫描二维码",
     "subtitleRedirect": "前往支付宝付款",
@@ -131,6 +131,7 @@
     "amountLabel": "付款金额"
   },
   "orderDetail": {
+    "notFound": "订单 {id} 已不存在",
     "pageTitle": "订单详情",
     "loadFailed": "加载订单失败",
     "retry": "重试",
@@ -185,11 +186,12 @@
       "cancelConfirmMessage": "确认取消订单？取消后无法恢复，已预留资源会被释放。",
       "cancelConfirmBtn": "确认取消",
       "cancelOk": "订单已取消",
-      "contactSupport": "在线客服"
+      "contactSupport": "联系我们"
     }
   },
   "support": {
-    "title": "在线客服",
+    "title": "联系我们",
+    "startChat": "发起对话",
     "intro": "如需协助，请通过以下方式联系我们：",
     "email": "客服邮箱",
     "qqGroup": "QQ 交流群",
@@ -200,7 +202,7 @@
     "btnOk": "我知道了"
   },
   "admin": {
-    "title": "计费",
+    "title": "计费管理",
     "tabPlans": "套餐设置",
     "tabOrders": "订单管理",
     "tabIncidents": "事件管理",

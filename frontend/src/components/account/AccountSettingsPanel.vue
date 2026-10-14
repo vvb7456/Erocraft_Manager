@@ -6,6 +6,7 @@ import { useToast } from '@/composables/useToast'
 import { switchLanguage } from '@/i18n/vue-i18n'
 import { backendToFrontendLocale, type BackendLocale } from '@/i18n/locale-map'
 import { useAppStore } from '@/stores/app'
+import { useSupportStore } from '@/stores/support'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
@@ -16,6 +17,7 @@ import FormField from '@/components/form/FormField.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
+import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 
 defineOptions({ name: 'AccountSettingsPanel' })
 
@@ -31,10 +33,11 @@ interface MessageResponse {
   message: string
 }
 
-const { t } = useI18n({ useScope: 'global' })
-const { get, post, raw } = useApiFetch()
+const { t, locale } = useI18n({ useScope: 'global' })
+const { get, post, patch, raw } = useApiFetch()
 const { toast } = useToast()
 const app = useAppStore()
+const support = useSupportStore()
 
 const initialLoading = ref(true)
 const profile = ref<UserProfile | null>(null)
@@ -52,7 +55,6 @@ const confirmPassword = ref('')
 const passwordBanner = ref('')
 
 const selectedLanguage = ref<BackendLocale>('zh')
-const languageBanner = ref('')
 
 const languageOptions = computed(() => [
   { value: 'zh', label: t('account.language.options.zh') },
@@ -133,6 +135,7 @@ async function loadProfile() {
 }
 
 async function submitEmailChange() {
+  if (emailLoading.value) return
   if (!profile.value) return
   if (!normalizedNewEmail.value) {
     toast(t('account.email.validation.required'), 'warning')
@@ -159,6 +162,7 @@ async function submitEmailChange() {
 }
 
 async function submitPasswordChange() {
+  if (passwordLoading.value) return
   const validationMessage = passwordLengthError.value
     || confirmPasswordError.value
     || t('account.password.validation.required')
@@ -197,40 +201,33 @@ async function submitPasswordChange() {
   }
 }
 
-const canSubmitLanguage = computed(() =>
-  !!profile.value
-  && selectedLanguage.value !== (profile.value.language === 'zh' ? 'zh' : 'en')
-  && !languageLoading.value,
-)
-
-watch(selectedLanguage, () => {
-  languageBanner.value = ''
-})
-
-async function submitLanguage() {
-  if (!profile.value || !canSubmitLanguage.value) return
+async function changeLanguage(value: unknown) {
+  if (!profile.value || languageLoading.value || (value !== 'zh' && value !== 'en') || value === selectedLanguage.value) return
+  const username = profile.value.username
+  const previousLanguage = selectedLanguage.value
+  const previousLocale = locale.value
+  const nextLocale = backendToFrontendLocale(value)
+  selectedLanguage.value = value
   languageLoading.value = true
+  switchLanguage(nextLocale)
   try {
-    const data = await raw('/api/user/account/language', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ language: selectedLanguage.value }),
-    })
-    if (!data) return
-    let payload: UserProfile | null = null
-    try { payload = await data.json() as UserProfile } catch { payload = null }
-    if (payload) profile.value = payload
+    const data = await patch<UserProfile>('/api/user/account/language', { language: value })
+    if (app.sessionUser?.username !== username) return
+    if (!data) {
+      selectedLanguage.value = previousLanguage
+      if (locale.value === nextLocale) switchLanguage(previousLocale)
+      return
+    }
+    profile.value = data
+    selectedLanguage.value = data.language === 'zh' ? 'zh' : 'en'
     app.setSessionUser({
       ok: true,
-      username: profile.value?.username ?? '',
-      is_admin: profile.value?.is_admin ?? false,
+      username: data.username,
+      is_admin: data.is_admin,
       has_owned_server: app.hasOwnedServer,
-      language: selectedLanguage.value,
+      language: data.language,
     })
-    languageBanner.value = t('account.language.success')
-    toast(languageBanner.value, 'success')
-    // Apply immediately so the rest of the UI matches the new preference.
-    switchLanguage(backendToFrontendLocale(selectedLanguage.value))
+    if (locale.value === nextLocale) switchLanguage(backendToFrontendLocale(data.language))
   } finally {
     languageLoading.value = false
   }
@@ -245,11 +242,10 @@ onMounted(loadProfile)
   </LoadingCenter>
 
   <div v-else class="account-panel">
-    <BaseCard variant="bg2" class="account-section">
-      <SectionHeader icon="person" flush>
+    <BaseCard variant="bg2" density="compact" class="account-section">
+      <SectionHeader icon="person" :subtitle="t('account.profile.desc')" flush>
         {{ t('account.profile.title') }}
       </SectionHeader>
-      <p class="account-section__desc">{{ t('account.profile.desc') }}</p>
 
       <FormField :label="t('account.profile.username')" layout="horizontal" bordered>
         <div class="account-value">{{ profile?.username ?? '' }}</div>
@@ -262,11 +258,10 @@ onMounted(loadProfile)
       </FormField>
     </BaseCard>
 
-    <BaseCard variant="bg2" class="account-section">
-      <SectionHeader icon="mail" flush>
+    <BaseCard variant="bg2" density="compact" class="account-section">
+      <SectionHeader icon="mail" :subtitle="t('account.email.desc')" flush>
         {{ t('account.email.title') }}
       </SectionHeader>
-      <p class="account-section__desc">{{ t('account.email.desc') }}</p>
 
       <form class="account-form" @submit.prevent="submitEmailChange">
         <AlertBanner v-if="emailBanner" tone="success" icon="check_circle">
@@ -301,11 +296,10 @@ onMounted(loadProfile)
       </form>
     </BaseCard>
 
-    <BaseCard variant="bg2" class="account-section">
-      <SectionHeader icon="lock" flush>
+    <BaseCard variant="bg2" density="compact" class="account-section">
+      <SectionHeader icon="lock" :subtitle="t('account.password.desc')" flush>
         {{ t('account.password.title') }}
       </SectionHeader>
-      <p class="account-section__desc">{{ t('account.password.desc') }}</p>
 
       <form class="account-form" @submit.prevent="submitPasswordChange">
         <input
@@ -371,42 +365,35 @@ onMounted(loadProfile)
       </form>
     </BaseCard>
 
-    <BaseCard variant="bg2" class="account-section">
-      <SectionHeader icon="language" flush>
-        {{ t('account.language.title') }}
+    <BaseCard variant="bg2" density="compact" class="account-section">
+      <SectionHeader icon="settings" :subtitle="t('account.otherSettingsDesc')" flush>
+        {{ t('account.otherSettings') }}
       </SectionHeader>
-      <p class="account-section__desc">{{ t('account.language.desc') }}</p>
-
-      <form class="account-form" @submit.prevent="submitLanguage">
-        <AlertBanner v-if="languageBanner" tone="success" icon="check_circle">
-          {{ languageBanner }}
-        </AlertBanner>
-
-        <FormField :label="t('account.language.label')" layout="horizontal" bordered>
-          <BaseSelect
-            v-model="selectedLanguage"
-            :options="languageOptions"
-          />
-        </FormField>
-
-        <div class="account-actions">
-          <BaseButton
-            type="submit"
-            variant="primary"
-            :loading="languageLoading"
-            :disabled="!canSubmitLanguage"
-          >
-            <MsIcon name="language" size="sm" />
-            {{ t('account.language.submit') }}
-          </BaseButton>
-        </div>
-      </form>
+      <FormField :label="t('account.language.label')" layout="horizontal" keep-horizontal control-fit bordered>
+        <BaseSelect
+          class="language-select"
+          :model-value="selectedLanguage"
+          :options="languageOptions"
+          :disabled="languageLoading || !profile"
+          :aria-label="t('account.language.label')"
+          :aria-busy="languageLoading"
+          @update:model-value="changeLanguage"
+        />
+      </FormField>
+      <FormField :label="t('account.notifications.sound')" layout="horizontal" keep-horizontal control-fit bordered>
+        <ToggleSwitch
+          :model-value="support.soundEnabled"
+          :aria-label="t('account.notifications.sound')"
+          @update:model-value="support.setSoundEnabled"
+        />
+      </FormField>
     </BaseCard>
   </div>
 </template>
 
 <style scoped>
 .account-panel {
+  --field-label-width: 172px;
   max-width: 760px;
   margin: 0 auto;
   display: flex;
@@ -416,16 +403,7 @@ onMounted(loadProfile)
 
 .account-section {
   display: grid;
-  gap: 12px;
-  padding: var(--sp-2);
-}
-
-.account-section__desc {
-  margin: calc(var(--sp-1) * -1) 0 var(--sp-2);
-  max-width: 52ch;
-  color: var(--t2);
-  font-size: .84rem;
-  line-height: 1.55;
+  gap: var(--sp-3);
 }
 
 .account-form {
@@ -455,19 +433,13 @@ onMounted(loadProfile)
   word-break: break-word;
 }
 
-.account-panel :deep(.form-field__h-left) {
-  min-width: 172px;
-}
-
-.account-panel :deep(.field-label__text) {
-  white-space: nowrap;
-}
-
 .account-actions {
   display: flex;
   justify-content: flex-end;
   padding-top: var(--sp-3);
 }
+
+.language-select { --control-width: 140px; }
 
 @media (max-width: 768px) {
   .account-actions {

@@ -207,6 +207,7 @@ watch([stale, isSuspended, isInstalling], ([isStale, isSusp, isInst]) => {
 
   <template v-else-if="server">
     <PageHeader icon="dns" :title="server.name" :breadcrumbs="headerBreadcrumbs">
+      <TabSwitcher :tabs="tabs" :modelValue="activeTab" @update:modelValue="onTabChange" />
       <template #badge>
         <Badge :color="statusBadge().color">
           <StatusDot :status="dotKey" size="sm" />
@@ -216,7 +217,6 @@ watch([stale, isSuspended, isInstalling], ([isStale, isSusp, isInst]) => {
     </PageHeader>
 
     <div class="page-body">
-      <TabSwitcher :tabs="tabs" :modelValue="activeTab" @update:modelValue="onTabChange" />
       <RouterView :key="serverId" />
     </div>
   </template>

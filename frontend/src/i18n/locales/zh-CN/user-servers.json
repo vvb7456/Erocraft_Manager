@@ -33,11 +33,6 @@
     "expiry": "到期时间",
     "actions": "操作"
   },
-  "summary": {
-    "total": "总计服务器",
-    "running": "正在运行",
-    "needRenew": "需要续费"
-  },
   "address": {
     "label": "服务器地址",
     "copy": "复制地址"
@@ -70,7 +65,7 @@
     "clientSection": "SFTP 客户端",
     "supportSection": "需要帮助",
     "sftpTip": "SFTP 让你像管理本地文件夹一样管理服务器文件，适合上传/下载大文件、批量替换文件等。使用本系统的账户密码登录。",
-    "debugTip": "联系客服或反馈问题时请提供以下信息。",
+    "debugTip": "联系我们或反馈问题时请提供以下信息。",
     "host": "主机",
     "port": "端口",
     "username": "用户名",
@@ -98,7 +93,7 @@
   "reconnecting": "连接失败({current}/{max})，{seconds} 秒后重试...",
   "reconnectFailed": "无法连接到服务器节点",
   "suspendedHint": "服务器已到期，请及时续费",
-  "reconnectHint": "请检查网络或联系客服",
+  "reconnectHint": "请检查网络或联系我们",
   "serverOfflineHint": "使用电源控制启动服务器",
   "serverStopped": "服务器已停止",
   "serverStarting": "服务器启动中",

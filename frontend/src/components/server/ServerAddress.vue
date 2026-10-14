@@ -126,7 +126,7 @@ function openLink() {
 
 .address-text {
   flex: 1;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--t2);
   word-break: break-all;

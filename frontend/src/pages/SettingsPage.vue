@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
@@ -7,7 +8,9 @@ import { useConfirm } from '@/composables/useConfirm'
 import { provideDirtyForm, useDirtyFormSection } from '@/composables/useDirtyForm'
 import { useAppStore } from '@/stores/app'
 import PageHeader from '@/components/layout/PageHeader.vue'
-import TabSwitcher, { type TabItem } from '@/components/ui/TabSwitcher.vue'
+import WorkspacePage from '@/components/layout/WorkspacePage.vue'
+import SettingsWorkspace from '@/components/layout/SettingsWorkspace.vue'
+import type { SettingsNavItem } from '@/components/layout/SettingsNavigation.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
 import BaseTextarea from '@/components/form/BaseTextarea.vue'
@@ -22,9 +25,11 @@ import Badge from '@/components/ui/Badge.vue'
 import DirtyBar from '@/components/ui/DirtyBar.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
-import AccountSettingsPanel from '@/components/account/AccountSettingsPanel.vue'
 import AgreementSettingsPanel from '@/components/settings/AgreementSettingsPanel.vue'
+import NotificationSettingsPanel from '@/components/settings/NotificationSettingsPanel.vue'
+import HostMonitoringSettingsPanel from '@/components/settings/HostMonitoringSettingsPanel.vue'
 import { TIMEZONE_OPTIONS } from '@/config/timezones'
+import { formSnapshot, restoreScalarValue, sameFormValue } from '@/utils/formState'
 
 defineOptions({ name: 'SettingsPage' })
 
@@ -33,19 +38,22 @@ const { get, post, put } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 const app = useAppStore()
+const route = useRoute()
+const router = useRouter()
 
 // ── Tabs ──
-const activeTab = ref('account')
-const tabs = computed<TabItem[]>(() => [
-  { key: 'account',    label: t('settings.account.title'),  icon: 'lock' },
-  { key: 'smtp',       label: t('settings.smtp.title'),     icon: 'mail' },
-  { key: 'payment',    label: t('settings.payment.title'),  icon: 'payments' },
+const activeTab = computed(() => tabs.value.some(item => item.key === route.query.tab) ? String(route.query.tab) : 'branding')
+const tabs = computed<SettingsNavItem[]>(() => [
   { key: 'branding',   label: t('settings.branding.title'), icon: 'palette' },
   { key: 'agreements', label: t('settings.agreements.title'), icon: 'gavel' },
   { key: 'defaults',   label: t('settings.defaults.title'), icon: 'tune' },
-  { key: 'automation', label: t('settings.automation.title'), icon: 'schedule' },
-  { key: 'marketing',  label: t('settings.marketing.title'), icon: 'campaign' },
   { key: 'llm',        label: t('settings.llm.title'),        icon: 'smart_toy' },
+  { key: 'payment',    label: t('settings.payment.title'),  icon: 'payments' },
+  { key: 'marketing',  label: t('settings.marketing.title'), icon: 'campaign' },
+  { key: 'automation', label: t('settings.automation.title'), icon: 'schedule' },
+  { key: 'monitoring', label: t('settings.monitoring.title'), icon: 'monitoring' },
+  { key: 'channels', label: t('notifications.center.channels'), icon: 'notifications' },
+  { key: 'recipients', label: t('notifications.center.recipientGroups'), icon: 'group' },
 ])
 
 // ── State ──
@@ -59,9 +67,6 @@ const automation = ref({
   AUTOMATION_SUSPEND_ENABLED: false,
   AUTOMATION_DELETE_ENABLED: false,
   AUTOMATION_DELETE_DAYS: 14,
-  AUTOMATION_EMAIL_ENABLED: false,
-  AUTOMATION_EMAIL_RUN_HOUR: 10,
-  AUTOMATION_EMAIL_RUN_MINUTE: 0,
   TIMEZONE: 'Asia/Shanghai',
 })
 const saveLoading = ref(false)
@@ -72,88 +77,66 @@ const wechatFields = [
   { key: 'MERCHANT_SERIAL_NO' }, { key: 'MERCHANT_PRIVATE_KEY', pem: true },
   { key: 'API_V3_KEY', secret: true }, { key: 'PUBLIC_KEY_ID' }, { key: 'PUBLIC_KEY', pem: true },
 ]
-const gatewayTabs = computed<TabItem[]>(() => [
+const gatewayTabs = computed<SettingsNavItem[]>(() => [
   { key: 'hupijiao', label: t('settings.payment.gateways.hupijiao') },
   { key: 'alipay_direct', label: t('settings.payment.gateways.alipay_direct') },
   { key: 'wechat_pay', label: t('wechat.title') },
 ])
-const activeGateway = ref<string>('hupijiao')
+const activeGateway = computed(() => gatewayTabs.value.some(item => item.key === route.query.gateway) ? String(route.query.gateway) : 'hupijiao')
+const channel = computed(() => route.query.channel === 'email' ? 'email' : 'wecom')
+const navItems = computed(() => tabs.value.map(item => ({ ...item, children: item.key === 'payment'
+  ? gatewayTabs.value.map(gateway => ({ ...gateway, key: `payment:${gateway.key}` }))
+  : item.key === 'channels' ? ['wecom', 'email'].map(key => ({ key: `channels:${key}`, label: t(`notifications.center.${key}`) })) : undefined })))
+const selectedNav = computed(() => activeTab.value === 'payment' ? `payment:${activeGateway.value}` : activeTab.value === 'channels' ? `channels:${channel.value}` : activeTab.value)
+function setSetting(section: 'settings' | 'billing' | 'llm', key: string, value: string | number | boolean) {
+  const previous = JSON.parse(orig.value[section])[key]
+  const target = section === 'settings' ? settings.value : section === 'billing' ? billingSettings.value : llmSettings.value
+  target[key] = restoreScalarValue(value, previous)
+}
 function getBillingStr(key: string, def = ''): string { return billingSettings.value[key] ?? def }
-function setBillingStr(key: string, val: string) { billingSettings.value[key] = val }
-function getBillingNum(key: string, def = 0): number { return Number(billingSettings.value[key]) || def }
+function setBillingStr(key: string, val: string) { setSetting('billing', key, val) }
+function getBillingNum(key: string, def = 0): number { return Number(billingSettings.value[key] ?? def) }
 function setBillingNum(key: string, val: string | number | boolean | (string | number | boolean)[]) {
   const v = Array.isArray(val) ? val[0] : val
-  billingSettings.value[key] = Number(v)
+  setSetting('billing', key, Number(v))
 }
 function getBillingBool(key: string): boolean {
   const v = billingSettings.value[key]
   return v === true || v === 'true' || v === '1'
 }
-function setBillingBool(key: string, val: boolean) { billingSettings.value[key] = val }
+function setBillingBool(key: string, val: boolean) { setSetting('billing', key, val) }
 
 // ── LLM settings helpers ──
 function getLlmStr(key: string, def = ''): string { return llmSettings.value[key] ?? def }
-function setLlmStr(key: string, val: string) { llmSettings.value[key] = val }
-function getLlmNum(key: string, def = 0): number { return Number(llmSettings.value[key]) || def }
+function setLlmStr(key: string, val: string) { setSetting('llm', key, val) }
+function getLlmNum(key: string, def = 0): number { return Number(llmSettings.value[key] ?? def) }
 function setLlmNum(key: string, val: string | number | boolean | (string | number | boolean)[]) {
   const v = Array.isArray(val) ? val[0] : val
-  llmSettings.value[key] = Number(v)
+  setSetting('llm', key, Number(v))
 }
 function getLlmBool(key: string): boolean {
   const v = llmSettings.value[key]
   return v === true || v === 'true' || v === '1'
 }
-function setLlmBool(key: string, val: boolean) { llmSettings.value[key] = val }
+function setLlmBool(key: string, val: boolean) { setSetting('llm', key, val) }
 function getLlmSecret(key: string): string {
-  const v = llmSettings.value[key]
-  if (!v || v === '********') return ''
-  return String(v)
+  return String(llmSettings.value[key] || '')
 }
-function setLlmSecret(key: string, val: string) { llmSettings.value[key] = val }
-
-// ── SMTP test email ──
-const testEmailRecipient = ref('')
-const testEmailSending = ref(false)
-async function sendTestEmail() {
-  const to = testEmailRecipient.value.trim()
-  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
-    toast(t('settings.smtp.testInvalid'), 'error')
-    return
-  }
-  testEmailSending.value = true
-  try {
-    const override: Record<string, any> = {}
-    if (settings.value.SMTP_HOST) override.SMTP_HOST = settings.value.SMTP_HOST
-    if (settings.value.SMTP_PORT) override.SMTP_PORT = settings.value.SMTP_PORT
-    override.SMTP_USE_SSL = !!getBool('SMTP_USE_SSL')
-    if (settings.value.SMTP_PASSWORD) override.SMTP_PASSWORD = settings.value.SMTP_PASSWORD
-    if (settings.value.SENDER_EMAIL) override.SENDER_EMAIL = settings.value.SENDER_EMAIL
-    const r = await post<{ ok: boolean; error: string | null }>('/api/admin/test-email', {
-      recipient: to,
-      smtpOverride: override,
-    })
-    if (r?.ok) toast(t('settings.smtp.testOk'), 'success')
-    else toast(t('settings.smtp.testFail', { err: r?.error || 'unknown' }), 'error')
-  } catch (e: any) {
-    toast(t('settings.smtp.testFail', { err: String(e?.message || e) }), 'error')
-  } finally {
-    testEmailSending.value = false
-  }
-}
+function setLlmSecret(key: string, val: string) { setSetting('llm', key, val) }
 
 // ── Helpers ──
 function getStr(key: string, def = ''): string { return settings.value[key] ?? def }
-function setStr(key: string, val: string) { settings.value[key] = val }
-function getNum(key: string, def = 0): number { return Number(settings.value[key]) || def }
+function setStr(key: string, val: string) { setSetting('settings', key, val) }
+function getNum(key: string, def = 0): number { return Number(settings.value[key] ?? def) }
 function setNum(key: string, val: string | number | boolean | (string | number | boolean)[]) {
   const v = Array.isArray(val) ? val[0] : val
-  settings.value[key] = Number(v)
+  setSetting('settings', key, Number(v))
 }
 function getBool(key: string): boolean {
   const v = settings.value[key]
   return v === true || v === 'true' || v === '1'
 }
-function setBool(key: string, val: boolean) { settings.value[key] = val }
+function setBool(key: string, val: boolean) { setSetting('settings', key, val) }
 
 // ── Resources for selects ──
 const nestList = ref<any[]>([])
@@ -199,6 +182,11 @@ function getBillingKinds(): string[] {
   if (Array.isArray(raw)) return raw.map(String).filter(Boolean)
   return ['new_purchase', 'renew', 'upgrade']
 }
+function setBillingKinds(value: unknown) {
+  const next = (Array.isArray(value) ? value : [value]).map(String)
+  const original = JSON.parse(orig.value.billing).REFERRAL_QUALIFYING_KINDS
+  billingSettings.value.REFERRAL_QUALIFYING_KINDS = sameFormValue([...next].sort(), [...(original ?? ['new_purchase', 'renew', 'upgrade'])].sort()) ? original : next
+}
 
 watch(() => getNum('DEFAULT_NEST_ID'), async (nestId) => {
   if (!nestId) { eggList.value = []; return }
@@ -217,8 +205,8 @@ onMounted(async () => {
     get<{ nodes: any[] }>('/api/admin/resources/nodes'),
     get<CouponTemplateLite[]>('/api/admin/billing/coupon-templates'),
   ])
-  if (settingsData) settings.value = settingsData
-  if (autoData) Object.assign(automation.value, autoData)
+  if (settingsData) settings.value = Object.fromEntries(Object.entries(settingsData).filter(([key]) => !key.startsWith('SMTP_') && !['SENDER_EMAIL', 'EMAIL_SEND_DELAY'].includes(key)))
+  if (autoData) Object.assign(automation.value, Object.fromEntries(Object.keys(automation.value).map(key => [key, autoData[key]])))
   if (billingData) billingSettings.value = billingData
   if (llmData) llmSettings.value = llmData
   if (nestsRes) nestList.value = nestsRes.nests
@@ -235,9 +223,6 @@ onMounted(async () => {
 
 // ── Dirty tracking + leave guard ──
 //
-// account tab is handled by AccountSettingsPanel which manages its own
-// state — it does not contribute to dirty here. All other tabs share
-// the two reactive blobs (settings / automation / billingSettings).
 const orig = ref({
   settings: '{}',
   automation: '{}',
@@ -245,17 +230,17 @@ const orig = ref({
   llm: '{}',
 })
 function snapshot() {
-  orig.value.settings   = JSON.stringify(settings.value)
-  orig.value.automation = JSON.stringify(automation.value)
-  orig.value.billing    = JSON.stringify(billingSettings.value)
-  orig.value.llm        = JSON.stringify(llmSettings.value)
+  orig.value.settings   = formSnapshot(settings.value)
+  orig.value.automation = formSnapshot(automation.value)
+  orig.value.billing    = formSnapshot(billingSettings.value)
+  orig.value.llm        = formSnapshot(llmSettings.value)
 }
 const isDirty = computed(() => {
-  if (activeTab.value === 'account') return false
-  if (JSON.stringify(settings.value)        !== orig.value.settings) return true
-  if (JSON.stringify(automation.value)      !== orig.value.automation) return true
-  if (JSON.stringify(billingSettings.value) !== orig.value.billing) return true
-  if (JSON.stringify(llmSettings.value)     !== orig.value.llm) return true
+  if (initialLoading.value) return false
+  if (formSnapshot(settings.value)        !== orig.value.settings) return true
+  if (formSnapshot(automation.value)      !== orig.value.automation) return true
+  if (formSnapshot(billingSettings.value) !== orig.value.billing) return true
+  if (formSnapshot(llmSettings.value)     !== orig.value.llm) return true
   return false
 })
 
@@ -273,16 +258,9 @@ function discardChanges() {
 // empty values where a runtime default exists (BRAND_NAME, UI_*, etc).
 interface ValidationError { tab: string; label: string; message: string }
 const URL_RE = /^https?:\/\/[^\s]+$/i
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function validateAll(): ValidationError[] {
   const errs: ValidationError[] = []
-
-  // SMTP: SENDER_EMAIL, if provided, must be a valid address
-  const sender = String(settings.value.SENDER_EMAIL || '').trim()
-  if (sender && !EMAIL_RE.test(sender)) {
-    errs.push({ tab: 'smtp', label: t('settings.smtp.sender'), message: t('settings.validate.invalidEmail') })
-  }
 
   // Branding: URL fields, if provided, must start with http(s)://
   const urlFields: [string, string][] = [
@@ -331,41 +309,28 @@ function tabLabel(key: string): string {
 }
 
 async function saveAll(): Promise<boolean> {
-  if (!isDirty.value || saveLoading.value) return true
+  if (saveLoading.value) return false
+  if (!isDirty.value) return true
   if (hasErrors.value) return false
   saveLoading.value = true
   try {
-    // Only PUT the section(s) that actually changed. This avoids
-    // round-tripping a stale automation payload when the user only
-    // touched a settings field (and vice versa), which historically
-    // caused unrelated runtime values to be re-applied on every save.
-    // (Audit FH2.)
-    const settingsDirty = JSON.stringify(settings.value) !== orig.value.settings
-    const autoDirty = JSON.stringify(automation.value) !== orig.value.automation
-    const billingDirty = JSON.stringify(billingSettings.value) !== orig.value.billing
-    const llmDirty = JSON.stringify(llmSettings.value) !== orig.value.llm
-    if (settingsDirty) {
-      const r = await post<{ message: string }>('/api/admin/settings', settings.value)
-      if (!r) return false
+    const sections = [
+      { key: 'settings', value: settings.value, url: '/api/admin/settings' },
+      { key: 'automation', value: automation.value, url: '/api/admin/automation' },
+      { key: 'billing', value: billingSettings.value, url: '/api/admin/billing/settings', wrapped: true },
+      { key: 'llm', value: llmSettings.value, url: '/api/admin/llm/settings', wrapped: true },
+    ] as const
+    for (const section of sections) {
+      const submitted = formSnapshot(section.value)
+      if (submitted === orig.value[section.key]) continue
+      const previous = JSON.parse(orig.value[section.key])
+      const changes = Object.fromEntries(Object.entries(JSON.parse(submitted)).filter(([key, value]) => !sameFormValue(value, previous[key])))
+      if (!await post(section.url, 'wrapped' in section ? { settings: changes } : changes)) return false
+      orig.value[section.key] = submitted
+      if (section.key === 'settings') await app.loadVersion()
     }
-    if (autoDirty) {
-      const r = await post<{ message: string }>('/api/admin/automation', automation.value)
-      if (!r) return false
-    }
-    if (billingDirty) {
-      const r = await post<{ message: string }>('/api/admin/billing/settings', { settings: billingSettings.value })
-      if (!r) return false
-      const saved = await get<Record<string, any>>('/api/admin/billing/settings')
-      if (saved) billingSettings.value = saved
-    }
-    if (llmDirty) {
-      const r = await post<{ message: string }>('/api/admin/llm/settings', { settings: llmSettings.value })
-      if (!r) return false
-    }
-    if (settingsDirty) await app.loadVersion()
     toast(t('settings.saved'), 'success')
-    snapshot()
-    return true
+    return !isDirty.value
   } finally {
     saveLoading.value = false
   }
@@ -390,14 +355,16 @@ const dirtyForm = provideDirtyForm({
       title: t('settings.unsavedTitle'),
       message: t('settings.unsavedMessage'),
       confirmText: t('settings.unsavedSave'),
-      cancelText: t('settings.unsavedDiscard'),
-      altText: t('settings.unsavedStay'),
+      cancelText: t('settings.unsavedStay'),
+      altText: t('settings.unsavedDiscard'),
     })
-    if (result === 'alt') return 'stay'
-    return result === true ? 'save' : 'discard'
+    if (result === 'alt') return 'discard'
+    return result === true ? 'save' : 'stay'
   },
 })
-dirtyForm.attachLeaveGuard()
+dirtyForm.attachLeaveGuard({
+  update: (to, from) => ['channels', 'recipients', 'monitoring'].includes(String(from.query.tab)) && to.query.tab !== from.query.tab,
+})
 useDirtyFormSection({
   name: 'settings',
   isDirty,
@@ -405,41 +372,27 @@ useDirtyFormSection({
   discard: discardChanges,
 }, dirtyForm)
 
-/**
- * Intercept tab switches: if the current tab has unsaved changes,
- * prompt the user. Reuses the page-level dirty-form prompt so both
- * route-leave and tab-switch surface identical dialogs.
- */
-async function onTabChange(next: string) {
-  if (next === activeTab.value) return
-  if (!isDirty.value) {
-    activeTab.value = next
-    return
-  }
-  const r = await dirtyForm.promptUnsaved()
-  if (r === 'stay') return
-  if (r === 'save') {
-    const ok = await saveAll()
-    if (!ok) return
-  } else {
-    discardChanges()
-  }
-  activeTab.value = next
+function onTabChange(next: string) {
+  const [tab, value] = next.split(':')
+  void router.push({ query: { ...route.query, tab,
+    gateway: tab === 'payment' ? value || activeGateway.value : undefined,
+    channel: tab === 'channels' ? value || channel.value : undefined,
+  } })
 }
+
 
 </script>
 
 <template>
-  <PageHeader icon="settings" :title="t('settings.title')" />
-
-  <div class="page-body">
+  <WorkspacePage>
+    <template #header><PageHeader icon="settings" :title="t('settings.title')" /></template>
     <div v-if="initialLoading" class="center-loading"><Spinner size="lg" /></div>
 
-    <template v-else>
-      <TabSwitcher :tabs="tabs" :modelValue="activeTab" @update:modelValue="onTabChange" />
+    <SettingsWorkspace v-else :items="navItems" :model-value="selectedNav" :label="t('settings.title')" storage-key="settings" :disabled="dirtyForm.saving.value" @update:model-value="onTabChange">
+      <div :inert="dirtyForm.saving.value" class="settings-form">
 
-      <AccountSettingsPanel v-if="activeTab === 'account'" />
-
+      <NotificationSettingsPanel v-if="activeTab === 'channels' || activeTab === 'recipients'" :section="activeTab" :channel="channel" />
+      <HostMonitoringSettingsPanel v-else-if="activeTab === 'monitoring'" />
       <AgreementSettingsPanel
         v-else-if="activeTab === 'agreements'"
         :settings="settings"
@@ -448,45 +401,9 @@ async function onTabChange(next: string) {
 
       <template v-else>
         <div class="st-panel">
-          <template v-if="activeTab === 'smtp'">
-            <BaseCard variant="bg2" class="settings-card">
-              <p class="section-note">{{ t('settings.smtp.desc') }}</p>
-              <FormField :label="t('settings.smtp.host')" layout="horizontal">
-                <BaseInput :modelValue="getStr('SMTP_HOST')" @update:modelValue="setStr('SMTP_HOST', $event)" />
-              </FormField>
-              <FormField :label="t('settings.smtp.port')" layout="horizontal">
-                <NumberInput :modelValue="getNum('SMTP_PORT', 587)" @update:modelValue="setNum('SMTP_PORT', $event)" :min="1" :max="65535" />
-              </FormField>
-              <FormField :label="t('settings.smtp.sender')" layout="horizontal">
-                <BaseInput :modelValue="getStr('SENDER_EMAIL')" type="email" @update:modelValue="setStr('SENDER_EMAIL', $event)" />
-              </FormField>
-              <FormField :label="t('settings.smtp.password')" layout="horizontal">
-                <SecretInput :modelValue="getStr('SMTP_PASSWORD')" @update:modelValue="setStr('SMTP_PASSWORD', $event)" />
-              </FormField>
-              <FormField :label="t('settings.smtp.delay')" layout="horizontal">
-                <NumberInput :modelValue="getNum('EMAIL_SEND_DELAY', 2)" @update:modelValue="setNum('EMAIL_SEND_DELAY', $event)" :min="0" :max="60" />
-              </FormField>
-              <FormField :label="t('settings.smtp.ssl')" layout="horizontal">
-                <ToggleSwitch :modelValue="getBool('SMTP_USE_SSL')" @update:modelValue="setBool('SMTP_USE_SSL', $event)" />
-              </FormField>
-              <FormField :hint="undefined" layout="horizontal">
-                <template #label>
-                  {{ t('settings.smtp.testRecipient') }}
-                  <HelpTip :text="t('settings.smtp.testHint')" />
-                </template>
-                <div class="st-test-row">
-                  <BaseInput v-model="testEmailRecipient" type="email" :placeholder="t('settings.smtp.testPlaceholder')" />
-                  <BaseButton size="sm" :loading="testEmailSending" @click="sendTestEmail">
-                    {{ t('settings.smtp.sendTest') }}
-                  </BaseButton>
-                </div>
-              </FormField>
-            </BaseCard>
-          </template>
-
-          <template v-else-if="activeTab === 'branding'">
-            <BaseCard variant="bg2" class="settings-card">
-              <p class="section-note">{{ t('settings.branding.desc') }}</p>
+          <template v-if="activeTab === 'branding'">
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="palette" :subtitle="t('settings.branding.desc')" flush>{{ t('settings.branding.title') }}</SectionHeader>
               <FormField :label="t('settings.branding.brandName')" layout="horizontal">
                 <BaseInput :modelValue="getStr('BRAND_NAME')" @update:modelValue="setStr('BRAND_NAME', $event)" />
               </FormField>
@@ -518,9 +435,8 @@ async function onTabChange(next: string) {
               </FormField>
             </BaseCard>
 
-            <BaseCard variant="bg2" class="settings-card">
-              <SectionHeader icon="support_agent" flush>{{ t('settings.branding.support.title') }}</SectionHeader>
-              <p class="section-note">{{ t('settings.branding.support.desc') }}</p>
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="support_agent" :subtitle="t('settings.branding.support.desc')" flush>{{ t('settings.branding.support.title') }}</SectionHeader>
               <FormField :label="t('settings.branding.support.email')" layout="horizontal">
                 <BaseInput :modelValue="getStr('SUPPORT_EMAIL')" type="email" @update:modelValue="setStr('SUPPORT_EMAIL', $event)" />
               </FormField>
@@ -540,29 +456,35 @@ async function onTabChange(next: string) {
                 </template>
                 <BaseInput :modelValue="getStr('SUPPORT_FOOTER_NOTE')" @update:modelValue="setStr('SUPPORT_FOOTER_NOTE', $event)" />
               </FormField>
+              <FormField :label="t('support.welcomeEnabled')" layout="horizontal">
+                <ToggleSwitch :modelValue="getBool('SUPPORT_WELCOME_ENABLED')" size="sm" @update:modelValue="setBool('SUPPORT_WELCOME_ENABLED', $event)" />
+              </FormField>
+              <FormField v-if="getBool('SUPPORT_WELCOME_ENABLED')" :label="t('support.welcomeMessage')" layout="horizontal">
+                <BaseTextarea :modelValue="getStr('SUPPORT_WELCOME_MESSAGE')" :rows="3" maxlength="2000" @update:modelValue="setStr('SUPPORT_WELCOME_MESSAGE', $event)" />
+              </FormField>
             </BaseCard>
           </template>
 
           <template v-else-if="activeTab === 'payment'">
-            <BaseCard variant="bg2" class="settings-card pay-gateway-config-card">
-              <TabSwitcher :tabs="gatewayTabs" :modelValue="activeGateway" @update:modelValue="activeGateway = $event" />
+            <BaseCard variant="bg2" density="compact" class="pay-gateway-config-card">
+              <SectionHeader icon="payments" :subtitle="t(`settings.payment.gatewayDescriptions.${activeGateway}`)" flush>{{ gatewayTabs.find(item => item.key === activeGateway)?.label }}</SectionHeader>
 
               <div v-if="activeGateway === 'wechat_pay'" class="pay-gateway-pane">
                 <FormField :label="t('settings.payment.gateways.enabled')" layout="horizontal" keep-horizontal>
                   <ToggleSwitch :modelValue="getBillingBool('WECHAT_PAY_ENABLED')" size="sm" @update:modelValue="setBillingBool('WECHAT_PAY_ENABLED', $event)" />
                 </FormField>
 
-                <SectionHeader icon="badge" flush>{{ t('settings.payment.credentials.title') }}</SectionHeader>
+                <SectionHeader icon="badge" :subtitle="t('settings.payment.credentials.desc')" flush>{{ t('settings.payment.credentials.title') }}</SectionHeader>
                 <FormField :label="t('settings.payment.credentials.displayName')" layout="horizontal">
                   <BaseInput :modelValue="getBillingStr('WECHAT_PAY_DISPLAY_NAME')" @update:modelValue="setBillingStr('WECHAT_PAY_DISPLAY_NAME', $event)" />
                 </FormField>
                 <FormField v-for="field in wechatFields" :key="field.key" :label="t(`wechat.${field.key}`)" layout="horizontal">
-                  <BaseTextarea v-if="field.pem" :modelValue="getBillingStr(`WECHAT_PAY_${field.key}`) === '********' ? '' : getBillingStr(`WECHAT_PAY_${field.key}`)" :placeholder="getBillingStr(`WECHAT_PAY_${field.key}`) === '********' ? t('wechat.configured') : '-----BEGIN …-----'" :rows="3" mono :spellcheck="false" @update:modelValue="setBillingStr(`WECHAT_PAY_${field.key}`, $event)" />
+                  <BaseTextarea v-if="field.pem" :modelValue="getBillingStr(`WECHAT_PAY_${field.key}`)" :rows="3" mono :spellcheck="false" @update:modelValue="setBillingStr(`WECHAT_PAY_${field.key}`, $event)" />
                   <SecretInput v-else-if="field.secret" :modelValue="getBillingStr(`WECHAT_PAY_${field.key}`)" @update:modelValue="setBillingStr(`WECHAT_PAY_${field.key}`, $event)" />
                   <BaseInput v-else :modelValue="getBillingStr(`WECHAT_PAY_${field.key}`)" @update:modelValue="setBillingStr(`WECHAT_PAY_${field.key}`, $event)" />
                 </FormField>
 
-                <SectionHeader icon="badge" flush>{{ t('wechat.officialAccount') }}</SectionHeader>
+                <SectionHeader icon="badge" :subtitle="t('settings.payment.wechat.officialAccountDesc')" flush>{{ t('wechat.officialAccount') }}</SectionHeader>
                 <FormField :label="t('wechat.APPID')" layout="horizontal">
                   <BaseInput :modelValue="getBillingStr('WECHAT_PAY_APPID')" @update:modelValue="setBillingStr('WECHAT_PAY_APPID', $event)" />
                 </FormField>
@@ -570,18 +492,13 @@ async function onTabChange(next: string) {
                   <SecretInput :modelValue="getBillingStr('WECHAT_PAY_APP_SECRET')" @update:modelValue="setBillingStr('WECHAT_PAY_APP_SECRET', $event)" />
                 </FormField>
 
-                <SectionHeader icon="badge" flush>{{ t('wechat.miniProgram') }}</SectionHeader>
+                <SectionHeader icon="badge" :subtitle="t('settings.payment.wechat.miniProgramDesc')" flush>{{ t('wechat.miniProgram') }}</SectionHeader>
                 <FormField :label="t('wechat.MINIPROGRAM_APPID')" layout="horizontal">
                   <BaseInput :modelValue="getBillingStr('WECHAT_PAY_MINIPROGRAM_APPID')" @update:modelValue="setBillingStr('WECHAT_PAY_MINIPROGRAM_APPID', $event)" />
                 </FormField>
                 <FormField :label="t('wechat.MINIPROGRAM_APP_SECRET')" layout="horizontal">
                   <SecretInput :modelValue="getBillingStr('WECHAT_PAY_MINIPROGRAM_APP_SECRET')" @update:modelValue="setBillingStr('WECHAT_PAY_MINIPROGRAM_APP_SECRET', $event)" />
                 </FormField>
-
-                <SectionHeader icon="link" flush>{{ t('settings.payment.urls.title') }}</SectionHeader>
-                <FormField :label="t('wechat.notify')" layout="horizontal"><BaseInput :modelValue="`${getStr('SITE_URL').replace(/\/$/, '')}/api/webhook/wechat_pay`" readonly /></FormField>
-                <FormField :label="t('wechat.oauth')" layout="horizontal"><BaseInput :modelValue="`${getStr('SITE_URL').replace(/\/$/, '')}/api/payments/wechat/oauth/callback`" readonly /></FormField>
-                <FormField :label="t('wechat.directory')" layout="horizontal"><BaseInput :modelValue="`${getStr('SITE_URL').replace(/\/$/, '')}/`" readonly /></FormField>
               </div>
 
               <div v-if="activeGateway === 'hupijiao'" class="pay-gateway-pane">
@@ -589,8 +506,7 @@ async function onTabChange(next: string) {
                   <ToggleSwitch :modelValue="getBillingBool('HUPIJIAO_ENABLED')" size="sm" @update:modelValue="setBillingBool('HUPIJIAO_ENABLED', $event)" />
                 </FormField>
 
-                <SectionHeader icon="badge" flush>{{ t('settings.payment.credentials.title') }}</SectionHeader>
-                <p class="section-note">{{ t('settings.payment.credentials.desc') }}</p>
+                <SectionHeader icon="badge" :subtitle="t('settings.payment.credentials.desc')" flush>{{ t('settings.payment.credentials.title') }}</SectionHeader>
                 <FormField :label="t('settings.payment.credentials.displayName')" layout="horizontal">
                   <BaseInput :modelValue="getBillingStr('HUPIJIAO_DISPLAY_NAME')" @update:modelValue="setBillingStr('HUPIJIAO_DISPLAY_NAME', $event)" />
                 </FormField>
@@ -601,8 +517,7 @@ async function onTabChange(next: string) {
                   <SecretInput :modelValue="getBillingStr('HUPIJIAO_APPSECRET')" @update:modelValue="setBillingStr('HUPIJIAO_APPSECRET', $event)" />
                 </FormField>
 
-                <SectionHeader icon="link" flush>{{ t('settings.payment.urls.title') }}</SectionHeader>
-                <p class="section-note">{{ t('settings.payment.urls.desc') }}</p>
+                <SectionHeader icon="link" :subtitle="t('settings.payment.urls.desc')" flush>{{ t('settings.payment.urls.title') }}</SectionHeader>
                 <FormField layout="horizontal">
                   <template #label>
                     {{ t('settings.payment.referer') }}
@@ -624,8 +539,7 @@ async function onTabChange(next: string) {
                   <ToggleSwitch :modelValue="getBillingBool('ALIPAY_DIRECT_ENABLED')" size="sm" @update:modelValue="setBillingBool('ALIPAY_DIRECT_ENABLED', $event)" />
                 </FormField>
 
-                <SectionHeader icon="badge" flush>{{ t('settings.payment.credentials.title') }}</SectionHeader>
-                <p class="section-note">{{ t('settings.payment.credentials.desc') }}</p>
+                <SectionHeader icon="badge" :subtitle="t('settings.payment.credentials.desc')" flush>{{ t('settings.payment.credentials.title') }}</SectionHeader>
                 <FormField :label="t('settings.payment.credentials.displayName')" layout="horizontal">
                   <BaseInput :modelValue="getBillingStr('ALIPAY_DIRECT_DISPLAY_NAME')" @update:modelValue="setBillingStr('ALIPAY_DIRECT_DISPLAY_NAME', $event)" />
                 </FormField>
@@ -639,8 +553,7 @@ async function onTabChange(next: string) {
                   <SecretInput :modelValue="getBillingStr('ALIPAY_DIRECT_ALIPAY_PUBLIC_KEY')" @update:modelValue="setBillingStr('ALIPAY_DIRECT_ALIPAY_PUBLIC_KEY', $event)" />
                 </FormField>
 
-                <SectionHeader icon="link" flush>{{ t('settings.payment.urls.title') }}</SectionHeader>
-                <p class="section-note">{{ t('settings.payment.alipay.gatewayDesc') }}</p>
+                <SectionHeader icon="link" :subtitle="t('settings.payment.alipay.gatewayDesc')" flush>{{ t('settings.payment.urls.title') }}</SectionHeader>
                 <FormField layout="horizontal">
                   <template #label>
                     {{ t('settings.payment.alipay.gateway') }}
@@ -653,9 +566,8 @@ async function onTabChange(next: string) {
                 </FormField>
               </div>
             </BaseCard>
-            <BaseCard variant="bg2" class="settings-card">
-              <SectionHeader icon="tune" flush>{{ t('settings.payment.quotas.title') }}</SectionHeader>
-              <p class="section-note">{{ t('settings.payment.quotas.desc') }}</p>
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="tune" :subtitle="t('settings.payment.quotas.desc')" flush>{{ t('settings.payment.quotas.title') }}</SectionHeader>
               <FormField layout="horizontal">
                 <template #label>
                   {{ t('settings.payment.payTimeout') }}
@@ -674,16 +586,16 @@ async function onTabChange(next: string) {
           </template>
 
           <template v-else-if="activeTab === 'defaults'">
-            <BaseCard variant="bg2" class="settings-card">
-              <p class="section-note">{{ t('settings.defaults.desc') }}</p>
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="tune" :subtitle="t('settings.defaults.desc')" flush>{{ t('settings.defaults.title') }}</SectionHeader>
               <FormField :label="t('settings.defaults.nest')" layout="horizontal">
-                <BaseSelect :modelValue="getNum('DEFAULT_NEST_ID')" :options="nestOptions" :placeholder="t('settings.defaults.nest')" @update:modelValue="setNum('DEFAULT_NEST_ID', $event)" />
+                <BaseSelect teleport :modelValue="getNum('DEFAULT_NEST_ID')" :options="nestOptions" :placeholder="t('settings.defaults.nest')" @update:modelValue="setNum('DEFAULT_NEST_ID', $event)" />
               </FormField>
               <FormField :label="t('settings.defaults.egg')" layout="horizontal">
-                <BaseSelect :modelValue="getNum('DEFAULT_EGG_ID')" :options="eggOptions" :placeholder="t('settings.defaults.egg')" :disabled="!getNum('DEFAULT_NEST_ID')" @update:modelValue="setNum('DEFAULT_EGG_ID', $event)" />
+                <BaseSelect teleport :modelValue="getNum('DEFAULT_EGG_ID')" :options="eggOptions" :placeholder="t('settings.defaults.egg')" :disabled="!getNum('DEFAULT_NEST_ID')" @update:modelValue="setNum('DEFAULT_EGG_ID', $event)" />
               </FormField>
               <FormField :label="t('settings.defaults.node')" layout="horizontal">
-                <BaseSelect :modelValue="getNum('DEFAULT_NODE_ID')" :options="nodeOptions" :placeholder="t('settings.defaults.node')" @update:modelValue="setNum('DEFAULT_NODE_ID', $event)" />
+                <BaseSelect teleport :modelValue="getNum('DEFAULT_NODE_ID')" :options="nodeOptions" :placeholder="t('settings.defaults.node')" @update:modelValue="setNum('DEFAULT_NODE_ID', $event)" />
               </FormField>
               <FormField :label="t('settings.defaults.dockerImage')" layout="horizontal">
                 <BaseInput :modelValue="getStr('DOCKER_IMAGE')" @update:modelValue="setStr('DOCKER_IMAGE', $event)" />
@@ -710,17 +622,15 @@ async function onTabChange(next: string) {
           </template>
 
           <template v-else-if="activeTab === 'automation'">
-            <BaseCard variant="bg2" class="settings-card">
-              <SectionHeader icon="schedule" flush>{{ t('settings.automation.time.title') }}</SectionHeader>
-              <p class="section-note">{{ t('settings.automation.time.desc') }}</p>
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="schedule" :subtitle="t('settings.automation.time.desc')" flush>{{ t('settings.automation.time.title') }}</SectionHeader>
               <FormField :label="t('settings.automation.timezone')" layout="horizontal">
-                <BaseSelect :modelValue="automation.TIMEZONE" :options="TIMEZONE_OPTIONS as any" searchable @update:modelValue="automation.TIMEZONE = String($event)" />
+                <BaseSelect teleport :modelValue="automation.TIMEZONE" :options="TIMEZONE_OPTIONS as any" searchable @update:modelValue="automation.TIMEZONE = String($event)" />
               </FormField>
             </BaseCard>
 
-            <BaseCard variant="bg2" class="settings-card">
-              <SectionHeader icon="pause_circle" flush>{{ t('settings.automation.suspend.title') }}</SectionHeader>
-              <p class="section-note">{{ t('settings.automation.suspend.desc') }}</p>
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="pause_circle" :subtitle="t('settings.automation.suspend.desc')" flush>{{ t('settings.automation.suspend.title') }}</SectionHeader>
               <FormField :label="t('settings.automation.suspend.enabled')" layout="horizontal">
                 <ToggleSwitch v-model="automation.AUTOMATION_SUSPEND_ENABLED" size="sm" />
               </FormField>
@@ -732,9 +642,8 @@ async function onTabChange(next: string) {
               </FormField>
             </BaseCard>
 
-            <BaseCard variant="bg2" class="settings-card">
-              <SectionHeader icon="delete" flush>{{ t('settings.automation.delete.title') }}</SectionHeader>
-              <p class="section-note">{{ t('settings.automation.delete.desc') }}</p>
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="delete" :subtitle="t('settings.automation.delete.desc')" flush>{{ t('settings.automation.delete.title') }}</SectionHeader>
               <FormField :label="t('settings.automation.delete.enabled')" layout="horizontal">
                 <ToggleSwitch v-model="automation.AUTOMATION_DELETE_ENABLED" size="sm" />
               </FormField>
@@ -743,24 +652,11 @@ async function onTabChange(next: string) {
               </FormField>
             </BaseCard>
 
-            <BaseCard variant="bg2" class="settings-card">
-              <SectionHeader icon="alternate_email" flush>{{ t('settings.automation.email.title') }}</SectionHeader>
-              <p class="section-note">{{ t('settings.automation.email.desc') }}</p>
-              <FormField :label="t('settings.automation.email.enabled')" layout="horizontal">
-                <ToggleSwitch v-model="automation.AUTOMATION_EMAIL_ENABLED" size="sm" />
-              </FormField>
-              <FormField :label="t('settings.automation.email.runHour')" layout="horizontal">
-                <NumberInput v-model="automation.AUTOMATION_EMAIL_RUN_HOUR" :min="0" :max="23" />
-              </FormField>
-              <FormField :label="t('settings.automation.email.runMinute')" layout="horizontal">
-                <NumberInput v-model="automation.AUTOMATION_EMAIL_RUN_MINUTE" :min="0" :max="59" />
-              </FormField>
-            </BaseCard>
           </template>
 
           <template v-else-if="activeTab === 'marketing'">
-            <BaseCard variant="bg2" class="settings-card">
-              <SectionHeader icon="group_add" flush>{{ t('settings.marketing.referral.title') }}</SectionHeader>
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="group_add" :subtitle="t('settings.marketing.referral.desc')" flush>{{ t('settings.marketing.referral.title') }}</SectionHeader>
               <FormField layout="horizontal">
                 <template #label>
                   {{ t('settings.marketing.referral.enabled') }}
@@ -779,6 +675,7 @@ async function onTabChange(next: string) {
                   <HelpTip :text="t('settings.marketing.referral.inviterTemplateHint')" />
                 </template>
                 <BaseSelect
+                  teleport
                   :modelValue="getBillingStr('REFERRAL_INVITER_TEMPLATE_CODE')"
                   :options="couponTemplateOptions"
                   :placeholder="t('settings.marketing.referral.templatePlaceholder')"
@@ -792,6 +689,7 @@ async function onTabChange(next: string) {
                   <HelpTip :text="t('settings.marketing.referral.inviteeTemplateHint')" />
                 </template>
                 <BaseSelect
+                  teleport
                   :modelValue="getBillingStr('REFERRAL_INVITEE_TEMPLATE_CODE')"
                   :options="couponTemplateOptions"
                   :placeholder="t('settings.marketing.referral.templatePlaceholder')"
@@ -818,18 +716,19 @@ async function onTabChange(next: string) {
                   <HelpTip :text="t('settings.marketing.referral.qualifyingKindsHint')" />
                 </template>
                 <BaseSelect
+                  teleport
                   :modelValue="getBillingKinds()"
                   :options="qualifyingKindOptions"
                   multiple
                   :placeholder="t('settings.marketing.referral.qualifyingKindsPlaceholder')"
-                  @update:modelValue="billingSettings[`REFERRAL_QUALIFYING_KINDS`] = Array.isArray($event) ? $event.map(String) : [String($event)]"
+                  @update:modelValue="setBillingKinds"
                 />
               </FormField>
             </BaseCard>
           </template>
           <template v-else-if="activeTab === 'llm'">
-            <BaseCard variant="bg2" class="settings-card">
-              <SectionHeader icon="toggle_on" flush>{{ t('settings.llm.general.title') }}</SectionHeader>
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="toggle_on" :subtitle="t('settings.llm.general.desc')" flush>{{ t('settings.llm.general.title') }}</SectionHeader>
               <FormField layout="horizontal">
                 <template #label>
                   {{ t('settings.llm.general.enabled') }}
@@ -839,8 +738,8 @@ async function onTabChange(next: string) {
               </FormField>
             </BaseCard>
 
-            <BaseCard variant="bg2" class="settings-card">
-              <SectionHeader icon="hub" flush>{{ t('settings.llm.connection.title') }}</SectionHeader>
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="hub" :subtitle="t('settings.llm.connection.desc')" flush>{{ t('settings.llm.connection.title') }}</SectionHeader>
               <FormField :label="t('settings.llm.connection.baseUrl')" layout="horizontal">
                 <BaseInput :modelValue="getLlmStr('NEWAPI_BASE_URL')" @update:modelValue="setLlmStr('NEWAPI_BASE_URL', $event)" placeholder="https://llm.erocraft.com:8443" />
               </FormField>
@@ -849,8 +748,8 @@ async function onTabChange(next: string) {
               </FormField>
             </BaseCard>
 
-            <BaseCard variant="bg2" class="settings-card">
-              <SectionHeader icon="extension" flush>{{ t('settings.llm.injection.title') }}</SectionHeader>
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="extension" :subtitle="t('settings.llm.injection.desc')" flush>{{ t('settings.llm.injection.title') }}</SectionHeader>
               <FormField :label="t('settings.llm.injection.stEndpoint')" layout="horizontal">
                 <BaseInput :modelValue="getLlmStr('LLM_ST_ENDPOINT_URL')" @update:modelValue="setLlmStr('LLM_ST_ENDPOINT_URL', $event)" placeholder="https://llm.erocraft.com:8443/v1" />
               </FormField>
@@ -858,26 +757,22 @@ async function onTabChange(next: string) {
           </template>
         </div>
       </template>
-    </template>
-  </div>
+      </div>
+    </SettingsWorkspace>
+  </WorkspacePage>
 
-  <!-- Floating dirty bar: appears whenever there are unsaved changes on any
-       non-account tab. DirtyBar itself renders the red hint and disables
-       Save when `errors` is non-empty; we override #extra to make each chip
-       clickable so the user can jump to the offending tab. -->
   <DirtyBar
     :dirty="dirtyForm.isDirty.value"
-    :saving="saveLoading"
+    :saving="dirtyForm.saving.value"
     :errors="errors.map(e => `${tabLabel(e.tab)}: ${e.label}`)"
-    confirm-before-unload
-    @save="saveAll"
-    @discard="discardChanges"
+    @save="dirtyForm.save"
+    @discard="dirtyForm.discard"
   >
     <template v-if="hasErrors" #extra>
       <span
         v-for="(e, i) in errors" :key="i"
         class="db-err-chip"
-        @click="activeTab = e.tab"
+        @click="onTabChange(e.tab)"
       ><Badge color="var(--amber)">{{ tabLabel(e.tab) }}</Badge> {{ e.label }}</span>
     </template>
   </DirtyBar>
@@ -886,47 +781,12 @@ async function onTabChange(next: string) {
 <style scoped>
 .center-loading { display: flex; justify-content: center; padding: var(--sp-8); }
 
-.st-test-row {
-  display: flex;
-  gap: var(--sp-2);
-  align-items: center;
-  width: 100%;
-}
-.st-test-row :deep(.bi-wrap) { flex: 1; }
-
 .st-panel {
-  margin-top: var(--sp-4);
-  max-width: 760px;
-  margin-left: auto;
-  margin-right: auto;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
 }
-
-.settings-card {
-  padding: var(--sp-2);
-}
-
-.section-note {
-  font-size: .84rem;
-  font-weight: 400;
-  line-height: 1.55;
-  color: var(--t2);
-  margin: 0 0 var(--sp-3);
-  max-width: 56ch;
-}
-
-/* Save bar */
-.st-save {
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--sp-4) 0;
-  max-width: 640px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
 /* Validation error chips in DirtyBar (clickable tab-switcher) */
 .db-err-chip {
   display: inline-flex; align-items: center; gap: var(--sp-1);
@@ -938,20 +798,4 @@ async function onTabChange(next: string) {
 
 .pay-gateway-config-card { display: flex; flex-direction: column; gap: var(--sp-4); }
 .pay-gateway-pane { display: flex; flex-direction: column; gap: var(--sp-3); }
-.dirty-bar__err-item:hover {
-  background: color-mix(in srgb, var(--amber) 10%, transparent);
-}
-.dirty-bar__err-label {
-  color: var(--t1);
-  font-weight: 500;
-  white-space: nowrap;
-}
-.dirty-bar__err-msg {
-  color: var(--t2);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 </style>

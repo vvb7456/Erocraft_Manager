@@ -91,8 +91,8 @@ useDirtyFormSection({ name: 'details', isDirty, save, discard })
 </script>
 
 <template>
-  <BaseCard variant="bg2" class="settings-card">
-    <CollapsibleGroup :title="t('adminServer.settings.details.title')" icon="info" :defaultOpen="true">
+  <BaseCard variant="bg2" density="compact">
+    <CollapsibleGroup :title="t('adminServer.settings.details.title')" :subtitle="t('adminServer.settings.details.desc')" icon="info" :defaultOpen="true">
       <div class="form">
         <FormField layout="horizontal" bordered>
           <template #label>{{ t('adminServer.settings.details.name') }}</template>

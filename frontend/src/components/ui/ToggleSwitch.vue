@@ -7,6 +7,7 @@ const props = withDefaults(defineProps<{
   modelValue: boolean
   size?: 'sm' | 'md'
   disabled?: boolean
+  block?: boolean
   labelOn?: string
   labelOff?: string
 }>(), {
@@ -29,10 +30,14 @@ function toggle() {
 <template>
   <div
     class="seg-switch"
-    :class="[`seg-switch--${size}`, { 'seg-switch--disabled': disabled }]"
+    :class="[`seg-switch--${size}`, { 'seg-switch--disabled': disabled, 'seg-switch--block': block }]"
     role="switch"
     :aria-checked="modelValue"
+    :aria-disabled="disabled"
+    :tabindex="disabled ? -1 : 0"
     @click="toggle"
+    @keydown.enter.prevent="toggle"
+    @keydown.space.prevent="toggle"
   >
     <div class="seg-track">
       <div class="seg-slider" :class="{ 'seg-slider--on': modelValue }" />
@@ -44,9 +49,10 @@ function toggle() {
 
 <style scoped>
 .seg-switch {
+  --control-width: fit-content;
   display: inline-flex;
   min-width: 0;
-  width: fit-content !important;
+  width: var(--control-width);
   margin-left: auto;
 }
 
@@ -54,6 +60,10 @@ function toggle() {
   opacity: .5;
   pointer-events: none;
 }
+.seg-switch--block { --control-width: 100%; margin-left: 0; }
+.seg-switch--block .seg-track { width: 100%; }
+.seg-switch--block .seg-btn { padding-left: var(--sp-1); padding-right: var(--sp-1); }
+.seg-switch:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; border-radius: var(--r-sm); }
 
 .seg-track {
   position: relative;

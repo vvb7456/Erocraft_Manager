@@ -1,37 +1,22 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
-import { useConfirm } from '@/composables/useConfirm'
-import { provideDirtyForm, useDirtyFormSection } from '@/composables/useDirtyForm'
-import PageHeader from '@/components/layout/PageHeader.vue'
-import TabSwitcher from '@/components/ui/TabSwitcher.vue'
+import { useDirtyFormSection, useParentDirtyForm } from '@/composables/useDirtyForm'
 import BaseCard from '@/components/ui/BaseCard.vue'
-import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
 import BaseTextarea from '@/components/form/BaseTextarea.vue'
 import FormField from '@/components/form/FormField.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
-import DirtyBar from '@/components/ui/DirtyBar.vue'
-import MsIcon from '@/components/ui/MsIcon.vue'
+import { useClipboard } from '@/composables/useClipboard'
+import { emailTemplateKeys as KEYS, type EmailTemplateKey as TemplateKey } from '@/types/emailTemplates'
 
 defineOptions({ name: 'EmailTemplatesPage' })
-
-type TemplateKey =
-  | 'bulk' | 'reminder' | 'expired' | 'preDelete' | 'createUser' | 'passwordReset'
-  | 'emailChange' | 'registerVerify' | 'alertFired' | 'alertResolved'
-  | 'orderPaid' | 'orderApplyFailed' | 'orderApplyAlert' | 'orderRefunded'
-  | 'serverInstalled' | 'referralInviterRewarded' | 'referralInviteeRewarded'
+const props = defineProps<{ templateKey: TemplateKey }>()
 
 interface TemplateData { subject: string; body: string }
 
-const KEYS: TemplateKey[] = [
-  'bulk', 'reminder', 'expired', 'preDelete', 'createUser', 'passwordReset',
-  'emailChange', 'registerVerify', 'alertFired', 'alertResolved',
-  'orderPaid', 'orderApplyFailed', 'orderApplyAlert', 'orderRefunded',
-  'serverInstalled', 'referralInviterRewarded', 'referralInviteeRewarded',
-]
 
 const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
   bulk: ['brand_name', 'username', 'email', 'server_name', 'server_id', 'expiration_date'],
@@ -56,11 +41,10 @@ const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
 const { t } = useI18n({ useScope: 'global' })
 const { get, post } = useApiFetch()
 const { toast } = useToast()
-const { confirm } = useConfirm()
+const { copy } = useClipboard()
+const bodyInput = ref<InstanceType<typeof BaseTextarea> | null>(null)
 
-const activeKey = ref<TemplateKey>('bulk')
 const loading = ref(true)
-const saveLoading = ref(false)
 const previewHtml = ref('')
 const previewSubject = ref('')
 const previewLoading = ref(false)
@@ -74,26 +58,21 @@ const savedAll = ref<Record<TemplateKey, TemplateData>>(
   Object.fromEntries(KEYS.map(k => [k, empty()])) as Record<TemplateKey, TemplateData>,
 )
 
-const cur = computed(() => all.value[activeKey.value])
-const saved = computed(() => savedAll.value[activeKey.value])
-const isDirty = computed(() => cur.value.subject !== saved.value.subject || cur.value.body !== saved.value.body)
-const vars = computed(() => TEMPLATE_VARIABLES[activeKey.value])
-
-const tabs = KEYS.map(k => ({ key: k, label: t(`emailTemplates.${k}.title`) }))
+const isDirty = computed(() => KEYS.some(key => JSON.stringify(all.value[key]) !== JSON.stringify(savedAll.value[key])))
+const vars = computed(() => TEMPLATE_VARIABLES[props.templateKey])
 
 // ── Variable chip actions ──
 function insertVar(key: string) {
-  const ta = document.querySelector('.tpl-body-textarea') as HTMLTextAreaElement | null
+  const ta = bodyInput.value?.element
   if (!ta) return
   const s = ta.selectionStart; const e = ta.selectionEnd
-  const c = all.value[activeKey.value]
+  const c = all.value[props.templateKey]
   c.body = c.body.slice(0, s) + `{{${key}}}` + c.body.slice(e)
   void nextTick(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + key.length + 4 })
 }
 
 async function copyVar(key: string) {
-  await navigator.clipboard.writeText(`{{${key}}}`)
-  toast(t('emailTemplates.varCopied', { key }), 'success')
+  await copy(`{{${key}}}`, { successMessage: t('emailTemplates.varCopied', { key }) })
 }
 
 // ── Preview ──
@@ -101,33 +80,23 @@ async function loadPreview() {
   previewLoading.value = true
   const rid = ++previewReqId
   let html = ''
+  let subject = ''
   try {
     const res = await fetch('/api/admin/email-templates/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: activeKey.value, subject: all.value[activeKey.value].subject, body: all.value[activeKey.value].body, theme: 'dark' }),
+      body: JSON.stringify({ type: props.templateKey, subject: all.value[props.templateKey].subject, body: all.value[props.templateKey].body, theme: 'dark' }),
     })
     if (res.ok) {
       const data = await res.json() as { renderedSubject: string; html: string }
-      previewSubject.value = data.renderedSubject
-      html = sanitize(data.html)
+      subject = data.renderedSubject
+      html = data.html
     }
   } catch { /* ignore */ }
   if (rid !== previewReqId) return
+  previewSubject.value = subject
   previewHtml.value = html
   previewLoading.value = false
-}
-
-function sanitize(html: string): string {
-  if (!html) return ''
-  const doc = new DOMParser().parseFromString(html, 'text/html')
-  doc.querySelectorAll('script, iframe, object, embed').forEach(n => n.remove())
-  doc.querySelectorAll('*').forEach(el => {
-    for (const a of [...el.attributes]) {
-      if (a.name.startsWith('on') || (a.value || '').toLowerCase().startsWith('javascript:')) el.removeAttribute(a.name)
-    }
-  })
-  return '<!doctype html>\n' + doc.documentElement.outerHTML
 }
 
 let previewTimer: ReturnType<typeof setTimeout> | null = null
@@ -138,40 +107,21 @@ function schedulePreview() {
 
 // ── Save / discard ──
 async function save(): Promise<boolean> {
-  saveLoading.value = true
-  const k = activeKey.value; const c = all.value[k]
-  const res = await post('/api/admin/email-templates', {
-    type: k,
-    subject: c.subject,
-    body: c.body,
-  })
-  saveLoading.value = false
-  if (res) {
-    savedAll.value[k] = { ...c }
-    toast(t('emailTemplates.saved'), 'success')
-    return true
+  for (const key of KEYS) {
+    const submitted = { ...all.value[key] }
+    if (JSON.stringify(submitted) === JSON.stringify(savedAll.value[key])) continue
+    if (!await post('/api/admin/email-templates', { type: key, ...submitted })) return false
+    savedAll.value[key] = submitted
   }
-  return false
+  toast(t('emailTemplates.saved'), 'success')
+  return !isDirty.value
 }
 
 function discard() {
-  all.value[activeKey.value] = { ...savedAll.value[activeKey.value] }
+  for (const key of KEYS) all.value[key] = { ...savedAll.value[key] }
 }
 
-const dirtyForm = provideDirtyForm({
-  prompt: async () => {
-    const result = await confirm({
-      title: t('emailTemplates.unsavedTitle'),
-      message: t('emailTemplates.unsavedMessage'),
-      confirmText: t('emailTemplates.unsavedSave'),
-      cancelText: t('emailTemplates.unsavedDiscard'),
-      altText: t('emailTemplates.unsavedStay'),
-    })
-    if (result === 'alt') return 'stay'
-    return result === true ? 'save' : 'discard'
-  },
-})
-dirtyForm.attachLeaveGuard()
+const dirtyForm = useParentDirtyForm()
 useDirtyFormSection({ name: 'email-templates', isDirty, save, discard }, dirtyForm)
 
 async function loadData() {
@@ -186,23 +136,21 @@ async function loadData() {
   schedulePreview()
 }
 
-watch([activeKey, () => all.value[activeKey.value].subject, () => all.value[activeKey.value].body], () => {
+watch([() => props.templateKey, () => all.value[props.templateKey].subject, () => all.value[props.templateKey].body], () => {
   if (!loading.value) schedulePreview()
 })
 
 onMounted(loadData)
+onBeforeUnmount(() => { previewReqId++; if (previewTimer) clearTimeout(previewTimer) })
 </script>
 
 <template>
-  <PageHeader :title="t('emailTemplates.title')" icon="mail" />
-
-  <div class="page-body">
+  <div>
     <LoadingCenter v-if="loading" />
 
-    <template v-else>
-      <TabSwitcher v-model="activeKey" :tabs="tabs" />
-
-      <div class="tpl-workspace">
+    <div v-else>
+      <h3 class="template-title">{{ t(`emailTemplates.${templateKey}.title`) }}</h3>
+      <div class="tpl-workspace" :inert="dirtyForm.saving.value">
         <!-- Left: editor -->
         <section class="tpl-col">
           <BaseCard>
@@ -219,15 +167,15 @@ onMounted(loadData)
             </div>
 
             <FormField :label="t('emailTemplates.subject')">
-              <BaseInput v-model="all[activeKey].subject" />
+              <BaseInput v-model="all[templateKey].subject" />
             </FormField>
 
             <FormField :label="t('emailTemplates.body')">
               <BaseTextarea
-                v-model="all[activeKey].body"
+                ref="bodyInput"
+                v-model="all[templateKey].body"
                 :rows="18"
                 mono
-                input-class="tpl-body-textarea"
               />
             </FormField>
           </BaseCard>
@@ -246,21 +194,20 @@ onMounted(loadData)
                 v-else-if="previewHtml"
                 class="tpl-preview-frame"
                 :srcdoc="previewHtml"
-                sandbox="allow-scripts"
-                title="email-preview"
+                sandbox=""
+                :title="t('emailTemplates.preview')"
               />
               <div v-else class="tpl-preview-empty">{{ t('emailTemplates.previewEmpty') }}</div>
             </div>
           </BaseCard>
         </section>
       </div>
-    </template>
+    </div>
   </div>
-
-  <DirtyBar :dirty="dirtyForm.isDirty.value" :saving="saveLoading" @save="dirtyForm.save" @discard="dirtyForm.discard" />
 </template>
 
 <style scoped>
+.template-title { font-size: var(--text-md); font-weight: 600; margin: 0; }
 /* Two-column workspace */
 .tpl-workspace {
   display: grid;
@@ -270,7 +217,7 @@ onMounted(loadData)
   margin-top: var(--sp-4);
 }
 .tpl-col { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
-.tpl-col--preview { position: sticky; top: calc(64px + var(--sp-4)); }
+.tpl-col--preview { position: sticky; top: 0; }
 
 /* Variable tokens */
 .tpl-vars {
@@ -283,7 +230,7 @@ onMounted(loadData)
   display: inline-flex; align-items: center;
   padding: 2px 8px; border: 1px solid var(--bd);
   border-radius: var(--r-xs); background: var(--bg-in);
-  color: var(--t2); font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  color: var(--t2); font-family: var(--font-mono);
   font-size: var(--text-xs); cursor: pointer; transition: border-color .15s, color .15s;
 }
 .tpl-var-chip:hover { border-color: var(--ac); color: var(--ac); }
@@ -306,7 +253,7 @@ onMounted(loadData)
   min-height: 720px; color: var(--t2); font-size: var(--text-sm);
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1100px) {
   .tpl-workspace { grid-template-columns: 1fr; }
   .tpl-col--preview { position: static; }
 }

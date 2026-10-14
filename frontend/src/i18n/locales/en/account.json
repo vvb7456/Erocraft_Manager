@@ -1,6 +1,8 @@
 {
   "title": "Account Settings",
   "loading": "Loading account information...",
+  "otherSettings": "Other settings",
+  "otherSettingsDesc": "Choose the interface language and chat notification sound.",
   "profile": {
     "title": "Profile",
     "desc": "Review the basic details for this account.",
@@ -11,6 +13,9 @@
       "admin": "Administrator",
       "user": "User"
     }
+  },
+  "notifications": {
+    "sound": "Chat notification sound"
   },
   "email": {
     "title": "Change Email",
@@ -39,14 +44,10 @@
     }
   },
   "language": {
-    "title": "Interface Language",
-    "desc": "Pick your default interface language. It will be applied on every sign-in.",
-    "label": "Default language",
+    "label": "Interface language",
     "options": {
       "zh": "简体中文",
       "en": "English"
-    },
-    "submit": "Save Language",
-    "success": "Language preference saved"
+    }
   }
 }

@@ -26,7 +26,6 @@ from app.db.models.billing import BillingOrder, BillingRefund
 from app.db.models.pterodactyl import PteroUser
 from app.db.session import get_session_factory
 from app.services.email import (
-    EmailTemplate,
     SiteUrlNotConfiguredError,
     load_template,
     render_template_body,
@@ -45,9 +44,6 @@ _USER_KIND_GREETING = {
     KIND_ORDER_PAID: ("查看服务器", "/#/servers"),
     KIND_ORDER_APPLY_FAILED: (None, None),
     KIND_ORDER_REFUNDED: ("查看订单", "/#/account"),
-}
-_ADMIN_KIND_ACTION = {
-    KIND_ORDER_APPLY_ALERT: ("查看订单", "/#/admin/billing/orders"),
 }
 
 
@@ -121,13 +117,11 @@ async def _resolve_user_email(db, user_id: int) -> tuple[str | None, str]:
     return res.email, res.username or ""
 
 
-async def _resolve_admin_recipients(db) -> list[tuple[str, str]]:
-    rows = await db.execute(
-        select(PteroUser.username, PteroUser.email).where(
-            PteroUser.root_admin.is_(True)
-        )
-    )
-    return [(u or "管理员", e) for (u, e) in rows.all() if e]
+async def order_apply_alert_context(db, order: BillingOrder) -> dict[str, Any]:
+    variables = await _build_order_variables(db, order)
+    email, username = await _resolve_user_email(db, order.user_id)
+    variables.update(username=username, email=email or "")
+    return {"template": KIND_ORDER_APPLY_ALERT, "variables": variables}
 
 
 async def _send_one(
@@ -233,42 +227,10 @@ async def _send_admin_alert(*, order_id: int) -> None:
             order = await session.get(BillingOrder, order_id)
             if order is None:
                 return
-            recipients = await _resolve_admin_recipients(session)
-            if not recipients:
-                logger.warning(
-                    "billing admin alert: no root_admin recipients (order_id=%s)",
-                    order_id,
-                )
-                return
+            from app.services.notifications.events import billing_apply
 
-            site_url = ""
-            try:
-                from app.services.email import get_site_url
-
-                site_url = await get_site_url(session)
-            except SiteUrlNotConfiguredError:
-                logger.warning(
-                    "billing admin alert skipped (SITE_URL not configured) order_id=%s",
-                    order_id,
-                )
-                return
-
-            user_email, username = await _resolve_user_email(session, order.user_id)
-            variables = await _build_order_variables(session, order)
-            variables["username"] = username or str(order.user_id)
-            variables["email"] = user_email or ""
-
-            action_text, action_path = _ADMIN_KIND_ACTION[KIND_ORDER_APPLY_ALERT]
-            for admin_name, admin_email in recipients:
-                await _send_one(
-                    session,
-                    template_key=KIND_ORDER_APPLY_ALERT,
-                    recipient_email=admin_email,
-                    greeting=f"管理员 {admin_name}：",
-                    variables=variables,
-                    action_text=action_text,
-                    action_url=f"{site_url}{action_path}",
-                )
+            await billing_apply(session, order)
+            await session.commit()
     except Exception:
         logger.exception(
             "billing admin alert send failed order_id=%s", order_id

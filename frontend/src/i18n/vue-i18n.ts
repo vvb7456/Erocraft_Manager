@@ -16,6 +16,7 @@ import zhUsers from './locales/zh-CN/users.json'
 import zhLogs from './locales/zh-CN/logs.json'
 import zhEmailTemplates from './locales/zh-CN/email-templates.json'
 import zhUserServers from './locales/zh-CN/user-servers.json'
+import zhUserHome from './locales/zh-CN/user-home.json'
 import zhServerSettings from './locales/zh-CN/server-settings.json'
 import zhAccount from './locales/zh-CN/account.json'
 import zhActivity from './locales/zh-CN/activity.json'
@@ -27,6 +28,7 @@ import zhBilling from './locales/zh-CN/billing.json'
 import zhAgreements from './locales/zh-CN/agreements.json'
 import zhSupport from './locales/zh-CN/support.json'
 import zhWechat from './locales/zh-CN/wechat.json'
+import zhNotifications from './locales/zh-CN/notifications.json'
 
 import enCommon from './locales/en/common.json'
 import enNav from './locales/en/nav.json'
@@ -43,6 +45,7 @@ import enUsers from './locales/en/users.json'
 import enLogs from './locales/en/logs.json'
 import enEmailTemplates from './locales/en/email-templates.json'
 import enUserServers from './locales/en/user-servers.json'
+import enUserHome from './locales/en/user-home.json'
 import enServerSettings from './locales/en/server-settings.json'
 import enAccount from './locales/en/account.json'
 import enActivity from './locales/en/activity.json'
@@ -54,6 +57,7 @@ import enBilling from './locales/en/billing.json'
 import enAgreements from './locales/en/agreements.json'
 import enSupport from './locales/en/support.json'
 import enWechat from './locales/en/wechat.json'
+import enNotifications from './locales/en/notifications.json'
 
 function detectLanguage(): string {
   const stored = localStorage.getItem('lang')
@@ -78,6 +82,7 @@ const i18n = createI18n({
       users: zhUsers, logs: zhLogs,
       emailTemplates: zhEmailTemplates,
       userServers: zhUserServers,
+      userHome: zhUserHome,
       serverSettings: zhServerSettings,
       account: zhAccount,
       activity: zhActivity,
@@ -89,6 +94,7 @@ const i18n = createI18n({
       agreements: zhAgreements,
       support: zhSupport,
       wechat: zhWechat,
+      notifications: zhNotifications,
     },
     en: {
       common: enCommon, nav: enNav, dashboard: enDashboard,
@@ -101,6 +107,7 @@ const i18n = createI18n({
       users: enUsers, logs: enLogs,
       emailTemplates: enEmailTemplates,
       userServers: enUserServers,
+      userHome: enUserHome,
       serverSettings: enServerSettings,
       account: enAccount,
       activity: enActivity,
@@ -112,6 +119,7 @@ const i18n = createI18n({
       agreements: enAgreements,
       support: enSupport,
       wechat: enWechat,
+      notifications: enNotifications,
     },
   },
 })

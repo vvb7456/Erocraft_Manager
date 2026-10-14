@@ -91,11 +91,10 @@ onMounted(loadAgreements)
     <div v-if="loading" class="panel-loading"><LoadingCenter size="sm" /></div>
 
     <template v-else>
-      <BaseCard variant="bg2" class="settings-card">
-        <SectionHeader icon="check_box" flush>
-          {{ t('settings.agreements.title') }}
+      <BaseCard variant="bg2" density="compact">
+        <SectionHeader icon="check_box" :subtitle="t('settings.agreements.desc')" flush>
+          {{ t('settings.agreements.registrationTitle') }}
         </SectionHeader>
-        <p class="section-note">{{ t('settings.agreements.desc') }}</p>
         <FormField layout="horizontal">
           <template #label>
             {{ t('settings.agreements.default_checked') }}
@@ -113,12 +112,11 @@ onMounted(loadAgreements)
         v-for="slug in FIXED_AGREEMENT_SLUGS"
         :key="slug"
         variant="bg2"
-        class="settings-card"
+        density="compact"
       >
-        <SectionHeader :icon="agreementIcon(slug)" flush>
+        <SectionHeader :icon="agreementIcon(slug)" :subtitle="agreementSubtitle(slug)" flush>
           {{ agreementName(slug) }}
         </SectionHeader>
-        <p class="section-note">{{ agreementSubtitle(slug) }}</p>
         <div class="doc-actions">
           <BaseButton size="md" variant="primary" @click="openEdit(slug, 'zh')">
             <MsIcon name="edit" size="sm" />
@@ -152,19 +150,6 @@ onMounted(loadAgreements)
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-}
-
-.settings-card {
-  padding: var(--sp-2);
-}
-
-.section-note {
-  font-size: .84rem;
-  font-weight: 400;
-  line-height: 1.55;
-  color: var(--t2);
-  margin: 0 0 var(--sp-3);
-  max-width: 56ch;
 }
 
 .doc-actions {

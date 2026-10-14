@@ -64,6 +64,7 @@ async def run_cert_deployment_scan() -> None:
     session_factory = get_session_factory()
     async with session_factory() as db:
         results = await scan_all_deployments(db)
+        await run_certificate_alerts(db)
         logger.info("certificate deployment scan completed (%d rows)", len(results))
 
 
@@ -78,5 +79,5 @@ async def run_cert_auto_dispatch() -> None:
 async def run_cert_expiry_alert() -> None:
     session_factory = get_session_factory()
     async with session_factory() as db:
-        results = await run_certificate_alerts(db)
+        results = await run_certificate_alerts(db, expiry_only=True)
         logger.info("certificate alert check completed (%d events)", len(results))

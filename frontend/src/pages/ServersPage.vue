@@ -6,7 +6,7 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import PageHeader from '@/components/layout/PageHeader.vue'
-import SectionToolbar from '@/components/ui/SectionToolbar.vue'
+import ListToolbar from '@/components/ui/ListToolbar.vue'
 import StatCard from '@/components/ui/StatCard.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
@@ -32,7 +32,7 @@ defineOptions({ name: 'ServersPage' })
 const { t } = useI18n({ useScope: 'global' })
 const route = useRoute()
 const router = useRouter()
-const { get, post, del, loading } = useApiFetch()
+const { get, post, del } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 const today = useToday()
@@ -108,15 +108,7 @@ function setRenewDate(pteroId: number, val: string) {
 // Batch operations
 const batchRenewModalOpen = ref(false)
 const batchRenewDays = ref(30)
-const batchActionType = ref('')
-const batchActionOptions = computed(() => [
-  { value: 'suspend', label: t('servers.batch.suspend') },
-  { value: 'unsuspend', label: t('servers.batch.unsuspend') },
-  { value: 'renew', label: t('servers.batch.renew') },
-  { value: 'update_plan', label: t('servers.batch.update_plan') },
-  { value: 'email', label: t('servers.batch.email') },
-  { value: 'delete', label: t('servers.batch.delete') },
-])
+const batchBusy = ref(false)
 
 // ── Options ──
 const statusOptions = computed(() => [
@@ -237,9 +229,6 @@ function pruneSelectionToCurrentPage() {
   if (next.size !== selectedIds.value.size) {
     selectedIds.value = next
   }
-  if (selectedIds.value.size === 0) {
-    batchActionType.value = ''
-  }
 }
 
 watch(paginated, pruneSelectionToCurrentPage, { immediate: true })
@@ -330,9 +319,8 @@ async function deleteServer(s: ServerItem) {
 }
 
 // ── Batch ──
-async function executeBatchAction() {
-  const action = batchActionType.value
-  if (!action) return
+async function executeBatchAction(action: 'suspend' | 'unsuspend' | 'renew' | 'update_plan' | 'email' | 'delete') {
+  if (batchBusy.value) return
   const ids = [...selectedIds.value]
   if (!ids.length) return
 
@@ -347,51 +335,56 @@ async function executeBatchAction() {
     return
   }
 
-  if (action === 'delete') {
-    const ok = await confirm({
-      title: t('servers.confirm.batch_delete_title'),
-      message: t('servers.confirm.batch_delete_msg', { n: ids.length }),
-      variant: 'danger',
-      confirmText: t('common.btn.delete'),
-    })
-    if (!ok) return
-  }
+  batchBusy.value = true
+  try {
+    if (action === 'delete') {
+      const ok = await confirm({
+        title: t('servers.confirm.batch_delete_title'),
+        message: t('servers.confirm.batch_delete_msg', { n: ids.length }),
+        variant: 'danger',
+        confirmText: t('common.btn.delete'),
+      })
+      if (!ok) return
+    }
 
-  if (action === 'email') {
-    const ok = await confirm({
-      title: t('servers.confirm.batch_email_title'),
-      message: t('servers.confirm.batch_email_msg', { n: ids.length }),
-      confirmText: t('common.btn.confirm'),
-    })
-    if (!ok) return
-  }
+    if (action === 'email') {
+      const ok = await confirm({
+        title: t('servers.confirm.batch_email_title'),
+        message: t('servers.confirm.batch_email_msg', { n: ids.length }),
+        confirmText: t('common.btn.confirm'),
+      })
+      if (!ok) return
+    }
 
-  const res = await post<BatchServersResult>('/api/admin/servers/batch', { action, serverIds: ids })
-  if (res) {
-    const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
-    toast(res.message, tone)
-    selectedIds.value = new Set()
-    batchActionType.value = ''
-    await loadServers(true)
-  }
+    const res = await post<BatchServersResult>('/api/admin/servers/batch', { action, serverIds: ids })
+    if (res) {
+      const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
+      toast(res.message, tone)
+      selectedIds.value = new Set()
+      await loadServers(true)
+    }
+  } finally { batchBusy.value = false }
 }
 
 async function doBatchRenew() {
+  if (batchBusy.value) return
   const ids = [...selectedIds.value]
   if (!ids.length) return
-  const res = await post<BatchServersResult>('/api/admin/servers/batch', {
-    action: 'renew',
-    serverIds: ids,
-    days: batchRenewDays.value,
-  })
-  if (res) {
-    const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
-    toast(res.message, tone)
-    batchRenewModalOpen.value = false
-    selectedIds.value = new Set()
-    batchActionType.value = ''
-    await loadServers(true)
-  }
+  batchBusy.value = true
+  try {
+    const res = await post<BatchServersResult>('/api/admin/servers/batch', {
+      action: 'renew',
+      serverIds: ids,
+      days: batchRenewDays.value,
+    })
+    if (res) {
+      const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
+      toast(res.message, tone)
+      batchRenewModalOpen.value = false
+      selectedIds.value = new Set()
+      await loadServers(true)
+    }
+  } finally { batchBusy.value = false }
 }
 
 // ── Plan Change Modal ──
@@ -414,25 +407,28 @@ function openPlanChangeBatch() {
 }
 
 async function onPlanModalConfirmed(planId: number | null) {
+  if (batchBusy.value) return
   if (planModalBatchMode.value) {
     const ids = [...selectedIds.value]
     if (!ids.length) {
       planModalOpen.value = false
       return
     }
-    const res = await post<BatchServersResult>('/api/admin/servers/batch', {
-      action: 'update_plan',
-      serverIds: ids,
-      planId,
-    })
-    if (res) {
-      const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
-      toast(res.message, tone)
-      selectedIds.value = new Set()
-      batchActionType.value = ''
-      planModalOpen.value = false
-      await loadServers(true)
-    }
+    batchBusy.value = true
+    try {
+      const res = await post<BatchServersResult>('/api/admin/servers/batch', {
+        action: 'update_plan',
+        serverIds: ids,
+        planId,
+      })
+      if (res) {
+        const tone = res.failed === 0 ? 'success' : res.success === 0 ? 'error' : 'warning'
+        toast(res.message, tone)
+        selectedIds.value = new Set()
+        planModalOpen.value = false
+        await loadServers(true)
+      }
+    } finally { batchBusy.value = false }
   } else {
     const s = planModalServer.value
     if (!s) {
@@ -522,7 +518,13 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 </script>
 
 <template>
-  <PageHeader icon="dns" :title="t('servers.title')" />
+  <PageHeader icon="dns" :title="t('servers.title')">
+    <template #controls>
+      <BaseButton size="sm" variant="primary" :disabled="batchBusy" @click="createModalOpen = true">
+        <MsIcon name="add" size="xs" />{{ t('servers.action.create') }}
+      </BaseButton>
+    </template>
+  </PageHeader>
 
   <div class="page-body">
     <section class="stat-grid" aria-label="server summary">
@@ -555,7 +557,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
     </section>
 
     <!-- Toolbar -->
-    <SectionToolbar>
+    <ListToolbar :selected-count="selectedIds.size" :busy="batchBusy" @clear="selectedIds = new Set()">
       <template #start>
         <div class="tb-search-row">
           <FilterInput
@@ -573,25 +575,21 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
           </button>
         </div>
         <span class="toolbar-status tb-status">{{ t('servers.total', { n: rawServers.length }) }}</span>
-        <span v-if="selectedIds.size > 0" class="toolbar-status tb-status">{{ t('servers.batch.selected', { n: selectedIds.size }) }}</span>
       </template>
       <template #end>
         <div class="tb-select-group tb-desktop-only">
           <BaseSelect v-model="filterStatus" :options="statusOptions" :prefix="t('servers.filter.label') + ': '" size="sm" fit @update:modelValue="page = 1" />
         </div>
-        <div class="batch-controls tb-batch">
-          <BaseSelect v-model="batchActionType" :options="batchActionOptions" :placeholder="t('servers.batch.select_action')" size="sm" fit :disabled="selectedIds.size === 0" />
-          <BaseButton size="sm" :disabled="selectedIds.size === 0 || !batchActionType" @click="executeBatchAction">
-            <MsIcon name="play_arrow" size="xs" /> {{ t('servers.batch.execute') }}
-          </BaseButton>
-        </div>
-        <div class="tb-btn-group">
-          <BaseButton size="sm" variant="primary" @click="createModalOpen = true">
-            <MsIcon name="add" size="xs" /> {{ t('servers.action.create') }}
-          </BaseButton>
-        </div>
       </template>
-    </SectionToolbar>
+      <template #selection-actions>
+        <BaseButton size="sm" variant="ghost" :disabled="batchBusy" :aria-label="t('servers.batch.suspend')" :title="t('servers.batch.suspend')" @click="executeBatchAction('suspend')"><MsIcon name="block" size="sm" /><span class="selection-action-label">{{ t('servers.batch.suspend') }}</span></BaseButton>
+        <BaseButton size="sm" variant="ghost" :disabled="batchBusy" :aria-label="t('servers.batch.unsuspend')" :title="t('servers.batch.unsuspend')" @click="executeBatchAction('unsuspend')"><MsIcon name="check_circle" size="sm" /><span class="selection-action-label">{{ t('servers.batch.unsuspend') }}</span></BaseButton>
+        <BaseButton size="sm" variant="ghost" :disabled="batchBusy" :aria-label="t('servers.batch.renew')" :title="t('servers.batch.renew')" @click="executeBatchAction('renew')"><MsIcon name="update" size="sm" /><span class="selection-action-label">{{ t('servers.batch.renew') }}</span></BaseButton>
+        <BaseButton size="sm" variant="ghost" :disabled="batchBusy" :aria-label="t('servers.batch.update_plan')" :title="t('servers.batch.update_plan')" @click="executeBatchAction('update_plan')"><MsIcon name="swap_horiz" size="sm" /><span class="selection-action-label">{{ t('servers.batch.update_plan') }}</span></BaseButton>
+        <BaseButton size="sm" variant="ghost" :disabled="batchBusy" :aria-label="t('servers.batch.email')" :title="t('servers.batch.email')" @click="executeBatchAction('email')"><MsIcon name="mail" size="sm" /><span class="selection-action-label">{{ t('servers.batch.email') }}</span></BaseButton>
+        <BaseButton size="sm" variant="danger" :disabled="batchBusy" :aria-label="t('servers.batch.delete')" :title="t('servers.batch.delete')" @click="executeBatchAction('delete')"><MsIcon name="delete" size="sm" /><span class="selection-action-label">{{ t('servers.batch.delete') }}</span></BaseButton>
+      </template>
+    </ListToolbar>
 
     <!-- Mobile filter & sort sheet -->
     <MobileFilterSheet
@@ -605,6 +603,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
     />
 
     <!-- Table -->
+    <div :inert="batchBusy">
     <DataTable
       :items="paginated"
       :page="page"
@@ -620,7 +619,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
     >
       <template #header>
         <th class="col-check">
-          <input type="checkbox" v-model="allSelected" />
+          <input type="checkbox" v-model="allSelected" :aria-label="t('common.selection.selectAll')" />
         </th>
         <th class="col-id sortable" @click="toggleSort('id')">
           {{ t('servers.table.id') }}
@@ -645,7 +644,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       </template>
       <template #row="{ item: s }">
         <td class="col-check">
-          <input type="checkbox" :checked="selectedIds.has(s.pteroId)" @change="toggleSelect(s.pteroId)" />
+          <input type="checkbox" :checked="selectedIds.has(s.pteroId)" :aria-label="t('common.selection.select', { name: s.name })" @change="toggleSelect(s.pteroId)" />
         </td>
         <td class="col-id">{{ s.pteroId }}</td>
         <td class="col-status">
@@ -704,6 +703,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       <template #card="{ item: s }">
         <CardTap @tap="openMobileServerAction(s)">
           <div class="card-row--main">
+            <input type="checkbox" :checked="selectedIds.has(s.pteroId)" :aria-label="t('common.selection.select', { name: s.name })" @click.stop @change="toggleSelect(s.pteroId)" />
             <span class="card-name">{{ s.name }} <span class="card-id-inline">#{{ s.pteroId }}</span></span>
             <Badge :color="s.isSuspended ? 'var(--red)' : 'var(--green)'" size="sm">
               {{ panelStatusText(s) }}
@@ -721,6 +721,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
         </CardTap>
       </template>
     </DataTable>
+    </div>
 
     <!-- Mobile Action Sheet -->
     <ActionSheet v-model="mobileActionOpen" :title="mobileActionServer?.name">
@@ -755,16 +756,16 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
   </div>
 
   <!-- Batch Renew Modal -->
-  <BaseModal v-model="batchRenewModalOpen" :title="t('servers.batch.renew')" icon="update" size="sm">
+  <BaseModal v-model="batchRenewModalOpen" :title="t('servers.batch.renew')" icon="update" size="sm" :persistent="batchBusy">
     <p style="margin-bottom: var(--sp-3); color: var(--t2)">
       {{ t('servers.batch.selected', { n: selectedIds.size }) }}
     </p>
     <FormField :label="t('servers.action.renew_days')" density="compact">
-      <NumberInput v-model="batchRenewDays" :min="1" :max="3650" />
+      <NumberInput v-model="batchRenewDays" :min="1" :max="3650" :disabled="batchBusy" />
     </FormField>
     <template #footer>
-      <BaseButton @click="batchRenewModalOpen = false">{{ t('common.btn.cancel') }}</BaseButton>
-      <BaseButton variant="primary" :loading="loading" @click="doBatchRenew">{{ t('common.btn.confirm') }}</BaseButton>
+      <BaseButton :disabled="batchBusy" @click="batchRenewModalOpen = false">{{ t('common.btn.cancel') }}</BaseButton>
+      <BaseButton variant="primary" :loading="batchBusy" @click="doBatchRenew">{{ t('common.btn.confirm') }}</BaseButton>
     </template>
   </BaseModal>
 
@@ -774,6 +775,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
   <!-- Plan Change Modal -->
   <PlanChangeModal
     v-model="planModalOpen"
+    :busy="batchBusy"
     :batch-mode="planModalBatchMode"
     :batch-count="planModalBatchCount"
     :server-name="planModalServer?.name"

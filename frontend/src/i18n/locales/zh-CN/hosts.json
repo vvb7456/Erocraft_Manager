@@ -1,5 +1,5 @@
 {
-  "title": "主机",
+  "title": "主机管理",
   "summary": {
     "total": "共 {n} 台"
   },
@@ -38,7 +38,6 @@
     "unconfigured": "未配置"
   },
   "toolbar": {
-    "globalDefaults": "全局默认",
     "create": "新建主机",
     "filterKind": "类型",
     "filterStatus": "状态",
@@ -84,23 +83,6 @@
     "label": "Agent Token",
     "copied": "Token 已复制",
     "done": "我已保存"
-  },
-  "globalDefaults": {
-    "title": "全局默认",
-    "fields": {
-      "interval": "采集间隔（秒）",
-      "intervalHint": "所有主机共享的 Pull 周期，30 – 3600。",
-      "retention": "监控保留（天）",
-      "retentionHint": "超过天数的监控样本将被清理，1 – 365。",
-      "recipients": "默认告警接收人",
-      "recipientsHint": "新建主机时继承该列表；已创建主机在其设置页单独调整。",
-      "recipientsEmpty": "暂无可选管理员"
-    },
-    "loading": "加载中…",
-    "save": "保存",
-    "saved": "已保存全局默认",
-    "saveFailed": "保存失败",
-    "cancel": "取消"
   },
   "time": {
     "never": "—"
@@ -196,6 +178,7 @@
     "probeOk": "探测成功 ({ms} ms)",
     "probeFail": "探测失败：{err}",
     "agent": {
+      "desc": "管理主机身份、Agent 连接地址与访问凭据。",
       "title": "Agent 连接",
       "kindLocked": "创建后类型不可修改。",
       "panelNodeLocked": "面板节点绑定不可修改。如需更换节点请重建主机。",
@@ -209,7 +192,8 @@
       "probe": "探测连通"
     },
     "wings": {
-      "desc": "维护该节点的 Wings 与 Panel 节点参数，并按需执行重启。",
+      "title": "Wings 节点配置",
+      "desc": "管理节点连接、资源容量与服务器运行环境。",
       "notWings": "该主机不是 Wings 节点",
       "saved": "已保存（{n} 个字段变更）",
       "cancel": "取消",
@@ -271,7 +255,8 @@
       "channelSection": "通知通道",
       "rulesSection": "告警类型与阈值",
       "rulesTip": "未启用的类型表示该主机不生成该告警。未修改的阈值使用全局默认。",
-      "pullSection": "Agent 拉取设置",
+      "pullSection": "监控数据采集",
+      "pullDesc": "设置从本主机 Agent 获取监控数据的超时与重试次数。",
       "threshold": "阈值",
       "warningThreshold": "warning %",
       "criticalThreshold": "critical %",
@@ -311,6 +296,7 @@
       }
     },
     "danger": {
+      "desc": "移除不再纳入管理的主机记录。",
       "title": "危险区域",
       "deleteTitle": "删除主机",
       "deleteMsg": "永久删除该主机记录。不会删除 Pterodactyl Panel 侧的节点。"
@@ -378,6 +364,7 @@
     "notWings": "仅 wings_node 主机可管理端口分配。"
   },
   "certs": {
+    "desc": "管理本主机的证书绑定、部署与同步。",
     "title": "证书部署",
     "labelDomains": "域名：",
     "labelTarget": "目标：",

@@ -373,7 +373,7 @@ onBeforeUnmount(closeStream)
   padding: var(--sp-2) var(--sp-3);
   height: 360px;
   overflow-y: auto;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 1.45;
   color: var(--t1);

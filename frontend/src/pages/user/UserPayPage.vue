@@ -506,7 +506,7 @@ function fenToYuan(fen: number | null | undefined): string {
   font-size: var(--text-sm);
 }
 .amount {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-xl);
   font-weight: 700;
   color: var(--ac);
@@ -579,7 +579,7 @@ function fenToYuan(fen: number | null | undefined): string {
   font-size: var(--text-xs);
 }
 .mono {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .actions {
