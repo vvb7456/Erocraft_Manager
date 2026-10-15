@@ -18,6 +18,7 @@ from app.schemas.coupons import (
     CouponTemplateUpdate,
 )
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.services.billing import coupon_templates as svc
 
 router = APIRouter(
@@ -93,7 +94,7 @@ async def create(
         db,
         actor=actor.username,
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.coupon_template.create", phase="execution", outcome="success", target={"template_id": tpl.id}),
         detail_key="billing.coupon_template.created",
         detail_params={"template_id": tpl.id, "name": tpl.name, "code": tpl.code},
     )
@@ -128,7 +129,7 @@ async def update(
         db,
         actor=actor.username,
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.coupon_template.update", phase="execution", outcome="success", target={"template_id": tpl.id}),
         detail_key="billing.coupon_template.updated",
         detail_params={"template_id": tpl.id, "name": tpl.name, "code": tpl.code},
     )
@@ -159,7 +160,7 @@ async def delete(
         db,
         actor=actor.username,
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.coupon_template.delete", phase="execution", outcome="success", target={"template_id": template_id}),
         detail_key="billing.coupon_template.deleted",
         detail_params={"template_id": template_id, "name": tpl_name, "code": tpl_code},
     )

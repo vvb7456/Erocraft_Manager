@@ -14,7 +14,7 @@ import SupportConnectionBadge from './SupportConnectionBadge.vue'
 const { t } = useI18n()
 const support = useSupportStore()
 const route = useRoute()
-const { post } = useApiFetch()
+const { post, handleError } = useApiFetch()
 const cid = ref<number | null>(null)
 const loading = ref(false)
 const panel = ref<HTMLElement | null>(null)
@@ -58,7 +58,7 @@ watch([() => support.open, mobile], async ([open, isMobile], previous) => {
   if (open) {
     if (!wasOpen) previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     updateViewport()
-    void load()
+    void load().catch(handleError)
     await nextTick()
     if (alive && support.open && !wasOpen) panel.value?.focus({ preventScroll: true })
   } else if (wasOpen) {

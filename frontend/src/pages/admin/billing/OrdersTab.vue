@@ -43,7 +43,7 @@ interface OrderItem {
 }
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, post } = useApiFetch()
+const { get, post, handleError } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 const router = useRouter()
@@ -109,30 +109,29 @@ async function loadOrders() {
   const data = await get<{ items: OrderItem[]; total: number }>(
     `/api/admin/billing/orders?${params}`,
     { silent: true },
-  )
+  ).finally(() => { loading.value = false })
   if (data !== null) {
     rawOrders.value = data.items
     totalCount.value = data.total
     if (page.value > totalPages.value) page.value = totalPages.value
   }
-  loading.value = false
 }
 
 watch(() => route.query.q, value => { searchTerm.value = typeof value === 'string' ? value : '' })
 watch([searchTerm, statusFilter, kindFilter, channelFilter], () => {
   if (page.value === 1) {
-    void loadOrders()
+    void loadOrders().catch(handleError)
   } else {
     page.value = 1
   }
 })
-watch([page, perPage], () => { void loadOrders() }, { immediate: true })
+watch([page, perPage], () => loadOrders(), { immediate: true })
 
 let refundPollTimer: ReturnType<typeof setInterval> | null = null
 watch(() => rawOrders.value.some(order => order.status === 'refunding'), (active) => {
   if (refundPollTimer !== null) clearInterval(refundPollTimer)
   refundPollTimer = active ? setInterval(() => {
-    if (document.visibilityState === 'visible' && !loading.value) void loadOrders()
+    if (document.visibilityState === 'visible' && !loading.value) void loadOrders().catch(handleError)
   }, 10000) : null
 })
 onBeforeUnmount(() => {

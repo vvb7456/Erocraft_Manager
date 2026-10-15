@@ -24,7 +24,7 @@ import { classifyHostStatus } from '@/utils/heartbeat'
 defineOptions({ name: 'CertificatesPage' })
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, post } = useApiFetch()
+const { get, post, handleError } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 const { formatDateTime: formatDate } = useFormatDate()
@@ -164,14 +164,16 @@ const availableAcme = computed(() =>
 async function loadAll() {
   loading.value = true
   try {
-    const [certData, acmeData, hostData] = await Promise.all([
+    const results = await Promise.allSettled([
       get<ManagedCertificate[]>('/api/admin/certificates', { silent: true }),
       get<AcmeStatus>('/api/admin/certificates/acme/status', { silent: true }),
       get<HostDetail[]>('/api/admin/hosts', { silent: true }),
     ])
-    if (certData) certificates.value = certData
-    if (acmeData) acmeStatus.value = acmeData
-    if (hostData) hosts.value = hostData
+    const [certData, acmeData, hostData] = results
+    if (certData.status === 'fulfilled') certificates.value = certData.value
+    if (acmeData.status === 'fulfilled') acmeStatus.value = acmeData.value
+    if (hostData.status === 'fulfilled') hosts.value = hostData.value
+    for (const result of results) if (result.status === 'rejected') handleError(result.reason)
   } finally {
     loading.value = false
   }
@@ -189,9 +191,10 @@ async function renewForce(cert: ManagedCertificate) {
   if (!ok) return
   renewingId.value = cert.id
   try {
-    const res = await post<Record<string, unknown>>(`/api/admin/certificates/${cert.id}/renew-force`)
+    const res = await post<{ source_scan: { ok: boolean }; dispatch: { ok: boolean }[] }>(`/api/admin/certificates/${cert.id}/renew-force`)
     if (res) {
-      toast(t('certificates.toast.renewed'), 'success')
+      const complete = res.source_scan.ok && res.dispatch.every(item => item.ok)
+      toast(t(complete ? 'certificates.toast.renewed' : 'certificates.toast.renewedPartial'), complete ? 'success' : 'warning')
       await loadAll()
     }
   } finally {

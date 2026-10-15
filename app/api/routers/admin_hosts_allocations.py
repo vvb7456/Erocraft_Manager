@@ -41,6 +41,7 @@ from app.schemas.allocations import (
 )
 from app.services import host_registry
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +172,7 @@ async def create_host_allocations(
     except PortExpressionError as exc:
         await log_manager_activity(
             db, actor=admin.username, category="server",
-            status="error", detail_key="allocation.create.bad_expression",
+            operation=OperationResult(action="allocation.create", phase="request", outcome="failed", target={"host_id": host_id, "node_id": node_id}), detail_key="allocation.create.bad_expression",
             detail_params={
                 "host_id": host_id, "node_id": node_id,
                 "ports": body.ports, "error": str(exc),
@@ -202,7 +203,8 @@ async def create_host_allocations(
     serialized = await _serialize_many(db, created)
 
     await log_manager_activity(
-        db, actor=admin.username, category="server", status="success",
+        db, actor=admin.username, category="server",
+        operation=OperationResult(action="allocation.create", phase="execution", outcome="success", target={"host_id": host_id, "node_id": node_id}, succeeded=len(created), facts={"skipped": len(skipped)}),
         detail_key="allocation.create.ok",
         detail_params={
             "host_id": host_id, "node_id": node_id,
@@ -243,7 +245,7 @@ async def delete_host_allocation(
     if error == "in_use":
         await log_manager_activity(
             db, actor=admin.username, category="server",
-            status="error", detail_key="allocation.delete.in_use",
+            operation=OperationResult(action="allocation.delete", phase="request", outcome="failed", target={"host_id": host_id, "allocation_id": allocation_id}), detail_key="allocation.delete.in_use",
             detail_params={
                 "host_id": host_id, "node_id": node_id,
                 "allocation_id": allocation_id,
@@ -258,7 +260,8 @@ async def delete_host_allocation(
     await db.commit()
     assert snapshot is not None
     await log_manager_activity(
-        db, actor=admin.username, category="server", status="success",
+        db, actor=admin.username, category="server",
+        operation=OperationResult(action="allocation.delete", phase="execution", outcome="success", target={"host_id": host_id, "allocation_id": allocation_id}),
         detail_key="allocation.delete.ok",
         detail_params={
             "host_id": host_id, "node_id": node_id,
@@ -287,7 +290,7 @@ async def bulk_delete_host_allocations(
         conflict_ports = [r.port for r in conflicting]
         await log_manager_activity(
             db, actor=admin.username, category="server",
-            status="error", detail_key="allocation.delete.bulk_blocked",
+            operation=OperationResult(action="allocation.batch_delete", phase="request", outcome="failed", target={"host_id": host_id, "allocation_ids": body.ids}), detail_key="allocation.delete.bulk_blocked",
             detail_params={
                 "host_id": host_id, "node_id": node_id,
                 "ids": body.ids,
@@ -310,7 +313,7 @@ async def bulk_delete_host_allocations(
     await db.commit()
     await log_manager_activity(
         db, actor=admin.username, category="server",
-        status="success", detail_key="allocation.delete.bulk_ok",
+        operation=OperationResult(action="allocation.batch_delete", phase="execution", outcome="success", target={"host_id": host_id, "node_id": node_id}, succeeded=len(deleted), failed=0), detail_key="allocation.delete.bulk_ok",
         detail_params={
             "host_id": host_id, "node_id": node_id,
             "deleted_count": len(deleted),

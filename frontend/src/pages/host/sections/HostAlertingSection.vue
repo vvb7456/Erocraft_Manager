@@ -17,7 +17,7 @@ import { formSnapshot, sameFormValue } from '@/utils/formState'
 
 const props = withDefaults(defineProps<{ hostId: number; hostKind: string; connectionOnly?: boolean; wecom?: { enabled: boolean; resolved: boolean; group: string } }>(), { connectionOnly: false })
 const { t } = useI18n()
-const { get, put } = useApiFetch()
+const { get, put, handleError } = useApiFetch()
 interface HostSettings {
   email_enabled: boolean | null; email_recipients: number[] | null; min_severity: string | null
   notify_resolve: boolean | null; cooldown_min: number | null; agent_pull_timeout: number | null; agent_pull_attempts: number | null
@@ -76,10 +76,18 @@ const rules = computed<Record<string, MetricRule>>({
 const dirty = computed(() => !!data.value && (formSnapshot(data.value) !== baseline.value || invalidRecipients.value))
 async function load() {
   loading.value = true
-  const [result, center] = await Promise.all([get<Payload>(`/api/admin/hosts/${props.hostId}/alerts`), props.connectionOnly ? null : get<{ admins: typeof admins.value }>('/api/admin/notifications/center')])
-  if (result) { result.rules.sort((a, b) => a.alert_type.localeCompare(b.alert_type)); data.value = result; baseline.value = formSnapshot(result); selectingRecipients.value = false }
-  if (center) admins.value = center.admins
-  loading.value = false
+  try {
+    const results = await Promise.allSettled([get<Payload>(`/api/admin/hosts/${props.hostId}/alerts`), props.connectionOnly ? null : get<{ admins: typeof admins.value }>('/api/admin/notifications/center')])
+    const [result, center] = results
+    if (result.status === 'fulfilled') {
+      result.value.rules.sort((a, b) => a.alert_type.localeCompare(b.alert_type))
+      data.value = result.value
+      baseline.value = formSnapshot(result.value)
+      selectingRecipients.value = false
+    }
+    if (center.status === 'fulfilled' && center.value) admins.value = center.value.admins
+    for (const result of results) if (result.status === 'rejected') handleError(result.reason)
+  } finally { loading.value = false }
 }
 async function save() {
   if (!data.value || saving.value || invalidRecipients.value) return false

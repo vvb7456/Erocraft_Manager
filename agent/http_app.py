@@ -21,8 +21,10 @@ from .collectors.snapshot import SnapshotProvider
 from .collectors import certificates as cert_collector
 from .collectors import wings_config as wings_config_collector
 from .collectors import wings_service as wings_service_collector
-from .commands import HANDLERS, execute as execute_command, handlers as command_handlers
+from .commands import execute as execute_command, handlers as command_handlers
 from .config import AgentConfig
+from .errors import register_error_handlers
+from .contract_openapi import PROBLEM_RESPONSES, install_contract_openapi
 from .schemas import (
     AgentCapabilities,
     AgentStatus,
@@ -124,7 +126,9 @@ def create_app(cfg: AgentConfig, config_path: str) -> FastAPI:
         redoc_url=None,
         openapi_url=None,
         lifespan=_lifespan,
+        responses=PROBLEM_RESPONSES,
     )
+    register_error_handlers(app)
     auth = make_auth_dependency(cfg)
     snapshot = SnapshotProvider(cfg)
     started_at = datetime.now(timezone.utc)
@@ -161,11 +165,6 @@ def create_app(cfg: AgentConfig, config_path: str) -> FastAPI:
     @app.post("/v1/commands", response_model=CommandResponse, dependencies=[Depends(auth)])
     async def post_command(req: CommandRequest) -> CommandResponse:
         log.info("command id=%d type=%s", req.id, req.type)
-        if req.type not in HANDLERS:
-            raise HTTPException(
-                status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail=f"command type not implemented in this agent version: {req.type}",
-            )
         return await execute_command(req)
 
     @app.get("/v1/status", response_model=AgentStatus, dependencies=[Depends(auth)])
@@ -185,6 +184,7 @@ def create_app(cfg: AgentConfig, config_path: str) -> FastAPI:
     if cfg.agent.is_wings:
         _register_wings_routes(app, cfg, auth)
 
+    install_contract_openapi(app)
     return app
 
 

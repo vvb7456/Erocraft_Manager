@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { apiErrorMessage, fetchApi } from '@/composables/apiClient'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -14,7 +15,7 @@ defineOptions({ name: 'ResetPasswordPage' })
 
 const route = useRoute()
 const router = useRouter()
-const { t, te } = useI18n({ useScope: 'global' })
+const { t } = useI18n({ useScope: 'global' })
 
 const newPassword = ref('')
 const confirmPassword = ref('')
@@ -23,15 +24,6 @@ const error = ref('')
 const success = ref('')
 
 let redirectTimer: ReturnType<typeof setTimeout> | null = null
-
-function translateApiText(value: unknown): string {
-  if (typeof value !== 'string' || !value.trim()) return ''
-  if (/^[a-z_]+\.[a-z_]+$/.test(value)) {
-    const key = `common.apiErrors.${value}`
-    if (te(key)) return t(key)
-  }
-  return value
-}
 
 const email = computed(() =>
   typeof route.query.email === 'string' ? route.query.email.trim() : '',
@@ -97,7 +89,7 @@ async function handleSubmit() {
 
   loading.value = true
   try {
-    const res = await fetch('/api/reset-password', {
+    await fetchApi('/api/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -107,24 +99,12 @@ async function handleSubmit() {
       }),
     })
 
-    let data: { message?: string; error?: string; detail?: string } | null = null
-    try {
-      data = await res.json() as { message?: string; error?: string; detail?: string }
-    } catch {
-      data = null
-    }
-
-    if (res.ok) {
-      success.value = t('resetPassword.success')
-      newPassword.value = ''
-      confirmPassword.value = ''
-      queueRedirect()
-      return
-    }
-
-    error.value = translateApiText(data?.detail || data?.error || data?.message) || t('resetPassword.error.failed')
-  } catch {
-    error.value = t('resetPassword.error.network')
+    success.value = t('resetPassword.success')
+    newPassword.value = ''
+    confirmPassword.value = ''
+    queueRedirect()
+  } catch (failure) {
+    error.value = apiErrorMessage(failure)
   } finally {
     loading.value = false
   }

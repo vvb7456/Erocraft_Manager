@@ -15,6 +15,7 @@ long-poll within ~1s and applies it in-process — zero downtime.
 from __future__ import annotations
 
 import logging
+from app.core.api_errors import ApiError
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -28,6 +29,7 @@ from app.db.models.manager import ManagerHost, ManagerHostTunnel, ManagerServerT
 from app.db.models.pterodactyl import PteroServer, PteroUser
 from app.services import host_registry
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.services.tunnel_manager import (
     CloudflareAPIError,
     CloudflareAuthError,
@@ -101,18 +103,18 @@ def _serialize_tunnel(st: ManagerServerTunnel | None) -> TunnelInfo | None:
 
 def _translate_cf_error(exc: CloudflareAPIError) -> HTTPException:
     if isinstance(exc, CloudflareAuthError):
-        return HTTPException(
-            status_code=503,
-            detail="tunnel.cf_auth_failed",
+        return ApiError(
+            status_code=502,
+            code="tunnel.cf_auth_failed",
         )
     if isinstance(exc, CloudflareRateLimited):
-        return HTTPException(
+        return ApiError(
             status_code=503,
-            detail="tunnel.cf_rate_limited",
+            code="tunnel.cf_rate_limited",
         )
-    return HTTPException(
+    return ApiError(
         status_code=502,
-        detail="tunnel.cf_api_error",
+        code="tunnel.cf_api_error",
     )
 
 
@@ -135,7 +137,7 @@ async def _push_host_ingress(
             db, host_tunnel, host_lan_ip=host.hostname,
         )
     except HostTunnelNotReady as exc:
-        raise HTTPException(status_code=503, detail="tunnel.host_not_ready") from exc
+        raise ApiError(409, "tunnel.host_not_ready") from exc
     except CloudflareAPIError as exc:
         # Record but don't change anything else (host_tunnel state is
         # determined by live agent probe, not by per-server push errors).
@@ -173,13 +175,13 @@ async def enable_server_tunnel(
 ) -> TunnelStateResponse:
     host = await _resolve_host_for_server(db, server)
     if host is None:
-        raise HTTPException(status_code=400, detail="tunnel.host_not_found")
+        raise ApiError(404, "tunnel.host_not_found")
     ht = await _resolve_host_tunnel(db, host)
     if ht is None or not ht.cf_tunnel_id:
-        raise HTTPException(status_code=400, detail="tunnel.host_not_ready")
+        raise ApiError(409, "tunnel.host_not_ready")
 
     if not server.allocation:
-        raise HTTPException(status_code=400, detail="tunnel.no_allocation")
+        raise ApiError(409, "tunnel.no_allocation")
 
     try:
         st = await tm_dispatcher.enable_server_tunnel(
@@ -191,11 +193,11 @@ async def enable_server_tunnel(
             custom_subdomain=body.customSubdomain,
         )
     except InvalidSubdomain as exc:
-        raise HTTPException(status_code=422, detail="tunnel.invalid_subdomain") from exc
+        raise ApiError(422, "tunnel.invalid_subdomain") from exc
     except HostnameConflict as exc:
-        raise HTTPException(status_code=409, detail="tunnel.subdomain_taken") from exc
+        raise ApiError(409, "tunnel.subdomain_taken") from exc
     except HostTunnelNotReady as exc:
-        raise HTTPException(status_code=400, detail="tunnel.host_not_ready") from exc
+        raise ApiError(409, "tunnel.host_not_ready") from exc
     except CloudflareAPIError as exc:
         raise _translate_cf_error(exc) from exc
 
@@ -222,7 +224,7 @@ async def enable_server_tunnel(
         db,
         actor=current_user.username,
         category="tunnel",
-        status="success",
+        operation=OperationResult(action="tunnel.server.enable", phase="execution", outcome="success", target={"server_id": server.id}),
         detail_key="tunnel.server.enable.ok",
         detail_params={
             "server_id": server.id,
@@ -247,14 +249,14 @@ async def change_server_tunnel_subdomain(
 ) -> TunnelStateResponse:
     host = await _resolve_host_for_server(db, server)
     if host is None:
-        raise HTTPException(status_code=400, detail="tunnel.host_not_found")
+        raise ApiError(404, "tunnel.host_not_found")
     ht = await _resolve_host_tunnel(db, host)
     if ht is None or not ht.cf_tunnel_id:
-        raise HTTPException(status_code=400, detail="tunnel.host_not_ready")
+        raise ApiError(409, "tunnel.host_not_ready")
 
     st = await tm_dispatcher.get_server_tunnel(db, server.id)
     if st is None or st.status == "deleted":
-        raise HTTPException(status_code=404, detail="tunnel.not_enabled")
+        raise ApiError(404, "tunnel.not_enabled")
 
     try:
         st = await tm_dispatcher.change_server_subdomain(
@@ -264,11 +266,11 @@ async def change_server_tunnel_subdomain(
             new_subdomain=body.customSubdomain,
         )
     except InvalidSubdomain as exc:
-        raise HTTPException(status_code=422, detail="tunnel.invalid_subdomain") from exc
+        raise ApiError(422, "tunnel.invalid_subdomain") from exc
     except HostnameConflict as exc:
-        raise HTTPException(status_code=409, detail="tunnel.subdomain_taken") from exc
+        raise ApiError(409, "tunnel.subdomain_taken") from exc
     except HostTunnelNotReady as exc:
-        raise HTTPException(status_code=400, detail="tunnel.host_not_ready") from exc
+        raise ApiError(409, "tunnel.host_not_ready") from exc
     except CloudflareAPIError as exc:
         raise _translate_cf_error(exc) from exc
 
@@ -289,7 +291,7 @@ async def change_server_tunnel_subdomain(
         db,
         actor=current_user.username,
         category="tunnel",
-        status="success",
+        operation=OperationResult(action="tunnel.server.rename", phase="execution", outcome="success", target={"server_id": server.id}),
         detail_key="tunnel.server.rename.ok",
         detail_params={
             "server_id": server.id,
@@ -347,7 +349,7 @@ async def disable_server_tunnel(
         db,
         actor=current_user.username,
         category="tunnel",
-        status="success",
+        operation=OperationResult(action="tunnel.server.disable", phase="execution", outcome="success", target={"server_id": server.id}),
         detail_key="tunnel.server.disable.ok",
         detail_params={
             "server_id": server.id,

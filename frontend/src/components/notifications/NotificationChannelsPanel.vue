@@ -28,10 +28,9 @@ async function test() {
   if (testing.value || props.dirty || props.saving) return
   testing.value = true
   try {
-    const result = props.channel === 'wecom'
-      ? await post<{ ok: boolean; error?: string }>('/api/admin/notifications/center/test', { group: testGroup.value })
-      : await post<{ ok: boolean; error?: string }>('/api/admin/test-email', { recipient: testEmail.value })
-    if (result) toast(result.ok ? t('notifications.center.testSuccess') : result.error || t('notifications.center.testFailed'), result.ok ? 'success' : 'error')
+    if (props.channel === 'wecom') await post('/api/admin/notifications/center/test', { group: testGroup.value })
+    else await post('/api/admin/test-email', { recipient: testEmail.value })
+    toast(t('notifications.center.testSuccess'), 'success')
   } finally { testing.value = false }
 }
 </script>

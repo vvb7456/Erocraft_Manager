@@ -54,7 +54,7 @@ interface TunnelState {
 const { t } = useI18n({ useScope: 'global' })
 const server = inject<Ref<ServerDetail | null>>('server')!
 const reloadServer = inject<() => Promise<void>>('reloadServer')
-const { get, post, put, del, error: apiError } = useApiFetch()
+const { get, post, put, del, error: apiError, handleError } = useApiFetch()
 const { toast } = useToast()
 const { copy: copyToClipboard } = useClipboard()
 
@@ -149,7 +149,7 @@ async function load() {
   }
 }
 
-watch(server, (s) => { if (s) void load() }, { immediate: true })
+watch(server, (s) => { if (s) void load().catch(handleError) }, { immediate: true })
 
 // ─── Clipboard ───────────────────────────────────────────────────────────
 async function copyAddr(text: string, key: string) {

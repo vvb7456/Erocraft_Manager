@@ -8,6 +8,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
+import { ApiError } from '@/composables/apiClient'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { useFormatDate } from '@/composables/useFormatDate'
@@ -79,7 +80,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, post, raw, loading } = useApiFetch()
+const { get, post, loading, handleError } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 const router = useRouter()
@@ -120,23 +121,26 @@ async function loadOrder() {
   loadFailed.value = false
   orderMissing.value = false
   try {
-    const [response, incData] = await Promise.all([
-      raw(`/api/admin/billing/orders/${id}`, { silent: true }),
+    const [orderData, incData] = await Promise.allSettled([
+      get<OrderDetail>(`/api/admin/billing/orders/${id}`, { silent: true }),
       get<Incident[]>(`/api/admin/billing/incidents?order_id=${id}&limit=20`, { silent: true }),
     ])
-    const orderData = response?.ok ? await response.json() as OrderDetail : null
     if (request !== loadRequest || !props.modelValue || props.orderId !== id) return
-    if (orderData) {
-      const refundFinished = order.value?.id === id && order.value.status === 'refunding' && orderData.status !== 'refunding'
-      order.value = orderData
+    if (orderData.status === 'fulfilled') {
+      const refundFinished = order.value?.id === id && order.value.status === 'refunding' && orderData.value.status !== 'refunding'
+      order.value = orderData.value
       if (refundFinished) emit('saved')
     } else {
       loadFailed.value = true
-      orderMissing.value = response?.status === 404
+      orderMissing.value = orderData.reason instanceof ApiError && orderData.reason.status === 404
     }
-    if (incData) incidents.value = incData
-  } catch {
-    if (request === loadRequest) loadFailed.value = true
+    if (incData.status === 'fulfilled') incidents.value = incData.value
+    else handleError(incData.reason)
+  } catch (error) {
+    if (request === loadRequest) {
+      loadFailed.value = true
+      orderMissing.value = error instanceof ApiError && error.status === 404
+    }
   } finally { if (request === loadRequest) detailLoading.value = false }
 }
 
@@ -247,10 +251,12 @@ async function doForceApply() {
     confirmText: t('billing.admin.detail.forceApply'),
   })
   if (!ok) return
-  const res = await post<{ result: string }>(`/api/admin/billing/orders/${order.value.id}/force-apply`, {})
-  if (res) {
-    toast(res.result === 'applied' ? t('billing.admin.detail.forceApplyOk') : t('billing.admin.detail.forceApplyFail'), res.result === 'applied' ? 'success' : 'error')
-    loadOrder(); emit('saved')
+  try {
+    const res = await post<{ result: string }>(`/api/admin/billing/orders/${order.value.id}/force-apply`, {})
+    toast(res.result === 'applied' ? t('billing.admin.detail.forceApplyOk') : t('billing.admin.detail.forceApplyScheduled'), res.result === 'applied' ? 'success' : 'info')
+  } finally {
+    await loadOrder()
+    emit('saved')
   }
 }
 

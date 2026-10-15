@@ -35,7 +35,7 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
-const { get } = useApiFetch()
+const { get, handleError } = useApiFetch()
 
 interface SnapshotMetrics {
   ts: string
@@ -92,11 +92,11 @@ async function fetchSnapshot() {
 }
 
 onMounted(() => {
-  fetchSnapshot()
-  pollTimer = window.setInterval(fetchSnapshot, 30_000)
+  void fetchSnapshot().catch(handleError)
+  pollTimer = window.setInterval(() => { void fetchSnapshot().catch(handleError) }, 30_000)
 })
 onBeforeUnmount(() => { if (pollTimer !== null) clearInterval(pollTimer) })
-watch(() => props.hostId, () => { snap.value = null; fetchSnapshot() })
+watch(() => props.hostId, () => { snap.value = null; return fetchSnapshot() })
 
 // Theme tokens
 type Tokens = { ac: string; t1: string; t3: string; bd: string; bg2: string; green: string; amber: string; red: string }

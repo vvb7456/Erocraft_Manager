@@ -29,11 +29,6 @@ export function useSupportNotifications() {
     try {
       const data = await get<{ unread: number; latest_incoming_id: number }>('/api/support/unread', { silent: true })
       if (!alive || version !== generation) return
-      if (!data) {
-        retry = setTimeout(() => void refresh(), retryDelay)
-        retryDelay = Math.min(retryDelay * 2, 30_000)
-        return
-      }
       retryDelay = 2000
       support.unread = data.unread
       const incoming = data.latest_incoming_id || 0
@@ -41,6 +36,11 @@ export function useSupportNotifications() {
         void playSupportSoundOnce(identity.value, incoming, sound.play, () => alive && version === generation, () => support.soundEnabled)
       }
       latestId = Math.max(latestId ?? 0, incoming)
+    } catch {
+      if (alive && version === generation) {
+        retry = setTimeout(() => void refresh(), retryDelay)
+        retryDelay = Math.min(retryDelay * 2, 30_000)
+      }
     } finally {
       busy = false
       if (again) { again = false; void refresh() }

@@ -18,7 +18,7 @@ defineOptions({ name: 'SupportChat' })
 const props = withDefaults(defineProps<{ conversationId: number; admin?: boolean; active?: boolean; customerName?: string; layout?: 'widget' | 'workspace'; compact?: boolean }>(), { active: true, layout: 'widget' })
 const emit = defineEmits<{ navigate: [] }>()
 const { t, locale } = useI18n()
-const { get, post, raw } = useApiFetch()
+const { get, post, raw, handleError } = useApiFetch()
 const { toast } = useToast()
 const support = useSupportStore()
 interface Message { id: number; content: string; is_admin: boolean; automated?: boolean; image_url: string | null; created_at: string }
@@ -84,7 +84,7 @@ async function markRead() {
   reading = true
   try {
     if (await post(`/api/support/conversations/${props.conversationId}/read`, { message_id: id }) && version === generation) ownRead.value = id
-  } finally { reading = false }
+  } catch (failure) { handleError(failure) } finally { reading = false }
 }
 function onScroll() {
   following.value = atBottom()
@@ -129,6 +129,8 @@ async function refresh() {
       more = !!after && data.has_more && data.items.length > 0
     }
     if (following.value) await scrollDown()
+  } catch {
+    if (version === generation) failed.value = true
   } finally {
     busy = false
     loading.value = false

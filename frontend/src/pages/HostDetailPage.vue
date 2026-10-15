@@ -20,7 +20,7 @@ defineOptions({ name: 'HostDetailPage' })
 const { t } = useI18n({ useScope: 'global' })
 const route = useRoute()
 const router = useRouter()
-const { get } = useApiFetch()
+const { get, handleError } = useApiFetch()
 
 const hostId = computed(() => Number(route.params.id))
 const host = ref<HostDetail | null>(null)
@@ -86,7 +86,7 @@ function stopStatusPolling() {
 function startStatusPolling() {
   stopStatusPolling()
   statusTimer = window.setInterval(() => {
-    void refreshHostStatus()
+    void refreshHostStatus().catch(handleError)
   }, 5000)
 }
 

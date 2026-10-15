@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +27,7 @@ async def activity_logs(
     per_page: int = Query(default=30, ge=1, le=100),
     actor: str | None = None,
     category: str | None = None,
-    status: str | None = None,
+    status: Literal["success", "failed"] | None = None,
     host_id: int | None = Query(default=None),
     node_id: int | None = Query(default=None),
 ) -> ActivityLogsResponse:

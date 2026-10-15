@@ -16,6 +16,10 @@ Action endpoints (§11.2 capability matrix):
 """
 
 from __future__ import annotations
+from fastapi import Response
+from app.core.api_errors import ApiError
+from app.core.contracts import ErrorInfo, OperationResult
+from app.core.operation import set_operation
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import String, cast, func, or_, select
@@ -475,8 +479,8 @@ async def refund_order_endpoint(
         db,
         actor=admin.username,
         category="billing",
-        status="success",
         detail_key="billing.order.refund_initiated",
+        operation=OperationResult(action="billing.refund.initiate", phase="acceptance", outcome="success", target={"order_id": order_id, "refund_id": refund.id}),
         detail_params={
             "order_id": order_id,
             "refund_id": refund.id,
@@ -515,8 +519,8 @@ async def reconcile_refund_endpoint(
         db,
         actor=admin.username,
         category="billing",
-        status="success",
         detail_key="billing.order.refund_reconciled",
+        operation=OperationResult(action="billing.refund.reconcile", phase="execution", outcome="failed" if outcome in {"failed", "exhausted"} else "success", target={"order_id": order_id, "refund_id": refund_id}, facts={"result": outcome}),
         detail_params={
             "order_id": order_id,
             "refund_id": refund_id,
@@ -529,9 +533,15 @@ async def reconcile_refund_endpoint(
 @router.post(
     "/{order_id}/force-apply",
     response_model=ActionAck,
+    responses={202: {
+        "model": ActionAck,
+        "description": "已保存重试安排，Location 指向订单查询地址",
+        "headers": {"Location": {"description": "订单查询地址", "schema": {"type": "string"}}},
+    }},
 )
 async def force_apply_endpoint(
     order_id: int,
+    response: Response,
     _payload: ForceApplyRequest = ForceApplyRequest(),
     admin: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -542,14 +552,28 @@ async def force_apply_endpoint(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except admin_actions.CannotForceApply as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    error = None
+    if result.value == "retry_scheduled":
+        operation = OperationResult(action="billing.order.apply", phase="acceptance", outcome="success", target={"order_id": order_id})
+    elif result.value == "applied":
+        operation = OperationResult(action="billing.order.apply", phase="execution", outcome="success", target={"order_id": order_id})
+    else:
+        error = ErrorInfo(code="billing.order.apply_failed" if result.value == "permanent_failure" else "resource.conflict")
+        operation = OperationResult(action="billing.order.apply", phase="execution", outcome="failed", target={"order_id": order_id}, error=error)
+    set_operation(operation)
     await log_manager_activity(
         db,
         actor=admin.username,
         category="billing",
-        status="success",
         detail_key="billing.order.force_applied",
         detail_params={"order_id": order_id, "result": result.value},
+        operation=operation,
     )
+    if result.value == "retry_scheduled":
+        response.status_code = 202
+        response.headers["Location"] = f"/api/admin/billing/orders/{order_id}"
+    if error is not None:
+        raise ApiError(502 if result.value == "permanent_failure" else 409, error.code, operation=operation, context={"result": result.value})
     return ActionAck(order_id=order_id, action="force_apply", result=result.value)
 
 
@@ -572,8 +596,8 @@ async def force_close_endpoint(
         db,
         actor=admin.username,
         category="billing",
-        status="success",
         detail_key="billing.order.force_closed",
+        operation=OperationResult(action="billing.order.close", phase="execution", outcome="success", target={"order_id": order_id}),
         detail_params={"order_id": order_id, "note": payload.note},
     )
     return ActionAck(order_id=order_id, action="force_close", result="ok")
@@ -596,8 +620,8 @@ async def cleanup_placeholder_endpoint(
         db,
         actor=admin.username,
         category="billing",
-        status="success",
         detail_key="billing.order.placeholder_cleaned",
+        operation=OperationResult(action="billing.order.placeholder_cleanup", phase="execution", outcome="success", target={"order_id": order_id}),
         detail_params={"order_id": order_id},
     )
     return ActionAck(order_id=order_id, action="cleanup_placeholder", result="ok")

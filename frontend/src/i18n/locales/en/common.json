@@ -14,6 +14,7 @@
     "empty": "Nothing to copy"
   },
   "btn": {
+    "retry": "Retry",
     "clear": "Clear",
     "save": "Save",
     "saveDirty": "Save changes",
@@ -36,9 +37,11 @@
     "switch_zh": "Switch to Chinese",
     "switch_en": "Switch to English"
   },
-  "theme_toggle": "Toggle Theme",  "pagination": {
+  "theme_toggle": "Toggle Theme",
+  "pagination": {
     "jump": "Jump to page (1–{n})"
-  },  "no_matches": "No matches",
+  },
+  "no_matches": "No matches",
   "search_hint": "Search…",
   "empty": "No data",
   "filter_hint": "Filter…",
@@ -67,78 +70,170 @@
   "on": "ON",
   "off": "OFF",
   "apiErrors": {
-    "file": {
-      "destination_exists": "Destination file or folder already exists",
-      "no_space": "Not enough disk space on server",
-      "unknown_archive": "Unsupported archive format",
-      "text_busy": "File is in use by another process, please try again later",
-      "name_conflict": "File name conflicts with an existing directory",
-      "unsupported_type": "Cannot open files of this type",
-      "not_a_directory": "Part of the path is not a directory",
-      "upload_too_large": "File exceeds upload size limit",
-      "not_found": "File or directory not found",
-      "permission_denied": "Permission denied",
-      "denylist": "This file is protected and cannot be modified",
-      "is_directory": "Cannot perform this action on a directory",
-      "name_too_long": "File name is too long",
-      "no_files_specified": "No files were specified for this operation"
-    },
-    "server": {
-      "offline": "Server is currently offline",
-      "suspended": "Server is suspended",
-      "installing": "Server is currently installing, please wait",
-      "invalid_power_action": "Invalid power action",
-      "power_conflict": "Another power action is already in progress",
-      "startup_credentials_required": "Please set username and password in settings first"
-    },
-    "wings": {
-      "unknown_error": "Server communication error, please try again later",
-      "timeout": "Operation timed out, please try again later"
-    },
-    "network": "Network error. Please try again later",
-    "auth": {
-      "credentials_required": "Please enter your username and password",
-      "invalid_credentials": "Invalid username or password",
-      "email_not_verified": "This email has not been verified yet. Please check your inbox for the registration email and click the link to finish signing up."
-    },
     "account": {
-      "password_required": "Please enter a new password",
-      "current_password_incorrect": "Current password is incorrect",
-      "password_update_failed": "Password update failed. Please try again later",
-      "invalid_reset_link": "The reset link is invalid",
-      "reset_link_expired": "The reset link has expired. Please request a new one",
-      "password_reset_status_unknown": "Password reset status is unknown. Try signing in later, and request a new reset link if needed",
-      "email_same": "The new email must be different from the current one",
-      "email_unavailable": "This email address is not available",
-      "email_rate_limited": "Too many requests. Please try again later",
-      "email_send_failed": "Failed to send the verification email. Please try again later",
-      "invalid_confirm_link": "The confirmation link is invalid",
       "confirm_link_expired": "The confirmation link has expired. Please request a new one",
-      "user_missing": "The user no longer exists",
-      "email_confirm_status_unknown": "Email change status is unknown. Refresh your account information later, and request a new change if needed"
+      "current_password_incorrect": "Current password is incorrect",
+      "email_confirm_status_unknown": "Email change status is unknown. Refresh your account information later, and request a new change if needed",
+      "email_rate_limited": "Too many requests. Please try again later",
+      "email_same": "The new email must be different from the current one",
+      "email_send_failed": "Failed to send the verification email. Please try again later",
+      "email_unavailable": "This email address is not available",
+      "invalid_confirm_link": "The confirmation link is invalid",
+      "invalid_reset_link": "The reset link is invalid",
+      "password_required": "Please enter a new password",
+      "password_reset_status_unknown": "Password reset status is unknown. Try signing in later, and request a new reset link if needed",
+      "password_update_failed": "Password update failed. Please try again later",
+      "reset_link_expired": "The reset link has expired. Please request a new one",
+      "user_missing": "The user no longer exists"
     },
-    "register": {
-      "disabled": "Public registration is currently disabled",
-      "invalid_email": "Invalid email format",
-      "invalid_username": "Username may only contain letters, digits, underscores, dots and hyphens (3-32 chars)",
-      "email_taken": "This email is already registered",
-      "username_taken": "This username is already taken",
-      "rate_limited": "Too many requests, please try again later",
-      "verification_pending": "A verification email has already been sent. Please check your inbox (and spam folder). The link is valid for 30 minutes; you can register again once it expires.",
-      "email_send_failed": "Failed to send the verification email, please try again later",
-      "invalid_token": "The verification link is invalid",
-      "token_used": "The verification link has already been used. Please log in.",
-      "token_expired": "The verification link has expired, please register again",
-      "site_url_not_configured": "The system has not configured a public site URL. Please contact an administrator.",
-      "create_failed": "Failed to create the account. Please register again or contact an administrator",
-      "agreement_required": "Please read and accept all required agreements before continuing"
+    "activity": {
+      "command_required": "A command is required",
+      "event_not_allowed": "This activity type is not supported",
+      "file_required": "A file is required"
+    },
+    "agent": {
+      "command_failed": "The agent command failed",
+      "command_invalid_params": "Invalid agent command parameters",
+      "command_unsupported": "The agent does not support this command"
     },
     "agreements": {
-      "not_found": "Agreement not found or not published",
-      "invalid_context": "Invalid agreement context",
-      "slug_conflict": "Agreement slug already exists",
       "egg_scope_requires_egg_id": "An egg-scoped agreement requires an egg_id",
-      "no_current_version_to_patch": "The agreement has no published version to patch"
+      "invalid_context": "Invalid agreement context",
+      "no_current_version_to_patch": "The agreement has no published version to patch",
+      "not_found": "Agreement not found or not published",
+      "slug_conflict": "Agreement slug already exists"
+    },
+    "auth": {
+      "credentials_required": "Please enter your username and password",
+      "email_not_verified": "This email has not been verified yet. Please check your inbox for the registration email and click the link to finish signing up.",
+      "forbidden": "You do not have permission to perform this action",
+      "invalid_credentials": "Invalid username or password",
+      "invalid_token": "Invalid authentication token",
+      "origin_forbidden": "Request origin is not allowed",
+      "session_required": "Please sign in again"
+    },
+    "billing": {
+      "order": {
+        "already_paid": "The order is already paid",
+        "apply_failed": "Order provisioning failed",
+        "in_progress": "The order is being processed"
+      }
+    },
+    "certificate": {
+      "deploy_failed": "Certificate deployment failed",
+      "renew_failed": "Certificate renewal failed",
+      "source_invalid": "Cannot read valid certificate files"
+    },
+    "client": {
+      "http_error": "Request failed (HTTP {status})",
+      "invalid_response": "The service returned an invalid response",
+      "network_error": "Network error. Please try again later"
+    },
+    "coupon": {
+      "template_inactive": "The coupon template is inactive"
+    },
+    "dependency": {
+      "authentication_failed": "The remote service rejected the system credentials",
+      "failed": "The remote service could not complete the operation",
+      "invalid_response": "The remote service returned an invalid response",
+      "timeout": "The remote service did not respond in time",
+      "unreachable": "Cannot connect to the remote service"
+    },
+    "email": {
+      "send_failed": "Failed to send the email"
+    },
+    "email_change": {
+      "site_url_not_configured": "Configure the site URL first"
+    },
+    "file": {
+      "denylist": "This file is protected and cannot be modified",
+      "destination_exists": "Destination file or folder already exists",
+      "is_directory": "Cannot perform this action on a directory",
+      "name_conflict": "File name conflicts with an existing directory",
+      "name_too_long": "File name is too long",
+      "no_files_specified": "No files were specified for this operation",
+      "no_space": "Not enough disk space on server",
+      "not_a_directory": "Part of the path is not a directory",
+      "not_found": "File or directory not found",
+      "permission_denied": "Permission denied",
+      "text_busy": "File is in use by another process, please try again later",
+      "unknown_archive": "Unsupported archive format",
+      "unsupported_type": "Cannot open files of this type",
+      "upload_too_large": "File exceeds upload size limit"
+    },
+    "forgot_password": {
+      "site_url_not_configured": "The site URL is not configured. Contact an administrator"
+    },
+    "notification": {
+      "delivery_failed": "Notification delivery failed",
+      "not_configured": "Configure the notification channel first"
+    },
+    "register": {
+      "agreement_required": "Please read and accept all required agreements before continuing",
+      "create_failed": "Failed to create the account. Please register again or contact an administrator",
+      "disabled": "Public registration is currently disabled",
+      "email_send_failed": "Failed to send the verification email, please try again later",
+      "email_taken": "This email is already registered",
+      "invalid_email": "Invalid email format",
+      "invalid_token": "The verification link is invalid",
+      "invalid_username": "Username may only contain letters, digits, underscores, dots and hyphens (3-32 chars)",
+      "rate_limited": "Too many requests, please try again later",
+      "site_url_not_configured": "The system has not configured a public site URL. Please contact an administrator.",
+      "token_expired": "The verification link has expired, please register again",
+      "token_used": "The verification link has already been used. Please log in.",
+      "username_taken": "This username is already taken",
+      "verification_pending": "A verification email has already been sent. Please check your inbox (and spam folder). The link is valid for 30 minutes; you can register again once it expires."
+    },
+    "request": {
+      "invalid": "Invalid request",
+      "malformed_json": "Invalid JSON request",
+      "method_not_allowed": "Method not allowed",
+      "rate_limited": "Too many requests. Please try again later",
+      "too_large": "Request is too large",
+      "unsupported_media_type": "Unsupported media type",
+      "validation_failed": "Please check the submitted fields"
+    },
+    "resource": {
+      "conflict": "The current state does not allow this operation",
+      "not_found": "Resource not found"
+    },
+    "server": {
+      "installing": "Server is currently installing, please wait",
+      "invalid_power_action": "Invalid power action",
+      "offline": "Server is currently offline",
+      "power_conflict": "Another power action is already in progress",
+      "startup_credentials_required": "Please set username and password in settings first",
+      "startup_variable_invalid": "Invalid startup variable: {variable}",
+      "suspended": "Server is suspended"
+    },
+    "system": {
+      "internal_error": "The service could not process the request. Please try again later",
+      "unavailable": "The service is temporarily unavailable",
+      "unsupported": "This operation is not supported"
+    },
+    "tunnel": {
+      "cf_api_error": "The domain service request failed",
+      "cf_auth_failed": "Domain service authentication failed",
+      "cf_rate_limited": "The domain service is rate limiting requests",
+      "host_not_found": "Tunnel host not found",
+      "host_not_ready": "The host tunnel is not ready",
+      "invalid_subdomain": "Invalid subdomain",
+      "no_allocation": "The server has no available allocation",
+      "not_enabled": "The tunnel is not enabled",
+      "subdomain_taken": "The subdomain is already in use"
+    },
+    "user": {
+      "not_found": "User not found"
+    },
+    "validation": {
+      "invalid": "Invalid field value",
+      "required": "This field is required"
+    },
+    "wings": {
+      "apply_failed": "The node could not apply the configuration",
+      "restart_failed": "Failed to restart Wings",
+      "timeout": "Operation timed out, please try again later",
+      "unknown_error": "Server communication error, please try again later"
     }
   },
   "loading": "Loading…"

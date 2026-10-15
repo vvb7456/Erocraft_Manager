@@ -6,6 +6,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
+import { apiErrorMessage } from '@/composables/apiClient'
 
 const props = withDefaults(defineProps<{
   orderId: string
@@ -16,7 +17,7 @@ const props = withDefaults(defineProps<{
 }>(), { autoStart: true, disabled: false })
 const emit = defineEmits<{ refresh: [] }>()
 const { t } = useI18n()
-const { post, error } = useApiFetch()
+const { post, raw, error, handleError } = useApiFetch()
 const { toast } = useToast()
 const busy = ref(false)
 const launched = ref(false)
@@ -50,12 +51,10 @@ async function checkPayment(silent = false) {
   if (querying) return
   querying = true
   try {
-    if (silent) {
-      await fetch(`/api/payments/wechat/orders/${props.orderId}/refresh`, { method: 'POST' })
-    } else {
-      await post(`/api/payments/wechat/orders/${props.orderId}/refresh`)
-    }
+    await raw(`/api/payments/wechat/orders/${props.orderId}/refresh`, { method: 'POST', silent })
     if (alive) emit('refresh')
+  } catch (failure) {
+    handleError(failure)
   } finally { querying = false }
 }
 async function pay() {
@@ -89,7 +88,7 @@ async function pay() {
     }
     emit('refresh')
   } catch (e) {
-    if (alive) toast(e instanceof Error ? e.message : t('wechat.failed'), 'error')
+    if (alive) toast(apiErrorMessage(e), 'error')
   } finally { busy.value = false }
 }
 watch(() => props.codeUrl, value => { if (value) code.value = value })

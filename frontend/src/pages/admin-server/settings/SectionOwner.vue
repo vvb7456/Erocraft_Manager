@@ -64,7 +64,6 @@ async function save(): Promise<boolean> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ownerId: ownerId.value }),
   })
-  if (!res) return false
   let body: { message?: string; warning?: string } = {}
   try { body = await res.json() } catch { /* ignore */ }
   toast(body.message || t('adminServer.settings.saved'), 'success')

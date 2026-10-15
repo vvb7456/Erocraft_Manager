@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { onMounted, onBeforeUnmount, computed, onErrorCaptured } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 import ConfirmProvider from '@/components/ui/ConfirmProvider.vue'
@@ -11,10 +11,24 @@ import { provideToast } from '@/composables/useToast'
 import { useTheme } from '@/composables/useTheme'
 import { providePageHeader } from '@/composables/usePageHeader'
 import { useAppStore } from '@/stores/app'
+import { ApiError, apiErrorMessage } from '@/composables/apiClient'
 
 defineOptions({ name: 'App' })
 
-provideToast()
+const { toast } = provideToast()
+const removeRouterErrorHandler = useRouter().onError(error => {
+  if (error instanceof ApiError && !error.silent) {
+    toast(apiErrorMessage(error), 'error')
+    error.silent = true
+  }
+})
+onBeforeUnmount(removeRouterErrorHandler)
+onErrorCaptured(error => {
+  if (error instanceof ApiError) {
+    if (!error.silent) toast(apiErrorMessage(error), 'error')
+    return false
+  }
+})
 useTheme()
 providePageHeader()
 

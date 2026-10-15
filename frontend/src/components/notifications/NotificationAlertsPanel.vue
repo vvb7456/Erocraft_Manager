@@ -61,8 +61,7 @@ async function load(background = false) {
   try {
     const result = await get<{ items: NotificationAlert[]; total: number; counts: Record<string, number> }>(`/api/admin/notifications/alerts?${params}`, { silent: true })
     if (!alive || request !== requestId) return
-    failed.value = !result
-    if (!result) return
+    failed.value = false
     total.value = result.total
     counts.value = result.counts
     if (page.value > totalPages.value) { page.value = totalPages.value; return }
@@ -70,6 +69,8 @@ async function load(background = false) {
     if (detailOpen.value && selected.value) {
       selected.value = result.items.find(item => item.key === selected.value?.key) || selected.value
     }
+  } catch {
+    if (alive && request === requestId) failed.value = true
   } finally { if (alive && request === requestId) loading.value = false }
 }
 

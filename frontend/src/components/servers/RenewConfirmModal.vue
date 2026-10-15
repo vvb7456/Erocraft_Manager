@@ -29,7 +29,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, post } = useApiFetch()
+const { get, post, handleError } = useApiFetch()
 const { toast } = useToast()
 
 const loading = ref(false)
@@ -77,7 +77,7 @@ watch(() => props.modelValue, async (open) => {
     const p = await get<{ display_name: string; price_fen: number; plan_type?: string; linked_plan_id?: number | null }>(`/api/admin/billing/plans/${props.planId}`)
     if (p) {
       if (props.isTrial && p.plan_type === 'trial' && p.linked_plan_id) {
-        const linked = await get<{ display_name: string; price_fen: number }>(`/api/admin/billing/plans/${p.linked_plan_id}`)
+        const linked = await get<{ display_name: string; price_fen: number }>(`/api/admin/billing/plans/${p.linked_plan_id}`).catch(handleError)
         if (linked) {
           planPriceFen.value = linked.price_fen
           planName.value = `${linked.display_name} (${t('servers.renew_modal.convert_badge')})`
@@ -120,8 +120,7 @@ async function submit() {
     external_order_id: isEcommerce.value ? f.external_order_id.trim() : null,
     amount_yuan: isEcommerce.value && f.amount_yuan !== undefined ? Number(f.amount_yuan) : null,
     channel_note: isEcommerce.value && f.channel_note.trim() ? f.channel_note.trim() : null,
-  })
-  loading.value = false
+  }).finally(() => { loading.value = false })
 
   if (res) {
     toast(res.message, 'success')

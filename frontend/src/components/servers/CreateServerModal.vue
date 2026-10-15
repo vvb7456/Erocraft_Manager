@@ -24,7 +24,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, post } = useApiFetch()
+const { get, post, handleError } = useApiFetch()
 const { toast } = useToast()
 
 const createLoading = ref(false)
@@ -243,7 +243,7 @@ let planEnvWaitSeq = 0
 watch(() => createForm.value.plan_id, (planId) => {
   if (!planId) return
   const plan = planList.value.find(p => p.id === planId)
-  if (plan) applyPlan(plan)
+  if (plan) return applyPlan(plan)
 })
 
 // Open modal → reset & load dropdown data
@@ -278,24 +278,26 @@ watch(() => props.modelValue, async (open) => {
   eggVariables.value = []
 
   // Load dropdown data in parallel
-  const [usersData, nestsData, nodesData, defaultsData, plansData] = await Promise.all([
+  const results = await Promise.allSettled([
     get<{ users: any[] }>('/api/admin/resources/users'),
     get<{ nests: any[] }>('/api/admin/resources/nests'),
     get<{ nodes: any[] }>('/api/admin/resources/nodes'),
     get<Record<string, any>>('/api/admin/resources/server-defaults'),
     get<PlanOption[]>('/api/admin/billing/plans?include_inactive=false'),
   ])
-  if (usersData) userList.value = usersData.users
-  if (nestsData) nestList.value = nestsData.nests
-  if (nodesData) nodeList.value = nodesData.nodes
-  if (plansData) {
-    planList.value = (plansData as PlanOption[]).filter(p => p.is_active !== false)
+  const [usersData, nestsData, nodesData, defaultsResult, plansData] = results
+  if (usersData.status === 'fulfilled') userList.value = usersData.value.users
+  if (nestsData.status === 'fulfilled') nestList.value = nestsData.value.nests
+  if (nodesData.status === 'fulfilled') nodeList.value = nodesData.value.nodes
+  if (plansData.status === 'fulfilled') {
+    planList.value = plansData.value.filter(p => p.is_active !== false)
     // 默认选中第一个套餐（会触发 watcher 自动套用）
     if (planList.value.length > 0 && !createForm.value.plan_id) {
       createForm.value.plan_id = planList.value[0].id
     }
   }
-  if (defaultsData) {
+  if (defaultsResult.status === 'fulfilled') {
+    const defaultsData = defaultsResult.value
     createForm.value.cpu = defaultsData.cpu
     createForm.value.memory = defaultsData.memory
     createForm.value.disk = defaultsData.disk
@@ -322,6 +324,7 @@ watch(() => props.modelValue, async (open) => {
     const user = userList.value.find(u => u.username === props.preSelectUsername)
     if (user) createForm.value.user_id = user.id
   }
+  for (const result of results) if (result.status === 'rejected') handleError(result.reason)
 })
 
 async function doCreateServer() {
@@ -368,8 +371,7 @@ async function doCreateServer() {
     external_order_id: isEcommerce.value ? f.external_order_id.trim() : null,
     amount_yuan: isEcommerce.value && f.amount_yuan !== undefined ? Number(f.amount_yuan) : null,
     channel_note: isEcommerce.value && f.channel_note.trim() ? f.channel_note.trim() : null,
-  })
-  createLoading.value = false
+  }).finally(() => { createLoading.value = false })
   if (res) {
     toast(t('servers.create.success'), 'success')
     emit('update:modelValue', false)

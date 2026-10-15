@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import re
+import httpx
 
-from fastapi import HTTPException, status
+from fastapi import status
 
 from app.services.wings import WingsServiceError
+from app.core.api_errors import ApiError
+from app.core.error_codes import ErrorCode
 
 # Wings error message → structured error code mapping
 # Supports both English (upstream) and Chinese (pterodactyl-china) Wings builds.
-_WINGS_ERROR_MAP: list[tuple[re.Pattern[str], str]] = [
+_WINGS_ERROR_MAP: list[tuple[re.Pattern[str], ErrorCode]] = [
     # --- File operations ---
     (re.compile(r"destination already exists|目标已存在", re.I), "file.destination_exists"),
     (re.compile(r"not (have )?enough (available )?disk space", re.I), "file.no_space"),
@@ -37,14 +40,25 @@ _WINGS_ERROR_MAP: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"could not process this request in time", re.I), "wings.timeout"),
 ]
 
-# Fallback code when no pattern matches — never exposes raw Wings message
-_FALLBACK_CODE = "wings.unknown_error"
+_STATUS_BY_CODE = {
+    "file.destination_exists": 409, "file.name_conflict": 409, "file.text_busy": 409,
+    "file.unknown_archive": 422, "file.unsupported_type": 422, "file.not_a_directory": 422,
+    "file.upload_too_large": 413, "file.not_found": 404, "file.permission_denied": 403,
+    "file.denylist": 403, "file.is_directory": 422, "file.name_too_long": 422,
+    "file.no_files_specified": 422, "server.offline": 409, "server.suspended": 403,
+    "server.installing": 409, "server.invalid_power_action": 422, "server.power_conflict": 409,
+    "wings.timeout": 504,
+}
 
 
-def translate_wings_error(exc: WingsServiceError) -> HTTPException:
+def translate_wings_error(exc: WingsServiceError) -> ApiError:
     """Map a WingsServiceError to an HTTPException with a structured error code."""
+    if isinstance(exc.__cause__, httpx.TimeoutException):
+        return ApiError(504, "dependency.timeout")
+    if isinstance(exc.__cause__, httpx.HTTPError):
+        return ApiError(502, "dependency.unreachable")
     msg = str(exc)
     for pattern, code in _WINGS_ERROR_MAP:
         if pattern.search(msg):
-            return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=code)
-    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=_FALLBACK_CODE)
+            return ApiError(_STATUS_BY_CODE.get(code, 502), code)
+    return ApiError(status.HTTP_502_BAD_GATEWAY, "wings.unknown_error")

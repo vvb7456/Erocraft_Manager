@@ -8,6 +8,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
+import { apiErrorMessage } from '@/composables/apiClient'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { useFormatDate } from '@/composables/useFormatDate'
@@ -37,7 +38,7 @@ const props = defineProps<{
 }>()
 
 const { t, te } = useI18n({ useScope: 'global' })
-const { get, raw } = useApiFetch()
+const { get, raw, handleError } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 const { formatDateTime: fmtDate } = useFormatDate()
@@ -150,9 +151,8 @@ async function loadList() {
   const data = await get<{ items: Coupon[]; total: number }>(
     `/api/admin/billing/coupons?${qs.toString()}`,
     { silent: true },
-  )
+  ).finally(() => { tableLoading.value = false })
   if (data) { items.value = data.items; total.value = data.total }
-  tableLoading.value = false
 }
 
 async function loadTemplates() {
@@ -164,17 +164,17 @@ async function loadTemplates() {
 }
 
 onMounted(async () => {
-  await loadTemplates()
-  await loadList()
+  await loadTemplates().catch(handleError)
+  await loadList().catch(handleError)
   if (props.initialAction === 'grant') grantOpen.value = true
 })
 
 watch([searchQuery, statusFilter, templateFilter], () => {
   offset.value = 0
-  void loadList()
+  void loadList().catch(handleError)
 })
 
-watch(page, () => { void loadList() })
+watch(page, () => loadList())
 
 // ── Revoke ──
 async function doRevoke(c: Coupon) {
@@ -189,17 +189,12 @@ async function doRevoke(c: Coupon) {
     method: 'POST',
     body: JSON.stringify({ reason: 'admin revoked' }),
     headers: { 'Content-Type': 'application/json' },
-    silent: true,
   })
   if (res && res.ok) {
     const updated = await res.json() as Coupon
     const idx = items.value.findIndex((x) => x.id === updated.id)
     if (idx >= 0) items.value.splice(idx, 1, updated)
     toast(t('billing.admin.coupons.revokeOk'), 'success')
-  } else if (res) {
-    let msg = `HTTP ${res.status}`
-    try { const body = await res.json(); msg = body.detail || body.message || msg } catch { /* ignore */ }
-    toast(msg, 'error')
   }
 }
 
@@ -255,7 +250,7 @@ function openGrant() {
   grantTemplateId.value = ''
   grantError.value = null
   grantOpen.value = true
-  void loadGrantUsers()
+  void loadGrantUsers().catch(handleError)
 }
 
 async function doGrant() {
@@ -276,13 +271,9 @@ async function doGrant() {
       toast(t('billing.admin.coupons.grantOk'), 'success')
       grantOpen.value = false
       await loadList()
-    } else if (res) {
-      let msg = `HTTP ${res.status}`
-      try { const body = await res.json(); msg = body.detail || body.message || msg } catch { /* ignore */ }
-      grantError.value = String(msg)
-    } else {
-      grantError.value = 'Network error'
     }
+  } catch (error) {
+    grantError.value = apiErrorMessage(error)
   } finally {
     grantSaving.value = false
   }

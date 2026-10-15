@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from app.core.api_errors import ApiError
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -27,6 +28,7 @@ from app.schemas.user_account import (
     UserAccountProfileResponse,
 )
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.services.email import (
     SiteUrlNotConfiguredError,
     get_site_url,
@@ -72,10 +74,10 @@ async def update_user_account(
     new_password = (payload.newPassword or "").strip() or None
 
     if not new_password:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.password_required")
+        raise ApiError(422, "account.password_required")
 
     if not current_user.check_password(current_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="account.current_password_incorrect")
+        raise ApiError(422, "account.current_password_incorrect")
 
     try:
         await server_lifecycle.update_user(
@@ -88,7 +90,7 @@ async def update_user_account(
             password=new_password,
         )
     except LifecycleError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="account.password_update_failed") from exc
+        raise ApiError(502, "account.password_update_failed") from exc
 
     await db.execute(
         update(ManagerPasswordReset)
@@ -102,7 +104,7 @@ async def update_user_account(
         db,
         actor=current_user.username,
         category="user",
-        status="success",
+        operation=OperationResult(action="user.password.update", phase="execution", outcome="success", target={"user_id": current_user.id}),
         detail_key="user_password_changed",
         detail_params={"username": current_user.username},
     )
@@ -127,7 +129,7 @@ async def update_user_language(
 ) -> UserAccountProfileResponse:
     user = await db.get(PteroUser, int(current_user.id))
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="account.user_missing")
+        raise ApiError(404, "account.user_missing")
     if user.language != payload.language:
         user.language = payload.language
         user.updated_at = datetime.now(UTC).replace(tzinfo=None)
@@ -137,7 +139,7 @@ async def update_user_language(
             db,
             actor=user.username,
             category="user",
-            status="success",
+            operation=OperationResult(action="user.language.update", phase="execution", outcome="success", target={"user_id": user.id}),
             detail_key="user_language_changed",
             detail_params={"username": user.username, "language": payload.language},
         )
@@ -154,11 +156,11 @@ async def change_email(
 ) -> ChangeEmailResponse:
     new_email = payload.newEmail.strip().lower()
     if new_email == current_user.email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.email_same")
+        raise ApiError(422, "account.email_same")
 
     existing = await user_repository.get_by_email(db, new_email)
     if existing and existing.id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="account.email_unavailable")
+        raise ApiError(409, "account.email_unavailable")
 
     cur_user_id = int(current_user.id)
     cur_username = current_user.username
@@ -177,7 +179,7 @@ async def change_email(
         elapsed = (datetime.now(UTC).replace(tzinfo=None) - last_change.created_at).total_seconds()
         if elapsed < 60:
             await db.rollback()
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="account.email_rate_limited")
+            raise ApiError(429, "account.email_rate_limited")
 
     raw_token = secrets.token_hex(32)
     token_hash = await hash_token_async(raw_token)
@@ -206,9 +208,9 @@ async def change_email(
     try:
         site_url = await get_site_url(db)
     except SiteUrlNotConfiguredError:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="email_change.site_url_not_configured",
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            "email_change.site_url_not_configured",
         ) from None
     confirm_url = f"{site_url}/#/confirm-email?token={raw_token}&uid={cur_user_id}"
 
@@ -236,13 +238,13 @@ async def change_email(
         await db.execute(delete(ManagerEmailChange).where(ManagerEmailChange.id == change_id))
         await db.commit()
         logger.error("Failed to send email change confirmation to %s: %s", cur_email, err)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="account.email_send_failed")
+        raise ApiError(502, "account.email_send_failed")
 
     await log_manager_activity(
         db,
         actor=cur_username,
         category="user",
-        status="success",
+        operation=OperationResult(action="user.email.update", phase="acceptance", outcome="success", target={"username": cur_username}),
         detail_key="email_change_requested",
         detail_params={"username": cur_username, "new_email": new_email},
     )
@@ -273,22 +275,22 @@ async def confirm_email(
     record = result.scalar_one_or_none()
 
     if not record or not await verify_token_async(payload.token, record.token):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.invalid_confirm_link")
+        raise ApiError(422, "account.invalid_confirm_link")
 
     # Check expiry
     if record.created_at:
         age = datetime.now(UTC).replace(tzinfo=None) - record.created_at
         if age > timedelta(minutes=EMAIL_CHANGE_EXPIRY_MINUTES):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.confirm_link_expired")
+            raise ApiError(422, "account.confirm_link_expired")
 
     # Check new email still available
     existing = await user_repository.get_by_email(db, record.new_email)
     if existing and existing.id != record.user_id:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="account.email_unavailable")
+        raise ApiError(409, "account.email_unavailable")
 
     user = await user_repository.get_by_id(db, record.user_id)
     if not user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.user_missing")
+        raise ApiError(404, "account.user_missing")
 
     old_email = user.email
     claim_time = datetime.now(UTC).replace(tzinfo=None)
@@ -300,7 +302,7 @@ async def confirm_email(
     )
     if not claim_result.rowcount:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.invalid_confirm_link")
+        raise ApiError(422, "account.invalid_confirm_link")
     await db.commit()
 
     # Update via direct panel DB write (bypasses panel email/activity)
@@ -314,14 +316,14 @@ async def confirm_email(
             last_name=user.name_last or "User",
         )
     except LifecycleError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="account.email_confirm_status_unknown") from exc
+        raise ApiError(502, "account.email_confirm_status_unknown") from exc
     await db.commit()
 
     await log_manager_activity(
         db,
         actor=user.username,
         category="user",
-        status="success",
+        operation=OperationResult(action="user.email.update", phase="execution", outcome="success", target={"user_id": user.id}),
         detail_key="email_changed",
         detail_params={"username": user.username, "old_email": old_email, "new_email": record.new_email},
     )

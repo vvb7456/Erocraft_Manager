@@ -26,6 +26,7 @@ export interface CouponTemplate {
 </script>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/composables/apiClient'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -55,7 +56,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
-const { raw } = useApiFetch()
+const { raw, handleError } = useApiFetch()
 const { toast } = useToast()
 
 interface FormState {
@@ -108,7 +109,7 @@ async function loadPlans() {
 watch(() => props.modelValue, (open) => {
   if (!open) return
   saveError.value = null
-  void loadPlans()
+  void loadPlans().catch(handleError)
   if (props.mode === 'edit' && props.template) {
     const tpl = props.template
     form.value = {
@@ -182,13 +183,9 @@ async function doSave() {
       emit('saved', saved)
       toast(t('billing.admin.couponTemplates.saveOk'), 'success')
       emit('update:modelValue', false)
-    } else if (res) {
-      let detail = `HTTP ${res.status}`
-      try { const body = await res.json(); detail = body.detail || body.message || detail } catch { /* ignore */ }
-      saveError.value = String(detail)
-    } else {
-      saveError.value = 'Network error'
     }
+  } catch (failure) {
+    saveError.value = apiErrorMessage(failure)
   } finally {
     saving.value = false
   }

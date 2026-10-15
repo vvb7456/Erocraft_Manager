@@ -17,6 +17,7 @@ from app.db.models.billing import BillingIncident
 from app.db.models.pterodactyl import PteroUser
 from app.schemas.billing_incidents import IncidentOut, IncidentUpdateRequest
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 
 router = APIRouter(prefix="/admin/billing/incidents", tags=["billing"])
 
@@ -105,7 +106,7 @@ async def update_incident_endpoint(
         db,
         actor=admin.username,
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.incident.update", phase="execution", outcome="success", target={"incident_id": incident_id}),
         detail_key="billing.incident.update",
         detail_params={"incident_id": incident_id, **changed},
     )

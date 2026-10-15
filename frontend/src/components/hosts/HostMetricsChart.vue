@@ -46,7 +46,7 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n({ useScope: 'global' })
-const { get } = useApiFetch()
+const { get, handleError } = useApiFetch()
 
 interface HistoryPoint extends Array<number> { 0: number; 1: number }
 
@@ -68,9 +68,9 @@ async function fetchHistory() {
 }
 
 onMounted(() => {
-  fetchHistory()
+  void fetchHistory().catch(handleError)
   if (props.autoRefresh) {
-    pollTimer = window.setInterval(fetchHistory, 30_000)
+    pollTimer = window.setInterval(() => { void fetchHistory().catch(handleError) }, 30_000)
   }
 })
 onBeforeUnmount(() => {

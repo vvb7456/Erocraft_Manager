@@ -47,6 +47,7 @@ from app.core.settings_store import get_settings_store
 from app.core.time import to_iso_z
 from app.db.session import get_session_factory
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.services.email import (
     EmailClient,
     get_email_delay,
@@ -209,13 +210,13 @@ async def run_install_notify_scan() -> None:
                 username = row["username"] or ""
 
                 # No email on file: mark notified anyway so we don't keep
-                # picking this row up forever. Surface as audit warning.
+                    # picking this row up forever.
                 if not email:
                     await log_manager_activity(
                         db,
                         actor="system",
                         category="automation",
-                        status="warning",
+                        operation=OperationResult(action="automation.install_notify", phase="request", outcome="failed", target={"server_id": server_id, "owner_id": int(row["owner_id"])}),
                         detail_key="install_notify.no_email",
                         detail_params={
                             "server_id": server_id,
@@ -283,7 +284,7 @@ async def run_install_notify_scan() -> None:
                 db,
                 actor="system",
                 category="automation",
-                status="success" if sent_count else "info",
+                operation=OperationResult(action="automation.install_notify", phase="execution", outcome="failed" if len(rows) > sent_count + skipped_count else "success", succeeded=sent_count, failed=len(rows) - sent_count - skipped_count, facts={"skipped": skipped_count}),
                 detail_key="install_notify.run",
                 detail_params={
                     "sent": sent_count,

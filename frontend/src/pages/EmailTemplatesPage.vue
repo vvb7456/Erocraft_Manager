@@ -125,14 +125,13 @@ const dirtyForm = useParentDirtyForm()
 useDirtyFormSection({ name: 'email-templates', isDirty, save, discard }, dirtyForm)
 
 async function loadData() {
-  const data = await get<Record<string, TemplateData>>('/api/admin/email-templates')
+  const data = await get<Record<string, TemplateData>>('/api/admin/email-templates').finally(() => { loading.value = false })
   if (data) {
     for (const k of KEYS) {
       const d = { subject: data[k]?.subject ?? '', body: data[k]?.body ?? '' }
       all.value[k] = { ...d }; savedAll.value[k] = { ...d }
     }
   }
-  loading.value = false
   schedulePreview()
 }
 

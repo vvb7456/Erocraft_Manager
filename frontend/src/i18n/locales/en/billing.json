@@ -229,6 +229,7 @@
       "forceApplyConfirm": "Force apply {orderNo}? Retry counter will reset.",
       "forceApplyOk": "Applied",
       "forceApplyFail": "Apply Failed",
+      "forceApplyScheduled": "Retry scheduled. Check the order status later",
       "forceClose": "Force Close",
       "forceCloseNote": "Close Note",
       "forceCloseOk": "Closed",

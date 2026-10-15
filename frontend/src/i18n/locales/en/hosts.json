@@ -196,6 +196,7 @@
       "desc": "Manage node connectivity, resource capacity, and the server runtime.",
       "notWings": "This host is not a Wings node",
       "saved": "Saved ({n} field(s) changed)",
+      "savedNotApplied": "Configuration saved, but the node could not apply it. Check the node status",
       "cancel": "Cancel",
       "serviceError": "Wings service status unavailable: {err}",
       "serviceState": {

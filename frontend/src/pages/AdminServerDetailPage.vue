@@ -24,7 +24,7 @@ defineOptions({ name: 'AdminServerDetailPage' })
 const { t } = useI18n({ useScope: 'global' })
 const route = useRoute()
 const router = useRouter()
-const { get } = useApiFetch()
+const { get, handleError } = useApiFetch()
 
 const serverId = computed(() => Number(route.params.id))
 const detail = ref<AdminServerDetailResponse | null>(null)
@@ -80,11 +80,11 @@ function pushBuffer(buf: typeof cpuBuffer, value: number | null | undefined) {
 
 async function fetchRuntime(withMetrics = false) {
   if (!Number.isFinite(serverId.value)) return
-  const data = await get<ServerRuntimeResponse>(
-    `/api/admin/servers/${serverId.value}/runtime`,
-    { silent: true },
-  )
-  if (data) {
+  try {
+    const data = await get<ServerRuntimeResponse>(
+      `/api/admin/servers/${serverId.value}/runtime`,
+      { silent: true },
+    )
     runtime.value = data
     runtimeStale.value = false
     if (withMetrics) {
@@ -93,7 +93,7 @@ async function fetchRuntime(withMetrics = false) {
       const memBytes = (r as { memory_bytes?: number }).memory_bytes
       pushBuffer(memBuffer, memBytes != null ? memBytes / (1024 * 1024) : null)
     }
-  } else {
+  } catch {
     runtimeStale.value = true
   }
 }
@@ -205,8 +205,11 @@ watch(
 
     // Single detail fetch when opening / switching tabs. No background
     // detail polling while staying on a tab.
-    await loadDetail(changedServer)
-    if (changedServer) refreshLlmProvisioned()
+    await loadDetail(changedServer).catch(handleError)
+    if (changedServer) {
+      llmProvisioned.value = false
+      await refreshLlmProvisioned().catch(handleError)
+    }
 
     // Header badge keeps a minimal live status on every tab.
     // Only overview tab appends metrics history buffers.

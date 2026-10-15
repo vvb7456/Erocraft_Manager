@@ -1,6 +1,9 @@
 """Unified notification configuration and current alerts."""
 
 import hashlib
+from app.core.api_errors import ApiError
+from app.core.contracts import ErrorInfo, OperationResult
+from app.core.operation import set_operation
 import json
 import re
 from datetime import timedelta
@@ -48,7 +51,8 @@ async def save_wecom_template(body: templates.TemplateInput, admin: PteroUser = 
         raise HTTPException(400, str(exc)) from None
     key = templates.setting_key(body.type)
     await get_settings_store().set_values(db, {key: body.model_dump(exclude={"type"})}, category="notifications")
-    await log_manager_activity(db, actor=admin.username, category="settings", status="success",
+    await log_manager_activity(db, actor=admin.username, category="settings",
+        operation=OperationResult(action="notifications.settings.update", phase="execution", outcome="success"),
         detail_key="settings_change", detail_params={"actor": admin.username, "keys": [key]})
     return {"ok": True}
 
@@ -121,7 +125,8 @@ async def save_center(body: CenterInput, admin: PteroUser = Depends(require_admi
         changes["NOTIFICATION_POLICY"] = policy.model_dump()
     await store.set_values(db, changes, category="notifications", commit=False)
     await db.commit()
-    await log_manager_activity(db, actor=admin.username, category="settings", status="success", detail_key="settings_change",
+    await log_manager_activity(db, actor=admin.username, category="settings", detail_key="settings_change",
+        operation=OperationResult(action="notifications.settings.update", phase="execution", outcome="success"),
         detail_params={"actor": admin.username, "keys": sorted(changes)})
     return await get_center(admin, db)
 
@@ -136,7 +141,7 @@ async def test_channel(request: Request, body: TestInput, _: PteroUser = Depends
     values = await get_settings_store().get_many(db, defaults_for(NOTIFICATION_SPECS))
     group = next((g for g in (await load_policy(db)).groups if g.id == body.group), None)
     if not values["WECOM_ENABLED"] or not group or not group.wecom_ids:
-        raise HTTPException(400, "请启用企业微信并选择包含成员账号的接收组")
+        raise ApiError(409, "notification.not_configured")
     site = str(await get_settings_store().get(db, "SITE_URL", "")).rstrip("/")
     try:
         wecom.validate(values, group.wecom_ids)
@@ -144,8 +149,13 @@ async def test_channel(request: Request, body: TestInput, _: PteroUser = Depends
             await wecom.client.send(values, recipient=member, content=wecom.format_content(title="通知渠道测试",
                 body=f"通知编号：{int(utc_naive_now().timestamp())}\n\n企业微信连接成功。",
                 url=site + "/#/admin/notifications?tab=rules"))
-    except (ValueError, wecom.DeliveryError) as exc:
-        raise HTTPException(400, str(exc)) from None
+    except ValueError as exc:
+        raise ApiError(409, "notification.not_configured", detail=str(exc)) from None
+    except wecom.DeliveryError as exc:
+        error = ErrorInfo(code="notification.delivery_failed", detail=str(exc))
+        operation = set_operation(OperationResult(action="notification.test", phase="execution", outcome="failed", target={"group": body.group}, error=error))
+        raise ApiError(502, error.code, detail=error.detail, operation=operation) from None
+    set_operation(OperationResult(action="notification.test", phase="execution", outcome="success", target={"group": body.group}))
     return {"ok": True}
 
 
@@ -206,6 +216,7 @@ async def alert_action(body: AlertAction, admin: PteroUser = Depends(require_adm
     else:
         row.resolved_at = now
     await db.commit()
-    await log_manager_activity(db, actor=admin.username, category="monitoring", status="success",
+    await log_manager_activity(db, actor=admin.username, category="monitoring",
+        operation=OperationResult(action=f"notification.alert.{body.action}", phase="execution", outcome="success", target={"issue_key": body.key}),
         detail_key="notification.alert.action", detail_params={"key": body.key, "action": body.action})
     return {"ok": True}

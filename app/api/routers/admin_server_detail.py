@@ -26,6 +26,7 @@ from app.schemas.admin_server_detail import (
 from app.schemas.servers import MessageResponse
 from app.services import server_lifecycle, server_management
 from app.services.audit import log_manager_activity
+from app.core.contracts import ErrorInfo, OperationResult
 from app.services.server_lifecycle import LifecycleError
 from app.services.server_management import (
     ServerManagementError,
@@ -98,7 +99,7 @@ async def update_admin_server_details(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
+        operation=OperationResult(action="server.details.update", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_key="admin_server.details.update",
         detail_params={"server_id": server_id},
     )
@@ -124,7 +125,10 @@ async def update_admin_server_owner(
         db,
         actor=current_user.username,
         category="server",
-        status="warning" if warning else "success",
+        operation=OperationResult(
+            action="server.owner.update", phase="execution", outcome="success", target={"server_id": server_id, "owner_id": payload.owner_id},
+            children=[OperationResult(action="wings.owner.deauthorize", phase="execution", outcome="failed", target={"server_id": server_id}, error=ErrorInfo(code="dependency.failed", detail=warning))] if warning else [],
+        ),
         detail_key="admin_server.owner.update",
         detail_params={"server_id": server_id, "owner_id": payload.owner_id},
     )
@@ -162,7 +166,7 @@ async def update_admin_server_build(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
+        operation=OperationResult(action="server.build.update", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_key="admin_server.build.update",
         detail_params={"server_id": server_id},
     )
@@ -201,7 +205,7 @@ async def add_admin_server_allocations(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
+        operation=OperationResult(action="server.allocations.add", phase="execution", outcome="success", target={"server_id": server_id, "allocation_ids": payload.allocation_ids}),
         detail_key="admin_server.allocations.add",
         detail_params={"server_id": server_id, "allocation_ids": payload.allocation_ids},
     )
@@ -223,7 +227,7 @@ async def remove_admin_server_allocation(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
+        operation=OperationResult(action="server.allocations.remove", phase="execution", outcome="success", target={"server_id": server_id, "allocation_id": allocation_id}),
         detail_key="admin_server.allocations.remove",
         detail_params={"server_id": server_id, "allocation_id": allocation_id},
     )
@@ -249,7 +253,7 @@ async def set_admin_server_primary_allocation(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
+        operation=OperationResult(action="server.allocations.primary", phase="execution", outcome="success", target={"server_id": server_id, "allocation_id": payload.allocation_id}),
         detail_key="admin_server.allocations.primary",
         detail_params={"server_id": server_id, "allocation_id": payload.allocation_id},
     )
@@ -280,7 +284,7 @@ async def update_admin_server_startup(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
+        operation=OperationResult(action="server.startup.update", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_key="admin_server.startup.update",
         detail_params={"server_id": server_id},
     )
@@ -312,7 +316,7 @@ async def switch_admin_server_egg(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
+        operation=OperationResult(action="server.egg.switch", phase="execution", outcome="success", target={"server_id": server_id, "egg_id": payload.egg_id}),
         detail_key="admin_server.egg.switch",
         detail_params={"server_id": server_id, "egg_id": payload.egg_id},
     )
@@ -334,7 +338,7 @@ async def update_admin_server_variables(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
+        operation=OperationResult(action="server.variables.update", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_key="admin_server.variables.update",
         detail_params={"server_id": server_id, "variables": sorted(payload.variables)},
     )
@@ -355,7 +359,7 @@ async def reinstall_admin_server(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
+        operation=OperationResult(action="server.reinstall", phase="acceptance", outcome="success", target={"server_id": server_id}),
         detail_key="admin_server.reinstall",
         detail_params={"server_id": server_id},
     )

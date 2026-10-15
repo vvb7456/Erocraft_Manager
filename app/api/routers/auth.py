@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from app.core.api_errors import ApiError
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import or_, select
@@ -19,6 +20,7 @@ from app.db.models.pterodactyl import PteroUser
 from app.db.repositories.users import user_repository
 from app.schemas.auth import LoginRequest, LoginResponse, LogoutResponse, MeResponse
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.services.pterodactyl_activity import get_request_ip, pterodactyl_activity_logger
 
 router = APIRouter(tags=["auth"])
@@ -34,7 +36,7 @@ async def login(
     username = payload.username.strip()
     password = payload.password
     if not username or not password:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="auth.credentials_required")
+        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, "auth.credentials_required")
 
     user = await user_repository.get_by_username_or_email(db, username)
     if not user or not user.check_password(password):
@@ -66,16 +68,16 @@ async def login(
                         db,
                         actor="system",
                         category="auth",
-                        status="info",
+                        operation=OperationResult(action="auth.login", phase="request", outcome="failed", target={"username": username}),
                         detail_key="login.email_not_verified",
                         detail_params={
                             "username": username,
                             "email": pending.email,
                         },
                     )
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="auth.email_not_verified",
+                    raise ApiError(
+                        status.HTTP_403_FORBIDDEN,
+                        "auth.email_not_verified",
                     )
 
         if user:
@@ -99,11 +101,11 @@ async def login(
             db,
             actor=user.username if user else "system",
             category="auth",
-            status="failure",
+            operation=OperationResult(action="auth.login", phase="request", outcome="failed", target={"username": username}),
             detail_key="login_failed",
             detail_params={"username": username},
         )
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="auth.invalid_credentials")
+        raise ApiError(status.HTTP_401_UNAUTHORIZED, "auth.invalid_credentials")
 
     request.session.clear()
     request.session[SESSION_USER_ID_KEY] = int(user.id)
@@ -125,7 +127,7 @@ async def login(
         db,
         actor=user.username,
         category="auth",
-        status="success",
+        operation=OperationResult(action="auth.login", phase="execution", outcome="success", target={"user_id": user.id}),
         detail_key="login_success",
         detail_params={"username": user.username},
     )
@@ -176,7 +178,7 @@ async def logout(
             db,
             actor=username,
             category="auth",
-            status="info",
+            operation=OperationResult(action="auth.logout", phase="execution", outcome="success", target={"username": username}),
             detail_key="logout",
             detail_params={"username": username},
         )

@@ -1,6 +1,7 @@
 """Schemas for admin user management routes."""
 
 from __future__ import annotations
+from app.core.contracts import OperationResult
 
 from typing import Literal
 
@@ -67,5 +68,6 @@ class CreateUserResponse(UserMessageResponse):
 
 
 class BatchUsersResponse(UserMessageResponse):
+    operation: OperationResult
     success: int
     failed: int

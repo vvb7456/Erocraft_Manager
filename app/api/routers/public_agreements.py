@@ -6,6 +6,7 @@ version body only; historical versions are admin-only.
 """
 
 from __future__ import annotations
+from app.core.api_errors import ApiError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,9 +50,9 @@ async def list_public_agreements(
     body for each agreement the caller must consent to.
     """
     if context not in ("register", "purchase"):
-        raise HTTPException(
+        raise ApiError(
             status.HTTP_400_BAD_REQUEST,
-            detail="agreements.invalid_context",
+            "agreements.invalid_context",
         )
     norm = _normalize_locale(locale)
     items = await agreements_svc.list_required(
@@ -80,7 +81,7 @@ async def get_public_agreement(
     norm = _normalize_locale(locale)
     out = await agreements_svc.public_view(db, slug, norm)
     if out is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail="agreements.not_found"
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, "agreements.not_found"
         )
     return out

@@ -1,6 +1,7 @@
 """Admin server management routes."""
 
 from __future__ import annotations
+from app.core.operation import batch_operation
 
 import asyncio
 import logging
@@ -38,6 +39,7 @@ from app.schemas.servers import (
     UpdateServerRequest,
 )
 from app.services.audit import log_manager_activity
+from app.core.contracts import ErrorInfo, OperationResult
 from app.services.billing._ids import gen_order_no
 from app.services.email import get_email_delay, get_site_url, load_template, render_template_body, send_email
 from app.services import server_lifecycle
@@ -478,7 +480,7 @@ async def create_server(
                         db,
                         actor=actor_username,
                         category="server",
-                        status="partial",
+                        operation=OperationResult(action="llm.provision", phase="execution", outcome="failed", target={"server_id": server_id}, facts={"server_created": True}, error=ErrorInfo(code="dependency.failed", detail=str(exc)[:200])),
                         detail_key="create_server_partial",
                         detail_params={
                             "actor": actor_username,
@@ -530,8 +532,8 @@ async def create_server(
         db,
         actor=actor_username,
         category="server",
-        status="success",
         detail_key="create_server",
+        operation=OperationResult(action="server.create", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_params=log_params,
     )
     return CreateServerResponse(
@@ -823,8 +825,8 @@ async def renew_server(
             db,
             actor=actor_username,
             category="server",
-            status="success",
             detail_key="set_server_permanent",
+            operation=OperationResult(action="server.set_permanent", phase="execution", outcome="success", target={"server_id": server_id}),
             detail_params=log_params,
         )
         return MessageResponse(message=f"已将 {server_name} 设为永久")
@@ -833,8 +835,8 @@ async def renew_server(
         db,
         actor=actor_username,
         category="server",
-        status="success",
         detail_key="renew_server",
+        operation=OperationResult(action="server.renew", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_params=log_params,
     )
     return MessageResponse(message=f"已续期至 {new_date.isoformat()}")
@@ -862,8 +864,8 @@ async def toggle_suspend(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
         detail_key="unsuspend_server" if was_suspended else "suspend_server",
+        operation=OperationResult(action="server.unsuspend" if was_suspended else "server.suspend", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_params={"actor": current_user.username, "server_name": server.name, "server_id": server_id},
     )
     return ToggleSuspendResponse(message=f"服务器已{action_text}", isSuspended=not was_suspended)
@@ -893,15 +895,17 @@ async def batch_servers(
                 await db.rollback()
                 errors += 1
 
+        operation = batch_operation(f"server.batch.{action}", {"requested_server_ids": server_ids}, success, errors)
         await log_manager_activity(
             db,
             actor=actor_username,
             category="server",
-            status="failure" if errors else "success",
             detail_key=f"batch_{action}",
+            operation=operation,
             detail_params={"success": success, "failed": errors},
         )
         return BatchServersResponse(
+            operation=operation,
             message=f"操作完成：成功 {success}，失败 {errors}",
             success=success,
             failed=errors,
@@ -943,15 +947,17 @@ async def batch_servers(
                 await db.rollback()
                 errors += 1
 
+        operation = batch_operation(f"server.batch.{action}", {"requested_server_ids": server_ids}, success, errors)
         await log_manager_activity(
             db,
             actor=actor_username,
             category="server",
-            status="failure" if errors else "success",
             detail_key="batch_renew",
+            operation=operation,
             detail_params={"success": success, "failed": errors},
         )
         return BatchServersResponse(
+            operation=operation,
             message=f"操作完成：成功 {success}，失败 {errors}",
             success=success,
             failed=errors,
@@ -968,15 +974,17 @@ async def batch_servers(
                 await db.rollback()
                 errors += 1
 
+        operation = batch_operation(f"server.batch.{action}", {"requested_server_ids": server_ids}, success, errors)
         await log_manager_activity(
             db,
             actor=actor_username,
             category="server",
-            status="failure" if errors else "success",
             detail_key="batch_delete",
+            operation=operation,
             detail_params={"success": success, "failed": errors},
         )
         return BatchServersResponse(
+            operation=operation,
             message=f"操作完成：成功 {success}，失败 {errors}",
             success=success,
             failed=errors,
@@ -1005,8 +1013,8 @@ async def batch_servers(
                     db,
                     actor=actor_username,
                     category="server",
-                    status="success",
                     detail_key="admin_server.plan.update",
+                    operation=OperationResult(action="server.plan.update", phase="execution", outcome="success", target={"server_id": server.id}),
                     detail_params={
                         "server_name": server.name,
                         "server_id": server.id,
@@ -1024,6 +1032,7 @@ async def batch_servers(
                 logger.exception("Failed to update plan for server %s", server.id)
 
         return BatchServersResponse(
+            operation=batch_operation(f"server.batch.{action}", {"requested_server_ids": server_ids}, success, errors),
             message=f"操作完成：成功 {success}，失败 {errors}",
             success=success,
             failed=errors,
@@ -1080,15 +1089,17 @@ async def batch_servers(
         if delay > 0 and index < len(servers) - 1:
             await asyncio.sleep(delay)
 
+    operation = batch_operation(f"server.batch.{action}", {"requested_server_ids": server_ids}, success, errors)
     await log_manager_activity(
         db,
         actor=actor_username,
         category="server",
-        status="failure" if errors else "success",
         detail_key="batch_email",
+        operation=operation,
         detail_params={"success": success, "failed": errors},
     )
     return BatchServersResponse(
+        operation=operation,
         message=f"操作完成：成功 {success}，失败 {errors}",
         success=success,
         failed=errors,
@@ -1112,8 +1123,8 @@ async def delete_server(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
         detail_key="delete_server",
+        operation=OperationResult(action="server.delete", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_params={"actor": current_user.username, "server_name": server.name, "server_id": server_id},
     )
     if force:
@@ -1158,8 +1169,8 @@ async def update_server(
         db,
         actor=actor_username,
         category="server",
-        status="success",
         detail_key="set_expiry",
+        operation=OperationResult(action="server.expiry.update", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_params={"actor": actor_username, "server_name": server_name, "server_id": server_id, "date": new_date.isoformat()},
     )
     return MessageResponse(message=f"到期日期已更新为 {new_date.isoformat()}")
@@ -1194,8 +1205,8 @@ async def update_server_plan(
         db,
         actor=current_user.username,
         category="server",
-        status="success",
         detail_key="admin_server.plan.update",
+        operation=OperationResult(action="server.plan.update", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_params={
             "server_name": server.name,
             "server_id": server_id,

@@ -61,7 +61,7 @@ interface Order {
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
 const route = useRoute()
-const { get } = useApiFetch()
+const { get, handleError } = useApiFetch()
 const { formatDateTime: formatDate } = useFormatDate()
 
 const orders = ref<Order[]>([])
@@ -96,7 +96,7 @@ function startPolling() {
       stopPolling()
       return
     }
-    loadOrders(true)
+    void loadOrders(true).catch(handleError)
   }, 5000)
 }
 
@@ -108,13 +108,12 @@ function stopPolling() {
 }
 
 async function loadOrders(silent = false) {
-  const data = await get<Order[]>('/api/user/orders', { silent })
+  const data = await get<Order[]>('/api/user/orders', { silent }).finally(() => { initialLoading.value = false })
   if (data) {
     orders.value = data
     if (hasActiveOrders.value) startPolling()
     else stopPolling()
   }
-  initialLoading.value = false
 }
 
 const statusOptions = computed(() => [

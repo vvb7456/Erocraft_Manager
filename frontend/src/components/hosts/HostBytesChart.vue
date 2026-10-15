@@ -43,7 +43,7 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n({ useScope: 'global' })
-const { get } = useApiFetch()
+const { get, handleError } = useApiFetch()
 
 type Point = [number, number]
 
@@ -54,14 +54,18 @@ async function fetchAll() {
   if (!Number.isFinite(props.hostId)) return
   loading.value = true
   try {
-    const results = await Promise.all(
+    const results = await Promise.allSettled(
       props.series.map(s =>
         get<{ series: Point[] }>(
           `/api/admin/hosts/${props.hostId}/history/metrics?metric=${s.metric}&window=${props.window}`,
         ).then(d => d?.series || []),
       ),
     )
-    data.value = results
+    data.value = results.map(result => {
+      if (result.status === 'fulfilled') return result.value
+      handleError(result.reason)
+      return []
+    })
   } finally {
     loading.value = false
   }

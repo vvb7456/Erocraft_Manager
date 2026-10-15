@@ -92,13 +92,12 @@ useDirtyFormSection({ name: 'wecom-templates', isDirty, save, discard }, dirtyFo
 
 async function load() {
   loading.value = true
-  const data = await get<Templates>('/api/admin/notifications/wecom-templates')
+  const data = await get<Templates>('/api/admin/notifications/wecom-templates').finally(() => { loading.value = false })
   if (data) {
     all.value = data
     savedAll.value = structuredClone(data)
     schedulePreview()
   }
-  loading.value = false
 }
 
 watch([() => props.templateKey, () => current.value?.title, () => current.value?.body], () => {

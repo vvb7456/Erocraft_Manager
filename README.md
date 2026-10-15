@@ -345,6 +345,15 @@ curl -fsS http://127.0.0.1:5001/api/version                  # health check
 
 ---
 
+## 4. 接口结果与错误
+
+- 网页和付款小程序接口成功时直接返回业务数据；204 没有响应体。失败使用 `application/problem+json`，固定包含 `type`、`title`、`status`、`code`，按需提供错误详情、字段问题和业务结果。
+- 错误码集中在 `contracts/error-codes.json`。修改后运行 `python3 scripts/generate-contracts.py`；CI 使用 `--check` 检查生成物与中英文文案一致。
+- 前端通过 `useApiFetch` 请求接口：成功返回数据，失败抛出 `ApiError`。页面选择提示方式；只有 `auth.session_required` 表示需要重新登录。
+- Agent 的 `/v1/commands` 使用内部 RPC：HTTP 错误表示请求没有正常处理，HTTP 200 中的 `ok` 表示命令结果，失败原因放在结构化 `error` 中。命令失败是否中止后续业务，仍由调用方决定。
+- 可审计结果 `operation` 明确区分请求处理、实际执行、诊断检查和后台受理。检查结论读取 `facts`，批量读取成功／失败数，独立子动作读取 `children`；不能只凭 HTTP 200 或旧日志状态认定业务全部成功。
+- 前端、Manager、Agent 和付款小程序按同一契约协调发布，旧浏览器页面需要刷新。
+
 ## License
 
 See [LICENSE](LICENSE).

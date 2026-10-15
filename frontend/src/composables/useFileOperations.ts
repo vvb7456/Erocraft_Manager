@@ -9,7 +9,7 @@ import { validateFileName, sanitizeMovePath } from '@/utils/path'
 
 export function useFileOperations(serverId: Ref<number | undefined>) {
   const { t } = useI18n({ useScope: 'global' })
-  const { get, post } = useApiFetch()
+  const { get, post, handleError } = useApiFetch()
   const { toast } = useToast()
   const { confirm } = useConfirm()
   const { reportServerActivity } = useServerActivityReporter(serverId)
@@ -169,8 +169,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
     const data = await get<FileEntry[]>(
       `/api/user/servers/${serverId.value}/files/list?directory=${encodeURIComponent(target)}`,
       { silent: true },
-    )
-    filesLoading.value = false
+    ).finally(() => { filesLoading.value = false })
     // Commit the new path AND the new items together, so the ".." row (which
     // is driven by currentPath) and the file rows always appear in sync —
     // never one before the other.
@@ -240,16 +239,13 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
     const filePath = currentPath.value.replace(/\/$/, '') + '/' + name
     operating.value = true
     try {
-      const res = await post(
+      await post<void>(
         `/api/user/servers/${serverId.value}/files/write?file=${encodeURIComponent(filePath)}`,
         { content: '' },
       )
-      if (res !== undefined) {
-        newFileOpen.value = false
-        await loadFiles()
-        return newFileName.value.trim()
-      }
-      return null
+      newFileOpen.value = false
+      await loadFiles()
+      return newFileName.value.trim()
     } finally {
       operating.value = false
     }
@@ -272,7 +268,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
         path: currentPath.value,
       })
       newFolderOpen.value = false
-      loadFiles()
+      void loadFiles().catch(handleError)
       onRefreshTree?.()
     } finally {
       operating.value = false
@@ -298,7 +294,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
         to: name,
       })
       renameOpen.value = false
-      loadFiles()
+      void loadFiles().catch(handleError)
       onRefreshTree?.()
     } finally {
       operating.value = false
@@ -326,7 +322,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
         to: `${destDir}/${moveFrom.value}`,
       })
       moveOpen.value = false
-      loadFiles()
+      void loadFiles().catch(handleError)
     } finally {
       operating.value = false
     }
@@ -347,7 +343,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
         root: currentPath.value,
         files: fileNames,
       })
-      loadFiles()
+      void loadFiles().catch(handleError)
       onRefreshTree?.()
     } finally {
       operating.value = false
@@ -475,7 +471,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
       })
     }
 
-    loadFiles()
+    void loadFiles().catch(handleError)
     setTimeout(() => {
       tasks.value = []
       uploadPanelOpen.value = false
@@ -499,7 +495,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
       })
       taskEntry.status = 'done' as any
       taskEntry.progress = 100
-      loadFiles()
+      void loadFiles().catch(handleError)
     } catch {
       taskEntry.status = 'error' as any
     } finally {
@@ -525,7 +521,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
       })
       taskEntry.status = 'done' as any
       taskEntry.progress = 100
-      loadFiles()
+      void loadFiles().catch(handleError)
       onRefreshTree?.()
     } catch {
       taskEntry.status = 'error' as any
@@ -555,7 +551,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
       })
     }
     moveOpen.value = false
-    loadFiles()
+    void loadFiles().catch(handleError)
   }
 
   // ── Drag & Drop ──

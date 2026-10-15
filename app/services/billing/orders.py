@@ -40,6 +40,7 @@ from app.db.models.pterodactyl import PteroServer, PteroUser
 from app.schemas.billing_orders import CreateOrderRequest
 from app.services import panel_db, server_lifecycle
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.services.billing import incidents
 from app.services.billing._ids import gen_invoice_no, gen_order_no
 from app.services.billing.gateway import registry as gateway_registry
@@ -536,7 +537,8 @@ async def create_order(
 
     if gateway.code == "wechat_pay":
         await log_manager_activity(
-            db, actor=user.username, category="billing", status="success",
+            db, actor=user.username, category="billing",
+            operation=OperationResult(action="billing.order.create", phase="execution", outcome="success", target={"order_id": order.id}),
             detail_key="billing.order.created",
             detail_params={"order_id": order.id, "order_no": order_no, "order_kind": payload.kind,
                            "plan_code": plan.code, "amount_fen": payable_total_fen,
@@ -624,7 +626,7 @@ async def create_order(
         db,
         actor=user.username,
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.order.create", phase="execution", outcome="success", target={"order_id": order.id}),
         detail_key="billing.order.created",
         detail_params={
             "order_id": order.id,
@@ -1077,7 +1079,7 @@ async def cancel_order(
             db,
             actor=user.username,
             category="billing",
-            status="success",
+            operation=OperationResult(action="billing.order.cancel", phase="execution", outcome="success", target={"order_id": order_id}),
             detail_key="billing.order.cancelled",
             detail_params={"order_id": order_id},
         )

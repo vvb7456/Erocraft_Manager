@@ -229,6 +229,7 @@
       "forceApplyConfirm": "确认强制开通 {orderNo}？重试计数将清零并立即重试开通。",
       "forceApplyOk": "开通成功",
       "forceApplyFail": "开通失败",
+      "forceApplyScheduled": "已安排重试，请稍后查看订单状态",
       "forceClose": "强制关单",
       "forceCloseNote": "关单备注",
       "forceCloseOk": "已关单",

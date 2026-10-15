@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useFormatDate } from '@/composables/useFormatDate'
+import { useActivityLog } from '@/composables/useActivityLog'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -14,7 +15,8 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 
 defineOptions({ name: 'ActivityLogsPage' })
 
-const { t, te, tm, rt } = useI18n({ useScope: 'global' })
+const { t, te } = useI18n({ useScope: 'global' })
+const { detailLabel } = useActivityLog()
 const { get, loading } = useApiFetch()
 const { formatDateTime } = useFormatDate()
 
@@ -24,7 +26,7 @@ interface LogItem {
   timestamp: string | null
   actor: string
   category: string
-  status: string
+  status: 'success' | 'failed'
   detailKey: string | null
   detailParams: Record<string, unknown>
 }
@@ -72,7 +74,7 @@ async function loadLogs() {
 onMounted(loadLogs)
 watch([filterActor, filterCategory, filterStatus], () => {
   page.value = 1
-  loadLogs()
+  return loadLogs()
 })
 
 // ── Helpers ──
@@ -85,10 +87,7 @@ function formatTime(ts: string | null): string {
 
 
 function statusColor(status: string): string {
-  if (status === 'success') return 'var(--green)'
-  if (status === 'failed') return 'var(--red)'
-  if (status === 'partial') return 'var(--amber)'
-  return 'var(--blue)'
+  return status === 'success' ? 'var(--green)' : 'var(--red)'
 }
 function actorLabel(actor: string): string {
   if (actor === 'system') return t('logs.actor.system')
@@ -96,73 +95,12 @@ function actorLabel(actor: string): string {
   return actor
 }
 
-function formatDurationSeconds(sec: number): string {
-  if (!Number.isFinite(sec) || sec < 0) sec = 0
-  sec = Math.round(sec)
-  if (sec < 60) return t('logs.duration.seconds', { n: sec })
-  if (sec < 3600) {
-    const m = Math.floor(sec / 60)
-    const s = sec % 60
-    return s > 0
-      ? t('logs.duration.minutesSeconds', { m, s })
-      : t('logs.duration.minutes', { n: m })
-  }
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  return m > 0
-    ? t('logs.duration.hoursMinutes', { h, m })
-    : t('logs.duration.hours', { n: h })
-}
-
 function categoryLabel(category: string): string {
   const key = `logs.category.${category}`
   return te(key) ? t(key) : category
 }
 
-function detailLabel(log: LogItem): string {
-  if (!log.detailKey) return '—'
-  const params = { ...(log.detailParams ?? {}) }
-  if (typeof params.template === 'string') {
-    params.template = t(`emailTemplates.${params.template}.title`, params.template)
-  }
-  if (typeof params.type === 'string') {
-    params.type = t(`logs.reminderType.${params.type}`, params.type)
-  }
-  if (typeof params.kind === 'string') {
-    const kindKey = `hosts.kind.${params.kind}`
-    if (te(kindKey)) params.kind = t(kindKey)
-  }
-  if (typeof params.language === 'string') {
-    params.language = t(`logs.language.${params.language}`, params.language)
-  }
-  if (typeof params.alert_type === 'string') {
-    const k = `hosts.alerting.types.${params.alert_type}`
-    if (te(k)) params.alert_type = t(k)
-  }
-  if (typeof params.severity === 'string') {
-    const k = `logs.severity.${params.severity}`
-    if (te(k)) params.severity = t(k)
-  }
-  if (typeof params.duration_seconds === 'number') {
-    params.duration_human = formatDurationSeconds(params.duration_seconds)
-  }
-
-  // detail_key usually contains dots (e.g. "node.wings_config.update").
-  // Treat it as a flat key under logs.detail first to avoid path-splitting misses.
-  const detailMap = tm('logs.detail') as Record<string, unknown>
-  const flatMessage = detailMap?.[log.detailKey]
-  if (typeof flatMessage === 'string') {
-    return rt(flatMessage, params)
-  }
-
-  const escapedPath = `logs.detail.${log.detailKey.replace(/\./g, '\\.')}`
-  if (te(escapedPath)) {
-    return t(escapedPath, params)
-  }
-  return t('logs.detail.unknown', { key: log.detailKey })
-}
-
-const statusOptions = ['success', 'failed', 'partial', 'info']
+const statusOptions = ['success', 'failed']
 
 // ── Mobile filter sheet ──
 const mobileFilterOpen = ref(false)
@@ -249,8 +187,8 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       :loading="loading"
       empty-icon="history"
       :empty-text="t('logs.empty')"
-      @update:page="v => { page = v; loadLogs() }"
-      @update:per-page="v => { perPage = v; page = 1; loadLogs() }"
+      @update:page="v => { page = v; return loadLogs() }"
+      @update:per-page="v => { perPage = v; page = 1; return loadLogs() }"
     >
       <template #header>
         <th class="col-time">{{ t('logs.table.time') }}</th>

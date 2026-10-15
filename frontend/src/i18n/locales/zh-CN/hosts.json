@@ -196,6 +196,7 @@
       "desc": "管理节点连接、资源容量与服务器运行环境。",
       "notWings": "该主机不是 Wings 节点",
       "saved": "已保存（{n} 个字段变更）",
+      "savedNotApplied": "配置已保存，但节点未能应用，请检查节点状态",
       "cancel": "取消",
       "serviceError": "Wings 服务状态不可达：{err}",
       "serviceState": {

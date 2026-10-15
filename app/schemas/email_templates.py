@@ -79,4 +79,3 @@ class TestEmailRequest(BaseModel):
 
 class TestEmailResponse(BaseModel):
     ok: bool
-    error: str | None = None

@@ -63,7 +63,7 @@ interface Coupon {
 interface CouponListResponse { items: Coupon[]; total: number }
 
 const { t } = useI18n({ useScope: 'global' })
-const { get } = useApiFetch()
+const { get, handleError } = useApiFetch()
 const { copy } = useClipboard()
 const { formatDate, formatDateTime } = useFormatDate()
 const appStore = useAppStore()
@@ -75,13 +75,16 @@ const coupons = ref<Coupon[]>([])
 
 async function load() {
   loading.value = true
-  const [iv, cp] = await Promise.all([
-    get<InviteSummary>('/api/user/invite', { silent: true }),
-    get<CouponListResponse>('/api/user/coupons', { silent: true }),
-  ])
-  if (iv) invite.value = iv
-  if (cp?.items) coupons.value = cp.items
-  loading.value = false
+  try {
+    const results = await Promise.allSettled([
+      get<InviteSummary>('/api/user/invite', { silent: true }),
+      get<CouponListResponse>('/api/user/coupons', { silent: true }),
+    ])
+    const [iv, cp] = results
+    if (iv.status === 'fulfilled') invite.value = iv.value
+    if (cp.status === 'fulfilled') coupons.value = cp.value.items
+    for (const result of results) if (result.status === 'rejected') handleError(result.reason)
+  } finally { loading.value = false }
 }
 
 onMounted(load)

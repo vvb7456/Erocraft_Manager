@@ -119,7 +119,7 @@ watch([currentPassword, newPassword, confirmPassword], () => {
 
 async function loadProfile() {
   initialLoading.value = true
-  const data = await get<UserProfile>('/api/user/me')
+  const data = await get<UserProfile>('/api/user/me').finally(() => { initialLoading.value = false })
   if (data) {
     profile.value = data
     selectedLanguage.value = data.language === 'zh' ? 'zh' : 'en'
@@ -131,7 +131,6 @@ async function loadProfile() {
       language: data.language,
     })
   }
-  initialLoading.value = false
 }
 
 async function submitEmailChange() {
@@ -174,7 +173,7 @@ async function submitPasswordChange() {
 
   passwordLoading.value = true
   try {
-    const response = await raw('/api/user/account', {
+    await raw('/api/user/account', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -182,15 +181,6 @@ async function submitPasswordChange() {
         newPassword: newPassword.value,
       }),
     })
-    if (!response) return
-
-    let payload: MessageResponse | null = null
-    try {
-      payload = await response.json() as MessageResponse
-    } catch {
-      payload = null
-    }
-
     passwordBanner.value = t('account.password.success')
     toast(passwordBanner.value, 'success')
     currentPassword.value = ''
@@ -213,11 +203,6 @@ async function changeLanguage(value: unknown) {
   try {
     const data = await patch<UserProfile>('/api/user/account/language', { language: value })
     if (app.sessionUser?.username !== username) return
-    if (!data) {
-      selectedLanguage.value = previousLanguage
-      if (locale.value === nextLocale) switchLanguage(previousLocale)
-      return
-    }
     profile.value = data
     selectedLanguage.value = data.language === 'zh' ? 'zh' : 'en'
     app.setSessionUser({
@@ -228,6 +213,10 @@ async function changeLanguage(value: unknown) {
       language: data.language,
     })
     if (locale.value === nextLocale) switchLanguage(backendToFrontendLocale(data.language))
+  } catch (failure) {
+    selectedLanguage.value = previousLanguage
+    if (locale.value === nextLocale) switchLanguage(previousLocale)
+    throw failure
   } finally {
     languageLoading.value = false
   }

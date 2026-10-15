@@ -20,6 +20,7 @@ from app.core.settings_store import get_settings_store
 from app.db.models.pterodactyl import PteroUser
 from app.schemas.settings import SettingsMessageResponse
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 
 router = APIRouter(prefix="/admin", tags=["settings"])
 
@@ -71,7 +72,7 @@ async def settings_save(
         db,
         actor=current_user.username,
         category="settings",
-        status="success",
+        operation=OperationResult(action="settings.update", phase="execution", outcome="success"),
         detail_key="settings_change",
         detail_params={"actor": current_user.username},
     )
@@ -99,7 +100,7 @@ async def automation_save(
         db,
         actor=current_user.username,
         category="settings",
-        status="success",
+        operation=OperationResult(action="automation.settings.update", phase="execution", outcome="success"),
         detail_key="automation_settings_change",
         detail_params={"actor": current_user.username},
     )
@@ -127,7 +128,7 @@ async def monitoring_settings_save(
         db,
         actor=current_user.username,
         category="settings",
-        status="success",
+        operation=OperationResult(action="monitoring.settings.update", phase="execution", outcome="success"),
         detail_key="monitoring_settings_change",
         detail_params={"actor": current_user.username},
     )

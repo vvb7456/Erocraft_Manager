@@ -28,7 +28,7 @@ defineOptions({ name: 'UserServersPage' })
 
 const { t, te } = useI18n({ useScope: 'global' })
 const router = useRouter()
-const { get } = useApiFetch()
+const { get, handleError } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 const resourceStore = useServerResourceStore()
@@ -79,7 +79,7 @@ const paginated = computed(() => {
 // ── Load data ──
 async function loadServers() {
   const scope = 'owner'
-  const data = await get<Server[]>(`/api/user/servers?scope=${scope}`)
+  const data = await get<Server[]>(`/api/user/servers?scope=${scope}`).finally(() => { initialLoading.value = false })
   if (data) {
     servers.value = data
     // Subscribe to store with 5s interval (faster than sidebar's 10s)
@@ -88,11 +88,10 @@ async function loadServers() {
       resourceStore.subscribe('serverList', ids, 5000)
     }
   }
-  initialLoading.value = false
 }
 
 onMounted(() => {
-  loadServers()
+  void loadServers().catch(handleError)
 })
 
 onBeforeUnmount(() => {
@@ -105,7 +104,7 @@ const hasInstalling = computed(() => servers.value.some(s => s.isInstalling))
 let installPollTimer: ReturnType<typeof setInterval> | null = null
 watch(hasInstalling, (val) => {
   if (val && !installPollTimer) {
-    installPollTimer = setInterval(loadServers, 10000)
+    installPollTimer = setInterval(() => { void loadServers().catch(handleError) }, 10000)
   } else if (!val && installPollTimer) {
     clearInterval(installPollTimer)
     installPollTimer = null

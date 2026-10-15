@@ -19,6 +19,7 @@ credentials path + protocol. See
 """
 
 from __future__ import annotations
+from ..command_errors import CommandExecutionError
 
 import asyncio
 import base64
@@ -126,7 +127,7 @@ async def setup(*, force: bool = False) -> dict[str, Any]:
     """
     version = await detect_version()
     if version is None:
-        raise RuntimeError(
+        raise CommandExecutionError(
             "cloudflared binary not found; install via "
             "`apt-get install -y cloudflared` (or download the .deb from "
             "https://pkg.cloudflare.com/) before running this command"
@@ -143,7 +144,7 @@ async def setup(*, force: bool = False) -> dict[str, Any]:
         unit_changed = True
         rc, _, err = await _run(["systemctl", "daemon-reload"])
         if rc != 0:
-            raise RuntimeError(f"systemctl daemon-reload failed: {err.strip()}")
+            raise CommandExecutionError(f"systemctl daemon-reload failed: {err.strip()}")
 
     return {"version": version, "unit_written": unit_changed}
 
@@ -223,7 +224,7 @@ async def restart_service(timeout: float = 30.0) -> dict[str, Any]:
         ["systemctl", "restart", SERVICE_NAME], timeout=timeout,
     )
     if rc != 0:
-        raise RuntimeError(
+        raise CommandExecutionError(
             f"systemctl restart {SERVICE_NAME} rc={rc}: {err.strip() or out.strip()}"
         )
     return {"rc": rc, "stdout": out.strip(), "stderr": err.strip(), "method": "restart"}
@@ -234,7 +235,7 @@ async def enable_and_start(timeout: float = 30.0) -> dict[str, Any]:
         ["systemctl", "enable", "--now", SERVICE_NAME], timeout=timeout,
     )
     if rc != 0:
-        raise RuntimeError(
+        raise CommandExecutionError(
             f"systemctl enable --now {SERVICE_NAME} rc={rc}: {err.strip() or out.strip()}"
         )
     return {"rc": rc, "stdout": out.strip(), "stderr": err.strip()}

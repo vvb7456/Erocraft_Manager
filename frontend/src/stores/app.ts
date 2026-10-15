@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { ApiError, fetchApi, readApiJson } from '@/composables/apiClient'
 import { computed, ref } from 'vue'
 
 const DEFAULT_BANNER_URL = '/banner.png'
@@ -86,17 +87,19 @@ export const useAppStore = defineStore('app', () => {
       return await sessionUserPromise
     }
 
-    sessionUserPromise = fetch('/api/me')
+    sessionUserPromise = fetchApi('/api/me')
       .then(async (res) => {
-        if (!res.ok) {
-          clearSessionUser()
-          return null
-        }
-        const data = await res.json() as SessionUser
+        const data = await readApiJson<SessionUser>(res)
         setSessionUser(data)
         return data
       })
-      .catch(() => null)
+      .catch(failure => {
+        if (failure instanceof ApiError && failure.status === 401 && failure.code === 'auth.session_required') {
+          clearSessionUser()
+          return null
+        }
+        throw failure
+      })
       .finally(() => {
         sessionUserPromise = null
       })

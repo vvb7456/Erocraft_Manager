@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { ErrorInfo } from '@/types/api'
+import { errorInfoMessage } from '@/composables/apiClient'
 // HostTunnelPane — Cloudflare Tunnel admin tab.
 //
 // Per docs/ADMIN_HOST_TUNNEL_DESIGN.md:
@@ -69,7 +71,7 @@ interface ServerTunnelRow {
 
 const host = inject<Ref<HostDetail | null>>('hostDetail')!
 const { t } = useI18n({ useScope: 'global' })
-const { get, post, put, del } = useApiFetch()
+const { get, post, put, del, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 const { formatDateTime: formatTime } = useFormatDate()
@@ -135,6 +137,8 @@ async function loadDetail() {
       `/api/admin/hosts/${host.value.id}/tunnel`, { silent: true },
     )
     detail.value = data
+  } catch (failure) {
+    handleError(failure)
   } finally {
     loading.value = false
   }
@@ -142,7 +146,7 @@ async function loadDetail() {
 }
 
 watch(host, (h) => {
-  if (h) void loadDetail()
+  if (h) void loadDetail().catch(handleError)
 }, { immediate: true })
 
 // ---------------------------------------------------------------
@@ -297,7 +301,7 @@ async function submitUninstall() {
   if (!host.value || !canUninstall.value) return
   uninstalling.value = true
   try {
-    const r = await del<{ ok: boolean; agent_ok: boolean; agent_error: string | null }>(
+    const r = await del<{ ok: boolean; agent_ok: boolean; agent_error: ErrorInfo | null }>(
       `/api/admin/hosts/${host.value.id}/tunnel`,
     )
     if (r) {
@@ -306,7 +310,7 @@ async function submitUninstall() {
       serverTotalPages.value = 1
       uninstallOpen.value = false
       if (r.agent_ok === false) {
-        toast(t('hosts.tunnel.uninstallPartial', { err: r.agent_error || '?' }), 'warning')
+        toast(t('hosts.tunnel.uninstallPartial', { err: r.agent_error ? errorInfoMessage(r.agent_error) : '?' }), 'warning')
       } else {
         toast(t('hosts.tunnel.uninstallOk'), 'success')
       }

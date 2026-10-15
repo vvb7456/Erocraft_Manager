@@ -54,6 +54,7 @@ export interface AdminPlan {
 </script>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/composables/apiClient'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -95,7 +96,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, raw } = useApiFetch()
+const { get, raw, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 
@@ -346,9 +347,9 @@ watch(() => props.modelValue, async (open) => {
   } else {
     // For edit/duplicate, ensure egg detail is loaded so docker image
     // options resolve correctly when computing dock_image_custom.
-    await loadEggDetail(props.plan.egg_id)
+    await loadEggDetail(props.plan.egg_id).catch(handleError)
     form.value = fromAdminPlan(props.plan, props.mode)
-    if (props.plan.nest_id) await loadEggVariables(props.plan.egg_id)
+    if (props.plan.nest_id) await loadEggVariables(props.plan.egg_id).catch(handleError)
   }
   orig.value = JSON.stringify(form.value)
 })
@@ -356,7 +357,7 @@ watch(() => props.modelValue, async (open) => {
 // Watch egg change to (re)load variables + docker images
 watch(() => form.value.egg_id, async (newId, oldId) => {
   if (newId == null || newId === oldId) return
-  await loadEggDetail(newId)
+  await loadEggDetail(newId).catch(handleError)
   await loadEggVariables(newId)
 })
 
@@ -368,8 +369,10 @@ async function loadEggVariables(eggId: number) {
   const data = await get<{ variables: EggVariable[] }>(
     `/api/admin/resources/nests/${nestId}/eggs/${eggId}/variables`,
     { silent: true },
-  )
-  loadingEggVars.value = false
+  ).catch(failure => {
+    eggVariables.value = []
+    throw failure
+  }).finally(() => { loadingEggVars.value = false })
   if (!data?.variables) {
     eggVariables.value = []
     return
@@ -600,28 +603,21 @@ async function doSave() {
     : '/api/admin/billing/plans'
   const method = props.mode === 'edit' ? 'PUT' : 'POST'
 
-  const res = await raw(url, {
-    method,
-    body: JSON.stringify(payload),
-    headers: { 'Content-Type': 'application/json' },
-    silent: true,
-  })
-  saving.value = false
-
-  if (res && res.ok) {
+  try {
+    const res = await raw(url, {
+      method,
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/json' },
+      silent: true,
+    })
     const saved = await res.json() as AdminPlan
     emit('saved', saved)
     toast(t('billing.admin.plans.saveSuccess'), 'success')
     closeModal(true)
-  } else if (res) {
-    let detail = `HTTP ${res.status}`
-    try {
-      const body = await res.json()
-      detail = body.detail || body.message || detail
-    } catch { /* ignore */ }
-    saveError.value = detail
-  } else {
-    saveError.value = t('common.apiErrors.network')
+  } catch (failure) {
+    saveError.value = apiErrorMessage(failure)
+  } finally {
+    saving.value = false
   }
 }
 

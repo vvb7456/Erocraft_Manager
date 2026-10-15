@@ -9,6 +9,7 @@ from typing import Any, Mapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.manager import ManagerActivityLog
+from app.core.contracts import OperationResult
 
 logger = logging.getLogger(__name__)
 
@@ -31,22 +32,6 @@ _VALID_CATEGORIES: frozenset[str] = frozenset(
     }
 )
 
-_STATUS_MAP = {
-    "success": "success",
-    "ok": "success",          # legacy alias used by some routers
-    "failure": "failed",
-    "fail": "failed",
-    "error": "failed",
-    "failed": "failed",
-    "partial": "partial",
-    "warning": "partial",     # legacy alias
-    "info": "info",
-}
-
-
-def _normalize_status(status: str) -> str:
-    return _STATUS_MAP.get(status, "info")
-
 
 def _normalize_category(category: str | None) -> str:
     if not category:
@@ -60,27 +45,28 @@ async def log_manager_activity(
     *,
     actor: str,
     category: str | None = None,
-    status: str,
+    operation: OperationResult,
     detail_key: str,
     detail_params: Mapping[str, Any] | None = None,
 ) -> None:
     try:
+        params = dict(detail_params or {})
+        params["operation"] = operation.model_dump(exclude_none=True, exclude_defaults=True)
         db.add(
             ManagerActivityLog(
                 actor=actor[:100],
                 category=_normalize_category(category)[:32],
-                status=_normalize_status(status)[:50],
+                status=operation.outcome,
                 detail_key=detail_key[:120],
                 detail_params=json.dumps(
-                    dict(detail_params or {}), ensure_ascii=False, default=str
+                    params, ensure_ascii=False, default=str
                 ),
             )
         )
         from app.services.notifications.events import audit_failure
 
         await audit_failure(
-            db, actor=actor, category=_normalize_category(category), status=_normalize_status(status),
-            detail_key=detail_key, params=detail_params or {},
+            db, actor=actor, category=_normalize_category(category), operation=operation,
         )
         await db.commit()
     except Exception:

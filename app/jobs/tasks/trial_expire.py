@@ -15,6 +15,7 @@ from app.db.repositories.servers import server_repository
 from app.db.session import get_session_factory
 from app.jobs.tasks.common import get_job_today
 from app.services.audit import log_manager_activity
+from app.core.contracts import ErrorInfo, OperationResult
 from app.services import server_lifecycle
 from app.services.server_lifecycle import LifecycleError
 
@@ -28,7 +29,7 @@ async def run_trial_expire_task() -> None:
             db,
             actor="system",
             category="automation",
-            status="info",
+            operation=OperationResult(action="automation.trial_expire.start", phase="execution", outcome="success"),
             detail_key="automated_trial_expire_started",
         )
 
@@ -40,7 +41,7 @@ async def run_trial_expire_task() -> None:
                     db,
                     actor="system",
                     category="automation",
-                    status="info",
+                    operation=OperationResult(action="automation.trial_expire", phase="execution", outcome="success", succeeded=0, failed=0),
                     detail_key="automated_trial_expire_noop",
                 )
                 return
@@ -63,7 +64,7 @@ async def run_trial_expire_task() -> None:
                 db,
                 actor="system",
                 category="automation",
-                status="success" if success_count or not failed_ids else "failure",
+                operation=OperationResult(action="automation.trial_expire", phase="execution", outcome="failed" if failed_ids else "success", succeeded=success_count, failed=len(failed_ids)),
                 detail_key="automated_trial_expire_finished",
                 detail_params={
                     "success": success_count,
@@ -77,7 +78,7 @@ async def run_trial_expire_task() -> None:
                 db,
                 actor="system",
                 category="automation",
-                status="failure",
+                operation=OperationResult(action="automation.trial_expire", phase="execution", outcome="failed", error=ErrorInfo(code="system.internal_error", detail=str(exc))),
                 detail_key="automated_trial_expire_failed",
                 detail_params={"error": str(exc)},
             )

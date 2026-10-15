@@ -11,6 +11,7 @@ from typing import Any
 
 from ..collectors import certificates, cloudflared_service, wings_service
 from ..config import AgentConfig
+from ..command_errors import CommandExecutionError
 
 
 # Module-level config holder. ``set_config`` is called from
@@ -28,7 +29,7 @@ def _wings_cfg() -> AgentConfig:
     if _cfg is None:
         raise RuntimeError("agent config not initialized")
     if not _cfg.agent.is_wings:
-        raise RuntimeError(
+        raise ValueError(
             f"this command is only available on wings_node agents "
             f"(current role: {_cfg.agent.role!r})"
         )
@@ -39,13 +40,20 @@ async def ping(params: dict) -> str:
     return "pong"
 
 
+def _timeout(params: dict) -> float:
+    try:
+        return float(params.get("timeout", 30.0))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("timeout must be a number") from exc
+
+
 async def wings_restart(params: dict) -> dict:
     """Restart the wings systemd unit."""
     cfg = _wings_cfg()
-    timeout = float(params.get("timeout", 30.0))
+    timeout = _timeout(params)
     result = await wings_service.restart(cfg.wings.service_name, timeout=timeout)
     if result["rc"] != 0:
-        raise RuntimeError(
+        raise CommandExecutionError(
             f"systemctl restart {result['service_name']} rc={result['rc']}: "
             f"{result['stderr'] or result['stdout']}"
         )
@@ -65,15 +73,19 @@ async def cert_install(params: dict) -> dict:
         raise RuntimeError("agent config not initialized")
     target_name = params.get("target_name")
     cert_id = params.get("cert_id")
+    try:
+        cert_id = int(cert_id) if cert_id is not None else None
+    except (TypeError, ValueError) as exc:
+        raise ValueError("cert_id must be an integer") from exc
     return await certificates.install(
         config_path=_cfg.wings.config_path,
         service_name=_cfg.wings.service_name,
         targets=_cfg.cert_install_targets,
         target_name=str(target_name) if target_name else "",
-        cert_id=int(cert_id) if cert_id is not None else None,
+        cert_id=cert_id,
         fullchain_pem=str(params.get("fullchain_pem") or ""),
         privkey_pem=str(params.get("privkey_pem") or ""),
-        timeout=float(params.get("timeout", 30.0)),
+        timeout=_timeout(params),
     )
 
 
@@ -117,7 +129,7 @@ async def cloudflared_restart(params: dict) -> dict:
     """``systemctl restart cloudflared``."""
     _wings_cfg()
     return await cloudflared_service.restart_service(
-        timeout=float(params.get("timeout", 30.0)),
+        timeout=_timeout(params),
     )
 
 
@@ -125,7 +137,7 @@ async def cloudflared_enable(params: dict) -> dict:
     """``systemctl enable --now cloudflared`` — used after first install."""
     _wings_cfg()
     return await cloudflared_service.enable_and_start(
-        timeout=float(params.get("timeout", 30.0)),
+        timeout=_timeout(params),
     )
 
 

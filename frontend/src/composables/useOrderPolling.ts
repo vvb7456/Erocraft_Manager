@@ -104,6 +104,8 @@ export function useOrderPolling(orderId: Ref<number | string | null>) {
       } else {
         error.value = 'fetch_failed'
       }
+    } catch {
+      error.value = 'fetch_failed'
     } finally {
       loading.value = false
     }

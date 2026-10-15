@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { apiErrorMessage, fetchApi } from '@/composables/apiClient'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AuthForm from '@/components/auth/AuthForm.vue'
@@ -11,7 +12,7 @@ import Spinner from '@/components/ui/Spinner.vue'
 
 defineOptions({ name: 'ForgotPasswordPage' })
 
-const { t, te } = useI18n({ useScope: 'global' })
+const { t } = useI18n({ useScope: 'global' })
 
 const email = ref('')
 const loading = ref(false)
@@ -22,15 +23,6 @@ watch(email, () => {
   error.value = ''
   success.value = ''
 })
-
-function translateApiText(value: unknown): string {
-  if (typeof value !== 'string' || !value.trim()) return ''
-  if (/^[a-z_]+\.[a-z_]+$/.test(value)) {
-    const key = `common.apiErrors.${value}`
-    if (te(key)) return t(key)
-  }
-  return value
-}
 
 async function handleSubmit() {
   // Reentrancy guard — see RegisterPage.vue handleSubmit for rationale.
@@ -45,7 +37,7 @@ async function handleSubmit() {
 
   loading.value = true
   try {
-    const res = await fetch('/api/forgot-password', {
+    await fetchApi('/api/forgot-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -53,21 +45,9 @@ async function handleSubmit() {
       }),
     })
 
-    let data: { message?: string; error?: string } | null = null
-    try {
-      data = await res.json() as { message?: string; error?: string }
-    } catch {
-      data = null
-    }
-
-    if (res.ok) {
-      success.value = t('forgotPassword.success')
-      return
-    }
-
-    error.value = translateApiText(data?.error || data?.message) || t('forgotPassword.error.failed')
-  } catch {
-    error.value = t('forgotPassword.error.network')
+    success.value = t('forgotPassword.success')
+  } catch (failure) {
+    error.value = apiErrorMessage(failure)
   } finally {
     loading.value = false
   }

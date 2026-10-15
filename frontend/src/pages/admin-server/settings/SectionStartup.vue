@@ -36,7 +36,7 @@ import type { AdminServerDetailResponse, DockerImageOption } from '@/types/admin
 defineOptions({ name: 'SectionStartup' })
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, raw } = useApiFetch()
+const { get, raw, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 
@@ -150,7 +150,7 @@ async function loadEggs(nid: number) {
 // Lazy load nests on first mount + eggs for the current nest.
 watch(detail, async (d) => {
   if (!d) return
-  await loadNests()
+  await loadNests().catch(handleError)
   await loadEggs(d.server.nestId)
 }, { immediate: true })
 
@@ -159,7 +159,8 @@ watch(detail, async (d) => {
 async function onNestChange(v: string | number | boolean | (string | number | boolean)[]) {
   if (typeof v !== 'number') return
   nestId.value = v
-  await loadEggs(v)
+  eggs.value = []
+  await loadEggs(v).catch(handleError)
   // If the previously selected egg doesn't belong to the new nest, reset.
   if (!eggs.value.some(e => e.id === eggId.value)) {
     eggId.value = 0
@@ -171,7 +172,6 @@ async function onNestChange(v: string | number | boolean | (string | number | bo
 // original egg we restore initial values cleanly.
 async function onEggChange(v: string | number | boolean | (string | number | boolean)[]) {
   if (typeof v !== 'number') return
-  eggId.value = v
   if (v === initialEggId.value) {
     // Reverted to the original egg — restore initial state.
     syncFromDetail()
@@ -190,6 +190,7 @@ async function onEggChange(v: string | number | boolean | (string | number | boo
     description: d.description,
     rules: d.rules,
   }))
+  eggId.value = v
   varDefs.value = defs
   const env: Record<string, string> = {}
   for (const d of defs) env[d.envVariable] = d.defaultValue

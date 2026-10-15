@@ -10,6 +10,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
+import { ApiError, apiErrorMessage } from '@/composables/apiClient'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
@@ -101,9 +102,8 @@ async function loadAll() {
   const data = await get<CouponTemplate[]>(
     '/api/admin/billing/coupon-templates?include_inactive=true',
     { silent: true },
-  )
+  ).finally(() => { tableLoading.value = false })
   if (data) templates.value = data
-  tableLoading.value = false
 }
 
 onMounted(loadAll)
@@ -138,19 +138,12 @@ async function doDelete(tpl: CouponTemplate) {
     confirmText: t('billing.admin.couponTemplates.delete'),
   })
   if (!ok) return
-  const res = await raw(`/api/admin/billing/coupon-templates/${tpl.id}`, {
-    method: 'DELETE',
-    silent: true,
-  })
-  if (res && res.ok) {
+  try {
+    await raw(`/api/admin/billing/coupon-templates/${tpl.id}`, { method: 'DELETE' })
     templates.value = templates.value.filter((t) => t.id !== tpl.id)
     toast(t('billing.admin.couponTemplates.deleteOk'), 'success')
-  } else if (res?.status === 409) {
-    toast(t('billing.admin.couponTemplates.deleteConflict'), 'error')
-  } else if (res) {
-    let msg = `HTTP ${res.status}`
-    try { const body = await res.json(); msg = body.detail || body.message || msg } catch { /* ignore */ }
-    toast(msg, 'error')
+  } catch (error) {
+    toast(error instanceof ApiError && error.status === 409 ? t('billing.admin.couponTemplates.deleteConflict') : apiErrorMessage(error), 'error')
   }
 }
 

@@ -15,6 +15,9 @@ See ``docs/CLOUDFLARE_TUNNEL_DESIGN.md`` §6 for the contract.
 """
 
 from __future__ import annotations
+from app.core.api_errors import ApiError
+from app.core.contracts import ErrorInfo, OperationResult
+from app.core.operation import set_operation
 
 import asyncio
 import logging
@@ -126,7 +129,7 @@ async def _serialize_detail(
                 live_unit_present = bool(out.get("unit_present"))
                 live_version = out.get("version")
             else:
-                live_error = resp.get("error") or "agent returned not-ok"
+                live_error = agent_client.command_error_text(resp)
         except (host_registry.AgentNotConfigured, asyncio.TimeoutError) as exc:
             live_error = str(exc) or exc.__class__.__name__
         except Exception as exc:  # noqa: BLE001 — best-effort probe
@@ -227,8 +230,8 @@ async def bind_tunnel(
         db,
         actor=_admin.username,
         category="tunnel",
-        status="success",
         detail_key="tunnel.bind.ok",
+        operation=OperationResult(action="tunnel.bind", phase="execution", outcome="success", target={"host_id": host.id}),
         detail_params={
             "host_id": host.id,
             "host_name": host.name,
@@ -288,7 +291,7 @@ async def install_tunnel(
     try:
         install_resp = await agent_client.cloudflared_setup(endpoint, token)
         if not install_resp.get("ok"):
-            raise RuntimeError(install_resp.get("error") or "agent install failed")
+            raise RuntimeError(agent_client.command_error_text(install_resp))
         version = (install_resp.get("output") or {}).get("version")
         logger.info(
             "tunnel install: host_id=%s step=agent_install version=%s",
@@ -308,7 +311,7 @@ async def install_tunnel(
             endpoint, token, **creds,
         )
         if not write_resp.get("ok"):
-            raise RuntimeError(write_resp.get("error") or "agent write_config_minimal failed")
+            raise RuntimeError(agent_client.command_error_text(write_resp))
         logger.info(
             "tunnel install: host_id=%s step=write_config_minimal ok",
             host.id,
@@ -328,7 +331,7 @@ async def install_tunnel(
     try:
         enable_resp = await agent_client.cloudflared_enable(endpoint, token)
         if not enable_resp.get("ok"):
-            raise RuntimeError(enable_resp.get("error") or "agent enable failed")
+            raise RuntimeError(agent_client.command_error_text(enable_resp))
         logger.info("tunnel install: host_id=%s step=enable ok", host.id)
     except Exception as exc:
         logger.warning("tunnel install: host_id=%s step=enable failed: %s", host.id, exc)
@@ -352,7 +355,7 @@ async def install_tunnel(
             last_err = f"agent status read: {exc}"
             continue
         if not status_resp.get("ok"):
-            last_err = status_resp.get("error") or "agent status not ok"
+            last_err = agent_client.command_error_text(status_resp)
             continue
         live_status = status_resp.get("output") or {}
         if live_status.get("active") and live_status.get("unit_present"):
@@ -405,8 +408,8 @@ async def install_tunnel(
         db,
         actor=_admin.username,
         category="tunnel",
-        status="success",
         detail_key="tunnel.install.ok",
+        operation=OperationResult(action="tunnel.install", phase="execution", outcome="success", target={"host_id": host.id}),
         detail_params={
             "host_id": host.id,
             "host_name": host.name,
@@ -462,7 +465,7 @@ async def sync_tunnel(
     if not live_resp.get("ok"):
         raise HTTPException(
             status_code=502,
-            detail=f"agent probe failed: {live_resp.get('error') or 'unknown'}",
+            detail=agent_client.command_error_text(live_resp),
         )
     live_out = live_resp.get("output") or {}
     if not (live_out.get("active") and live_out.get("unit_present")):
@@ -494,8 +497,8 @@ async def sync_tunnel(
         db,
         actor=_admin.username,
         category="tunnel",
-        status="success",
         detail_key="tunnel.sync.ok",
+        operation=OperationResult(action="tunnel.sync", phase="execution", outcome="success", target={"host_id": host.id}),
         detail_params={
             "host_id": host.id,
             "host_name": host.name,
@@ -519,19 +522,24 @@ async def restart_tunnel(
 ) -> dict:
     host = await _require_wings_host(db, host_id)
     endpoint, token = await _resolve_agent_credentials(db, host)
-    resp = await agent_client.cloudflared_restart(endpoint, token)
-    if not resp.get("ok"):
-        raise HTTPException(
-            status_code=502, detail=resp.get("error") or "restart failed",
-        )
+    try:
+        resp = await agent_client.cloudflared_restart(endpoint, token)
+    except agent_client.AgentClientError as exc:
+        operation = set_operation(OperationResult(action="tunnel.restart", phase="execution", outcome="failed", target={"host_id": host.id}, error=exc.error))
+        await log_manager_activity(db, actor=_admin.username, category="tunnel", operation=operation, detail_key="tunnel.restart.ok", detail_params={"host_id": host.id, "host_name": host.name})
+        raise ApiError(504 if exc.error.code == "dependency.timeout" else 502, exc.error.code, detail=exc.error.detail, operation=operation) from exc
+    error = None if resp["ok"] else agent_client.command_error(resp)
+    operation = set_operation(OperationResult(action="tunnel.restart", phase="execution", outcome="success" if resp["ok"] else "failed", target={"host_id": host.id}, error=error))
     await log_manager_activity(
         db,
         actor=_admin.username,
         category="tunnel",
-        status="success",
         detail_key="tunnel.restart.ok",
+        operation=operation,
         detail_params={"host_id": host.id, "host_name": host.name},
     )
+    if error is not None:
+        raise ApiError(500 if error.code in {"system.internal_error", "agent.command_invalid_params"} else 502, error.code, detail=error.detail, operation=operation)
     return resp.get("output") or {"ok": True}
 
 
@@ -551,9 +559,8 @@ async def get_tunnel_status(
     endpoint, token = await _resolve_agent_credentials(db, host)
     resp = await agent_client.cloudflared_status(endpoint, token)
     if not resp.get("ok"):
-        raise HTTPException(
-            status_code=502, detail=resp.get("error") or "status read failed",
-        )
+        error = agent_client.command_error(resp)
+        raise ApiError(502, error.code, detail=error.detail)
     return resp.get("output") or {}
 
 
@@ -637,18 +644,25 @@ async def uninstall_tunnel(
     # Step 3: stop cloudflared on agent (best-effort — proceed even on failure)
     agent_ok = True
     agent_error: str | None = None
+    cleanup = OperationResult(action="tunnel.node_cleanup", phase="execution", outcome="success", target={"host_id": host.id})
     try:
         endpoint, token = await _resolve_agent_credentials(db, host)
         resp = await agent_client.cloudflared_uninstall(endpoint, token)
         if not resp.get("ok"):
             agent_ok = False
-            agent_error = resp.get("error") or "agent uninstall failed"
+            agent_error = agent_client.command_error_text(resp)
+            cleanup.outcome = "failed"
+            cleanup.error = agent_client.command_error(resp)
     except HTTPException as exc:
         agent_ok = False
         agent_error = str(exc.detail)
+        cleanup.outcome = "failed"
+        cleanup.error = ErrorInfo(code="resource.conflict", detail=agent_error)
     except Exception as exc:
         agent_ok = False
         agent_error = str(exc)
+        cleanup.outcome = "failed"
+        cleanup.error = exc.error if isinstance(exc, agent_client.AgentClientError) else ErrorInfo(code="system.internal_error")
         logger.warning(
             "agent uninstall failed for host %s: %s", host.id, exc,
         )
@@ -662,11 +676,15 @@ async def uninstall_tunnel(
     except CloudflareAPIError as exc:
         raise _translate_cf_error(exc) from exc
 
+    operation = set_operation(OperationResult(
+        action="tunnel.uninstall", phase="execution", outcome="success", target={"host_id": host.id},
+        children=[cleanup],
+    ))
     await log_manager_activity(
         db,
         actor=_admin.username,
         category="tunnel",
-        status="success" if agent_ok else "partial",
+        operation=operation,
         detail_key="tunnel.uninstall.ok",
         detail_params={
             "host_id": host.id,
@@ -675,4 +693,4 @@ async def uninstall_tunnel(
             "agent_error": agent_error,
         },
     )
-    return {"ok": True, "agent_ok": agent_ok, "agent_error": agent_error}
+    return {"ok": True, "agent_ok": agent_ok, "agent_error": cleanup.error.model_dump(exclude_none=True) if cleanup.error else None, "operation": operation.model_dump(exclude_none=True, exclude_defaults=True)}

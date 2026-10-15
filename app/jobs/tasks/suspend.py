@@ -12,6 +12,7 @@ from app.db.repositories.servers import server_repository
 from app.db.session import get_session_factory
 from app.jobs.tasks.common import get_job_today
 from app.services.audit import log_manager_activity
+from app.core.contracts import ErrorInfo, OperationResult
 from app.services import server_lifecycle
 from app.services.server_lifecycle import LifecycleError
 
@@ -25,7 +26,7 @@ async def run_suspend_task() -> None:
             db,
             actor="system",
             category="automation",
-            status="info",
+            operation=OperationResult(action="automation.suspend.start", phase="execution", outcome="success"),
             detail_key="automated_suspend_started",
         )
 
@@ -37,7 +38,7 @@ async def run_suspend_task() -> None:
                     db,
                     actor="system",
                     category="automation",
-                    status="info",
+                    operation=OperationResult(action="automation.suspend", phase="execution", outcome="success", succeeded=0, failed=0),
                     detail_key="automated_suspend_noop",
                 )
                 return
@@ -57,7 +58,7 @@ async def run_suspend_task() -> None:
                 db,
                 actor="system",
                 category="automation",
-                status="success" if success_count or not failed_ids else "failure",
+                operation=OperationResult(action="automation.suspend", phase="execution", outcome="failed" if failed_ids else "success", succeeded=success_count, failed=len(failed_ids)),
                 detail_key="automated_suspend_finished",
                 detail_params={"success": success_count, "failed": len(failed_ids), "failed_ids": ", ".join(str(server_id) for server_id in failed_ids)},
             )
@@ -67,7 +68,7 @@ async def run_suspend_task() -> None:
                 db,
                 actor="system",
                 category="automation",
-                status="failure",
+                operation=OperationResult(action="automation.suspend", phase="execution", outcome="failed", error=ErrorInfo(code="system.internal_error", detail=str(exc))),
                 detail_key="automated_suspend_failed",
                 detail_params={"error": str(exc)},
             )

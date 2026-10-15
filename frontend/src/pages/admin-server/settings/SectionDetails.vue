@@ -71,12 +71,11 @@ async function save(): Promise<boolean> {
   if (form.value.externalId !== initial.value.externalId) {
     body.externalId = form.value.externalId.trim() === '' ? null : form.value.externalId.trim()
   }
-  const res = await raw(`/api/admin/servers/${serverId.value}/details`, {
+  await raw(`/api/admin/servers/${serverId.value}/details`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res) return false
   toast(t('adminServer.settings.saved'), 'success')
   await reload()
   // The detail watcher skips re-sync while isDirty is true to avoid

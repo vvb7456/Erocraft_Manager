@@ -307,27 +307,19 @@ router.beforeEach(async (to) => {
     }
     return true
   }
-  try {
-    const data = await app.fetchSessionUser()
-    if (!data) {
-      app.setIsAdmin(false)
-      return { name: 'login', query: { redirect: to.fullPath } }
-    }
-    applyServerLanguage(data?.language)
-    app.setIsAdmin(!!data.is_admin)
-    if (to.name === 'user-support' && data.is_admin) return { name: 'admin-support' }
-    // Root path: pick destination by role.
-    if (to.name === 'home') {
-      if (data.is_admin) return { name: 'dashboard' }
-      return { name: 'user-home' }
-    }
-    // Admin routes require admin role
-    if (to.meta.admin && !data.is_admin) {
-      return { name: 'user-home' }
-    }
-  } catch {
+  const data = await app.fetchSessionUser()
+  if (!data) {
     app.setIsAdmin(false)
     return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  applyServerLanguage(data.language)
+  app.setIsAdmin(!!data.is_admin)
+  if (to.name === 'user-support' && data.is_admin) return { name: 'admin-support' }
+  if (to.name === 'home') {
+    return { name: data.is_admin ? 'dashboard' : 'user-home' }
+  }
+  if (to.meta.admin && !data.is_admin) {
+    return { name: 'user-home' }
   }
   return true
 })

@@ -90,11 +90,14 @@ async function loadOrder() {
   const revision = ++loadRevision
   loading.value = true
   loadFailed.value = false
-  const data = await get<Order>(`/api/user/orders/${props.orderId}`)
-  if (revision !== loadRevision) return
-  order.value = data
-  loadFailed.value = !data
-  loading.value = false
+  try {
+    const data = await get<Order>(`/api/user/orders/${props.orderId}`)
+    if (revision === loadRevision) order.value = data
+  } catch {
+    if (revision === loadRevision) loadFailed.value = true
+  } finally {
+    if (revision === loadRevision) loading.value = false
+  }
 }
 
 watch([() => props.modelValue, () => props.orderId], () => {

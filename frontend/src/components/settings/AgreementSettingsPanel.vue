@@ -50,9 +50,8 @@ function setBool(key: string, val: boolean) {
 
 async function loadAgreements() {
   loading.value = true
-  const data = await get<AgreementAdminOut[]>('/api/admin/agreements')
+  const data = await get<AgreementAdminOut[]>('/api/admin/agreements').finally(() => { loading.value = false })
   if (data) agreements.value = data
-  loading.value = false
 }
 
 function openEdit(slug: FixedAgreementSlug, lang: 'zh' | 'en') {

@@ -22,6 +22,10 @@ import logging
 from typing import Any, AsyncGenerator
 
 import httpx
+from pydantic import TypeAdapter, ValidationError
+
+from app.core.contracts import CommandFailure, CommandSuccess, ErrorInfo
+from app.core.error_codes import ERROR_TITLES, ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +34,22 @@ DEFAULT_TIMEOUT = 10.0
 
 class AgentClientError(Exception):
     """Raised when an agent HTTP call fails (transport or non-2xx)."""
+
+    def __init__(self, message: str, code: ErrorCode = "dependency.failed") -> None:
+        super().__init__(message)
+        self.error = ErrorInfo(code=code, detail=message)
+
+
+_command_response: TypeAdapter[CommandSuccess | CommandFailure] = TypeAdapter(CommandSuccess | CommandFailure)
+
+
+def command_error(result: dict) -> ErrorInfo:
+    return ErrorInfo.model_validate(result["error"])
+
+
+def command_error_text(result: dict) -> str:
+    error = command_error(result)
+    return error.detail or ERROR_TITLES[error.code]
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +76,8 @@ async def _request(
     except httpx.HTTPError as exc:
         logger.debug("agent %s %s transport error: %r", method, url, exc)
         raise AgentClientError(
-            f"{method} {path} transport error: {type(exc).__name__}"
+            f"{method} {path} transport error: {type(exc).__name__}",
+            "dependency.timeout" if isinstance(exc, httpx.TimeoutException) else "dependency.unreachable",
         ) from exc
     if resp.status_code >= 400:
         body_hint = resp.text[:80].replace("\n", " ") if resp.text else ""
@@ -66,9 +87,21 @@ async def _request(
         )
         raise AgentClientError(
             f"{method} {path} -> HTTP {resp.status_code}"
-            + (f": {body_hint}" if body_hint else "")
+            + (f": {body_hint}" if body_hint else ""),
+            "dependency.authentication_failed" if resp.status_code in {401, 403} else "dependency.failed",
         )
-    return resp.json()
+    if path == "/v1/commands":
+        try:
+            result = _command_response.validate_json(resp.content)
+        except ValidationError as exc:
+            raise AgentClientError("Invalid agent command response", "dependency.invalid_response") from exc
+        if json is None or result.id != json["id"] or result.operation.action != json["type"]:
+            raise AgentClientError("Agent command response does not match request", "dependency.invalid_response")
+        return result.model_dump(exclude_none=True)
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise AgentClientError("Invalid agent JSON response", "dependency.invalid_response") from exc
 
 
 # ---------------------------------------------------------------------------

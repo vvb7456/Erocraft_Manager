@@ -1,12 +1,15 @@
 """Business-specific administrator notifications."""
 
 from datetime import datetime
+import hashlib
+import json
 import logging
-from typing import Any, Mapping
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utc_naive_now, to_iso_z
+from app.core.contracts import OperationResult
 from app.services.billing.notify import order_apply_alert_context
 from app.services.notifications.queue import configuration, enqueue_safely
 
@@ -97,26 +100,54 @@ async def billing_apply(db: AsyncSession, order: Any) -> None:
     )
 
 
-async def audit_failure(db: AsyncSession, *, actor: str, category: str, status: str, detail_key: str, params: Mapping[str, Any]) -> None:
+async def audit_failure(db: AsyncSession, *, actor: str, category: str, operation: OperationResult, severity: str = "critical") -> None:
     categories = {"certificate": "证书操作", "automation": "自动化任务", "host_node": "主机操作", "server": "服务器操作", "tunnel": "隧道操作"}
-    if category not in categories or status not in {"failed", "partial"}:
+    if category not in categories:
         return
-    target = str(params.get("server_id") or params.get("host_id") or params.get("certificate_id") or params.get("task_name") or "")
+    # Batch email summaries already have per-recipient failure notifications.
+    if operation.action in {"automation.reminder", "automation.install_notify"} and operation.error is None:
+        return
+    if operation.outcome == "success":
+        for child in operation.children:
+            # Each deployment writes its own audit event before the parent summary.
+            if child.action == "certificate.deploy":
+                continue
+            await audit_failure(db, actor=actor, category=category, operation=child.model_copy(update={"target": child.target or operation.target}), severity="warning")
+        return
+    if operation.phase == "request":
+        return
+    labels = {
+        "wings.restart": "重启 Wings", "wings.restart_and_verify": "重启并检查 Wings",
+        "wings.configuration.update": "更新 Wings 配置", "wings.token.rotate": "更新 Wings 密钥",
+        "wings.owner.deauthorize": "撤销旧所有者会话", "tunnel.restart": "重启隧道服务",
+        "tunnel.node_cleanup": "清理节点隧道", "certificate.renew": "续签证书", "certificate.deploy": "下发证书",
+        "automation.suspend": "自动冻结服务器", "automation.delete": "自动删除服务器",
+        "automation.trial_expire": "删除到期试用服务器", "automation.reminder": "发送到期提醒",
+        "email.send": "发送邮件", "llm.provision": "开通 LLM 额度", "llm.revoke": "撤销 LLM 额度",
+        "llm.subscription.invalidate": "撤销旧 LLM 订阅", "llm.token.enable": "启用 LLM 密钥",
+        "server.database.cleanup": "清理服务器远端数据库",
+    }
+    label = labels.get(operation.action, categories[category])
+    target_labels = {"server_id": "服务器", "host_id": "主机", "node_id": "节点", "certificate_id": "证书", "deployment_id": "部署", "requested_server_ids": "服务器", "requested_user_ids": "用户", "recipient": "收件人", "task_name": "任务"}
+    target = "，".join(f"{target_labels.get(key, key)}：{value}" for key, value in sorted(operation.target.items()))
+    identity = hashlib.sha256(json.dumps(operation.target, sort_keys=True).encode()).hexdigest()[:16]
+    issue_key = f"audit:{category}:{operation.action}:{identity}"
+    severity = "warning" if operation.succeeded else severity
     # Coalesce recurring failures without copying credential-bearing exception payloads.
     window = int(utc_naive_now().timestamp()) // 1800
     from app.services.notifications.center import record_issue
     if category != "certificate":
-        await record_issue(db, key=f"audit:{category}:{detail_key}:{target}", category="system",
-            severity="critical" if status == "failed" else "warning", title=f"{categories[category]}异常",
-            body=f"操作人：{actor}\n关联对象：{target}", path="/admin/activity-logs")
+        await record_issue(db, key=issue_key, category="system",
+            severity=severity, title=f"{label}失败",
+            body=f"操作人：{actor}\n关联对象：{target or '—'}", path="/admin/activity-logs")
     await enqueue_safely(
-        db, event_key=f"audit:{category}:{detail_key}:{target}:{window}",
+        db, event_key=f"{issue_key}:{window}",
         category="certificate" if category == "certificate" else "system",
-        severity="critical" if status == "failed" else "warning", title=f"{categories[category]}异常",
-        body=f"操作人：{actor}\n系统检测到{'失败' if status == 'failed' else '部分失败'}的操作，请在活动日志中查看详情。" + (f"\n关联对象：{target}" if target else ""),
+        severity=severity, title=f"{label}失败",
+        body=f"操作人：{actor}\n{label}失败，请在活动日志中查看详情。" + (f"\n关联对象：{target}" if target else ""),
         path="/admin/activity-logs",
-        context={"issue_key": f"audit:{category}:{detail_key}:{target}", "wecom_template": "audit_failure",
-            "wecom_variables": {"actor": actor, "operation": categories[category], "status_label": "失败" if status == "failed" else "部分失败", "target": target or "—"}},
+        context={"issue_key": issue_key, "wecom_template": "audit_failure",
+            "wecom_variables": {"actor": actor, "operation": label, "status_label": "失败", "target": target or "—"}},
     )
 
 

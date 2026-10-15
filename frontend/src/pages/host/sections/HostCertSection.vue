@@ -19,7 +19,7 @@ defineOptions({ name: 'HostCertSection' })
 
 const props = defineProps<{ hostId: number; hostKind: string }>()
 const { t } = useI18n({ useScope: 'global' })
-const { get, post, del } = useApiFetch()
+const { get, post, del, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 
@@ -124,23 +124,21 @@ useDirtyFormSection({ name: 'host-cert', isDirty, save, discard })
 // ---- load ----
 async function load() {
   loading.value = true
-  const data = await get<ManagedCertificate[]>('/api/admin/certificates', { silent: true })
+  const data = await get<ManagedCertificate[]>('/api/admin/certificates', { silent: true }).finally(() => { loading.value = false })
   certificates.value = data ?? []
-  loading.value = false
 }
 
 async function loadTargets() {
   if (targetsLoading.value) return
   targetsLoading.value = true
-  const data = await get<CertTargetsResponse>(`/api/admin/hosts/${props.hostId}/cert-targets`, { silent: true })
+  const data = await get<CertTargetsResponse>(`/api/admin/hosts/${props.hostId}/cert-targets`, { silent: true }).finally(() => { targetsLoading.value = false })
   certTargets.value = data?.targets ?? []
   if (!isWings.value && selectedTargetName.value === '' && certTargets.value.length > 0) {
     selectedTargetName.value = certTargets.value[0].name
   }
-  targetsLoading.value = false
 }
 
-onMounted(() => { load(); loadTargets() })
+onMounted(() => Promise.all([load(), loadTargets()]).catch(handleError))
 
 // ---- actions ----
 function openAdd() {

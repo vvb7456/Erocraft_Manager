@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import panel_db
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.services.panel_db import (
     CreatedServer,
     CreatedUser,
@@ -523,7 +524,7 @@ async def delete_server(db: AsyncSession, server_id: int, *, force: bool = False
             db,
             actor="system",
             category="server",
-            status="warning",
+            operation=OperationResult(action="server.database.cleanup", phase="execution", outcome="failed", target={"server_id": server_id}, facts={"server_deleted": True}),
             detail_key="server.delete.remote_db_leftover",
             detail_params={"server_id": server_id, "errors": db_errors[:10]},
         )

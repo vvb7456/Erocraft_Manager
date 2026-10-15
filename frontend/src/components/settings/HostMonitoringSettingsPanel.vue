@@ -22,12 +22,11 @@ const dirty = computed(() => !!values.value && formSnapshot(values.value) !== ba
 
 async function load() {
   loading.value = true
-  const result = await get<NonNullable<typeof values.value>>('/api/admin/global-defaults')
+  const result = await get<NonNullable<typeof values.value>>('/api/admin/global-defaults').finally(() => { loading.value = false })
   if (result) {
     values.value = { monitor_interval_sec: result.monitor_interval_sec, monitor_retention_days: result.monitor_retention_days }
     baseline.value = formSnapshot(values.value)
   }
-  loading.value = false
 }
 
 async function save() {

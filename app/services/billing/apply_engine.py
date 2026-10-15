@@ -43,6 +43,7 @@ from app.db.models.manager import ServerMeta
 from app.db.models.pterodactyl import PteroServer
 from app.services import server_lifecycle
 from app.services.audit import log_manager_activity
+from app.core.contracts import ErrorInfo, OperationResult
 from app.services.billing import incidents
 from app.services.wings import WingsServiceError, wings_service
 
@@ -197,7 +198,7 @@ async def apply_paid_order(
         db,
         actor="system",
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.order.apply", phase="execution", outcome="success", target={"order_id": order_id}),
         detail_key="billing.order.applied",
         detail_params={
             "order_id": order_id,
@@ -234,7 +235,7 @@ async def apply_paid_order(
                 db,
                 actor="system",
                 category="billing",
-                status="failed",
+                operation=OperationResult(action="billing.coupon.mark_used", phase="execution", outcome="failed", target={"order_id": order_id, "coupon_id": coupon_id}, error=ErrorInfo(code="system.internal_error", detail=str(exc)[:200])),
                 detail_key="billing.coupon.mark_used_failed",
                 detail_params={
                     "order_id": order_id,
@@ -256,7 +257,7 @@ async def apply_paid_order(
             db,
             actor="system",
             category="billing",
-            status="failed",
+            operation=OperationResult(action="billing.referral.grant", phase="execution", outcome="failed", target={"order_id": order_id}, error=ErrorInfo(code="system.internal_error", detail=str(exc)[:200])),
             detail_key="billing.referral.grant_failed",
             detail_params={
                 "order_id": order_id,
@@ -723,7 +724,7 @@ async def _record_failure_and_release(
             db,
             actor="system",
             category="billing",
-            status="failed",
+            operation=OperationResult(action="billing.order.apply", phase="execution", outcome="failed", target={"order_id": order_id}, error=ErrorInfo(code="billing.order.apply_failed", detail=last_error)),
             detail_key="billing.order.apply_failed",
             detail_params={"order_id": order_id, "error": last_error},
         )
@@ -807,7 +808,7 @@ async def _terminate_apply(
         db,
         actor="system",
         category="billing",
-        status="failed",
+        operation=OperationResult(action="billing.order.apply", phase="execution", outcome="failed", target={"order_id": order_id}, error=ErrorInfo(code="billing.order.apply_failed", detail=reason)),
         detail_key="billing.order.apply_terminated",
         detail_params={"order_id": order_id, "reason": reason},
     )

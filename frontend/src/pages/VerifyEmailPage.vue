@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { apiErrorMessage, fetchApi } from '@/composables/apiClient'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -10,7 +11,7 @@ defineOptions({ name: 'VerifyEmailPage' })
 
 const route = useRoute()
 const router = useRouter()
-const { t, te } = useI18n({ useScope: 'global' })
+const { t } = useI18n({ useScope: 'global' })
 
 const loading = ref(true)
 const error = ref('')
@@ -21,15 +22,6 @@ let redirectTimer: ReturnType<typeof setTimeout> | null = null
 const token = computed(() =>
   typeof route.query.token === 'string' ? route.query.token.trim() : '',
 )
-
-function translateApiText(value: unknown): string {
-  if (typeof value !== 'string' || !value.trim()) return ''
-  if (/^[a-z_]+\.[a-z_]+$/.test(value)) {
-    const key = `common.apiErrors.${value}`
-    if (te(key)) return t(key)
-  }
-  return value
-}
 
 function queueRedirect(target: { name: string } = { name: 'login' }) {
   if (redirectTimer) clearTimeout(redirectTimer)
@@ -45,7 +37,7 @@ async function verify() {
     return
   }
   try {
-    const res = await fetch('/api/register/verify', {
+    const res = await fetchApi('/api/register/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: token.value }),
@@ -66,10 +58,8 @@ async function verify() {
       queueRedirect(target)
       return
     }
-    error.value = translateApiText(data?.detail || data?.error || data?.message)
-      || t('verifyEmail.error.failed')
-  } catch {
-    error.value = t('verifyEmail.error.network')
+  } catch (failure) {
+    error.value = apiErrorMessage(failure)
   } finally {
     loading.value = false
   }

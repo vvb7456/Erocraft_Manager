@@ -57,7 +57,7 @@ interface PlanGroup {
 }
 
 const { t } = useI18n({ useScope: 'global' })
-const { get } = useApiFetch()
+const { get, handleError } = useApiFetch()
 const router = useRouter()
 const app = useAppStore()
 const { confirm } = useConfirm()
@@ -104,13 +104,13 @@ const groups = computed<PlanGroup[]>(() => {
 
 async function loadPlans() {
   loadFailed.value = false
-  const data = await get<Plan[]>('/api/user/plans', { silent: true })
-  if (data === null) {
+  try {
+    plans.value = await get<Plan[]>('/api/user/plans', { silent: true })
+  } catch {
     loadFailed.value = true
-  } else {
-    plans.value = data
+  } finally {
+    initialLoading.value = false
   }
-  initialLoading.value = false
 }
 
 async function loadServerCount() {
@@ -139,7 +139,7 @@ async function handleBuy(plan: Plan, period: PeriodOption) {
 
 onMounted(() => {
   loadPlans()
-  loadServerCount()
+  void loadServerCount().catch(handleError)
 })
 </script>
 

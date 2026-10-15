@@ -13,6 +13,7 @@ from app.db.models.billing import BillingPlan
 from app.db.models.pterodactyl import PteroUser
 from app.schemas.settings import SettingsMessageResponse
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.services.billing.plans import (
     PlanCodeConflictError,
     PlanIn,
@@ -108,7 +109,7 @@ async def plans_create(
         db,
         actor=current_user.username,
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.plan.create", phase="execution", outcome="success", target={"plan_id": plan.id}),
         detail_key="billing.plan.create",
         detail_params={
             "plan_id": plan.id,
@@ -140,7 +141,7 @@ async def plans_update(
         db,
         actor=current_user.username,
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.plan.update", phase="execution", outcome="success", target={"plan_id": plan.id}),
         detail_key="billing.plan.update",
         detail_params={
             "plan_id": plan.id,
@@ -167,7 +168,7 @@ async def plans_delete(
         db,
         actor=current_user.username,
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.plan.delete", phase="execution", outcome="success", target={"plan_id": plan_id}),
         detail_key="billing.plan.delete",
         detail_params={"plan_id": plan_id},
     )

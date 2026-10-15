@@ -1,160 +1,79 @@
 import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useToast } from './useToast'
 import router from '@/router'
 import { useAppStore } from '@/stores/app'
+import { ApiError, apiErrorMessage, fetchApi, readApiJson } from './apiClient'
+import { useToast } from './useToast'
 
-let _redirecting = false
-function redirectToLogin() {
-  if (_redirecting) return
-  _redirecting = true
-  router.push({ name: 'login' }).finally(() => { _redirecting = false })
-}
+let redirecting = false
 
-/**
- * Unified HTTP client composable.
- * Wraps fetch with loading/error state, JSON parsing, and toast on error.
- *
- * If the backend returns a structured error code (e.g. "file.destination_exists"),
- * it will attempt to find a translation at `apiErrors.{code}` before displaying.
- */
+type RequestOptions = RequestInit & { silent?: boolean }
+
 export function useApiFetch() {
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const { toast } = useToast()
-  const { t, te } = useI18n({ useScope: 'global' })
   const app = useAppStore()
+  const { toast } = useToast()
+  let pending = 0
 
-  /** Translate a structured error code to i18n, fallback to raw message. */
-  function translateError(msg: string): string {
-    if (/^[a-z_]+\.[a-z_]+$/.test(msg)) {
-      const key = `common.apiErrors.${msg}`
-      if (te(key)) return t(key)
-    }
-    return msg
-  }
-
-  async function request<T = unknown>(
-    url: string,
-    opts: RequestInit & { silent?: boolean } = {},
-  ): Promise<T | null> {
+  async function perform<T>(url: string, opts: RequestOptions, read: (response: Response) => Promise<T>): Promise<T> {
+    pending++
     loading.value = true
     error.value = null
-    const { silent, ...fetchOpts } = opts
+    const { silent = false, ...options } = opts
     try {
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json', ...fetchOpts.headers as Record<string, string> },
-        ...fetchOpts,
-      })
-      if (!res.ok) {
-        // 401: session expired — redirect to login
-        if (res.status === 401) {
+      return await read(await fetchApi(url, options))
+    } catch (failure) {
+      if (failure instanceof ApiError) {
+        failure.silent = silent
+        error.value = apiErrorMessage(failure)
+        if (failure.status === 401 && failure.code === 'auth.session_required') {
+          failure.silent = true
           app.clearSessionUser()
-          redirectToLogin()
-          return null
+          if (!redirecting && router.currentRoute.value.name !== 'login') {
+            redirecting = true
+            void router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
+              .finally(() => { redirecting = false })
+          }
         }
-        let msg = `HTTP ${res.status}`
-        try {
-          const body = await res.json()
-          msg = body.error || body.message || msg
-        } catch { /* ignore parse error */ }
-        error.value = msg
-        if (!silent) toast(translateError(msg), 'error')
-        return null
       }
-      // Handle 204 No Content
-      if (res.status === 204) return {} as T
-      return await res.json() as T
-    } catch {
-      const msg = t('common.apiErrors.network')
-      error.value = msg
-      if (!silent) toast(msg, 'error')
-      return null
+      throw failure
     } finally {
-      loading.value = false
+      loading.value = --pending > 0
     }
   }
 
-  async function get<T = unknown>(url: string, opts?: { silent?: boolean }): Promise<T | null> {
+  async function request<T>(url: string, options: RequestOptions): Promise<T> {
+    return perform(url, options, readApiJson<T>)
+  }
+
+  function raw(url: string, options: RequestOptions = {}): Promise<Response> {
+    return perform(url, options, response => Promise.resolve(response))
+  }
+
+  function get<T = unknown>(url: string, opts?: { silent?: boolean }): Promise<T> {
     return request<T>(url, { method: 'GET', ...opts })
   }
 
-  async function post<T = unknown>(url: string, body?: Record<string, unknown> | unknown[]): Promise<T | null> {
+  function write<T>(method: string, url: string, body?: Record<string, unknown> | unknown[]): Promise<T> {
     return request<T>(url, {
-      method: 'POST',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      method, headers: { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
     })
   }
 
-  async function put<T = unknown>(url: string, body?: Record<string, unknown> | unknown[]): Promise<T | null> {
-    return request<T>(url, {
-      method: 'PUT',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    })
-  }
+  const post = <T = unknown>(url: string, body?: Record<string, unknown> | unknown[]) => write<T>('POST', url, body)
+  const put = <T = unknown>(url: string, body?: Record<string, unknown> | unknown[]) => write<T>('PUT', url, body)
+  const patch = <T = unknown>(url: string, body?: Record<string, unknown> | unknown[]) => write<T>('PATCH', url, body)
+  const del = <T = unknown>(url: string, body?: Record<string, unknown>) => write<T>('DELETE', url, body)
 
-  async function patch<T = unknown>(url: string, body?: Record<string, unknown> | unknown[]): Promise<T | null> {
-    return request<T>(url, {
-      method: 'PATCH',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    })
-  }
-
-  async function del<T = unknown>(url: string, body?: Record<string, unknown>): Promise<T | null> {
-    return request<T>(url, {
-      method: 'DELETE',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    })
-  }
-
-  /** Raw fetch without JSON parsing (for file uploads, etc.).
-   *
-   * 401 always triggers session-clear + redirect (even with ``silent``).
-   * ``silent`` suppresses toasts on other non-OK statuses so the caller can
-   * inspect status codes (e.g. 409) and present its own message. The raw
-   * response (including non-OK!) is returned in that case so the caller can
-   * read the body. (Audit FM1.)
-   */
-  async function raw(
-    url: string,
-    opts: RequestInit & { silent?: boolean } = {},
-  ): Promise<Response | null> {
-    loading.value = true
-    error.value = null
-    const { silent, ...fetchOpts } = opts
-    try {
-      const res = await fetch(url, fetchOpts)
-      if (res.status === 401) {
-        app.clearSessionUser()
-        redirectToLogin()
-        return null
-      }
-      if (!res.ok) {
-        let msg = `HTTP ${res.status}`
-        if (!silent) {
-          try {
-            const cloned = res.clone()
-            const body = await cloned.json()
-            msg = body.error || body.message || msg
-          } catch { /* ignore */ }
-          error.value = msg
-          toast(translateError(msg), 'error')
-          return null
-        }
-        // silent: surface the response so caller handles non-OK itself.
-        error.value = msg
-        return res
-      }
-      return res
-    } catch {
-      const msg = t('common.apiErrors.network')
-      error.value = msg
-      if (!silent) toast(msg, 'error')
-      return null
-    } finally {
-      loading.value = false
+  function handleError(failure: unknown): void {
+    if (failure instanceof ApiError) {
+      if (!failure.silent) toast(apiErrorMessage(failure), 'error')
+      return
     }
+    if (failure instanceof DOMException && failure.name === 'AbortError') return
+    throw failure
   }
 
-  return { loading, error, get, post, put, patch, del, raw }
+  return { loading, error, get, post, put, patch, del, raw, handleError }
 }

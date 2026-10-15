@@ -13,12 +13,13 @@ import FormField from '@/components/form/FormField.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
+import { apiErrorMessage, fetchApi } from '@/composables/apiClient'
 
 defineOptions({ name: 'LoginPage' })
 
 const router = useRouter()
 const route = useRoute()
-const { t, te } = useI18n({ useScope: 'global' })
+const { t } = useI18n({ useScope: 'global' })
 const app = useAppStore()
 
 const username = ref('')
@@ -37,15 +38,6 @@ onMounted(async () => {
   } catch { /* ignore */ }
 })
 
-function translateApiText(value: unknown): string {
-  if (typeof value !== 'string' || !value.trim()) return ''
-  if (/^[a-z_]+\.[a-z_]+$/.test(value)) {
-    const key = `common.apiErrors.${value}`
-    if (te(key)) return t(key)
-  }
-  return value
-}
-
 async function handleLogin() {
   // Reentrancy guard — see RegisterPage.vue handleSubmit for rationale.
   if (loading.value) return
@@ -57,7 +49,7 @@ async function handleLogin() {
 
   loading.value = true
   try {
-    const res = await fetch('/api/login', {
+    const res = await fetchApi('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -81,10 +73,10 @@ async function handleLogin() {
         router.replace({ name: 'user-home' })
       }
     } else {
-      error.value = translateApiText(data.error) || t('login.error.invalid')
+      error.value = t('login.error.invalid')
     }
-  } catch {
-    error.value = t('login.error.network')
+  } catch (failure) {
+    error.value = apiErrorMessage(failure)
   } finally {
     loading.value = false
   }

@@ -1,6 +1,9 @@
 """Admin email template routes."""
 
 from __future__ import annotations
+from app.core.api_errors import ApiError
+from app.core.contracts import ErrorInfo, OperationResult
+from app.core.operation import set_operation
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,7 +81,7 @@ async def update_email_template(
         db,
         actor=current_user.username,
         category="settings",
-        status="success",
+        operation=OperationResult(action="email.template.update", phase="execution", outcome="success", target={"template": payload.type}),
         detail_key="email_template_change",
         detail_params={"template": payload.type},
     )
@@ -122,12 +125,16 @@ async def send_smtp_test_email(
         override=payload.smtpOverride,
         actor=current_user.username,
     )
+    error = ErrorInfo(code="email.send_failed", detail=err) if not ok else None
+    operation = set_operation(OperationResult(action="email.test", phase="execution", outcome="success" if ok else "failed", target={"recipient": str(payload.recipient)}, error=error))
     await log_manager_activity(
         db,
         actor=current_user.username,
         category="settings",
-        status="success" if ok else "fail",
         detail_key="test_email_sent",
+        operation=operation,
         detail_params={"recipient": str(payload.recipient), "error": err or ""},
     )
-    return TestEmailResponse(ok=ok, error=err)
+    if error is not None:
+        raise ApiError(502, error.code, detail=error.detail, operation=operation)
+    return TestEmailResponse(ok=True)

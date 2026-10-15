@@ -59,11 +59,10 @@ function credits(v: number): string {
 
 async function load() {
   if (!serverId.value) return
-  const res = await get<AdminLlmUsage>(`/api/admin/servers/${serverId.value}/llm`)
-  if (res) {
-    data.value = res
+  try {
+    data.value = await get<AdminLlmUsage>(`/api/admin/servers/${serverId.value}/llm`)
     loadFailed.value = false
-  } else {
+  } catch {
     loadFailed.value = true
   }
 }

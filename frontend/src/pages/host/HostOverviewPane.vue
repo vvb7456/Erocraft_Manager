@@ -22,7 +22,7 @@ defineOptions({ name: 'HostOverviewPane' })
 const { t } = useI18n({ useScope: 'global' })
 const { formatDateTime } = useFormatDate()
 const host = inject<Ref<HostDetail | null>>('hostDetail')!
-const { get } = useApiFetch()
+const { get, handleError } = useApiFetch()
 
 interface AlertItem {
   id: number
@@ -43,9 +43,9 @@ async function fetchAlerts() {
 }
 
 onMounted(() => {
-  fetchAlerts()
+  void fetchAlerts().catch(handleError)
   // Same cadence as host status panel
-  alertTimer = window.setInterval(fetchAlerts, 30_000)
+  alertTimer = window.setInterval(() => { void fetchAlerts().catch(handleError) }, 30_000)
 })
 onBeforeUnmount(() => { if (alertTimer !== null) clearInterval(alertTimer) })
 

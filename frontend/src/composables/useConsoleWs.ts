@@ -1,6 +1,7 @@
 import { ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
+import { ApiError } from '@/composables/apiClient'
 import { useToast } from '@/composables/useToast'
 import { useClipboard } from '@/composables/useClipboard'
 import { useServerActivityReporter } from '@/composables/useServerActivityReporter'
@@ -128,26 +129,12 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
 
   async function fetchWingsToken(): Promise<WingsTokenResponse | null> {
     if (!serverId.value) return null
-    // Use raw() so 401 triggers session-clear + login redirect via the
-    // shared useApiFetch handler (the previous bare fetch() pushed to login
-    // without clearing pinia auth state, leaving the global header chrome
-    // out of sync). silent: true lets us still inspect 403 ourselves to
-    // surface the suspend banner. (Audit FM2.)
-    const res = await raw(`/api/user/servers/${serverId.value}/wings-token`, { silent: true })
-    if (!res) return null  // 401 redirected, network error
-    if (res.status === 403) {
-      const body = await res.json().catch(() => ({}))
-      if (body?.detail?.error === 'server_suspended' || body?.error === 'server_suspended') {
-        suspended.value = true
-        return null
-      }
-      return null
-    }
-    if (!res.ok) return null
-    suspended.value = false
     try {
+      const res = await raw(`/api/user/servers/${serverId.value}/wings-token`, { silent: true })
+      suspended.value = false
       return await res.json()
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'server.suspended') suspended.value = true
       return null
     }
   }

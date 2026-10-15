@@ -10,8 +10,12 @@ status / metrics on non-wings hosts) live in :mod:`admin_hosts` instead.
 """
 
 from __future__ import annotations
+from app.core.api_errors import ApiError
+from app.core.contracts import ErrorInfo, OperationResult
+from app.core.operation import set_operation
 
 import asyncio
+import httpx
 import logging
 from typing import AsyncGenerator, ClassVar
 
@@ -21,6 +25,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_admin
+from app.api.utils.wings_errors import translate_wings_error
 from app.api.deps.db import get_db
 from app.db.models.manager import ManagerHost
 from app.db.models.pterodactyl import PanelNode, PteroUser
@@ -301,6 +306,7 @@ async def put_wings_config(
 
     push_result: dict = {"pushed": False, "reason": "no_wings_affecting_field"}
     push_error: str | None = None
+    push_failure: ApiError | None = None
     try:
         push_result = await wings_config.push_to_wings(
             db,
@@ -311,20 +317,25 @@ async def put_wings_config(
         )
     except WingsServiceError as exc:
         push_error = str(exc)
+        if isinstance(exc.__cause__, httpx.HTTPError):
+            push_failure = translate_wings_error(exc)
         logger.warning("wings push failed for host %s (node %s): %s", host_id, node.id, exc)
 
-    if push_error is not None:
-        log_status = "partial"
-    elif push_result.get("pushed") and push_result.get("applied") is False:
-        log_status = "partial"
-    else:
-        log_status = "success"
+    push_failed = push_error is not None or (push_result.get("pushed") and push_result.get("applied") is False)
+    error = ErrorInfo(code="wings.apply_failed", detail=push_error) if push_failed else None
+    if push_failure is not None:
+        error = push_failure.error
+    operation = set_operation(OperationResult(
+        action="wings.configuration.update", phase="execution", outcome="failed" if error else "success",
+        target={"host_id": host_id, "node_id": node.id}, error=error,
+        children=[OperationResult(action="wings.configuration.save", phase="execution", outcome="success", target={"node_id": node.id})],
+    ))
     await log_manager_activity(
         db,
         actor=admin.username,
         category="host_node",
-        status=log_status,
         detail_key="node.wings_config.update",
+        operation=operation,
         detail_params={
             "host_id": host_id,
             "node_id": node.id,
@@ -362,12 +373,9 @@ async def put_wings_config(
             and push_result.get("applied") is False
         ),
     }
-    if push_error:
-        response["wings_error"] = push_error
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=response,
-        )
+    if error:
+        raise ApiError(push_failure.status_code if push_failure else 502, error.code, detail=error.detail, context=response, operation=operation)
+    response["operation"] = operation.model_dump(exclude_none=True, exclude_defaults=True)
     return response
 
 
@@ -398,7 +406,7 @@ async def reset_node_daemon_token(
             db,
             actor=admin.username,
             category="host_node",
-            status="error",
+            operation=OperationResult(action="wings.token.rotate", phase="execution", outcome="failed", target={"host_id": host_id, "node_id": node.id}, error=ErrorInfo(code="wings.apply_failed", detail=str(exc))),
             detail_key="node.daemon_token.reset",
             detail_params={
                 "host_id": host_id,
@@ -428,9 +436,7 @@ async def reset_node_daemon_token(
             )
             if not restart_resp.get("ok"):
                 auto_restart_outcome["restarted"] = False
-                auto_restart_outcome["error"] = (
-                    restart_resp.get("error") or "agent reported wings.restart failure"
-                )
+                auto_restart_outcome["error"] = agent_client.command_error(restart_resp).model_dump(exclude_none=True, exclude_defaults=True)
             else:
                 auto_restart_outcome["restarted"] = True
                 self_check_ok = False
@@ -446,26 +452,33 @@ async def reset_node_daemon_token(
                         await asyncio.sleep(1.0)
                 auto_restart_outcome["self_check"] = self_check_ok
                 if not self_check_ok and self_check_error:
-                    auto_restart_outcome["self_check_error"] = self_check_error
+                    auto_restart_outcome["self_check_error"] = ErrorInfo(code="dependency.failed", detail=self_check_error).model_dump(exclude_none=True, exclude_defaults=True)
         except host_registry.AgentNotConfigured:
             auto_restart_outcome["restarted"] = False
-            auto_restart_outcome["error"] = "agent not configured for this host"
+            auto_restart_outcome["error"] = ErrorInfo(code="resource.conflict", detail="agent not configured for this host").model_dump(exclude_none=True, exclude_defaults=True)
         except agent_client.AgentClientError as exc:
             auto_restart_outcome["restarted"] = False
-            auto_restart_outcome["error"] = str(exc)
+            auto_restart_outcome["error"] = exc.error.model_dump(exclude_none=True, exclude_defaults=True)
 
-    log_status_value = "success"
+    children: list[OperationResult] = []
     if auto_restart_outcome.get("attempted"):
-        if not auto_restart_outcome.get("restarted") or (
-            "self_check" in auto_restart_outcome and not auto_restart_outcome["self_check"]
-        ):
-            log_status_value = "partial"
-
+        restart_error = auto_restart_outcome.get("error") or auto_restart_outcome.get("self_check_error")
+        children.append(OperationResult(
+            action="wings.restart_and_verify", phase="execution",
+            outcome="failed" if restart_error or not auto_restart_outcome.get("self_check") else "success",
+            target={"host_id": host_id},
+            facts={key: bool(auto_restart_outcome[key]) for key in ("restarted", "self_check") if key in auto_restart_outcome},
+            error=ErrorInfo.model_validate(restart_error) if restart_error else None,
+        ))
+    operation = set_operation(OperationResult(
+        action="wings.token.rotate", phase="execution", outcome="success",
+        target={"host_id": host_id, "node_id": node.id}, children=children,
+    ))
     await log_manager_activity(
         db,
         actor=admin.username,
         category="host_node",
-        status=log_status_value,
+        operation=operation,
         detail_key="node.daemon_token.reset",
         detail_params={
             "host_id": host_id,
@@ -478,6 +491,7 @@ async def reset_node_daemon_token(
     )
 
     response["auto_restart"] = auto_restart_outcome
+    response["operation"] = operation.model_dump(exclude_none=True, exclude_defaults=True)
     if auto_restart and auto_restart_outcome.get("restarted") and auto_restart_outcome.get("self_check"):
         response["wings_restart_required"] = False
         response["message"] = (
@@ -510,16 +524,18 @@ async def restart_wings(
     try:
         result = await agent_client.restart_wings(endpoint, token, timeout=60.0)
     except agent_client.AgentClientError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc),
-        ) from exc
+        operation = set_operation(OperationResult(action="wings.restart", phase="execution", outcome="failed", target={"host_id": host_id}, error=exc.error))
+        await log_manager_activity(db, actor=admin.username, category="host_node", operation=operation, detail_key="node.wings.restart", detail_params={"host_id": host_id, "node_id": node.id})
+        raise ApiError(504 if exc.error.code == "dependency.timeout" else 502, exc.error.code, detail=exc.error.detail, operation=operation) from exc
 
+    error = None if result["ok"] else agent_client.command_error(result)
+    operation = set_operation(OperationResult(action="wings.restart", phase="execution", outcome="success" if result["ok"] else "failed", target={"host_id": host_id}, error=error))
     await log_manager_activity(
         db,
         actor=admin.username,
         category="host_node",
-        status="success" if result.get("ok") else "error",
         detail_key="node.wings.restart",
+        operation=operation,
         detail_params={
             "host_id": host_id,
             "node_id": node.id,
@@ -528,6 +544,9 @@ async def restart_wings(
             "error": result.get("error"),
         },
     )
+    if error is not None:
+        raise ApiError(500 if error.code in {"agent.command_invalid_params", "system.internal_error"} else 502, error.code, detail=error.detail, operation=operation)
+    result["operation"] = operation.model_dump(exclude_none=True, exclude_defaults=True)
     return result
 
 

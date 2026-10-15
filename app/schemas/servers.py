@@ -1,6 +1,7 @@
 """Schemas for admin server management routes."""
 
 from __future__ import annotations
+from app.core.contracts import OperationResult
 
 from typing import Any, Literal, Self
 
@@ -114,5 +115,6 @@ class UpdateServerPlanRequest(BaseModel):
 
 
 class BatchServersResponse(MessageResponse):
+    operation: OperationResult
     success: int
     failed: int

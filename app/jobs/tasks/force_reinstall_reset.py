@@ -31,6 +31,7 @@ from sqlalchemy import text
 
 from app.db.session import get_session_factory
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ async def run_force_reinstall_reset() -> None:
                 db,
                 actor="system",
                 category="automation",
-                status="success",
+                operation=OperationResult(action="automation.reinstall_reset", phase="execution", outcome="success", succeeded=int(n)),
                 detail_key="force_reinstall_reset.cleared",
                 detail_params={"count": int(n)},
             )

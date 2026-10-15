@@ -16,7 +16,7 @@ export interface FileEntry {
 }
 
 export function useFileTree(serverId: Ref<number | undefined>) {
-  const { get } = useApiFetch()
+  const { get, handleError } = useApiFetch()
 
   const treeRoot = ref<TreeNode>({
     name: '/',
@@ -32,8 +32,7 @@ export function useFileTree(serverId: Ref<number | undefined>) {
     const data = await get<FileEntry[]>(
       `/api/user/servers/${serverId.value}/files/list?directory=${encodeURIComponent(node.path)}`,
       { silent: true },
-    )
-    node.loading = false
+    ).finally(() => { node.loading = false })
     if (data) {
       node.children = data
         .filter(f => !f.file)
@@ -54,7 +53,7 @@ export function useFileTree(serverId: Ref<number | undefined>) {
     } else {
       node.expanded = true
       if (node.children === null) {
-        loadTreeNode(node)
+        void loadTreeNode(node).catch(handleError)
       }
     }
   }
@@ -79,7 +78,7 @@ export function useFileTree(serverId: Ref<number | undefined>) {
     const parts = path.split('/').filter(Boolean)
     let node = treeRoot.value
     if (path === '/') {
-      loadTreeNode(node)
+      void loadTreeNode(node).catch(handleError)
       return
     }
     for (const part of parts) {
@@ -88,7 +87,7 @@ export function useFileTree(serverId: Ref<number | undefined>) {
       if (child) node = child
       else break
     }
-    loadTreeNode(node)
+    void loadTreeNode(node).catch(handleError)
   }
 
   return {

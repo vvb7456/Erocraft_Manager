@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ApiError, apiErrorMessage } from '@/composables/apiClient'
 // HostWingsSection — Wings 服务配置（panel.nodes 白名单字段 + push to wings）+ 服务状态 + 重启控制
 //
 // GET  /api/admin/hosts/{hostId}/wings-config
@@ -39,7 +40,7 @@ defineOptions({ name: 'HostWingsSection' })
 
 const props = defineProps<{ hostId: number }>()
 const { t } = useI18n({ useScope: 'global' })
-const { get, post, raw } = useApiFetch()
+const { get, post, raw, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 
@@ -190,7 +191,6 @@ async function performSave(): Promise<{ ok: boolean; pushed: boolean }> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res) return { ok: false, pushed: false }
   const json = await res.json()
   lastResult.value = { changed: json.changed || [], restart_required: json.restart_required_fields }
   return {
@@ -202,16 +202,11 @@ async function performSave(): Promise<{ ok: boolean; pushed: boolean }> {
 async function performRestart(): Promise<boolean> {
   restarting.value = true
   try {
-    const r = await post<{ ok: boolean; error?: string; duration_ms?: number }>(
+    const r = await post<{ duration_ms: number }>(
       `/api/admin/hosts/${props.hostId}/wings/restart`, {},
     )
-    if (!r) return false
-    if (r.ok) {
-      toast(t('hosts.setting.wings.restartOk', { ms: r.duration_ms ?? '?' }), 'success')
-      return true
-    }
-    toast(t('hosts.setting.wings.restartFail', { err: r.error || '?' }), 'error')
-    return false
+    toast(t('hosts.setting.wings.restartOk', { ms: r.duration_ms }), 'success')
+    return true
   } finally {
     restarting.value = false
   }
@@ -238,12 +233,18 @@ async function save(): Promise<boolean> {
   let result: { ok: boolean; pushed: boolean }
   try {
     result = await performSave()
+  } catch (failure) {
+    if (failure instanceof ApiError && failure.problem.context?.panel_updated) {
+      toast(t('hosts.setting.wings.savedNotApplied'), 'warning')
+      await load()
+    } else toast(apiErrorMessage(failure), 'error')
+    return false
   } finally {
     submitting.value = false
   }
   if (!result.ok) return false
   toast(t('hosts.setting.wings.saved', { n: lastResult.value?.changed.length || 0 }), 'success')
-  await load()
+  await load().catch(handleError)
 
   // Only attempt the restart if wings actually accepted the patch — otherwise
   // restarting won't help (backend already suppresses restart_required_fields

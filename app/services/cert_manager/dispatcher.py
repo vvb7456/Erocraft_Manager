@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utc_naive_now
+from app.core.contracts import ErrorInfo, OperationResult
 from app.db.models.manager import ManagerCertDeployment, ManagerCertificate, ManagerHost
 from app.services import agent_client, host_registry
 from app.services.audit import log_manager_activity
@@ -29,14 +30,17 @@ async def redeploy_deployment(
     commit: bool = True,
 ) -> dict[str, Any]:
     """Install the deployment's certificate source on its target host."""
+    operation = OperationResult(action="certificate.deploy", phase="execution", outcome="success", target={"certificate_id": deployment.certificate_id, "deployment_id": deployment.id, "host_id": deployment.host_id})
     cert = await db.get(ManagerCertificate, deployment.certificate_id)
     if cert is None:
         deployment.status = "deploy_failed"
         deployment.last_deploy_attempt_at = utc_naive_now()
         deployment.last_deploy_error = "certificate row not found"
+        operation.outcome = "failed"
+        operation.error = ErrorInfo(code="resource.not_found", detail=deployment.last_deploy_error)
         if commit:
             await db.commit()
-        return {"ok": False, "deployment_id": deployment.id, "error": deployment.last_deploy_error}
+        return {"ok": False, "deployment_id": deployment.id, "error": deployment.last_deploy_error, "operation": operation.model_dump(exclude_none=True, exclude_defaults=True)}
 
     now = utc_naive_now()
     deployment.last_deploy_attempt_at = now
@@ -53,6 +57,8 @@ async def redeploy_deployment(
         material = load_source_material(cert.source_path)
         endpoint, token = await host_registry.get_credentials(db, deployment.host_id)
     except (CertPemError, host_registry.HostRegistryError) as exc:
+        operation.outcome = "failed"
+        operation.error = ErrorInfo(code="certificate.source_invalid" if isinstance(exc, CertPemError) else "resource.conflict", detail=str(exc))
         deployment.status = "deploy_failed"
         deployment.last_deploy_error = str(exc)
         if commit:
@@ -61,8 +67,8 @@ async def redeploy_deployment(
             db,
             actor=actor,
             category="certificate",
-            status="error",
             detail_key="cert.deploy.failed",
+            operation=operation,
             detail_params={
                 "certificate_id": cert.id,
                 "deployment_id": deployment.id,
@@ -70,7 +76,7 @@ async def redeploy_deployment(
                 "error": str(exc),
             },
         )
-        return {"ok": False, "deployment_id": deployment.id, "error": str(exc)}
+        return {"ok": False, "deployment_id": deployment.id, "error": str(exc), "operation": operation.model_dump(exclude_none=True, exclude_defaults=True)}
 
     try:
         result = await agent_client.install_cert(
@@ -84,6 +90,8 @@ async def redeploy_deployment(
             timeout=request_timeout,
         )
     except Exception as exc:
+        operation.error = exc.error if isinstance(exc, agent_client.AgentClientError) else ErrorInfo(code="system.internal_error")
+        operation.outcome = "failed"
         deployment.status = "deploy_failed"
         deployment.last_deploy_error = str(exc)
         if commit:
@@ -92,8 +100,8 @@ async def redeploy_deployment(
             db,
             actor=actor,
             category="certificate",
-            status="error",
             detail_key="cert.deploy.failed",
+            operation=operation,
             detail_params={
                 "certificate_id": cert.id,
                 "deployment_id": deployment.id,
@@ -101,19 +109,21 @@ async def redeploy_deployment(
                 "error": str(exc),
             },
         )
-        return {"ok": False, "deployment_id": deployment.id, "error": str(exc)}
+        return {"ok": False, "deployment_id": deployment.id, "error": str(exc), "operation": operation.model_dump(exclude_none=True, exclude_defaults=True)}
 
     if not result.get("ok"):
+        operation.outcome = "failed"
+        operation.error = agent_client.command_error(result)
         deployment.status = "deploy_failed"
-        deployment.last_deploy_error = result.get("error") or "agent reported cert.install failure"
+        deployment.last_deploy_error = agent_client.command_error_text(result)
         if commit:
             await db.commit()
         await log_manager_activity(
             db,
             actor=actor,
             category="certificate",
-            status="error",
             detail_key="cert.deploy.failed",
+            operation=operation,
             detail_params={
                 "certificate_id": cert.id,
                 "deployment_id": deployment.id,
@@ -126,6 +136,7 @@ async def redeploy_deployment(
             "deployment_id": deployment.id,
             "error": deployment.last_deploy_error,
             "agent_response": result,
+            "operation": operation.model_dump(exclude_none=True, exclude_defaults=True),
         }
 
     output = result.get("output") or {}
@@ -151,8 +162,8 @@ async def redeploy_deployment(
         db,
         actor=actor,
         category="certificate",
-        status="success",
         detail_key="cert.deploy.success",
+        operation=operation,
         detail_params={
             "certificate_id": cert.id,
             "deployment_id": deployment.id,
@@ -168,6 +179,7 @@ async def redeploy_deployment(
         "status": deployment.status,
         "fingerprint_sha256": deployment.deployed_fingerprint_sha256,
         "agent_response": result,
+        "operation": operation.model_dump(exclude_none=True, exclude_defaults=True),
     }
 
 

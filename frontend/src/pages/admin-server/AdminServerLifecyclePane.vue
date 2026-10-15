@@ -19,7 +19,7 @@ defineOptions({ name: 'AdminServerLifecyclePane' })
 
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
-const { post, del, loading } = useApiFetch()
+const { post, patch, del, loading } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 
@@ -184,27 +184,10 @@ const currentPlanName = computed(() => server.value?.planName ?? null)
 
 async function onPlanModalConfirmed(planId: number | null) {
   if (!serverId.value) return
-  try {
-    const res = await fetch(`/api/admin/servers/${serverId.value}/plan`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planId }),
-    })
-    if (res.ok) {
-      toast(t('servers.toast.plan_updated'), 'success')
-      planModalOpen.value = false
-      await reload()
-    } else {
-      let msg = `HTTP ${res.status}`
-      try {
-        const body = await res.json()
-        msg = body.detail || body.error || body.message || msg
-      } catch { /* ignore */ }
-      toast(msg, 'error')
-    }
-  } catch {
-    toast(t('common.apiErrors.network'), 'error')
-  }
+  await patch(`/api/admin/servers/${serverId.value}/plan`, { planId })
+  toast(t('servers.toast.plan_updated'), 'success')
+  planModalOpen.value = false
+  await reload()
 }
 </script>
 

@@ -6,6 +6,7 @@ are DB-backed and UI-editable. The admin token is marked
 """
 
 from __future__ import annotations
+from app.core.api_errors import ApiError
 
 from typing import Any
 
@@ -20,6 +21,7 @@ from app.core.settings_store import get_settings_store
 from app.db.models.pterodactyl import PteroUser
 from app.schemas.settings import SettingsMessageResponse
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 
 router = APIRouter(prefix="/admin/llm", tags=["llm"])
 
@@ -81,7 +83,7 @@ async def llm_settings_post(
         db,
         actor=current_user.username,
         category="settings",
-        status="success",
+        operation=OperationResult(action="llm.settings.update", phase="execution", outcome="success"),
         detail_key="llm.settings.batch",
         detail_params={
             "keys": ", ".join(sorted(payload.settings.keys())),
@@ -122,14 +124,22 @@ async def llm_models_list(
                 },
             )
         if resp.status_code >= 400:
-            return {"models": []}
+            raise ApiError(502, "dependency.authentication_failed" if resp.status_code in {401, 403} else "dependency.failed")
         data = resp.json()
-        models = data.get("data", [])
+        if not isinstance(data, dict):
+            raise ApiError(502, "dependency.invalid_response")
+        if data.get("success") is False:
+            raise ApiError(502, "dependency.failed")
+        models = data.get("data")
         if isinstance(models, list):
             return {"models": [str(m) for m in models]}
-        return {"models": []}
-    except Exception:
-        return {"models": []}
+        raise ApiError(502, "dependency.invalid_response")
+    except httpx.TimeoutException as exc:
+        raise ApiError(504, "dependency.timeout") from exc
+    except httpx.HTTPError as exc:
+        raise ApiError(502, "dependency.unreachable") from exc
+    except ValueError as exc:
+        raise ApiError(502, "dependency.invalid_response") from exc
 
 
 @router.get("/groups")
@@ -147,5 +157,7 @@ async def llm_groups_list(
     try:
         groups = await newapi_client.list_groups(db)
         return {"groups": groups}
-    except Exception:
+    except newapi_client.NewApiNotConfigured:
         return {"groups": []}
+    except newapi_client.NewApiError as exc:
+        raise ApiError(502, "dependency.failed", detail=str(exc)) from exc

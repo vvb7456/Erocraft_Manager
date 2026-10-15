@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ApiError, apiErrorMessage } from '@/composables/apiClient'
 // HostAllocationsPane — Pterodactyl-Panel-style port allocation manager.
 // Mounted only on wings_node hosts (parent route hides the tab otherwise).
 // Reads/writes the shared `panel.allocations` table via:
@@ -169,10 +170,10 @@ async function load(silent = false) {
 // Reset page on filter/search change.
 watch([filterAssigned, searchTerm], () => {
   page.value = 1
-  load()
+  return load()
 })
 watch([page, perPage], () => load())
-watch(hostId, (id) => { if (id) load() })
+watch(hostId, (id) => { if (id) return load() })
 
 onMounted(() => {
   // Allocations are wings-only; redirect away when host is not a wings node.
@@ -181,7 +182,7 @@ onMounted(() => {
     router.replace({ name: 'host-overview', params: { id: String(host.value.id) } })
     return
   }
-  if (hostId.value) load()
+  if (hostId.value) return load()
 })
 
 // React when the host detail finishes loading after this pane mounts.
@@ -213,19 +214,16 @@ async function deleteOne(a: AllocationOut) {
       `/api/admin/hosts/${hostId.value}/allocations/${a.id}`,
       { method: 'DELETE', silent: true },
     )
-    if (!res) return  // 401 already redirected, network error already toasted
     if (res.ok) {
       toast(t('hosts.allocations.delete.toastOk', { n: 1 }), 'success')
       selectedIds.value.delete(a.id)
       await load(true)
-    } else if (res.status === 409) {
+    }
+  } catch (failure) {
+    if (failure instanceof ApiError && failure.status === 409) {
       toast(t('hosts.allocations.delete.inUse', { port: a.port }), 'error')
       await load(true)
-    } else {
-      toast(t('hosts.allocations.delete.failed'), 'error')
-    }
-  } catch {
-    toast(t('hosts.allocations.delete.failed'), 'error')
+    } else toast(apiErrorMessage(failure), 'error')
   }
 }
 
@@ -247,28 +245,20 @@ async function bulkDelete() {
       body: JSON.stringify({ ids }),
       silent: true,
     })
-    if (!res) return  // 401 already redirected, network error already toasted
     if (res.ok) {
       toast(t('hosts.allocations.delete.toastOk', { n: ids.length }), 'success')
       clearSelection()
       await load(true)
-    } else if (res.status === 409) {
-      let ports: number[] | undefined
-      try {
-        const body = await res.json()
-        // FastAPI HTTPException wraps payload under `detail`; fall back to root.
-        ports = body?.detail?.conflicting_ports || body?.conflicting_ports
-      } catch { /* swallow */ }
+    }
+  } catch (failure) {
+    if (failure instanceof ApiError && failure.status === 409) {
+      const ports = failure.problem.context?.conflicting_ports
       const msg = (Array.isArray(ports) && ports.length)
         ? t('hosts.allocations.delete.inUse', { port: ports.join(', ') })
         : t('hosts.allocations.delete.failed')
       toast(msg, 'error')
       await load(true)
-    } else {
-      toast(t('hosts.allocations.delete.failed'), 'error')
-    }
-  } catch {
-    toast(t('hosts.allocations.delete.failed'), 'error')
+    } else toast(apiErrorMessage(failure), 'error')
   } finally { batchBusy.value = false }
 }
 

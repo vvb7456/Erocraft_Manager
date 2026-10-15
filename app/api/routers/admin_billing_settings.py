@@ -21,6 +21,7 @@ from app.core.settings_store import get_settings_store
 from app.db.models.pterodactyl import PteroUser
 from app.schemas.settings import SettingsMessageResponse
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 
 router = APIRouter(prefix="/admin/billing", tags=["billing"])
 
@@ -105,7 +106,7 @@ async def billing_settings_post(
         db,
         actor=current_user.username,
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.settings.update", phase="execution", outcome="success"),
         detail_key="billing.settings.batch",
         detail_params={
             "keys": ", ".join(sorted(payload.settings.keys())),

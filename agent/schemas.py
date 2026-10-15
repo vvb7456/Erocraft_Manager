@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
+from .contracts import CommandFailure, CommandSuccess
 
 
 # ---------- collectors ----------
@@ -92,15 +93,7 @@ class CommandRequest(BaseModel):
     params: Optional[Dict[str, Any]] = None
 
 
-class CommandResponse(BaseModel):
-    id: int
-    ok: bool
-    # ``output`` is intentionally Any so handlers can return either a simple
-    # string (e.g. ``ping`` -> "pong") or a structured payload (e.g.
-    # ``wings.status`` -> systemd state dict). The wire format stays JSON.
-    output: Optional[Any] = None
-    error: Optional[str] = None
-    duration_ms: int
+CommandResponse = CommandSuccess | CommandFailure
 
 
 # ---------- agent self status ----------

@@ -43,6 +43,9 @@ jobs:
         run: npm ci
         working-directory: frontend
 
+      - name: 检查共用接口契约
+        run: python3 scripts/generate-contracts.py --check
+
       - name: frontend build
         run: npx vite build
         working-directory: frontend

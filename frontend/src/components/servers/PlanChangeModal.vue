@@ -43,7 +43,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
-const { get } = useApiFetch()
+const { get, loading, error, handleError } = useApiFetch()
 
 const plans = ref<AdminPlanLite[]>([])
 const loaded = ref(false)
@@ -52,10 +52,11 @@ const submitting = ref(false)
 
 async function loadPlans() {
   if (loaded.value) return
-  const data = await get<AdminPlanLite[]>('/api/admin/billing/plans?include_inactive=true', { silent: true })
-  if (data) {
-    plans.value = data
+  try {
+    plans.value = await get<AdminPlanLite[]>('/api/admin/billing/plans?include_inactive=true', { silent: true })
     loaded.value = true
+  } catch (failure) {
+    handleError(failure)
   }
 }
 
@@ -74,7 +75,6 @@ watch(
   () => props.modelValue,
   async (open) => {
     if (open) {
-      await loadPlans()
       // Initialize selection: in single mode default to current; in batch mode start empty
       if (props.batchMode) {
         selectedPlanId.value = ''
@@ -82,14 +82,15 @@ watch(
         selectedPlanId.value =
           props.currentPlanId !== null && props.currentPlanId !== undefined
             ? String(props.currentPlanId)
-            : ''
+             : ''
       }
+      await loadPlans()
     }
   },
 )
 
 onMounted(() => {
-  if (props.modelValue) loadPlans()
+  if (props.modelValue) return loadPlans()
 })
 
 function close() {
@@ -98,7 +99,7 @@ function close() {
 }
 
 async function onConfirm() {
-  if (props.busy || submitting.value) return
+  if (props.busy || submitting.value || !loaded.value) return
   submitting.value = true
   try {
     const planId = selectedPlanId.value === '' ? null : Number(selectedPlanId.value)
@@ -128,14 +129,15 @@ const title = computed(() =>
         <span class="cb-label">{{ t('servers.modal.updatePlan.batchSubject', { n: batchCount ?? 0 }) }}</span>
       </div>
 
-      <FormField :label="t('servers.modal.updatePlan.targetPlan')">
-        <BaseSelect v-model="selectedPlanId" :options="planOptions" :placeholder="t('servers.modal.updatePlan.unbindOption')" :disabled="busy" teleport />
+      <FormField :label="t('servers.modal.updatePlan.targetPlan')" :error="error || undefined">
+        <BaseSelect v-model="selectedPlanId" :options="planOptions" :placeholder="t('servers.modal.updatePlan.unbindOption')" :disabled="busy || !loaded" teleport />
       </FormField>
+      <BaseButton v-if="error && !loaded" :loading="loading" @click="loadPlans">{{ t('common.btn.retry') }}</BaseButton>
     </div>
 
     <template #footer>
       <BaseButton variant="ghost" :disabled="busy" @click="close">{{ t('common.btn.cancel') }}</BaseButton>
-      <BaseButton variant="primary" :loading="submitting || busy" @click="onConfirm">
+      <BaseButton variant="primary" :loading="submitting || busy" :disabled="!loaded" @click="onConfirm">
         {{ t('common.btn.confirm') }}
       </BaseButton>
     </template>

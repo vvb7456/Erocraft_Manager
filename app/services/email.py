@@ -24,6 +24,7 @@ from app.core.runtime_settings import SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
 from app.db.models.manager import ManagerEmailTemplate
 from app.services.audit import log_manager_activity
+from app.core.contracts import ErrorInfo, OperationResult
 
 logger = logging.getLogger(__name__)
 
@@ -634,7 +635,7 @@ class EmailClient:
             self._db,
             actor=self._actor,
             category=self._log_category,
-            status="success" if ok else "fail",
+            operation=OperationResult(action="email.send", phase="acceptance", outcome="success" if ok else "failed", target={"recipient": recipient}, error=None if ok else ErrorInfo(code="email.send_failed", detail=err)),
             detail_key="email_sent" if ok else "email_failed",
             detail_params=params,
         )

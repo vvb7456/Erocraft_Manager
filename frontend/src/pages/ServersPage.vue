@@ -32,7 +32,7 @@ defineOptions({ name: 'ServersPage' })
 const { t } = useI18n({ useScope: 'global' })
 const route = useRoute()
 const router = useRouter()
-const { get, post, del } = useApiFetch()
+const { get, post, patch, del, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 const today = useToday()
@@ -125,15 +125,14 @@ const tableLoading = ref(true)
 
 async function loadServers(silent = false) {
   if (!silent) tableLoading.value = true
-  const data = await get<{ servers: ServerItem[] }>('/api/admin/servers')
+  const data = await get<{ servers: ServerItem[] }>('/api/admin/servers').finally(() => { tableLoading.value = false })
   if (data) {
     rawServers.value = data.servers
   }
-  tableLoading.value = false
 }
 
 onMounted(async () => {
-  await loadServers()
+  await loadServers().catch(handleError)
   // Auto-open create modal if navigated from user creation
   if (newForUser.value) {
     createModalOpen.value = true
@@ -439,27 +438,10 @@ async function onPlanModalConfirmed(planId: number | null) {
       planModalOpen.value = false
       return
     }
-    try {
-      const res = await fetch(`/api/admin/servers/${s.pteroId}/plan`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId }),
-      })
-      if (res.ok) {
-        toast(t('servers.toast.plan_updated'), 'success')
-        planModalOpen.value = false
-        await loadServers(true)
-      } else {
-        let msg = `HTTP ${res.status}`
-        try {
-          const body = await res.json()
-          msg = body.detail || body.error || body.message || msg
-        } catch { /* ignore */ }
-        toast(msg, 'error')
-      }
-    } catch {
-      toast(t('common.apiErrors.network'), 'error')
-    }
+    await patch(`/api/admin/servers/${s.pteroId}/plan`, { planId })
+    toast(t('servers.toast.plan_updated'), 'success')
+    planModalOpen.value = false
+    await loadServers(true)
   }
 }
 

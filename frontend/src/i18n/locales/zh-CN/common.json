@@ -14,6 +14,7 @@
     "empty": "没有可复制的内容"
   },
   "btn": {
+    "retry": "重试",
     "clear": "清空",
     "save": "保存",
     "saveDirty": "保存更改",
@@ -70,78 +71,170 @@
   "on": "启用",
   "off": "禁用",
   "apiErrors": {
-    "file": {
-      "destination_exists": "目标文件或文件夹已存在",
-      "no_space": "服务器磁盘空间不足",
-      "unknown_archive": "不支持的压缩格式",
-      "text_busy": "文件正在被其他进程使用，请稍后再试",
-      "name_conflict": "文件名与已存在的目录冲突",
-      "unsupported_type": "无法打开此类型的文件",
-      "not_a_directory": "路径中的某一部分不是目录",
-      "upload_too_large": "文件超过上传大小限制",
-      "not_found": "文件或目录不存在",
-      "permission_denied": "权限不足",
-      "denylist": "此文件受保护，无法修改",
-      "is_directory": "无法对目录执行此操作",
-      "name_too_long": "文件名过长",
-      "no_files_specified": "未指定要操作的文件"
-    },
-    "server": {
-      "offline": "服务器当前处于关闭状态",
-      "suspended": "服务器已被冻结",
-      "installing": "服务器正在安装中，请稍后",
-      "invalid_power_action": "无效的电源操作",
-      "power_conflict": "另一个电源操作正在进行中",
-      "startup_credentials_required": "请先在设置中填写用户名和密码"
-    },
-    "wings": {
-      "unknown_error": "服务器通信异常，请稍后再试",
-      "timeout": "操作超时，请稍后再试"
-    },
-    "network": "网络连接失败，请稍后再试",
-    "auth": {
-      "credentials_required": "请输入用户名和密码",
-      "invalid_credentials": "用户名或密码无效",
-      "email_not_verified": "该邮箱尚未完成验证，请查收注册验证邮件并点击链接完成注册。"
-    },
     "account": {
-      "password_required": "请提供新密码",
-      "current_password_incorrect": "当前密码不正确",
-      "password_update_failed": "密码修改失败，请稍后重试",
-      "invalid_reset_link": "无效的重置链接",
-      "reset_link_expired": "重置链接已过期，请重新申请",
-      "password_reset_status_unknown": "密码重置状态未知，请稍后尝试登录；如仍失败，请重新申请重置链接",
-      "email_same": "新邮箱与当前邮箱相同",
-      "email_unavailable": "该邮箱暂时不可用，请更换后重试",
-      "email_rate_limited": "请求过于频繁，请稍后再试",
-      "email_send_failed": "验证邮件发送失败，请稍后重试",
-      "invalid_confirm_link": "无效的确认链接",
       "confirm_link_expired": "确认链接已过期，请重新申请",
-      "user_missing": "用户不存在",
-      "email_confirm_status_unknown": "邮箱变更状态未知，请稍后刷新账户信息；如仍未生效，请重新发起变更"
-    },
-    "register": {
-      "disabled": "当前系统已关闭公开注册",
-      "invalid_email": "邮箱格式不正确",
-      "invalid_username": "用户名只能包含字母、数字、下划线、点和连字符（3-32 位）",
-      "email_taken": "该邮箱已被注册",
-      "username_taken": "该用户名已被使用",
-      "rate_limited": "请求过于频繁，请稍后再试",
-      "verification_pending": "验证邮件已发送，请检查收件箱（含垃圾邮件）。链接在 30 分钟内有效，过期后可重新注册。",
+      "current_password_incorrect": "当前密码不正确",
+      "email_confirm_status_unknown": "邮箱变更状态未知，请稍后刷新账户信息；如仍未生效，请重新发起变更",
+      "email_rate_limited": "请求过于频繁，请稍后再试",
+      "email_same": "新邮箱与当前邮箱相同",
       "email_send_failed": "验证邮件发送失败，请稍后重试",
-      "invalid_token": "验证链接无效",
-      "token_used": "验证链接已使用，请直接登录",
-      "token_expired": "验证链接已过期，请重新注册",
-      "site_url_not_configured": "系统未配置外部访问地址，请联系管理员",
-      "create_failed": "账号创建失败，请重新注册或联系管理员",
-      "agreement_required": "请阅读并同意所有必选协议后继续"
+      "email_unavailable": "该邮箱暂时不可用，请更换后重试",
+      "invalid_confirm_link": "无效的确认链接",
+      "invalid_reset_link": "无效的重置链接",
+      "password_required": "请提供新密码",
+      "password_reset_status_unknown": "密码重置状态未知，请稍后尝试登录；如仍失败，请重新申请重置链接",
+      "password_update_failed": "密码修改失败，请稍后重试",
+      "reset_link_expired": "重置链接已过期，请重新申请",
+      "user_missing": "用户不存在"
+    },
+    "activity": {
+      "command_required": "请填写命令",
+      "event_not_allowed": "不支持此活动类型",
+      "file_required": "请指定文件"
+    },
+    "agent": {
+      "command_failed": "节点命令执行失败",
+      "command_invalid_params": "节点命令参数无效",
+      "command_unsupported": "节点不支持此命令"
     },
     "agreements": {
-      "not_found": "协议不存在或未发布",
-      "invalid_context": "无效的协议场景",
-      "slug_conflict": "协议标识已存在",
       "egg_scope_requires_egg_id": "egg 作用域协议必须指定 egg_id",
-      "no_current_version_to_patch": "当前协议尚无已发布版本，无法订正"
+      "invalid_context": "无效的协议场景",
+      "no_current_version_to_patch": "当前协议尚无已发布版本，无法订正",
+      "not_found": "协议不存在或未发布",
+      "slug_conflict": "协议标识已存在"
+    },
+    "auth": {
+      "credentials_required": "请输入用户名和密码",
+      "email_not_verified": "该邮箱尚未完成验证，请查收注册验证邮件并点击链接完成注册。",
+      "forbidden": "没有执行此操作的权限",
+      "invalid_credentials": "用户名或密码无效",
+      "invalid_token": "认证令牌无效",
+      "origin_forbidden": "请求来源不受允许",
+      "session_required": "请重新登录"
+    },
+    "billing": {
+      "order": {
+        "already_paid": "订单已付款，不能执行此操作",
+        "apply_failed": "订单开通失败",
+        "in_progress": "订单正在处理中"
+      }
+    },
+    "certificate": {
+      "deploy_failed": "证书部署失败",
+      "renew_failed": "证书续签失败",
+      "source_invalid": "无法读取有效的证书文件"
+    },
+    "client": {
+      "http_error": "请求失败（HTTP {status}）",
+      "invalid_response": "服务返回了无法解析的响应",
+      "network_error": "网络连接失败，请稍后再试"
+    },
+    "coupon": {
+      "template_inactive": "优惠券模板未启用"
+    },
+    "dependency": {
+      "authentication_failed": "远端服务拒绝了系统凭据",
+      "failed": "远端服务执行失败",
+      "invalid_response": "远端服务返回了无效响应",
+      "timeout": "等待远端服务响应超时",
+      "unreachable": "无法连接远端服务"
+    },
+    "email": {
+      "send_failed": "邮件发送失败"
+    },
+    "email_change": {
+      "site_url_not_configured": "请先配置网站地址"
+    },
+    "file": {
+      "denylist": "此文件受保护，无法修改",
+      "destination_exists": "目标文件或文件夹已存在",
+      "is_directory": "无法对目录执行此操作",
+      "name_conflict": "文件名与已存在的目录冲突",
+      "name_too_long": "文件名过长",
+      "no_files_specified": "未指定要操作的文件",
+      "no_space": "服务器磁盘空间不足",
+      "not_a_directory": "路径中的某一部分不是目录",
+      "not_found": "文件或目录不存在",
+      "permission_denied": "权限不足",
+      "text_busy": "文件正在被其他进程使用，请稍后再试",
+      "unknown_archive": "不支持的压缩格式",
+      "unsupported_type": "无法打开此类型的文件",
+      "upload_too_large": "文件超过上传大小限制"
+    },
+    "forgot_password": {
+      "site_url_not_configured": "系统未配置网站地址，请联系管理员"
+    },
+    "notification": {
+      "delivery_failed": "通知发送失败",
+      "not_configured": "请先完成通知渠道配置"
+    },
+    "register": {
+      "agreement_required": "请阅读并同意所有必选协议后继续",
+      "create_failed": "账号创建失败，请重新注册或联系管理员",
+      "disabled": "当前系统已关闭公开注册",
+      "email_send_failed": "验证邮件发送失败，请稍后重试",
+      "email_taken": "该邮箱已被注册",
+      "invalid_email": "邮箱格式不正确",
+      "invalid_token": "验证链接无效",
+      "invalid_username": "用户名只能包含字母、数字、下划线、点和连字符（3-32 位）",
+      "rate_limited": "请求过于频繁，请稍后再试",
+      "site_url_not_configured": "系统未配置外部访问地址，请联系管理员",
+      "token_expired": "验证链接已过期，请重新注册",
+      "token_used": "验证链接已使用，请直接登录",
+      "username_taken": "该用户名已被使用",
+      "verification_pending": "验证邮件已发送，请检查收件箱（含垃圾邮件）。链接在 30 分钟内有效，过期后可重新注册。"
+    },
+    "request": {
+      "invalid": "请求无效",
+      "malformed_json": "请求内容不是有效的 JSON",
+      "method_not_allowed": "不支持此请求方法",
+      "rate_limited": "请求过于频繁，请稍后再试",
+      "too_large": "请求内容过大",
+      "unsupported_media_type": "不支持此内容类型",
+      "validation_failed": "请检查填写内容"
+    },
+    "resource": {
+      "conflict": "当前状态不允许此操作",
+      "not_found": "资源不存在"
+    },
+    "server": {
+      "installing": "服务器正在安装中，请稍后",
+      "invalid_power_action": "无效的电源操作",
+      "offline": "服务器当前处于关闭状态",
+      "power_conflict": "另一个电源操作正在进行中",
+      "startup_credentials_required": "请先在设置中填写用户名和密码",
+      "startup_variable_invalid": "启动参数 {variable} 不符合要求",
+      "suspended": "服务器已被冻结"
+    },
+    "system": {
+      "internal_error": "服务处理失败，请稍后重试",
+      "unavailable": "服务暂时不可用",
+      "unsupported": "不支持此操作"
+    },
+    "tunnel": {
+      "cf_api_error": "域名服务请求失败",
+      "cf_auth_failed": "域名服务认证失败",
+      "cf_rate_limited": "域名服务暂时限制了请求",
+      "host_not_found": "隧道主机不存在",
+      "host_not_ready": "主机隧道尚未就绪",
+      "invalid_subdomain": "子域名格式不正确",
+      "no_allocation": "服务器没有可用端口",
+      "not_enabled": "尚未启用隧道",
+      "subdomain_taken": "子域名已被使用"
+    },
+    "user": {
+      "not_found": "用户不存在"
+    },
+    "validation": {
+      "invalid": "此项内容不符合要求",
+      "required": "此项为必填项"
+    },
+    "wings": {
+      "apply_failed": "节点未能应用配置",
+      "restart_failed": "Wings 服务重启失败",
+      "timeout": "操作超时，请稍后再试",
+      "unknown_error": "服务器通信异常，请稍后再试"
     }
   }
 }

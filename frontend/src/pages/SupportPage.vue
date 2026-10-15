@@ -96,6 +96,8 @@ async function load(more = false) {
       failed.value = !res
       if (res) selected.value = res.id
     }
+  } catch {
+    if (alive && currentFilter === filterKey.value) failed.value = true
   } finally {
     loading.value = false
     if (pendingRefresh) { pendingRefresh = false; void load() }

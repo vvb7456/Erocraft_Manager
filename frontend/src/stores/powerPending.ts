@@ -4,6 +4,8 @@ import { useServerResourceStore } from './serverResources'
 import type { ToastAPI } from '@/composables/useToast'
 import i18n from '@/i18n/vue-i18n'
 import router from '@/router'
+import { ApiError, apiErrorMessage, fetchApi } from '@/composables/apiClient'
+import { useAppStore } from './app'
 
 export type PowerAction = 'start' | 'stop' | 'restart' | 'kill'
 
@@ -46,13 +48,14 @@ interface PendingPower {
  */
 export const usePowerPendingStore = defineStore('powerPending', () => {
   const pending = reactive<Map<number, PendingPower>>(new Map())
-  const { t, te } = i18n.global
+  const { t } = i18n.global
 
   let _redirecting = false
   function redirectToLogin() {
     if (_redirecting) return
     _redirecting = true
-    router.push({ name: 'login' }).finally(() => { _redirecting = false })
+    useAppStore().clearSessionUser()
+    router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } }).finally(() => { _redirecting = false })
   }
 
   const TIMEOUT_MS: Record<PowerAction, number> = {
@@ -197,15 +200,6 @@ export const usePowerPendingStore = defineStore('powerPending', () => {
     return false
   }
 
-  /** Translate structured error codes (same logic as useApiFetch) */
-  function translateError(msg: string): string {
-    if (/^[a-z_]+\.[a-z_]+$/.test(msg)) {
-      const key = `common.apiErrors.${msg}`
-      if (te(key)) return t(key)
-    }
-    return msg
-  }
-
   /**
    * Centralized power action sender.
    * Sets pending, calls API via raw fetch, clears on failure.
@@ -224,43 +218,23 @@ export const usePowerPendingStore = defineStore('powerPending', () => {
 
     setPending(serverId, action)
     try {
-      const res = await fetch(`/api/user/servers/${serverId}/power`, {
+      await fetchApi(`/api/user/servers/${serverId}/power`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
       })
-      if (!res.ok) {
-        clearPending(serverId)
-        if (res.status === 401) {
-          redirectToLogin()
-          return null
-        }
-        let code = `HTTP ${res.status}`
-        let missing: string[] = []
-        try {
-          const body = await res.json()
-          // FastAPI HTTPException(detail=...) is echoed as { error: detail }.
-          // detail is either a string code or a dict { code, missing }.
-          const e = body.error
-          if (e && typeof e === 'object') {
-            code = String(e.code ?? code)
-            if (Array.isArray(e.missing)) missing = e.missing.map(String)
-          } else if (typeof e === 'string') {
-            code = e
-          } else if (typeof body.message === 'string') {
-            code = body.message
-          }
-        } catch { /* ignore parse error */ }
-        const err: PowerError = { code, missing }
-        if (suppressErrors?.includes(code)) return err
-        if (toastFn) toastFn(translateError(code), 'error')
-        return err
-      }
       return null
-    } catch {
+    } catch (failure) {
       clearPending(serverId)
-      if (toastFn) toastFn(t('common.apiErrors.network'), 'error')
-      return null
+      if (failure instanceof ApiError && failure.code === 'auth.session_required') {
+        redirectToLogin()
+        return null
+      }
+      const code = failure instanceof ApiError ? failure.code : 'system.internal_error'
+      const fields = failure instanceof ApiError ? failure.problem.context?.missing : undefined
+      const err: PowerError = { code, missing: Array.isArray(fields) ? fields.map(String) : [] }
+      if (!suppressErrors?.includes(code)) toastFn?.(apiErrorMessage(failure), 'error')
+      return err
     }
   }
 

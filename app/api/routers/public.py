@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from app.core.api_errors import ApiError
+from app.core.error_codes import ErrorCode
 import logging
 import re
 import secrets
@@ -31,6 +33,7 @@ from app.schemas.agreements import AcceptanceItem
 from app.services import agreements as agreements_svc
 from app.services import panel_db
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.services.email import (
     SiteUrlNotConfiguredError,
     get_site_url,
@@ -86,15 +89,13 @@ async def _site_url(db: AsyncSession) -> str:
     return await get_site_url(db)
 
 
-async def _site_url_or_503(db: AsyncSession, *, detail_key: str) -> str:
+async def _site_url_or_503(db: AsyncSession, *, detail_key: ErrorCode) -> str:
     """get_site_url with HTTPException 503 conversion for user-facing flows."""
     try:
         return await get_site_url(db)
     except SiteUrlNotConfiguredError:
         logger.error("SITE_URL not configured; aborting flow %s", detail_key)
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail_key
-        ) from None
+        raise ApiError(409, detail_key) from None
 
 
 # ── Routes ──
@@ -210,7 +211,7 @@ async def forgot_password(
         db,
         actor=username,
         category="auth",
-        status="success" if success else "failure",
+        operation=OperationResult(action="auth.password_reset.email", phase="acceptance", outcome="success" if success else "failed", target={"username": username}),
         detail_key="forgot_password",
         detail_params={"username": username, "email": email},
     )
@@ -228,7 +229,7 @@ async def reset_password(
     email = payload.email.strip().lower()
     user = await user_repository.get_by_email(db, email)
     if not user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.invalid_reset_link")
+        raise ApiError(422, "account.invalid_reset_link")
 
     # Find latest unused reset token for this user
     result = await db.execute(
@@ -240,17 +241,17 @@ async def reset_password(
     )
     reset_record = result.scalar_one_or_none()
     if not reset_record:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.invalid_reset_link")
+        raise ApiError(422, "account.invalid_reset_link")
 
     # Check expiry
     if reset_record.created_at:
         age = datetime.now(UTC).replace(tzinfo=None) - reset_record.created_at
         if age > timedelta(minutes=TOKEN_EXPIRY_MINUTES):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.reset_link_expired")
+            raise ApiError(422, "account.reset_link_expired")
 
     # Verify token
     if not await verify_token_async(payload.token, reset_record.token):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.invalid_reset_link")
+        raise ApiError(422, "account.invalid_reset_link")
 
     claim_time = datetime.now(UTC).replace(tzinfo=None)
     claim_result = await db.execute(
@@ -261,7 +262,7 @@ async def reset_password(
     )
     if not claim_result.rowcount:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account.invalid_reset_link")
+        raise ApiError(422, "account.invalid_reset_link")
     await db.commit()
 
     # Sync to panel via direct DB write
@@ -280,16 +281,16 @@ async def reset_password(
         await db.commit()
     except LifecycleError as exc:
         logger.exception("Failed to sync password to panel for user %s", user.username)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="account.password_reset_status_unknown",
+        raise ApiError(
+            502,
+            "account.password_reset_status_unknown",
         ) from exc
 
     await log_manager_activity(
         db,
         actor=user.username,
         category="auth",
-        status="success",
+        operation=OperationResult(action="auth.password.reset", phase="execution", outcome="success", target={"user_id": user.id}),
         detail_key="reset_password",
         detail_params={"username": user.username},
     )
@@ -343,7 +344,7 @@ async def register(
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
     if not await _allow_registration(db):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="register.disabled")
+        raise ApiError(403, "register.disabled")
 
     # SITE_URL must exist before we even build the verify_url. Bail out
     # *before* hashing / sending so the user gets a fast, accurate error.
@@ -353,7 +354,7 @@ async def register(
     username = payload.username.strip()
 
     if not USERNAME_RE.match(username):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.invalid_username")
+        raise ApiError(422, "register.invalid_username")
 
     # ── Agreement consent validation ──
     # Validate the user's claimed agreement versions against the current
@@ -369,16 +370,16 @@ async def register(
             context="register",
         )
     except agreements_svc.AgreementError:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="register.agreement_required",
+        raise ApiError(
+            422,
+            "register.agreement_required",
         ) from None
 
     # Conflict checks against the panel users table
     if await user_repository.get_by_email(db, email):
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="register.email_taken")
+        raise ApiError(409, "register.email_taken")
     if await user_repository.get_by_username(db, username):
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="register.username_taken")
+        raise ApiError(409, "register.username_taken")
 
     # Conflict checks against unfinished pending registrations
     pending_user = await db.execute(
@@ -390,7 +391,7 @@ async def register(
         .limit(1)
     )
     if pending_user.scalar_one_or_none():
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="register.username_taken")
+        raise ApiError(409, "register.username_taken")
 
     # ── Serialize concurrent POST /register for the same email ──
     # Two requests can race here (e.g. a double-submitted form). The
@@ -426,9 +427,9 @@ async def register(
         None,
     )
     if active_pending:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail="register.verification_pending",
+        raise ApiError(
+            409,
+            "register.verification_pending",
         )
 
     # Bake a $2y$ bcrypt hash up-front so we don't have to keep the plaintext.
@@ -527,15 +528,15 @@ async def register(
         )
         await db.commit()
         logger.error("Failed to send registration email to %s: %s", email, err)
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY, detail="register.email_send_failed"
+        raise ApiError(
+            502, "register.email_send_failed"
         )
 
     await log_manager_activity(
         db,
         actor=username,
         category="auth",
-        status="success",
+        operation=OperationResult(action="auth.register", phase="acceptance", outcome="success", target={"username": username}),
         detail_key="register_request",
         detail_params={"username": username, "email": email},
     )
@@ -552,7 +553,7 @@ async def verify_registration(
 ) -> RegisterVerifyResponse:
     raw_token = (payload.token or "").strip()
     if not raw_token:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.invalid_token")
+        raise ApiError(422, "register.invalid_token")
 
     # O(1) lookup via SHA-256 lookup_hash; bcrypt verify still required to
     # actually authorize (defends against DB read).
@@ -566,23 +567,23 @@ async def verify_registration(
     ).scalar_one_or_none()
 
     if pending is None or not await verify_token_async(raw_token, pending.token):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.invalid_token")
+        raise ApiError(422, "register.invalid_token")
 
     # Distinguish already-used vs expired vs valid for clearer UX.
     if pending.used_at is not None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.token_used")
+        raise ApiError(409, "register.token_used")
 
     if pending.created_at:
         age = datetime.now(UTC).replace(tzinfo=None) - pending.created_at
         if age > timedelta(minutes=REGISTER_TOKEN_EXPIRY_MINUTES):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.token_expired")
+            raise ApiError(422, "register.token_expired")
 
     # Last-second conflict check (someone else might have grabbed the email
     # / username between sign-up and verify).
     if await user_repository.get_by_email(db, pending.email):
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="register.email_taken")
+        raise ApiError(409, "register.email_taken")
     if await user_repository.get_by_username(db, pending.username):
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="register.username_taken")
+        raise ApiError(409, "register.username_taken")
 
     # Atomically claim the pending row so a double-click can't create two users
     claim_time = datetime.now(UTC).replace(tzinfo=None)
@@ -599,7 +600,7 @@ async def verify_registration(
         # Lost the race: someone else already claimed (or the row was
         # marked used between our check and update). Surface as token_used
         # so the user can just go log in.
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="register.token_used")
+        raise ApiError(409, "register.token_used")
     await db.commit()
 
     try:
@@ -624,15 +625,15 @@ async def verify_registration(
         except Exception:
             logger.exception("Failed to revert pending claim for id=%s", pending.id)
         logger.error("create_user (public register) failed for %s: %s", pending.email, exc)
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY, detail="register.create_failed"
+        raise ApiError(
+            502, "register.create_failed"
         ) from exc
 
     await log_manager_activity(
         db,
         actor=created.username,
         category="auth",
-        status="success",
+        operation=OperationResult(action="auth.register", phase="execution", outcome="success", target={"user_id": created.id}),
         detail_key="register_verified",
         detail_params={"username": created.username, "email": created.email},
     )

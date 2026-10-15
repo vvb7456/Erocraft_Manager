@@ -34,7 +34,7 @@ import { formSnapshot, restoreScalarValue, sameFormValue } from '@/utils/formSta
 defineOptions({ name: 'SettingsPage' })
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, post, put } = useApiFetch()
+const { get, post, put, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 const app = useAppStore()
@@ -196,29 +196,34 @@ watch(() => getNum('DEFAULT_NEST_ID'), async (nestId) => {
 
 // ── Fetch ──
 onMounted(async () => {
-  const [settingsData, autoData, billingData, llmData, nestsRes, nodesRes, tplRes] = await Promise.all([
-    get<Record<string, any>>('/api/admin/settings'),
-    get<Record<string, any>>('/api/admin/automation'),
-    get<Record<string, any>>('/api/admin/billing/settings'),
-    get<Record<string, any>>('/api/admin/llm/settings'),
-    get<{ nests: any[] }>('/api/admin/resources/nests'),
-    get<{ nodes: any[] }>('/api/admin/resources/nodes'),
-    get<CouponTemplateLite[]>('/api/admin/billing/coupon-templates'),
-  ])
-  if (settingsData) settings.value = Object.fromEntries(Object.entries(settingsData).filter(([key]) => !key.startsWith('SMTP_') && !['SENDER_EMAIL', 'EMAIL_SEND_DELAY'].includes(key)))
-  if (autoData) Object.assign(automation.value, Object.fromEntries(Object.keys(automation.value).map(key => [key, autoData[key]])))
-  if (billingData) billingSettings.value = billingData
-  if (llmData) llmSettings.value = llmData
-  if (nestsRes) nestList.value = nestsRes.nests
-  if (nodesRes) nodeList.value = nodesRes.nodes
-  if (tplRes) couponTemplates.value = tplRes
-  const nestId = getNum('DEFAULT_NEST_ID')
-  if (nestId) {
-    const data = await get<{ eggs: any[] }>(`/api/admin/resources/nests/${nestId}/eggs`)
-    eggList.value = data?.eggs || []
+  try {
+    const results = await Promise.allSettled([
+      get<Record<string, any>>('/api/admin/settings'),
+      get<Record<string, any>>('/api/admin/automation'),
+      get<Record<string, any>>('/api/admin/billing/settings'),
+      get<Record<string, any>>('/api/admin/llm/settings'),
+      get<{ nests: any[] }>('/api/admin/resources/nests'),
+      get<{ nodes: any[] }>('/api/admin/resources/nodes'),
+      get<CouponTemplateLite[]>('/api/admin/billing/coupon-templates'),
+    ])
+    const [settingsData, autoData, billingData, llmData, nestsRes, nodesRes, tplRes] = results
+    if (settingsData.status === 'fulfilled') settings.value = Object.fromEntries(Object.entries(settingsData.value).filter(([key]) => !key.startsWith('SMTP_') && !['SENDER_EMAIL', 'EMAIL_SEND_DELAY'].includes(key)))
+    if (autoData.status === 'fulfilled') Object.assign(automation.value, Object.fromEntries(Object.keys(automation.value).map(key => [key, autoData.value[key]])))
+    if (billingData.status === 'fulfilled') billingSettings.value = billingData.value
+    if (llmData.status === 'fulfilled') llmSettings.value = llmData.value
+    if (nestsRes.status === 'fulfilled') nestList.value = nestsRes.value.nests
+    if (nodesRes.status === 'fulfilled') nodeList.value = nodesRes.value.nodes
+    if (tplRes.status === 'fulfilled') couponTemplates.value = tplRes.value
+    for (const result of results) if (result.status === 'rejected') handleError(result.reason)
+    const nestId = getNum('DEFAULT_NEST_ID')
+    if (nestId) {
+      const data = await get<{ eggs: any[] }>(`/api/admin/resources/nests/${nestId}/eggs`)
+      eggList.value = data.eggs
+    }
+  } finally {
+    snapshot()
+    initialLoading.value = false
   }
-  initialLoading.value = false
-  snapshot()
 })
 
 // ── Dirty tracking + leave guard ──

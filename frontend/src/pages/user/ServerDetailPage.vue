@@ -17,7 +17,7 @@ defineOptions({ name: 'ServerDetailPage' })
 const { t } = useI18n({ useScope: 'global' })
 const route = useRoute()
 const router = useRouter()
-const { get, loading } = useApiFetch()
+const { get, loading, handleError } = useApiFetch()
 const resourceStore = useServerResourceStore()
 const RESOURCE_SUB_KEY = 'serverDetail'
 
@@ -169,7 +169,7 @@ function statusBadge(): { color: string; label: string } {
 // Auto-reload when install completes (Wings status changes from installing → other)
 watch(liveState, (newState, oldState) => {
   if (oldState === 'installing' && newState !== 'installing') {
-    loadServer()
+    void loadServer().catch(handleError)
   }
 })
 
@@ -181,7 +181,7 @@ watch(liveState, (newState, oldState) => {
 let installPollTimer: ReturnType<typeof setInterval> | null = null
 watch(isInstalling, (val) => {
   if (val && !installPollTimer) {
-    installPollTimer = setInterval(loadServer, 5000)
+    installPollTimer = setInterval(() => { void loadServer().catch(handleError) }, 5000)
   } else if (!val && installPollTimer) {
     clearInterval(installPollTimer)
     installPollTimer = null

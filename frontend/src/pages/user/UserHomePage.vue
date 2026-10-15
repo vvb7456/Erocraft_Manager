@@ -39,8 +39,7 @@ const featureState = computed(() => {
 
 async function load() {
   loading.value = true
-  servers.value = await get<HomeServer[]>('/api/user/servers?scope=owner')
-  loading.value = false
+  servers.value = await get<HomeServer[]>('/api/user/servers?scope=owner').finally(() => { loading.value = false })
 }
 
 function serverNote(server: HomeServer) {

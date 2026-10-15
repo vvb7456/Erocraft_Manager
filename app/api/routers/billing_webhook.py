@@ -19,6 +19,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +33,17 @@ from app.services.billing.gateway.base import GatewayPayloadError, GatewaySignat
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["billing-webhook"])
+
+TEXT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    family: {"model": str, "description": "支付平台回调失败，返回平台约定的文本"}
+    for family in ("4XX", "5XX")
+}
+
+
+class WechatNotifyError(BaseModel):
+    code: str
+    message: str
+
 
 _SUCCESS_BODY = "success"
 """Literal hupijiao expects in the HTTP body to mark a notify as ack'd."""
@@ -312,7 +324,7 @@ async def _handle_notify(
 # --------------------------------------------------------------------------- #
 
 
-@router.post("/webhook/hupijiao", response_class=PlainTextResponse)
+@router.post("/webhook/hupijiao", response_class=PlainTextResponse, responses=TEXT_ERROR_RESPONSES)
 async def hupijiao_notify(
     request: Request, db: AsyncSession = Depends(get_db)
 ) -> Response:
@@ -331,7 +343,7 @@ async def hupijiao_notify(
 # --------------------------------------------------------------------------- #
 
 
-@router.post("/webhook/alipay_direct", response_class=PlainTextResponse)
+@router.post("/webhook/alipay_direct", response_class=PlainTextResponse, responses=TEXT_ERROR_RESPONSES)
 async def alipay_direct_notify(
     request: Request, db: AsyncSession = Depends(get_db)
 ) -> Response:
@@ -344,7 +356,10 @@ async def alipay_direct_notify(
     return await _handle_notify("alipay_direct", request, db)
 
 
-@router.post("/webhook/wechat_pay")
+@router.post("/webhook/wechat_pay", responses={
+    family: {"model": WechatNotifyError, "description": "微信支付回调失败，返回平台约定的 JSON"}
+    for family in ("4XX", "5XX")
+})
 async def wechat_notify(request: Request, db: AsyncSession = Depends(get_db)) -> Response:
     try:
         async with asyncio.timeout(4):

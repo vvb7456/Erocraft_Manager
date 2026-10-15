@@ -22,7 +22,8 @@ from urllib.parse import urlparse
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from app.core.api_errors import problem_response
+from app.core.contracts import ErrorInfo
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +79,6 @@ class OriginCheckMiddleware(BaseHTTPMiddleware):
                 "CSRF block: %s %s host=%s origin=%r referer=%r",
                 request.method, request.url.path, host, origin, referer,
             )
-            return JSONResponse(
-                {"error": "Cross-origin request blocked"}, status_code=403
-            )
+            return problem_response(403, ErrorInfo(code="auth.origin_forbidden"), request=request)
 
         return await call_next(request)

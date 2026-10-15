@@ -85,6 +85,7 @@
   },
   "toast": {
     "renewed": "证书已强制更新",
+    "renewedPartial": "证书已续签，但扫描或部分部署未完成，请检查证书状态",
     "synced": "证书已同步",
     "registered": "证书已添加"
   }

@@ -29,6 +29,9 @@ jobs:
       - name: compile check
         run: python -m compileall -q app agent
 
+      - name: 检查共用接口契约
+        run: python scripts/generate-contracts.py --check
+
       - name: ruff (fatal only)
         run: |
           pip install ruff

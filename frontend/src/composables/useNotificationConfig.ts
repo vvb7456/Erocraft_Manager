@@ -30,10 +30,9 @@ export function useNotificationConfig(group?: DirtyFormGroup) {
 
   async function load() {
     loading.value = true
-    const result = await get<NotificationConfig>('/api/admin/notifications/center')
+    const result = await get<NotificationConfig>('/api/admin/notifications/center').finally(() => { loading.value = false })
     if (!alive) return
     if (result) { data.value = result; original.value = snapshot(result) }
-    loading.value = false
   }
 
   async function save() {

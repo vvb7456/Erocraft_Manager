@@ -1,6 +1,9 @@
 """Certificate registry and deployment admin API."""
 
 from __future__ import annotations
+from app.core.api_errors import ApiError
+from app.core.contracts import ErrorInfo, OperationResult
+from app.core.operation import set_operation
 
 import asyncio
 import secrets
@@ -592,8 +595,8 @@ async def register_acme_certificate(
         db,
         actor=admin.username,
         category="certificate",
-        status="success" if scan_result.get("ok") else "partial",
         detail_key="cert.acme.register",
+        operation=OperationResult(action="certificate.register", phase="execution", outcome="success", target={"certificate_id": cert.id}, children=[OperationResult(action="certificate.scan", phase="observation", outcome="success", target={"certificate_id": cert.id}, facts={"valid": bool(scan_result["ok"])}, error=None if scan_result["ok"] else ErrorInfo(code="certificate.source_invalid", detail=scan_result.get("error")))]),
         detail_params={
             "certificate_id": cert.id,
             "domain": acme_cert.domain,
@@ -642,8 +645,8 @@ async def create_certificate(
         db,
         actor=admin.username,
         category="certificate",
-        status="success" if scan_result.get("ok") else "partial",
         detail_key="cert.create",
+        operation=OperationResult(action="certificate.create", phase="execution", outcome="success", target={"certificate_id": cert.id}, children=[OperationResult(action="certificate.scan", phase="observation", outcome="success", target={"certificate_id": cert.id}, facts={"valid": bool(scan_result["ok"])}, error=None if scan_result["ok"] else ErrorInfo(code="certificate.source_invalid", detail=scan_result.get("error")))]),
         detail_params={
             "certificate_id": cert.id,
             "name": cert.name,
@@ -688,8 +691,8 @@ async def save_certificate_settings(
         db,
         actor=admin.username,
         category="settings",
-        status="success",
         detail_key="cert.settings.update",
+        operation=OperationResult(action="certificate.settings.update", phase="execution", outcome="success"),
         detail_params={"changed": sorted(updates.keys())},
     )
     return SettingsMessageResponse(message="证书设置已保存。")
@@ -730,8 +733,8 @@ async def patch_certificate(
         db,
         actor=admin.username,
         category="certificate",
-        status="success",
         detail_key="cert.patch",
+        operation=OperationResult(action="certificate.update", phase="execution", outcome="success", target={"certificate_id": cert.id}, children=[OperationResult(action="certificate.scan", phase="observation", outcome="success", target={"certificate_id": cert.id}, facts={"valid": bool(scan_result["ok"])}, error=None if scan_result["ok"] else ErrorInfo(code="certificate.source_invalid", detail=scan_result.get("error")))] if scan_result else []),
         detail_params={"certificate_id": cert.id, "changed": changed, "source_scan": scan_result},
     )
     return await _certificate_out(db, cert)
@@ -751,8 +754,8 @@ async def delete_certificate(
         db,
         actor=admin.username,
         category="certificate",
-        status="success",
         detail_key="cert.delete",
+        operation=OperationResult(action="certificate.delete", phase="execution", outcome="success", target={"certificate_id": cert_id}),
         detail_params=snapshot,
     )
 
@@ -783,8 +786,8 @@ async def add_deployment(
         db,
         actor=admin.username,
         category="certificate",
-        status="success",
         detail_key="cert.deployment.create",
+        operation=OperationResult(action="certificate.deployment.create", phase="execution", outcome="success", target={"certificate_id": cert_id, "deployment_id": dep.id, "host_id": dep.host_id}),
         detail_params={"certificate_id": cert_id, "deployment_id": dep.id, "host_id": dep.host_id},
     )
     return _deployment_out(dep, host)
@@ -808,8 +811,8 @@ async def delete_deployment(
         db,
         actor=admin.username,
         category="certificate",
-        status="success",
         detail_key="cert.deployment.delete",
+        operation=OperationResult(action="certificate.deployment.delete", phase="execution", outcome="success", target={"certificate_id": cert_id, "deployment_id": deployment_id, "host_id": dep.host_id}),
         detail_params=snapshot,
     )
 
@@ -827,7 +830,21 @@ async def redeploy_certificate(
     for _attempt in range(2):
         dep = await _require_deployment(db, cert_id, deployment_id)
         try:
-            return await redeploy_deployment(db, dep, actor=admin.username)
+            result = await redeploy_deployment(db, dep, actor=admin.username)
+            operation = set_operation(OperationResult.model_validate(result["operation"]))
+            error = operation.error
+            if error is not None:
+                error_status = {
+                    "system.internal_error": 500,
+                    "agent.command_invalid_params": 500,
+                    "dependency.timeout": 504,
+                    "certificate.source_invalid": 409,
+                    "resource.conflict": 409,
+                    "resource.not_found": 409,
+                }.get(error.code, 502)
+                raise ApiError(error_status, error.code, detail=error.detail, operation=operation)
+            result["operation"] = operation.model_dump(exclude_none=True, exclude_defaults=True)
+            return result
         except OperationalError as exc:
             if "1020" not in str(exc):
                 raise
@@ -858,7 +875,7 @@ async def renew_certificate_force(
             db,
             actor=admin.username,
             category="certificate",
-            status="error",
+            operation=OperationResult(action="certificate.renew", phase="execution", outcome="failed", target={"certificate_id": cert.id}, error=ErrorInfo(code="certificate.renew_failed", detail=str(exc))),
             detail_key="cert.renew_force.failed",
             detail_params={"certificate_id": cert.id, "domain": acme_cert.domain, "error": str(exc)},
         )
@@ -875,13 +892,23 @@ async def renew_certificate_force(
     if renew_result.get("ok") and changed:
         dispatch_results = await dispatch_certificate(db, cert, actor=admin.username, statuses=())
 
-    status_text = "success" if renew_result.get("ok") else "error"
+    scan_error = None if scan_result["ok"] else ErrorInfo(code="certificate.source_invalid", detail=scan_result.get("error"))
+    scan_operation = OperationResult(
+        action="certificate.scan", phase="observation", outcome="success",
+        target={"certificate_id": cert_id}, facts={"valid": bool(scan_result["ok"])}, error=scan_error,
+    )
+    operation = set_operation(OperationResult(
+        action="certificate.renew", phase="execution", outcome="success" if renew_result.get("ok") else "failed",
+        target={"certificate_id": cert_id},
+        error=None if renew_result.get("ok") else ErrorInfo(code="certificate.renew_failed"),
+        children=[scan_operation, *[OperationResult.model_validate(item["operation"]) for item in dispatch_results]],
+    ))
     await log_manager_activity(
         db,
         actor=admin.username,
         category="certificate",
-        status=status_text,
         detail_key="cert.renew_force",
+        operation=operation,
         detail_params={
             "certificate_id": cert.id,
             "domain": acme_cert.domain,
@@ -891,17 +918,15 @@ async def renew_certificate_force(
         },
     )
     if not renew_result.get("ok"):
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=renew_result.get("output") or "acme.sh renew failed",
-        )
+        raise ApiError(502, "certificate.renew_failed", operation=operation)
     return {
         "ok": True,
         "renew": renew_result,
-        "source_scan": scan_result,
+        "source_scan": {**scan_result, "error": scan_error.model_dump(exclude_none=True) if scan_error else None},
         "changed": bool(changed),
-        "dispatch": dispatch_results,
+        "dispatch": [{**item, "error": item["operation"].get("error")} for item in dispatch_results],
         "certificate": await _certificate_out(db, cert),
+        "operation": operation.model_dump(exclude_none=True, exclude_defaults=True),
     }
 
 
@@ -912,7 +937,19 @@ async def scan_certificate(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     cert = await _require_certificate(db, cert_id)
-    return await scan_certificate_source(db, cert)
+    result = await scan_certificate_source(db, cert)
+    valid = result.pop("ok")
+    error_text = result.pop("error", None)
+    reason = None if valid else ErrorInfo(code="certificate.source_invalid", detail=error_text)
+    operation = set_operation(OperationResult(
+        action="certificate.scan", phase="observation", outcome="success",
+        target={"certificate_id": cert_id}, facts={"valid": bool(valid)}, error=reason,
+    ))
+    return {
+        **result, "valid": valid,
+        "reason": reason.model_dump(exclude_none=True) if reason else None,
+        "operation": operation.model_dump(exclude_none=True, exclude_defaults=True),
+    }
 
 
 @router.post("/cert/source-changed")
@@ -974,8 +1011,8 @@ async def cert_source_changed_webhook(
         db,
         actor="system",
         category="certificate",
-        status="success",
         detail_key="cert.source_changed",
+        operation=OperationResult(action="certificate.source_changed", phase="execution", outcome="success", target={"certificate_ids": [cert.id for cert in certs]}, children=[OperationResult.model_validate(item["operation"]) for item in dispatch_results]),
         detail_params={
             "source": "acme_webhook",
             "source_path": normalized_path,

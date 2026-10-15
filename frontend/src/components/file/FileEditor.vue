@@ -20,7 +20,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, post } = useApiFetch()
+const { get, post, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 
@@ -50,8 +50,7 @@ async function openFile(name: string, fileSize?: number) {
   const filePath = props.currentPath.replace(/\/$/, '') + '/' + name
   const data = await get<{ content: string }>(
     `/api/user/servers/${props.serverId}/files/contents?file=${encodeURIComponent(filePath)}`,
-  )
-  editorLoading.value = false
+  ).finally(() => { editorLoading.value = false })
   if (data) {
     content.value = data.content
     originalContent = data.content
@@ -94,7 +93,7 @@ async function initCodeMirror(doc: string, fName: string) {
       ...historyKeymap,
       ...searchKeymap,
       indentWithTab,
-      { key: 'Mod-s', run: () => { save(); return true } },
+      { key: 'Mod-s', run: () => { void save().catch(handleError); return true } },
     ]),
     EditorView.theme({
       '&': { height: '100%', fontSize: '13px' },
@@ -133,16 +132,13 @@ async function save() {
   const c = editorView ? editorView.state.doc.toString() : content.value
   const filePath = props.currentPath.replace(/\/$/, '') + '/' + fileName.value
 
-  const res = await post(
+  await post<void>(
     `/api/user/servers/${props.serverId}/files/write?file=${encodeURIComponent(filePath)}`,
     { content: c },
-  )
-  saving.value = false
-  if (res !== undefined) {
-    originalContent = c
-    toast(t('userServers.file.saved'), 'success')
-    emit('saved')
-  }
+  ).finally(() => { saving.value = false })
+  originalContent = c
+  toast(t('userServers.file.saved'), 'success')
+  emit('saved')
 }
 
 async function close() {

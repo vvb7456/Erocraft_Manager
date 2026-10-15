@@ -107,7 +107,6 @@ async function submit() {
       created: { id: number; port: number }[]
       skipped: { port: number; reason: string }[]
     }>(`/api/admin/hosts/${props.hostId}/allocations`, body)
-    if (!res) return  // useApiFetch already toasted the error
     const c = res.created.length
     const s = res.skipped.length
     toast(

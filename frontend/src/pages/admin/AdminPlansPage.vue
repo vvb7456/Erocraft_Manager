@@ -18,6 +18,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
+import { ApiError, apiErrorMessage } from '@/composables/apiClient'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import PageHeader from '@/components/layout/PageHeader.vue'
@@ -40,7 +41,7 @@ defineOptions({ name: 'AdminPlansPage' })
 const props = withDefaults(defineProps<{ standalone?: boolean }>(), { standalone: true })
 
 const { t } = useI18n({ useScope: 'global' })
-const { get, raw } = useApiFetch()
+const { get, raw, handleError } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 
@@ -128,20 +129,26 @@ async function loadNestsAndEggs() {
   const data = await get<{ nests: NestRef[] }>('/api/admin/resources/nests', { silent: true })
   if (!data?.nests) return
   nests.value = new Map(data.nests.map((n) => [n.id, n]))
-  const eggLists = await Promise.all(
+  const eggLists = await Promise.allSettled(
     data.nests.map((n) =>
       get<{ eggs: EggRef[] }>(`/api/admin/resources/nests/${n.id}/eggs`, { silent: true }).then((r) =>
         (r?.eggs ?? []).map((e) => ({ ...e, nest_id: n.id })),
       ),
     ),
   )
-  eggs.value = new Map(eggLists.flat().map((e) => [e.id, e]))
+  eggs.value = new Map(eggLists.flatMap(result => {
+    if (result.status === 'fulfilled') return result.value
+    handleError(result.reason)
+    return []
+  }).map((e) => [e.id, e]))
 }
 
 async function loadAll() {
   tableLoading.value = true
-  await Promise.all([loadPlans(), loadNodes(), loadNestsAndEggs()])
-  tableLoading.value = false
+  try {
+    const results = await Promise.allSettled([loadPlans(), loadNodes(), loadNestsAndEggs()])
+    for (const result of results) if (result.status === 'rejected') handleError(result.reason)
+  } finally { tableLoading.value = false }
 }
 
 onMounted(loadAll)
@@ -175,7 +182,6 @@ async function toggleActive(plan: AdminPlan) {
     method: 'PUT',
     body: JSON.stringify(payload),
     headers: { 'Content-Type': 'application/json' },
-    silent: true,
   })
   if (res && res.ok) {
     const updated = await res.json() as AdminPlan
@@ -183,10 +189,6 @@ async function toggleActive(plan: AdminPlan) {
     toast(plan.is_active
       ? t('billing.admin.plans.deactivateSuccess')
       : t('billing.admin.plans.activateSuccess'), 'success')
-  } else if (res) {
-    let msg = `HTTP ${res.status}`
-    try { const body = await res.json(); msg = body.detail || body.message || msg } catch { /* ignore */ }
-    toast(msg, 'error')
   }
 }
 
@@ -199,16 +201,12 @@ async function doDelete(plan: AdminPlan) {
   })
   if (!ok) return
 
-  const res = await raw(`/api/admin/billing/plans/${plan.id}`, { method: 'DELETE', silent: true })
-  if (res && res.ok) {
+  try {
+    await raw(`/api/admin/billing/plans/${plan.id}`, { method: 'DELETE' })
     plans.value = plans.value.filter((p) => p.id !== plan.id)
     toast(t('billing.admin.plans.deleteSuccess'), 'success')
-  } else if (res?.status === 409) {
-    toast(t('billing.admin.plans.deleteFailedReferenced'), 'error')
-  } else if (res) {
-    let msg = `HTTP ${res.status}`
-    try { const body = await res.json(); msg = body.detail || body.message || msg } catch { /* ignore */ }
-    toast(msg, 'error')
+  } catch (error) {
+    toast(error instanceof ApiError && error.status === 409 ? t('billing.admin.plans.deleteFailedReferenced') : apiErrorMessage(error), 'error')
   }
 }
 

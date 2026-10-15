@@ -1,6 +1,7 @@
 """Admin user management routes."""
 
 from __future__ import annotations
+from app.core.operation import batch_operation
 
 import asyncio
 import logging
@@ -33,6 +34,7 @@ from app.schemas.users import (
     UsersListResponse,
 )
 from app.services.audit import log_manager_activity
+from app.core.contracts import ErrorInfo, OperationResult
 from app.services.email import (
     EmailClient,
     generate_temporary_password,
@@ -119,7 +121,7 @@ async def _delete_user_remote(db: AsyncSession, user_id: int) -> int:
                 db,
                 actor="system",
                 category="user",
-                status="failure",
+                operation=OperationResult(action="user.delete", phase="execution", outcome="failed", target={"user_id": user_id}, facts={"deleted_servers": deleted}, error=ErrorInfo(code="system.internal_error", detail=str(exc)[:200])),
                 detail_key="delete_user_partial",
                 detail_params={
                     "user_id": user_id,
@@ -262,8 +264,8 @@ async def create_user(
         db,
         actor=admin_username,
         category="user",
-        status="success",
         detail_key="create_user",
+        operation=OperationResult(action="user.create", phase="execution", outcome="success", target={"username": username}),
         detail_params={"username": username, "email": email},
     )
     return CreateUserResponse(
@@ -327,8 +329,8 @@ async def update_user(
         db,
         actor=current_user.username,
         category="user",
-        status="success",
         detail_key="edit_user",
+        operation=OperationResult(action="user.update", phase="execution", outcome="success", target={"user_id": user_id}),
         detail_params={"user_id": user_id},
     )
     return UserMessageResponse(message="用户已更新")
@@ -353,8 +355,8 @@ async def delete_user(
         db,
         actor=current_user.username,
         category="user",
-        status="success",
         detail_key="delete_user",
+        operation=OperationResult(action="user.delete", phase="execution", outcome="success", target={"user_id": user_id}, facts={"deleted_servers": deleted_server_count}),
         detail_params={"user_id": user_id, "server_count": deleted_server_count},
     )
     return UserMessageResponse(message=f"用户及其 {deleted_server_count} 台服务器已删除")
@@ -413,11 +415,12 @@ async def batch_users(
                 if delay > 0 and index < len(users) - 1:
                     await asyncio.sleep(delay)
 
+        operation = batch_operation(f"user.batch.{payload.action}", {"requested_user_ids": payload.userIds}, success, errors)
         await log_manager_activity(
             db,
             actor=current_user.username,
             category="user",
-            status="failure" if errors else "success",
+            operation=operation,
             detail_key="batch_email_users",
             detail_params={"success": success, "failed": errors},
         )
@@ -430,16 +433,18 @@ async def batch_users(
                 await db.rollback()
                 errors += 1
 
+        operation = batch_operation(f"user.batch.{payload.action}", {"requested_user_ids": payload.userIds}, success, errors)
         await log_manager_activity(
             db,
             actor=current_user.username,
             category="user",
-            status="failure" if errors else "success",
             detail_key="batch_delete_users",
+            operation=operation,
             detail_params={"success": success, "failed": errors},
         )
 
     return BatchUsersResponse(
+        operation=operation,
         message=f"操作完成：成功 {success}，失败 {errors}",
         success=success,
         failed=errors,

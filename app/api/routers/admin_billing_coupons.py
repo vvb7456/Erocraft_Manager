@@ -10,6 +10,7 @@ See ``docs/REFERRAL_AND_COUPON_DESIGN.md`` §11.
 """
 
 from __future__ import annotations
+from app.core.api_errors import ApiError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select, cast, String
@@ -26,6 +27,7 @@ from app.schemas.coupons import (
     RevokeCouponRequest,
 )
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.services.billing import coupon_templates as tpl_svc
 from app.services.billing import coupons as svc
 from app.core.time import utc_naive_now
@@ -131,17 +133,17 @@ async def manual_grant(
     except tpl_svc.CouponTemplateNotFound as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     if not tpl.is_active:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="coupon.template_inactive",
+        raise ApiError(
+            409,
+            "coupon.template_inactive",
         )
     # Verify user exists in the panel.
     from app.db.models.pterodactyl import PteroUser as _PteroUser
 
     target = await db.get(_PteroUser, payload.user_id)
     if target is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail="user.not_found"
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, "user.not_found"
         )
     coupon = await svc.issue_from_template(
         db, template=tpl, user_id=payload.user_id, source="admin_grant"
@@ -150,7 +152,7 @@ async def manual_grant(
         db,
         actor=actor.username,
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.coupon.grant", phase="execution", outcome="success", target={"coupon_id": coupon.id, "user_id": payload.user_id}),
         detail_key="billing.coupon.granted",
         detail_params={
             "coupon_id": coupon.id,
@@ -188,7 +190,7 @@ async def revoke(
         db,
         actor=actor.username,
         category="billing",
-        status="success",
+        operation=OperationResult(action="billing.coupon.revoke", phase="execution", outcome="success", target={"coupon_id": coupon_id, "user_id": coupon.user_id}),
         detail_key="billing.coupon.revoked",
         detail_params={
             "coupon_id": coupon_id,

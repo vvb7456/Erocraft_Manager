@@ -409,9 +409,6 @@ async def _condition_sustained(db: AsyncSession, host_id: int, condition: Any, m
     return len(values) >= 2 and sum(bool(value) for value in values) / len(values) >= 0.8
 
 
-_SEVERITY_TO_AUDIT_STATUS = {"critical": "failed", "warning": "partial", "info": "info"}
-
-
 def _audit_alert_event(
     db: AsyncSession,
     *,
@@ -425,12 +422,10 @@ def _audit_alert_event(
     Uses the caller's session so the audit row is committed atomically with the
     rest of the monitoring cycle (no separate transaction, no early commit).
     """
-    if kind == "resolved":
-        status = "success"
-    else:
-        status = _SEVERITY_TO_AUDIT_STATUS.get(alert_obj.severity, "info")
+    from app.core.contracts import OperationResult
 
     params: dict[str, Any] = {
+        "operation": OperationResult(action=f"monitoring.alert.{kind}", phase="execution", outcome="success", target={"host_id": alert_obj.host_id} if alert_obj.host_id is not None else {}).model_dump(exclude_none=True, exclude_defaults=True),
         "alert_type": alert_obj.alert_type,
         "severity": alert_obj.severity,
         "host_id": alert_obj.host_id,
@@ -447,7 +442,7 @@ def _audit_alert_event(
         ManagerActivityLog(
             actor="system",
             category="monitoring",
-            status=status,
+            status="success",
             detail_key=f"monitoring.alert.{kind}",
             detail_params=json.dumps(params, ensure_ascii=False, default=str),
         )

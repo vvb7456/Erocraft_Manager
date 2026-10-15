@@ -186,10 +186,7 @@ async function fetchBranches() {
   }
 }
 
-onMounted(() => {
-  fetchBranches()
-  loadLlmUsage()
-})
+onMounted(() => Promise.all([fetchBranches(), loadLlmUsage()]))
 
 /** Save startup variables (no confirmation / no restart). Returns true on success. */
 async function save(): Promise<boolean> {

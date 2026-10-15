@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.runtime_settings import BILLING_SPECS
 from app.core.settings_store import get_settings_store
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.core.time import utc_naive_now
 from app.db.models.billing import BillingOrder, Coupon, CouponTemplate
 from app.db.models.manager import UserReferral
@@ -145,7 +146,7 @@ async def _try_grant_inner(
                 db,
                 actor="system",
                 category="billing",
-                status="info",
+                operation=OperationResult(action="billing.referral.grant", phase="request", outcome="failed", target={"order_id": order.id}),
                 detail_key="billing.referral.template_missing",
                 detail_params={
                     "order_id": order.id,
@@ -216,7 +217,7 @@ async def _try_grant_inner(
             db,
             actor="system",
             category="billing",
-            status="success",
+            operation=OperationResult(action="billing.referral.grant", phase="execution", outcome="success", target={"order_id": order.id, "referral_id": locked.id}),
             detail_key="billing.referral.rewarded",
             detail_params={
                 "order_id": order.id,

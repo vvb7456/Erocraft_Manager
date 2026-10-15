@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "check:i18n": "node scripts/check-i18n-refs.mjs",
+    "check:contracts": "python3 ../scripts/generate-contracts.py --check",
     "preview": "vite preview"
   },
   "dependencies": {

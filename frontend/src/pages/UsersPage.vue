@@ -266,8 +266,7 @@ async function doCreate(andCreateServer = false) {
     email: createEmail.value,
     username: createUsername.value,
     sendWelcome: createSendWelcome.value,
-  })
-  createLoading.value = false
+  }).finally(() => { createLoading.value = false })
   if (res) {
     let msg = res.message
     if (createSendWelcome.value) {
@@ -308,8 +307,7 @@ async function doEdit() {
     lastName: editForm.value.lastName,
     password: editForm.value.password || undefined,
     language: editForm.value.language,
-  })
-  editLoading.value = false
+  }).finally(() => { editLoading.value = false })
   if (res) {
     toast(t('users.edit.success'), 'success')
     editModalOpen.value = false

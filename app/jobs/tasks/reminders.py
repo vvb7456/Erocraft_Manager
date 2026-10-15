@@ -16,6 +16,7 @@ from app.db.repositories.servers import server_repository
 from app.db.session import get_session_factory
 from app.jobs.tasks.common import get_job_today
 from app.services.audit import log_manager_activity
+from app.core.contracts import ErrorInfo, OperationResult
 from app.services.email import (
     EmailClient,
     get_email_delay,
@@ -108,7 +109,7 @@ async def run_reminder_task(reminder_type: str) -> None:
             db,
             actor="system",
             category="automation",
-            status="info",
+            operation=OperationResult(action="automation.reminder.start", phase="execution", outcome="success", target={"task_name": task_name}),
             detail_key="automated_reminder_started",
             detail_params={"type": reminder_type},
         )
@@ -120,7 +121,7 @@ async def run_reminder_task(reminder_type: str) -> None:
                     db,
                     actor="system",
                     category="automation",
-                    status="info",
+                    operation=OperationResult(action="automation.reminder", phase="execution", outcome="success", target={"task_name": task_name}, succeeded=0, failed=0),
                     detail_key="automated_reminder_noop",
                     detail_params={"type": reminder_type},
                 )
@@ -146,7 +147,7 @@ async def run_reminder_task(reminder_type: str) -> None:
                 audit_source=f"{reminder_type}_reminder",
             ) as client:
                 if reminder_type == "expiry":
-                    sent_count = await _send_expiry_reminders(
+                    sent_count, failed_count = await _send_expiry_reminders(
                         client,
                         servers,
                         template=template,
@@ -158,7 +159,7 @@ async def run_reminder_task(reminder_type: str) -> None:
                     )
                 elif reminder_type == "expired":
                     delete_days = int(await get_settings_store().get(db, "AUTOMATION_DELETE_DAYS", 14))
-                    sent_count = await _send_expired_reminders(
+                    sent_count, failed_count = await _send_expired_reminders(
                         client,
                         servers,
                         template=template,
@@ -170,7 +171,7 @@ async def run_reminder_task(reminder_type: str) -> None:
                         delete_days=delete_days,
                     )
                 else:
-                    sent_count = await _send_pre_delete_reminders(
+                    sent_count, failed_count = await _send_pre_delete_reminders(
                         client,
                         db,
                         servers,
@@ -185,9 +186,9 @@ async def run_reminder_task(reminder_type: str) -> None:
                 db,
                 actor="system",
                 category="automation",
-                status="success",
+                operation=OperationResult(action="automation.reminder", phase="execution", outcome="failed" if failed_count else "success", target={"task_name": task_name}, succeeded=sent_count, failed=failed_count),
                 detail_key="automated_reminder_finished",
-                detail_params={"type": reminder_type, "sent": sent_count},
+                detail_params={"type": reminder_type, "sent": sent_count, "failed": failed_count},
             )
         except Exception as exc:
             logger.exception("Automated reminder task failed: %s", reminder_type)
@@ -195,7 +196,7 @@ async def run_reminder_task(reminder_type: str) -> None:
                 db,
                 actor="system",
                 category="automation",
-                status="failure",
+                operation=OperationResult(action="automation.reminder", phase="execution", outcome="failed", target={"task_name": task_name}, error=ErrorInfo(code="system.internal_error", detail=str(exc))),
                 detail_key="automated_reminder_failed",
                 detail_params={"type": reminder_type, "error": str(exc)},
             )
@@ -211,12 +212,13 @@ async def _send_expiry_reminders(
     action_url: str | None,
     delay: int,
     target_date,
-) -> int:
+) -> tuple[int, int]:
     grouped: dict[int, list[PteroServer]] = {}
     for server in servers:
         grouped.setdefault(server.owner_id, []).append(server)
 
     sent_count = 0
+    failed_count = 0
     owner_groups = list(grouped.values())
     for index, owner_servers in enumerate(owner_groups):
         owner = owner_servers[0].owner
@@ -244,10 +246,12 @@ async def _send_expiry_reminders(
         )
         if sent:
             sent_count += 1
+        else:
+            failed_count += 1
         if delay > 0 and index < len(owner_groups) - 1:
             await asyncio.sleep(delay)
 
-    return sent_count
+    return sent_count, failed_count
 
 
 async def _send_expired_reminders(
@@ -261,7 +265,7 @@ async def _send_expired_reminders(
     delay: int,
     target_date,
     delete_days: int,
-) -> int:
+) -> tuple[int, int]:
     grouped: dict[int, list[PteroServer]] = {}
     for server in servers:
         if server.meta and server.meta.is_trial:
@@ -272,6 +276,7 @@ async def _send_expired_reminders(
         grouped.setdefault(server.owner_id, []).append(server)
 
     sent_count = 0
+    failed_count = 0
     owner_groups = list(grouped.values())
     deletion_date = (target_date + timedelta(days=delete_days)).strftime("%Y-%m-%d")
     for index, owner_servers in enumerate(owner_groups):
@@ -302,10 +307,12 @@ async def _send_expired_reminders(
         )
         if sent:
             sent_count += 1
+        else:
+            failed_count += 1
         if delay > 0 and index < len(owner_groups) - 1:
             await asyncio.sleep(delay)
 
-    return sent_count
+    return sent_count, failed_count
 
 
 async def _send_pre_delete_reminders(
@@ -318,8 +325,9 @@ async def _send_pre_delete_reminders(
     action_text: str | None,
     action_url: str | None,
     delay: int,
-) -> int:
+) -> tuple[int, int]:
     sent_count = 0
+    failed_count = 0
     today = await get_job_today(db)
     deletion_date = (today + timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -348,7 +356,9 @@ async def _send_pre_delete_reminders(
         )
         if sent:
             sent_count += 1
+        else:
+            failed_count += 1
         if delay > 0 and index < len(servers) - 1:
             await asyncio.sleep(delay)
 
-    return sent_count
+    return sent_count, failed_count

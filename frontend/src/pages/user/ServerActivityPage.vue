@@ -98,8 +98,8 @@ async function loadLogs() {
   }
 }
 
-watch([() => server.value?.id], () => { page.value = 1; loadLogs() }, { immediate: true })
-watch(eventFilter, () => { page.value = 1; loadLogs() })
+watch([() => server.value?.id], () => { page.value = 1; return loadLogs() }, { immediate: true })
+watch(eventFilter, () => { page.value = 1; return loadLogs() })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
 

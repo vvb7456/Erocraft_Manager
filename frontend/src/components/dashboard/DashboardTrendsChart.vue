@@ -43,7 +43,7 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n({ useScope: 'global' })
-const { get } = useApiFetch()
+const { get, handleError } = useApiFetch()
 
 const seriesByHost = ref<Record<number, [number, number][]>>({})
 const loading = ref(false)
@@ -72,8 +72,8 @@ async function fetchAll() {
 }
 
 onMounted(() => {
-  fetchAll()
-  pollTimer = setInterval(fetchAll, 60_000)
+  void fetchAll().catch(handleError)
+  pollTimer = setInterval(() => { void fetchAll().catch(handleError) }, 60_000)
 })
 onUnmounted(() => {
   alive = false

@@ -113,20 +113,17 @@ async function save(): Promise<boolean> {
   }
 
   if (d.added.length > 0) {
-    const r = await post(`/api/admin/servers/${sid}/allocations`, {
+    await post(`/api/admin/servers/${sid}/allocations`, {
       allocationIds: d.added.map(a => a.id),
     })
-    if (r === null) return false
   }
   if (d.primaryChanged && d.newPrimary > 0) {
-    const r = await put(`/api/admin/servers/${sid}/allocations/primary`, {
+    await put(`/api/admin/servers/${sid}/allocations/primary`, {
       allocationId: d.newPrimary,
     })
-    if (r === null) return false
   }
   for (const a of d.removed) {
-    const r = await raw(`/api/admin/servers/${sid}/allocations/${a.id}`, { method: 'DELETE' })
-    if (!r) return false
+    await raw(`/api/admin/servers/${sid}/allocations/${a.id}`, { method: 'DELETE' })
   }
   toast(t('adminServer.settings.saved'), 'success')
   // Wings stores the new allocation but the docker container's published

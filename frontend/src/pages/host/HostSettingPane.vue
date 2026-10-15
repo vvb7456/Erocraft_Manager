@@ -129,12 +129,11 @@ async function save(): Promise<boolean> {
     if (form.value.enabled !== initial.value.enabled) body.enabled = form.value.enabled
     if (newToken.value) body.agent_token = newToken.value
 
-    const res = await raw(`/api/admin/hosts/${host.value.id}`, {
+    await raw(`/api/admin/hosts/${host.value.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    if (!res) return false
     toast(t('hosts.setting.saved'), 'success')
     await reloadHost()
     // The host watcher skips re-sync while isDirty is true to avoid
@@ -170,14 +169,14 @@ async function probe() {
   if (!host.value) return
   probing.value = true
   try {
-    const r = await post<{ ok: boolean; error?: string; latency_ms?: number }>(
+    const r = await post<{ reachable: boolean; reason?: { detail?: string }; latency_ms?: number }>(
       `/api/admin/hosts/${host.value.id}/probe`, {},
     )
     if (!r) return
-    if (r.ok) {
+    if (r.reachable) {
       toast(t('hosts.setting.probeOk', { ms: r.latency_ms ?? '?' }), 'success')
     } else {
-      toast(t('hosts.setting.probeFail', { err: r.error || '?' }), 'error')
+      toast(t('hosts.setting.probeFail', { err: r.reason?.detail || '?' }), 'error')
     }
   } finally {
     probing.value = false

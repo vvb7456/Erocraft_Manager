@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { apiErrorMessage, fetchApi } from '@/composables/apiClient'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -12,7 +13,7 @@ defineOptions({ name: 'ConfirmEmailPage' })
 
 const route = useRoute()
 const router = useRouter()
-const { t, te } = useI18n({ useScope: 'global' })
+const { t } = useI18n({ useScope: 'global' })
 
 const loading = ref(false)
 const error = ref('')
@@ -39,25 +40,6 @@ function queueRedirect() {
   }, 3000)
 }
 
-function readErrorMessage(data: unknown) {
-  if (!data || typeof data !== 'object') return ''
-  const record = data as Record<string, unknown>
-  for (const key of ['detail', 'error', 'message']) {
-    const value = record[key]
-    if (typeof value === 'string' && value.trim()) return value
-  }
-  return ''
-}
-
-function translateApiText(value: unknown): string {
-  if (typeof value !== 'string' || !value.trim()) return ''
-  if (/^[a-z_]+\.[a-z_]+$/.test(value)) {
-    const key = `common.apiErrors.${value}`
-    if (te(key)) return t(key)
-  }
-  return value
-}
-
 async function confirmEmail() {
   if (linkError.value) {
     error.value = linkError.value
@@ -69,7 +51,7 @@ async function confirmEmail() {
   success.value = ''
 
   try {
-    const res = await fetch('/api/user/account/confirm-email', {
+    await fetchApi('/api/user/account/confirm-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -78,22 +60,10 @@ async function confirmEmail() {
       }),
     })
 
-    let data: unknown = null
-    try {
-      data = await res.json()
-    } catch {
-      data = null
-    }
-
-    if (res.ok) {
-      success.value = t('confirmEmail.success')
-      queueRedirect()
-      return
-    }
-
-    error.value = translateApiText(readErrorMessage(data)) || t('confirmEmail.error.failed')
-  } catch {
-    error.value = t('confirmEmail.error.network')
+    success.value = t('confirmEmail.success')
+    queueRedirect()
+  } catch (failure) {
+    error.value = apiErrorMessage(failure)
   } finally {
     loading.value = false
   }

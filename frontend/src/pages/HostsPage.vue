@@ -28,7 +28,7 @@ const router = useRouter()
 // shared across every request this composable instance issues, so a per-row
 // probe/rotate/delete would briefly flip the table into a skeleton state.
 // Instead we maintain a separate `listLoading` that tracks ONLY `loadHosts`.
-const { get } = useApiFetch()
+  const { get, handleError } = useApiFetch()
 const listLoading = ref(false)
 
 // ── Types ──
@@ -70,8 +70,8 @@ async function loadHosts(silent = false) {
 }
 
 onMounted(() => {
-  loadHosts()
-  reloadTimer = window.setInterval(() => loadHosts(true), 15000)
+  void loadHosts().catch(handleError)
+  reloadTimer = window.setInterval(() => { void loadHosts(true).catch(handleError) }, 15000)
 })
 
 onBeforeUnmount(() => {

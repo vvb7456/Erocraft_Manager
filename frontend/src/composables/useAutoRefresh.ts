@@ -1,10 +1,12 @@
 import { ref, onUnmounted } from 'vue'
+import { useApiFetch } from './useApiFetch'
 
 /**
  * Periodic auto-refresh composable.
  * Automatically stops on component unmount.
  */
 export function useAutoRefresh(fn: () => Promise<void>, interval: number) {
+  const { handleError } = useApiFetch()
   let timer: ReturnType<typeof setInterval> | null = null
   let running = false
   const active = ref(false)
@@ -12,7 +14,7 @@ export function useAutoRefresh(fn: () => Promise<void>, interval: number) {
   async function tick() {
     if (running) return
     running = true
-    try { await fn() } finally { running = false }
+    try { await fn() } catch (error) { handleError(error) } finally { running = false }
   }
 
   function start(opts?: { immediate?: boolean }) {

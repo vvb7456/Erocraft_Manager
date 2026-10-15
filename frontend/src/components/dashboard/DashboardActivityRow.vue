@@ -3,19 +3,21 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import { useNow } from '@/composables/useNow'
+import { useActivityLog } from '@/composables/useActivityLog'
 
 defineOptions({ name: 'DashboardActivityRow' })
 
 const props = defineProps<{
   timestamp: string | null
   actor: string
-  status: string
+  status: 'success' | 'failed'
   category?: string | null
   detailKey?: string | null
   detailParams?: Record<string, unknown> | null
 }>()
 
-const { t, te, tm, rt } = useI18n({ useScope: 'global' })
+const { t, te } = useI18n({ useScope: 'global' })
+const { detailLabel } = useActivityLog()
 
 const now = useNow()
 const timeAgo = computed(() => {
@@ -42,70 +44,10 @@ const categoryLabel = computed(() => {
   return te(key) ? t(key) : cat
 })
 
-function formatDurationSeconds(sec: number): string {
-  if (!Number.isFinite(sec) || sec < 0) sec = 0
-  sec = Math.round(sec)
-  if (sec < 60) return t('logs.duration.seconds', { n: sec })
-  if (sec < 3600) {
-    const m = Math.floor(sec / 60)
-    const s = sec % 60
-    return s > 0
-      ? t('logs.duration.minutesSeconds', { m, s })
-      : t('logs.duration.minutes', { n: m })
-  }
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  return m > 0
-    ? t('logs.duration.hoursMinutes', { h, m })
-    : t('logs.duration.hours', { n: h })
-}
-
-const statusMeta = computed(() => {
-  switch (props.status) {
-    case 'success': return { icon: 'check_circle', color: 'var(--green)' }
-    case 'failure':
-    case 'failed': return { icon: 'cancel', color: 'var(--red)' }
-    case 'pending': return { icon: 'schedule', color: 'var(--amber)' }
-    case 'partial': return { icon: 'warning', color: 'var(--amber)' }
-    default: return { icon: 'info', color: 'var(--t3)' }
-  }
-})
-
-const detailText = computed(() => {
-  if (!props.detailKey) return ''
-  const params: Record<string, unknown> = { ...(props.detailParams ?? {}) }
-  if (typeof params.template === 'string') {
-    params.template = t(`emailTemplates.${params.template}.title`, params.template)
-  }
-  if (typeof params.type === 'string') {
-    params.type = t(`logs.reminderType.${params.type}`, params.type)
-  }
-  if (typeof params.kind === 'string') {
-    params.kind = t(`hosts.kind.${params.kind}`, params.kind)
-  }
-  if (typeof params.language === 'string') {
-    params.language = t(`logs.language.${params.language}`, params.language)
-  }
-  if (typeof params.alert_type === 'string') {
-    const k = `hosts.alerting.types.${params.alert_type}`
-    if (te(k)) params.alert_type = t(k)
-  }
-  if (typeof params.severity === 'string') {
-    const k = `logs.severity.${params.severity}`
-    if (te(k)) params.severity = t(k)
-  }
-  if (typeof params.duration_seconds === 'number') {
-    params.duration_human = formatDurationSeconds(params.duration_seconds)
-  }
-
-  const detailMap = tm('logs.detail') as Record<string, unknown>
-  const flat = detailMap?.[props.detailKey]
-  if (typeof flat === 'string') return rt(flat, params)
-
-  const escapedPath = `logs.detail.${props.detailKey.replace(/\./g, '\\.')}`
-  if (te(escapedPath)) return t(escapedPath, params)
-  return props.detailKey
-})
+const statusMeta = computed(() => props.status === 'success'
+  ? { icon: 'check_circle', color: 'var(--green)' }
+  : { icon: 'cancel', color: 'var(--red)' })
+const detailText = computed(() => detailLabel(props))
 
 const fullTitle = computed(() => {
   const parts = [categoryLabel.value]

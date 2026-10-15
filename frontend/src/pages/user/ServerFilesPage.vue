@@ -3,6 +3,7 @@ import { ref, inject, onMounted, onBeforeUnmount, computed, watch, nextTick, typ
 import { useI18n } from 'vue-i18n'
 import { useFileTree } from '@/composables/useFileTree'
 import { useFileOperations } from '@/composables/useFileOperations'
+import { useApiFetch } from '@/composables/useApiFetch'
 import { useVirtualList } from '@/composables/useVirtualList'
 import type { FileEntry } from '@/composables/useFileTree'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -30,6 +31,7 @@ const serverId = computed(() => server.value?.id)
 const tree = useFileTree(serverId as Ref<number | undefined>)
 const moveTree = useFileTree(serverId as Ref<number | undefined>)
 const ops = useFileOperations(serverId as Ref<number | undefined>)
+const { handleError } = useApiFetch()
 const moveSelectedPath = ref('/')
 const moveTreeExpanded = ref(false)
 
@@ -116,8 +118,8 @@ const virtual = useVirtualList<FileEntry>({
 
 // ── Init ──
 onMounted(async () => {
-  await ops.loadFiles()
-  tree.loadTreeNode(tree.treeRoot.value)
+  await ops.loadFiles().catch(handleError)
+  void tree.loadTreeNode(tree.treeRoot.value).catch(handleError)
   await nextTick()
   measureHeader()
   virtual.refresh()
@@ -150,8 +152,8 @@ watch(() => ops.moveOpen.value, (open) => {
       expanded: true,
       loading: false,
     }
-    moveTree.loadTreeNode(moveTree.treeRoot.value)
-    moveTree.expandTreeToPath(ops.currentPath.value)
+    void moveTree.loadTreeNode(moveTree.treeRoot.value).catch(handleError)
+    void moveTree.expandTreeToPath(ops.currentPath.value).catch(handleError)
   }
 })
 
@@ -163,9 +165,9 @@ function selectMoveTarget(node: { path: string }) {
 function confirmMove() {
   ops.moveTo.value = moveSelectedPath.value
   if (ops.hasSelection.value) {
-    ops.doBatchMove()
+    return ops.doBatchMove()
   } else {
-    ops.doMove()
+    return ops.doMove()
   }
 }
 

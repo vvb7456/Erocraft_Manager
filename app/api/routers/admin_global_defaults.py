@@ -24,6 +24,7 @@ from app.core.runtime_settings import MONITORING_SPECS, defaults_for
 from app.core.settings_store import get_settings_store
 from app.db.models.pterodactyl import PteroUser
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/global-defaults", tags=["admin-global-defaults"])
@@ -98,7 +99,8 @@ async def put_global_defaults(
         await db.commit()
 
     await log_manager_activity(
-        db, actor=admin.username, category="settings", status="success",
+        db, actor=admin.username, category="settings",
+        operation=OperationResult(action="global_defaults.update", phase="execution", outcome="success"),
         detail_key="global_defaults.update",
         detail_params={"keys": sorted(normalized.keys())},
     )

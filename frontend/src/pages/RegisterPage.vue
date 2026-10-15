@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { apiErrorMessage, fetchApi } from '@/composables/apiClient'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -15,7 +16,7 @@ import AgreementCheckboxGroup from '@/components/agreements/AgreementCheckboxGro
 defineOptions({ name: 'RegisterPage' })
 
 const route = useRoute()
-const { t, te } = useI18n({ useScope: 'global' })
+const { t } = useI18n({ useScope: 'global' })
 
 const username = ref('')
 const email = ref('')
@@ -32,15 +33,6 @@ const allowRegistration = ref(true)
 const agreementsDefaultChecked = ref(false)
 const acceptedAgreements = ref<{ agreement_id: number; version: number }[]>([])
 const allAgreementsAccepted = ref(false)
-
-function translateApiText(value: unknown): string {
-  if (typeof value !== 'string' || !value.trim()) return ''
-  if (/^[a-z_]+\.[a-z_]+$/.test(value)) {
-    const key = `common.apiErrors.${value}`
-    if (te(key)) return t(key)
-  }
-  return value
-}
 
 const usernameError = computed(() => {
   if (!username.value) return ''
@@ -156,7 +148,7 @@ async function handleSubmit() {
 
   loading.value = true
   try {
-    const res = await fetch('/api/register', {
+    await fetchApi('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -167,19 +159,11 @@ async function handleSubmit() {
         accepted_agreements: acceptedAgreements.value,
       }),
     })
-    let data: { message?: string; detail?: string; error?: string } | null = null
-    try { data = await res.json() } catch { data = null }
-
-    if (res.ok) {
-      success.value = t('register.success')
-      password.value = ''
-      confirmPassword.value = ''
-      return
-    }
-    error.value = translateApiText(data?.detail || data?.error || data?.message)
-      || t('register.error.failed')
-  } catch {
-    error.value = t('register.error.network')
+    success.value = t('register.success')
+    password.value = ''
+    confirmPassword.value = ''
+  } catch (failure) {
+    error.value = apiErrorMessage(failure)
   } finally {
     loading.value = false
   }

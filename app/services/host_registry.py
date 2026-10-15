@@ -412,7 +412,7 @@ async def probe_credentials(
     try:
         validated = validate_agent_endpoint(endpoint)
     except AgentEndpointError as exc:
-        return {"ok": False, "error": f"invalid endpoint: {exc}"}
+        return {"ok": False, "error": f"invalid endpoint: {exc}", "code": "request.validation_failed"}
     return await _do_probe(validated, token, timeout)
 
 
@@ -426,10 +426,10 @@ async def _do_probe(endpoint: str, token: str, timeout: float) -> dict[str, Any]
         ) as client:
             resp = await client.get(url, headers=headers)
     except httpx.HTTPError as exc:
-        return {"ok": False, "error": f"transport: {type(exc).__name__}"}
+        return {"ok": False, "error": f"transport: {type(exc).__name__}", "code": "dependency.timeout" if isinstance(exc, httpx.TimeoutException) else "dependency.unreachable"}
     latency_ms = round((time.monotonic() - started) * 1000)
     if resp.status_code >= 400:
-        return {"ok": False, "error": f"HTTP {resp.status_code}", "latency_ms": latency_ms}
+        return {"ok": False, "error": f"HTTP {resp.status_code}", "latency_ms": latency_ms, "code": "dependency.authentication_failed" if resp.status_code in {401, 403} else "dependency.failed"}
     return {
         "ok": True,
         "response": resp.json() if resp.content else {},

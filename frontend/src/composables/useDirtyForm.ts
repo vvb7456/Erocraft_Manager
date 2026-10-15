@@ -15,6 +15,8 @@ import { computed, getCurrentInstance, inject, onBeforeUnmount, provide, ref, sh
 import { onBeforeRouteLeave, onBeforeRouteUpdate, type RouteLocationNormalized } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useConfirm } from '@/composables/useConfirm'
+import { ApiError, apiErrorMessage } from '@/composables/apiClient'
+import { useToast } from '@/composables/useToast'
 
 export interface DirtyFormSection {
   busy?: Ref<boolean> | ComputedRef<boolean>
@@ -75,6 +77,7 @@ export function provideDirtyForm(options: ProvideDirtyFormOptions = {}): DirtyFo
   const saving = ref(false)
   const { t } = useI18n({ useScope: 'global' })
   const { confirm } = useConfirm()
+  const { toast } = useToast()
 
   const isDirty = computed(() => sections.some(s => !!s.isDirty.value))
 
@@ -99,6 +102,12 @@ export function provideDirtyForm(options: ProvideDirtyFormOptions = {}): DirtyFo
         if (ok === false) return false
       }
       return !isDirty.value
+    } catch (failure) {
+      if (failure instanceof ApiError) {
+        if (!failure.silent) toast(apiErrorMessage(failure), 'error')
+        return false
+      }
+      throw failure
     } finally {
       saving.value = false
     }

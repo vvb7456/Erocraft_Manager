@@ -76,7 +76,7 @@ interface AlertItem {
   message: string | null; createdAt: string; resolvedAt: string | null; notified: boolean
 }
 interface ActivityItem {
-  id: number; timestamp: string | null; actor: string; status: string
+  id: number; timestamp: string | null; actor: string; status: 'success' | 'failed'
   category?: string | null; detailKey?: string | null; detailParams?: Record<string, unknown> | null
 }
 
@@ -305,7 +305,8 @@ async function loadActivity() {
 }
 
 async function refreshLive() {
-  await Promise.all([loadDashboard(), loadMonitoring(), loadAlerts(), loadActivity()])
+  const results = await Promise.allSettled([loadDashboard(), loadMonitoring(), loadAlerts(), loadActivity()])
+  for (const result of results) if (result.status === 'rejected') dashboardApi.handleError(result.reason)
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -324,7 +325,7 @@ onMounted(async () => {
   try { await refreshLive() }
   catch (e) { fatalError.value = String(e) }
   finally { if (alive) loading.value = false }
-  pollTimer = setInterval(refreshLive, 30_000)
+  pollTimer = setInterval(() => { void refreshLive().catch(dashboardApi.handleError) }, 30_000)
 })
 onUnmounted(() => {
   alive = false

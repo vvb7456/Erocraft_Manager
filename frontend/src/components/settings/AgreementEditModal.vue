@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { apiErrorMessage } from '@/composables/apiClient'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -105,27 +106,22 @@ function isDirty(): boolean {
 
 async function loadInitial() {
   initLoading.value = true
-  let bzh = resolveAgreementBody(props.slug, '', 'zh')
-  let ben = resolveAgreementBody(props.slug, '', 'en')
-
-  const a = props.agreement
-  if (a && a.current_version > 0) {
-    const data = await get<AgreementVersionOut[]>(`/api/admin/agreements/${a.id}/versions`)
-    if (data) {
+  try {
+    let bzh = resolveAgreementBody(props.slug, '', 'zh')
+    let ben = resolveAgreementBody(props.slug, '', 'en')
+    const a = props.agreement
+    if (a && a.current_version > 0) {
+      const data = await get<AgreementVersionOut[]>(`/api/admin/agreements/${a.id}/versions`)
       const cur = data.find(v => v.version === a.current_version)
       if (cur) {
         if (cur.body_zh && cur.body_zh.trim()) bzh = cur.body_zh
         if (cur.body_en && cur.body_en.trim()) ben = cur.body_en
       }
     }
-  }
-  bodyZh.value = bzh
-  bodyEn.value = ben
-  snapshot.value = JSON.stringify({
-    bodyZh: bzh,
-    bodyEn: ben,
-  })
-  initLoading.value = false
+    bodyZh.value = bzh
+    bodyEn.value = ben
+    snapshot.value = JSON.stringify({ bodyZh: bzh, bodyEn: ben })
+  } finally { initLoading.value = false }
 }
 
 async function onCloseAttempt() {
@@ -152,30 +148,23 @@ async function submit() {
     body_en: bodyEn.value,
     bump,
   }
-  const res = await raw(`/api/admin/agreements/${a.id}/versions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-    silent: true,
-  })
-  submitLoading.value = false
-  if (res == null) return false
-  if (res.status === 201) {
+  try {
+    await raw(`/api/admin/agreements/${a.id}/versions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      silent: true,
+    })
     toast(t('settings.agreements.save_ok'), 'success')
     emit('saved')
     snapshot.value = JSON.stringify({ bodyZh: payload.body_zh, bodyEn: payload.body_en })
     if (isDirty()) return false
     emit('update:modelValue', null)
     return true
-  } else {
-    let msg = `HTTP ${res.status}`
-    try {
-      const body = await res.json()
-      msg = body.error || body.message || msg
-    } catch { /* ignore */ }
-    toast(msg, 'error')
+  } catch (failure) {
+    toast(apiErrorMessage(failure), 'error')
     return false
-  }
+  } finally { submitLoading.value = false }
 }
 
 function discard() {
@@ -189,7 +178,7 @@ function discard() {
 useDirtyFormSection({ name: 'agreement-editor', isDirty: computed(() => show.value && !initLoading.value && isDirty()), busy: submitLoading, save: submit, discard })
 
 watch(() => props.modelValue, (open) => {
-  if (open) loadInitial()
+  if (open) return loadInitial()
 }, { immediate: true })
 </script>
 

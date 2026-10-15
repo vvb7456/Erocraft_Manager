@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
-from typing import Any
+from typing import Any, Literal
 
 
 class ActivityLogItem(BaseModel):
@@ -11,7 +11,7 @@ class ActivityLogItem(BaseModel):
     timestamp: str | None
     actor: str
     category: str
-    status: str
+    status: Literal["success", "failed"]
     detailKey: str | None = None
     detailParams: dict[str, Any] = {}
 

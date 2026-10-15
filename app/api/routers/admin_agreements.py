@@ -7,6 +7,7 @@ require admin. See ``docs/USER_AGREEMENT_DESIGN.md`` §4.e.
 from __future__ import annotations
 
 from typing import Any
+from app.core.api_errors import ApiError
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
@@ -24,6 +25,7 @@ from app.schemas.agreements import (
 )
 from app.services import agreements as agreements_svc
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 
 router = APIRouter(prefix="/admin/agreements", tags=["agreements"])
 
@@ -57,16 +59,16 @@ async def agreements_create(
     after creation.
     """
     if payload.scope == "egg" and payload.egg_id is None:
-        raise HTTPException(
+        raise ApiError(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="agreements.egg_scope_requires_egg_id",
+            "agreements.egg_scope_requires_egg_id",
         )
     existing = (
         await db.execute(select(Agreement).where(Agreement.slug == payload.slug))
     ).scalar_one_or_none()
     if existing is not None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, detail="agreements.slug_conflict"
+        raise ApiError(
+            status.HTTP_409_CONFLICT, "agreements.slug_conflict"
         )
     agr = Agreement(
         slug=payload.slug,
@@ -84,8 +86,8 @@ async def agreements_create(
         db,
         actor=current_user.username,
         category="settings",
-        status="success",
         detail_key="agreement.create",
+        operation=OperationResult(action="agreement.create", phase="execution", outcome="success", target={"agreement_id": agr.id}),
         detail_params={"slug": agr.slug, "id": agr.id},
     )
     await db.commit()
@@ -110,11 +112,11 @@ async def agreements_update(
         )
     ).scalar_one_or_none()
     if agr is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="agreements.not_found")
+        raise ApiError(404, "agreements.not_found")
     if payload.scope == "egg" and payload.egg_id is None:
-        raise HTTPException(
+        raise ApiError(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="agreements.egg_scope_requires_egg_id",
+            "agreements.egg_scope_requires_egg_id",
         )
     agr.scope = payload.scope
     agr.egg_id = payload.egg_id
@@ -127,8 +129,8 @@ async def agreements_update(
         db,
         actor=current_user.username,
         category="settings",
-        status="success",
         detail_key="agreement.update",
+        operation=OperationResult(action="agreement.update", phase="execution", outcome="success", target={"agreement_id": agr.id}),
         detail_params={"slug": agr.slug, "id": agr.id},
     )
     await db.commit()
@@ -148,7 +150,7 @@ async def versions_list(
         )
     ).scalar_one_or_none()
     if agr is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="agreements.not_found")
+        raise ApiError(404, "agreements.not_found")
     rows = (
         await db.execute(
             select(AgreementVersion)
@@ -198,7 +200,7 @@ async def versions_publish(
         )
     ).scalar_one_or_none()
     if agr is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="agreements.not_found")
+        raise ApiError(404, "agreements.not_found")
 
     now = utc_naive_now()
     actor = current_user.username
@@ -230,8 +232,8 @@ async def versions_publish(
             db,
             actor=actor,
             category="settings",
-            status="success",
             detail_key="agreement.publish_bump",
+            operation=OperationResult(action="agreement.publish_bump", phase="execution", outcome="success", target={"agreement_id": agr.id}),
             detail_params={"slug": agr.slug, "id": agr.id, "version": next_ver},
         )
         await db.commit()
@@ -252,9 +254,9 @@ async def versions_publish(
 
     # bump=False → patch current version in place
     if agr.current_version <= 0:
-        raise HTTPException(
+        raise ApiError(
             status.HTTP_409_CONFLICT,
-            detail="agreements.no_current_version_to_patch",
+            "agreements.no_current_version_to_patch",
         )
     patch_ver = (
         await db.execute(
@@ -266,9 +268,9 @@ async def versions_publish(
     ).scalar_one_or_none()
     if patch_ver is None:
         # orphaned current_version pointer — treat as not found
-        raise HTTPException(
+        raise ApiError(
             status.HTTP_409_CONFLICT,
-            detail="agreements.no_current_version_to_patch",
+            "agreements.no_current_version_to_patch",
         )
     patch_ver.title_zh = payload.title_zh
     patch_ver.title_en = payload.title_en
@@ -281,8 +283,8 @@ async def versions_publish(
         db,
         actor=actor,
         category="settings",
-        status="success",
         detail_key="agreement.publish_patch",
+        operation=OperationResult(action="agreement.publish_patch", phase="execution", outcome="success", target={"agreement_id": agr.id}),
         detail_params={"slug": agr.slug, "id": agr.id, "version": patch_ver.version},
     )
     await db.commit()
@@ -320,15 +322,15 @@ async def agreements_disable(
         )
     ).scalar_one_or_none()
     if agr is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="agreements.not_found")
+        raise ApiError(404, "agreements.not_found")
     agr.is_enabled = False
     await db.flush()
     await log_manager_activity(
         db,
         actor=current_user.username,
         category="settings",
-        status="success",
         detail_key="agreement.disable",
+        operation=OperationResult(action="agreement.disable", phase="execution", outcome="success", target={"agreement_id": agr.id}),
         detail_params={"slug": agr.slug, "id": agr.id},
     )
     await db.commit()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from app.core.api_errors import ApiError
 import json
 import time
 import uuid
@@ -134,17 +135,17 @@ def _validate_activity_report(payload: UserActivityReportRequest) -> dict[str, s
     if payload.event == "server:console.command":
         command = str(props.get("command") or "").strip()
         if not command:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="activity.command_required")
+            raise ApiError(422, "activity.command_required")
         return {"command": command}
 
     if payload.event == "server:file.uploaded":
         directory = str(props.get("directory") or "").strip() or "/"
         file = str(props.get("file") or "").strip()
         if not file:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="activity.file_required")
+            raise ApiError(422, "activity.file_required")
         return {"directory": directory, "file": file}
 
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="activity.event_not_allowed")
+    raise ApiError(422, "activity.event_not_allowed")
 
 
 @router.get("/servers", response_model=list[UserServerItem])
@@ -356,7 +357,7 @@ async def send_user_server_power_action(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     if server.is_suspended:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Server is suspended")
+        raise ApiError(403, "server.suspended")
 
     # For 'start' / 'restart', enforce per-egg credential vars (e.g.
     # SillyTavern PASSWORD, USERNAME). The frontend's confirm dialog talks
@@ -381,13 +382,7 @@ async def send_user_server_power_action(
                 if not (present.get(key) or "").strip()
             ]
             if missing:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={
-                        "code": "server.startup_credentials_required",
-                        "missing": missing,
-                    },
-                )
+                raise ApiError(409, "server.startup_credentials_required", context={"missing": missing})
 
     try:
         await wings_service.send_power_action(db, server.node_id, server.uuid, payload.action)
@@ -413,10 +408,7 @@ async def get_user_server_wings_token(
 ) -> WingsTokenResponse:
     """Unified Wings token for WS console + file upload."""
     if server.is_suspended:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="server_suspended",
-        )
+        raise ApiError(403, "server.suspended")
     try:
         data = await wings_service.create_wings_token(
             db, server.node_id, server.uuid, current_user.uuid,
@@ -464,14 +456,7 @@ async def update_user_server_startup(
     for env_var, value in payload.variables.items():
         err = validate_startup_variable(egg_name, env_var, value)
         if err:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "code": "server.startup_variable_invalid",
-                    "variable": env_var,
-                    "message": err,
-                },
-            )
+            raise ApiError(422, "server.startup_variable_invalid", detail=err, params={"variable": env_var})
         result = await server_repository.update_startup_variable(
             db,
             server_id=server.id,
@@ -508,7 +493,7 @@ async def reinstall_user_server(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     if server.is_suspended:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Server is suspended")
+        raise ApiError(403, "server.suspended")
 
     if payload.force:
         # FORCE_REINSTALL=true tells the install script to wipe /home/container.

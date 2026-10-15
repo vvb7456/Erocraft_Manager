@@ -25,6 +25,7 @@ from app.core.time import utc_naive_now
 from app.db.models.manager import ServerLlmKey
 from app.db.models.pterodactyl import PteroServer
 from app.services.audit import log_manager_activity
+from app.core.contracts import ErrorInfo, OperationResult
 from app.services.llm_provision import newapi_client
 
 logger = logging.getLogger(__name__)
@@ -51,13 +52,15 @@ async def _reprovision_existing(
 ) -> ServerLlmKey:
     uid = row.newapi_user_id
     access_token = row.newapi_user_access_token
+    children: list[OperationResult] = []
 
     if row.newapi_subscription_id:
         try:
             await newapi_client.invalidate_subscription(
                 db, row.newapi_subscription_id
             )
-        except Exception:
+        except Exception as exc:
+            children.append(OperationResult(action="llm.subscription.invalidate", phase="execution", outcome="failed", error=ErrorInfo(code="dependency.failed", detail=str(exc))))
             logger.warning(
                 "reprovision server %s: failed to invalidate old sub %s",
                 row.server_id, row.newapi_subscription_id, exc_info=True,
@@ -78,7 +81,8 @@ async def _reprovision_existing(
             token_id=row.newapi_token_id,
             status=1,
         )
-    except Exception:
+    except Exception as exc:
+        children.append(OperationResult(action="llm.token.enable", phase="execution", outcome="failed", error=ErrorInfo(code="dependency.failed", detail=str(exc))))
         logger.warning(
             "reprovision server %s: failed to re-enable token %s",
             row.server_id, row.newapi_token_id, exc_info=True,
@@ -94,7 +98,7 @@ async def _reprovision_existing(
         db,
         actor="system",
         category="billing",
-        status="success",
+        operation=OperationResult(action="llm.provision", phase="execution", outcome="success", target={"server_id": row.server_id}, children=children),
         detail_key="llm.provision",
         detail_params={
             "server_id": row.server_id,
@@ -253,7 +257,7 @@ async def provision_for_server(
         db,
         actor="system",
         category="billing",
-        status="success",
+        operation=OperationResult(action="llm.provision", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_key="llm.provision",
         detail_params={
             "server_id": server_id,
@@ -279,9 +283,11 @@ async def revoke_for_server(db: AsyncSession, server_id: int) -> None:
     if row is None:
         return
 
+    error = None
     try:
         await newapi_client.delete_user(db, row.newapi_user_id)
-    except Exception:
+    except Exception as exc:
+        error = ErrorInfo(code="dependency.failed", detail=str(exc))
         logger.warning(
             "failed to delete NewAPI user %s for server %s, "
             "removing local row anyway",
@@ -295,7 +301,7 @@ async def revoke_for_server(db: AsyncSession, server_id: int) -> None:
         db,
         actor="system",
         category="billing",
-        status="info",
+        operation=OperationResult(action="llm.revoke", phase="execution", outcome="failed" if error else "success", target={"server_id": server_id}, error=error, facts={"local_record_removed": True}),
         detail_key="llm.revoke",
         detail_params={
             "server_id": server_id,
@@ -342,7 +348,7 @@ async def admin_set_status(
         db,
         actor=actor,
         category="server",
-        status="success",
+        operation=OperationResult(action="llm.status.update", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_key="llm.admin.status",
         detail_params={"server_id": server_id, "enabled": str(enabled).lower()},
     )
@@ -388,7 +394,7 @@ async def admin_reset_usage(
         db,
         actor=actor,
         category="server",
-        status="success",
+        operation=OperationResult(action="llm.usage.reset", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_key="llm.admin.reset_usage",
         detail_params={
             "server_id": server_id,
@@ -406,9 +412,11 @@ async def admin_revoke(db: AsyncSession, server_id: int, *, actor: str = "admin"
     if row is None:
         raise LlmAdminError("no LLM key for this server")
     newapi_user_id = row.newapi_user_id
+    error = None
     try:
         await newapi_client.delete_user(db, newapi_user_id)
-    except Exception:
+    except Exception as exc:
+        error = ErrorInfo(code="dependency.failed", detail=str(exc))
         logger.warning(
             "admin revoke: failed to delete user %s for server %s",
             newapi_user_id, server_id, exc_info=True,
@@ -419,7 +427,7 @@ async def admin_revoke(db: AsyncSession, server_id: int, *, actor: str = "admin"
         db,
         actor=actor,
         category="server",
-        status="info",
+        operation=OperationResult(action="llm.revoke", phase="execution", outcome="failed" if error else "success", target={"server_id": server_id}, error=error, facts={"local_record_removed": True}),
         detail_key="llm.admin.revoke",
         detail_params={
             "server_id": server_id,
@@ -461,12 +469,14 @@ async def update_for_upgrade(
         return
 
     # Invalidate old subscription + bind new
+    children: list[OperationResult] = []
     if row.newapi_subscription_id:
         try:
             await newapi_client.invalidate_subscription(
                 db, row.newapi_subscription_id
             )
-        except Exception:
+        except Exception as exc:
+            children.append(OperationResult(action="llm.subscription.invalidate", phase="execution", outcome="failed", error=ErrorInfo(code="dependency.failed", detail=str(exc))))
             logger.warning(
                 "upgrade: failed to invalidate old subscription %s for server %s",
                 row.newapi_subscription_id, server_id, exc_info=True,
@@ -501,7 +511,7 @@ async def update_for_upgrade(
         db,
         actor="system",
         category="billing",
-        status="success",
+        operation=OperationResult(action="llm.upgrade", phase="execution", outcome="success", target={"server_id": server_id}, children=children),
         detail_key="llm.upgrade",
         detail_params={
             "server_id": server_id,

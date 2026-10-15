@@ -17,6 +17,7 @@ from apscheduler.schedulers.base import BaseScheduler
 from app.db.session import get_session_factory
 from app.jobs.tasks.common import get_job_today
 from app.services.audit import log_manager_activity
+from app.core.contracts import OperationResult
 from app.services.notifications.events import task_failure, task_recovered
 from app.core.time import utc_naive_now
 
@@ -63,7 +64,7 @@ async def run_daily_lifecycle_batch() -> None:
             db,
             actor="system",
             category="automation",
-            status="info",
+            operation=OperationResult(action="automation.daily_lifecycle.start", phase="execution", outcome="success"),
             detail_key="automated_daily_lifecycle_started",
         )
 
@@ -115,6 +116,6 @@ async def run_daily_lifecycle_batch() -> None:
             db,
             actor="system",
             category="automation",
-            status="info",
+            operation=OperationResult(action="automation.daily_lifecycle.dispatch", phase="execution", outcome="success"),
             detail_key="automated_daily_lifecycle_finished",
         )

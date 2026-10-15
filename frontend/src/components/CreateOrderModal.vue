@@ -132,8 +132,7 @@ async function loadUpgradeOptions() {
   const data = await get<UpgradeOptionsResponse>(
     `/api/user/servers/${props.targetServerId}/upgrade-options`,
     { silent: true },
-  )
-  upgradeLoading.value = false
+  ).finally(() => { upgradeLoading.value = false })
   if (data) {
     upgradeData.value = data
     selectedUpgradePlan.value = data.options[0]?.planCode ?? ''
@@ -151,7 +150,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
-const { get, post } = useApiFetch()
+const { get, post, handleError } = useApiFetch()
 const { toast } = useToast()
 
 const open = computed({
@@ -247,7 +246,8 @@ async function loadGateways() {
   gatewayLoading.value = true
   gatewayFailed.value = false
   const data = await get<PaymentGatewayOption[]>('/api/user/payment-gateways', { silent: true })
-  gatewayLoading.value = false
+    .catch(error => { gatewayFailed.value = true; throw error })
+    .finally(() => { gatewayLoading.value = false })
   if (data && data.length > 0) {
     gateways.value = data
     selectedGateway.value = data[0].code
@@ -264,8 +264,8 @@ const isConvert = computed(() => props.mode === 'convert')
 watch(
   () => props.modelValue,
   (v) => {
-    if (v && gateways.value.length === 0 && !gatewayFailed.value) loadGateways()
-    if (v && isUpgrade.value) loadUpgradeOptions()
+    if (v && gateways.value.length === 0 && !gatewayFailed.value) void loadGateways().catch(handleError)
+    if (v && isUpgrade.value) void loadUpgradeOptions().catch(handleError)
   },
   { immediate: true },
 )
@@ -320,8 +320,7 @@ async function loadUsableCoupons() {
   const data = await get<CouponListPayload>(
     `/api/user/coupons?${params.toString()}`,
     { silent: true },
-  )
-  couponsLoading.value = false
+  ).finally(() => { couponsLoading.value = false })
   usableCoupons.value = data?.items ?? []
   // If the previously selected coupon is no longer applicable (e.g.
   // user shrank the period and the new subtotal falls below
@@ -360,7 +359,7 @@ const couponSelectOptions = computed(() => ([
 watch(
   () => [props.modelValue, couponSubtotalFen.value, couponOrderKind.value, couponPlanId.value],
   ([open]) => {
-    if (open) loadUsableCoupons()
+    if (open) return loadUsableCoupons()
   },
   { immediate: true },
 )

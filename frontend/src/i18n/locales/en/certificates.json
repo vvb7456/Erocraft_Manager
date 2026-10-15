@@ -85,6 +85,7 @@
   },
   "toast": {
     "renewed": "Certificate renewed",
+    "renewedPartial": "Certificate renewed, but scanning or some deployments did not complete. Check the certificate status",
     "synced": "Certificate synced",
     "registered": "Certificate added"
   }
