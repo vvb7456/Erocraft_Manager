@@ -38,17 +38,22 @@ async def certificate_problems(db: AsyncSession) -> list[dict[str, Any]]:
         if kind:
             result.append({"key": f"certificate:{cert.id}:{kind}:", "category": "certificate", "severity": severity,
                 "title": f"{cert.name} · {alert_type_label(kind)}", "body": message, "path": "/admin/certificates",
-                "created_at": cert.updated_at})
-    ids = {c.id for c in certs}
+                "created_at": cert.updated_at, "variables": {"certificate_id": cert.id, "certificate_name": cert.name,
+                    "alert_type_label": alert_type_label(kind), "expires_at": to_iso_z(cert.source_not_after) or "—",
+                    "target": "—", "error": cert.source_last_error or "—"}})
+    by_id = {c.id: c for c in certs}
     rows = (await db.execute(select(ManagerCertDeployment, ManagerHost.name).join(ManagerHost, ManagerHost.id == ManagerCertDeployment.host_id)
-        .where(ManagerCertDeployment.certificate_id.in_(ids), ManagerCertDeployment.status != "synced"))).all()
+        .where(ManagerCertDeployment.certificate_id.in_(by_id), ManagerCertDeployment.status != "synced"))).all()
     for dep, host in rows:
         if not dep.unhealthy_since or now - dep.unhealthy_since < timedelta(hours=1):
             continue
         kind = "cert_deployment_outdated" if dep.status == "outdated" else "cert_deployment_unreachable"
+        cert = by_id[dep.certificate_id]
         result.append({"key": f"certificate:{dep.certificate_id}:{kind}:{dep.id}", "category": "certificate", "severity": "warning",
             "title": f"{host} · {alert_type_label(kind)}", "body": dep.last_check_error or dep.status,
-            "path": "/admin/certificates", "created_at": dep.unhealthy_since})
+            "path": "/admin/certificates", "created_at": dep.unhealthy_since,
+            "variables": {"certificate_id": cert.id, "certificate_name": cert.name, "alert_type_label": alert_type_label(kind),
+                "expires_at": to_iso_z(cert.source_not_after) or "—", "target": host, "error": dep.last_check_error or "—"}})
     return result
 
 

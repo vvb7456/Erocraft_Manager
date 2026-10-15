@@ -57,7 +57,7 @@
     "select_action": "Batch action...",
     "execute": "Execute",
     "selected": "{n} users selected",
-    "email": "Send Notification",
+    "email": "Email",
     "delete": "Delete"
   },
   "empty": "No users found",

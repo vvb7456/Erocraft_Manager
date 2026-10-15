@@ -100,9 +100,7 @@ const router = createRouter({
     },
     {
       path: '/orders/:id',
-      name: 'user-order-detail',
-      component: () => import('@/pages/user/UserOrderDetailPage.vue'),
-      meta: { layout: 'user' },
+      redirect: to => ({ path: '/orders', query: { ...to.query, order: to.params.id } }),
     },
     {
       path: '/pay/:id',

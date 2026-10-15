@@ -192,6 +192,10 @@ function toggleSelect(id: number) {
   selectedIds.value = s
 }
 
+function invertSelection() {
+  selectedIds.value = new Set(paginated.value.filter(user => !selectedIds.value.has(user.id)).map(user => user.id))
+}
+
 // ── Batch ──
 async function executeBatchAction(action: 'email' | 'delete') {
   if (batchBusy.value) return
@@ -375,7 +379,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 
   <div class="page-body">
     <!-- Toolbar -->
-    <ListToolbar :selected-count="selectedIds.size" :busy="batchBusy" @clear="selectedIds = new Set()">
+    <ListToolbar :selected-count="selectedIds.size" :busy="batchBusy" @select-all="allSelected = true" @invert="invertSelection" @clear="selectedIds = new Set()">
       <template #start>
         <div class="tb-search-row">
           <FilterInput

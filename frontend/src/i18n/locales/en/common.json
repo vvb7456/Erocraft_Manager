@@ -2,10 +2,11 @@
   "listSep": ", ",
   "selection": {
     "count": "{count} selected",
-    "clear": "Cancel selection",
+    "clear": "Cancel",
     "actions": "Bulk actions",
     "select": "Select {name}",
-    "selectAll": "Select all on this page"
+    "selectAll": "Select all",
+    "invert": "Invert"
   },
   "clipboard": {
     "copied": "Copied",

@@ -5,7 +5,7 @@
  * Browses active billing plans, grouped by ``category_label`` (admin-set
  * UI label, decoupled from egg). Plans without a label fall into a final
  * "其他" / "Others" section. Clicking "Buy now" posts to
- * ``POST /api/user/orders`` and redirects to ``/orders/:id``.
+ * ``POST /api/user/orders`` and redirects to ``/pay/:id``.
  */
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'

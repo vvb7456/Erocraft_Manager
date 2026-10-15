@@ -1,11 +1,12 @@
 {
   "listSep": "、",
   "selection": {
-    "count": "已选择 {count} 项",
-    "clear": "取消选择",
+    "count": "已选 {count} 项",
+    "clear": "取消",
     "actions": "批量操作",
     "select": "选择 {name}",
-    "selectAll": "选择本页全部"
+    "selectAll": "全选",
+    "invert": "反选"
   },
   "clipboard": {
     "copied": "已复制",

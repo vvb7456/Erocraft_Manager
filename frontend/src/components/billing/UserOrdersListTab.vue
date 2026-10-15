@@ -1,18 +1,8 @@
 <script setup lang="ts">
-/**
- * UserOrdersListTab — orders list extracted from UserOrdersPage so the
- * page can host sibling tabs (coupons, invite) without duplicating the
- * polling / search / status-filter logic.
- *
- * The tab keeps its own polling; the parent page lazy-mounts each tab
- * with ``v-if`` so polling stops when the user switches away.
- */
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
-import { useConfirm } from '@/composables/useConfirm'
-import { useToast } from '@/composables/useToast'
 import { useFormatDate } from '@/composables/useFormatDate'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -20,11 +10,11 @@ import BaseSelect from '@/components/form/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import Badge from '@/components/ui/Badge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import ActionSheet from '@/components/ui/ActionSheet.vue'
 import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import SupportModal from '@/components/billing/SupportModal.vue'
+import UserOrderDetailModal from '@/components/billing/UserOrderDetailModal.vue'
 
 defineOptions({ name: 'UserOrdersListTab' })
 
@@ -70,9 +60,8 @@ interface Order {
 
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
-const { get, del } = useApiFetch()
-const { confirm } = useConfirm()
-const { toast } = useToast()
+const route = useRoute()
+const { get } = useApiFetch()
 const { formatDateTime: formatDate } = useFormatDate()
 
 const orders = ref<Order[]>([])
@@ -81,8 +70,17 @@ const searchTerm = ref('')
 const statusFilter = ref<string>('all')
 const page = ref(1)
 const perPage = ref(20)
-const cancellingId = ref<number | null>(null)
 const supportOpen = ref(false)
+const detailOrderId = computed(() => {
+  const id = Number(route.query.order)
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+})
+const detailOpen = computed({
+  get: () => detailOrderId.value !== null,
+  set: value => {
+    if (!value) void router.replace({ query: { ...route.query, order: undefined } })
+  },
+})
 
 const TERMINAL_STATES = new Set(['applied', 'closed', 'cancelled', 'refunded'])
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -204,45 +202,8 @@ function statusLabel(status: string): string {
   return t(`billing.orders.status.${status}`)
 }
 
-function canCancel(o: Order): boolean {
-  return o.status === 'pending'
-}
-
-function canPay(o: Order): boolean {
-  return o.status === 'pending'
-}
-
-function goPay(o: Order) {
-  router.push({ path: `/pay/${o.id}` })
-}
-
-async function doCancel(o: Order) {
-  const ok = await confirm({
-    title: t('billing.orders.cancelConfirmTitle'),
-    message: t('billing.orders.cancelConfirmMessage', { orderNo: o.order_no }),
-    confirmText: t('billing.orders.cancelConfirm'),
-    variant: 'danger',
-  })
-  if (!ok) return
-  cancellingId.value = o.id
-  const res = await del<Order>(`/api/user/orders/${o.id}`)
-  cancellingId.value = null
-  if (res) {
-    toast(t('billing.orders.cancelOk'), 'success')
-    await loadOrders(true)
-  }
-}
-
-const mobileActionOpen = ref(false)
-const mobileActionOrder = ref<Order | null>(null)
-
-function openMobileAction(o: Order) {
-  mobileActionOrder.value = o
-  mobileActionOpen.value = true
-}
-
 function goDetail(o: Order) {
-  router.push({ path: `/orders/${o.id}` })
+  void router.push({ query: { ...route.query, order: String(o.id) } })
 }
 
 onMounted(() => {
@@ -335,28 +296,14 @@ onBeforeUnmount(() => {
       </td>
       <td class="col-time mono">{{ formatDate(o.created_at) }}</td>
       <td class="col-actions">
-        <div class="action-group">
-          <BaseButton v-if="canPay(o)" size="sm" variant="primary" @click="goPay(o)">
-            <MsIcon name="paid" size="xs" /> {{ t('billing.orders.payNow') }}
-          </BaseButton>
-          <BaseButton
-            v-if="canCancel(o)"
-            size="sm"
-            variant="danger"
-            :loading="cancellingId === o.id"
-            @click="doCancel(o)"
-          >
-            <MsIcon name="cancel" size="xs" /> {{ t('billing.orders.cancel') }}
-          </BaseButton>
-          <BaseButton v-if="!canPay(o) && !canCancel(o)" size="sm" @click="goDetail(o)">
-            {{ t('billing.orders.viewDetail') }}
-          </BaseButton>
-        </div>
+        <BaseButton size="sm" @click="goDetail(o)">
+          {{ t('billing.orders.viewDetail') }}
+        </BaseButton>
       </td>
     </template>
 
     <template #card="{ item: o }">
-      <CardTap @tap="openMobileAction(o)">
+      <CardTap @tap="goDetail(o)">
         <div class="card-row--main">
           <div class="card-title">
             <span class="card-plan-name">{{ o.plan_name }}</span>
@@ -373,38 +320,11 @@ onBeforeUnmount(() => {
     </template>
   </DataTable>
 
-  <ActionSheet v-model="mobileActionOpen" :title="mobileActionOrder?.order_no">
-    <template v-if="mobileActionOrder" #info>
-      <Badge :color="statusColor(mobileActionOrder.status)">{{ statusLabel(mobileActionOrder.status) }}</Badge>
-      · ¥{{ fenToYuan(mobileActionOrder.total_fen) }}
-    </template>
-    <template v-if="mobileActionOrder">
-      <button @click="mobileActionOpen = false; goDetail(mobileActionOrder!)">
-        <MsIcon name="receipt_long" size="sm" /> {{ t('billing.orders.viewDetail') }}
-      </button>
-      <button v-if="canPay(mobileActionOrder)" @click="mobileActionOpen = false; goPay(mobileActionOrder!)">
-        <MsIcon name="paid" size="sm" /> {{ t('billing.orders.payNow') }}
-      </button>
-      <button
-        v-if="canCancel(mobileActionOrder)"
-        :disabled="cancellingId === mobileActionOrder.id"
-        @click="mobileActionOpen = false; doCancel(mobileActionOrder!)"
-      >
-        <MsIcon name="cancel" size="sm" /> {{ t('billing.orders.cancel') }}
-      </button>
-    </template>
-  </ActionSheet>
-
+  <UserOrderDetailModal v-model="detailOpen" :order-id="detailOrderId" @updated="loadOrders(true)" @contact="supportOpen = true" />
   <SupportModal v-model="supportOpen" />
 </template>
 
 <style scoped>
-.action-group {
-  display: flex;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-}
-
 .order-link {
   color: var(--ac);
   text-decoration: none;

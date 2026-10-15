@@ -59,7 +59,6 @@ const currentPage = computed(() => {
   if (name.startsWith('host-')) return 'hosts'
   if (name.startsWith('admin-server-')) return 'servers'
   if (name.startsWith('server-')) return 'user-servers'
-  if (name === 'user-order-detail') return 'user-orders'
   return name
 })
 async function go(page: string, query?: Record<string, string>) {

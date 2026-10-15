@@ -25,12 +25,41 @@ from app.services.audit import log_manager_activity
 from app.services.notifications.center import current_problems
 from app.services.notifications.policy import NotificationPolicy, load_policy
 from app.services.notifications import wecom
+from app.services.notifications import templates
 
 router = APIRouter(prefix="/admin/notifications", tags=["notifications"])
 KEYS = {"WECOM_ENABLED", "WECOM_CORP_ID", "WECOM_AGENT_ID", "WECOM_SECRET", "NOTIFY_SUPPORT_DELAY",
         "SMTP_HOST", "SMTP_PORT", "SMTP_USE_SSL", "SMTP_PASSWORD", "SENDER_EMAIL", "EMAIL_SEND_DELAY",
         "AUTOMATION_EMAIL_RUN_HOUR", "AUTOMATION_EMAIL_RUN_MINUTE", "TIMEZONE"}
 SPECS = {k: v for k, v in {**NOTIFICATION_SPECS, **SETTINGS_SPECS, **AUTOMATION_SPECS}.items() if k in KEYS}
+
+
+@router.get("/wecom-templates")
+async def get_wecom_templates(_: PteroUser = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> dict:
+    values = await templates.load_templates(db)
+    return {key: {**value.model_dump(), "variables": [*templates.COMMON_VARIABLES, *templates.VARIABLES[key]]} for key, value in values.items()}
+
+
+@router.post("/wecom-templates")
+async def save_wecom_template(body: templates.TemplateInput, admin: PteroUser = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> dict:
+    try:
+        templates.validate_template(body)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    key = templates.setting_key(body.type)
+    await get_settings_store().set_values(db, {key: body.model_dump(exclude={"type"})}, category="notifications")
+    await log_manager_activity(db, actor=admin.username, category="settings", status="success",
+        detail_key="settings_change", detail_params={"actor": admin.username, "keys": [key]})
+    return {"ok": True}
+
+
+@router.post("/wecom-templates/preview")
+async def preview_wecom_template(body: templates.TemplateInput, _: PteroUser = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> dict:
+    try:
+        templates.validate_template(body)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    return {"content": await templates.preview(db, body)}
 
 
 @router.get("/center")
@@ -112,8 +141,9 @@ async def test_channel(request: Request, body: TestInput, _: PteroUser = Depends
     try:
         wecom.validate(values, group.wecom_ids)
         for member in group.wecom_ids:
-            await wecom.client.send(values, recipient=member, title="通知渠道测试", body="企业微信连接成功。",
-                url=site + "/#/admin/notifications?tab=channels", reference=int(utc_naive_now().timestamp()))
+            await wecom.client.send(values, recipient=member, content=wecom.format_content(title="通知渠道测试",
+                body=f"通知编号：{int(utc_naive_now().timestamp())}\n\n企业微信连接成功。",
+                url=site + "/#/admin/notifications?tab=rules"))
     except (ValueError, wecom.DeliveryError) as exc:
         raise HTTPException(400, str(exc)) from None
     return {"ok": True}

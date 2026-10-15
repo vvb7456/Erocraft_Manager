@@ -59,9 +59,9 @@
     "suspend": "冻结",
     "unsuspend": "解冻",
     "renew": "续期",
-    "email": "发送通知邮件",
+    "email": "发邮件",
     "delete": "删除",
-    "update_plan": "修改套餐"
+    "update_plan": "改套餐"
   },
   "confirm": {
     "delete_title": "删除服务器",

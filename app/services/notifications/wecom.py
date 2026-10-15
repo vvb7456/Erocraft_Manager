@@ -46,6 +46,14 @@ def gateway_key(settings: dict[str, Any]) -> str:
     return hashlib.sha256(f"{settings.get('WECOM_CORP_ID')}:{settings.get('WECOM_AGENT_ID')}".encode()).hexdigest()
 
 
+def format_content(*, title: str, body: str, url: str) -> str:
+    # text supports links in both WeCom and its WeChat plugin; the limit is in UTF-8 bytes.
+    suffix = f'\n\n<a href="{html.escape(url, quote=True)}">查看详情</a>' if url else ""
+    budget = max(0, 2048 - len(suffix.encode()))
+    content = html.escape(f"{title[:180].strip()}\n\n{body.strip()}")
+    return content.encode()[:budget].decode(errors="ignore").rstrip() + suffix
+
+
 class WecomClient:
     def __init__(self) -> None:
         self._token = ""
@@ -89,15 +97,8 @@ class WecomClient:
             self._expires = time.monotonic() + max(0, int(data.get("expires_in", 7200)) - 120)
             return self._token
 
-    async def send(self, settings: dict[str, Any], *, recipient: str, title: str, body: str, url: str, reference: int) -> str:
+    async def send(self, settings: dict[str, Any], *, recipient: str, content: str) -> str:
         validate(settings, [recipient])
-        # text supports links in both WeCom and its WeChat plugin; bound UTF-8 bytes, not characters.
-        heading = html.escape(title[:180])
-        link = f'\n<a href="{html.escape(url, quote=True)}">查看详情</a>' if url else ""
-        suffix = f"\n通知 #{reference}"
-        content = f"{heading}\n{html.escape(body)}"
-        budget = max(0, 2048 - len((link + suffix).encode()))
-        content = content.encode()[:budget].decode(errors="ignore") + link + suffix
         async with httpx.AsyncClient(timeout=12, trust_env=False) as client:
             for attempt in range(2):
                 token = await self._access_token(client, settings)

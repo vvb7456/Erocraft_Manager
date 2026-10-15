@@ -7,6 +7,19 @@
   "supportDelay": "Chat message grouping delay (seconds)", "reload": "Reload",
   "category": { "support": "Customer messages", "monitoring": "Monitoring alerts", "certificate": "Certificate issues", "billing": "Order and payment issues", "system": "System and job failures" },
   "severity": { "info": "All severities", "warning": "Warning and critical", "critical": "Critical only" },
+  "wecomTemplates": {
+    "heading": "Notification title", "body": "Notification body", "saved": "WeChat notification templates saved", "previewFailed": "Preview unavailable. Check the title and template content.",
+    "types": { "support": "Customer messages", "alert_fired": "Monitoring alerts", "alert_resolved": "Monitoring recovery", "certificate": "Certificate issues", "billing_incident": "Order and payment issues", "billing_apply": "Order provisioning failures", "audit_failure": "Operation failures", "task_failure": "Task failures" },
+    "variables": {
+      "brand_name": "Brand name", "site_name": "Site domain", "notification_id": "Notification number", "severity_label": "Alert severity",
+      "username": "Username", "message_count": "Unread message count", "messages": "Latest unread messages (up to five)",
+      "node_name": "Host name", "node_id": "Host ID", "alert_type_label": "Alert type", "alert_message": "Monitoring record when the alert was triggered", "fired_at": "Triggered at (UTC)", "resolved_at": "Resolved at (UTC)",
+      "certificate_id": "Certificate ID", "certificate_name": "Certificate name", "expires_at": "Certificate expiry (UTC)", "error": "Certificate read or deployment error",
+      "incident_id": "Incident ID", "incident_type_label": "Order incident type", "order_id": "Order ID", "server_id": "Server ID",
+      "order_no": "Order number", "plan_name": "Plan name", "total_yuan": "Order amount", "currency_code": "Currency", "apply_retry_count": "Provisioning retry count", "apply_error": "Provisioning error",
+      "actor": "Operator", "operation": "Operation type", "status_label": "Failed or partially failed", "target": "Deployment target or related object", "job_id": "Task name", "error_type": "Error type"
+    }
+  },
   "center": {
     "subtitles": {
       "wecom": "Send support, business, and monitoring notifications to internal members through a WeCom application.",
@@ -26,7 +39,7 @@
     "globalRules": "Global rules", "globalRecipients": "Global recipient group",
     "channelDisabled": "Channel disabled",
     "more": "Load more",
-    "alerts": "Current alerts", "rules": "Notification rules", "channels": "Channels", "templates": "Message templates",
+    "alerts": "Current alerts", "rules": "Notification rules", "channels": "Channels", "templates": "Email templates", "wecomTemplates": "WeChat templates",
     "notificationType": "Notification type", "recipient": "Recipient", "serverOwner": "Server owner", "delivery": "Delivery", "reminderPolicy": "Reminder policy", "conditions": "Trigger conditions", "reminderSchedule": "Schedule",
     "emailGroup": "Email recipient group", "wecomGroup": "WeCom recipient group", "wecomResolved": "WeCom recovery notifications", "channelTest": "Channel test", "usedBy": "Associated rules", "groupCount": "{count} recipient groups",
     "inheritValue": "Inherit global ({value})", "selectedAdmins": "Selected administrators", "selectAdmin": "Select at least one administrator", "minutes": "{count} minutes", "customCooldown": "Custom interval (minutes)",

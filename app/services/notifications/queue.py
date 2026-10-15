@@ -16,6 +16,7 @@ from app.core.time import utc_naive_now
 from app.db.models.notifications import NotificationDelivery
 from app.db.session import get_engine
 from app.services.notifications import wecom
+from app.services.notifications.templates import delivery_content
 from app.services.notifications.policy import load_policy
 
 logger = logging.getLogger(__name__)
@@ -147,8 +148,10 @@ async def prepare(db: AsyncSession, row: NotificationDelivery, settings: dict[st
         ))
         username = await db.scalar(select(PteroUser.username).where(PteroUser.id == conversation.user_id))
         row.title = f"客服新消息 · {username or conversation.user_id}"[:200]
-        row.body = f"{count} 条未读消息\n" + "\n".join((message.content[:220] + (" [截图]" if message.image_type else "")) for message in reversed(messages))
-        row.context = {**row.context, "message_id": messages[0].id}
+        summary = "\n".join((message.content[:220] + (" [截图]" if message.image_type else "")) for message in reversed(messages))
+        row.body = f"{count} 条未读消息\n" + summary
+        row.context = {**row.context, "message_id": messages[0].id,
+            "wecom_variables": {"username": username or str(conversation.user_id), "message_count": count, "messages": summary}}
     elif row.category == "monitoring":
         from app.db.models.monitoring import HostAlert
 
@@ -243,6 +246,8 @@ async def _dispatch(db: AsyncSession, row_id: int) -> None:
         row.status, row.last_error = "failed", "请先在站点设置中配置有效的站点 URL"
         await db.commit()
         return
+    if row.channel == "wecom":
+        content = await delivery_content(db, row, brand=str(brand), site=site)
     row.status = "sending"
     row.attempts += 1
     row.last_attempt_at = now
@@ -252,8 +257,7 @@ async def _dispatch(db: AsyncSession, row_id: int) -> None:
     try:
         if row.channel == "wecom":
             row.message_id = await wecom.client.send(
-                settings, recipient=row.recipient, title=f"{brand} · {row.title}",
-                body=f"站点：{parsed.netloc}\n{row.body}", url=site + "/#" + row.path, reference=row.id,
+                settings, recipient=row.recipient, content=content,
             )
         else:
             from app.services.email import EmailClient, get_smtp_config, load_template, render_template_body

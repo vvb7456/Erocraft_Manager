@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.time import utc_naive_now
+from app.core.time import utc_naive_now, to_iso_z
 from app.services.billing.notify import order_apply_alert_context
 from app.services.notifications.queue import configuration, enqueue_safely
 
@@ -17,7 +17,7 @@ async def support_message(db: AsyncSession, *, conversation_id: int, message_id:
     await enqueue_safely(
         db, event_key=f"support:message:{message_id}", category="support", severity="info",
         title=f"客服新消息 · {username}", body="", path=f"/admin/support?conversation={conversation_id}",
-        topic=f"support:{conversation_id}", context={"conversation_id": conversation_id}, delay=delay, settings=settings,
+        topic=f"support:{conversation_id}", context={"conversation_id": conversation_id, "wecom_template": "support"}, delay=delay, settings=settings,
     )
 
 
@@ -34,7 +34,9 @@ async def monitoring_alert(db: AsyncSession, *, alert: Any, host_name: str, kind
         body=f"{alert_type_label(alert.alert_type)}\n{alert.message or ''}",
         path=f"/admin/hosts/{alert.host_id}/overview" if alert.host_id else "/admin/dashboard",
         context={"alert_id": alert.id, "kind": kind, "template": "alert_resolved" if restored else "alert_fired",
-                 "variables": {"node_name": host_name, "node_id": str(alert.host_id or ""),
+                 "wecom_template": "alert_resolved" if restored else "alert_fired",
+                 "wecom_variables": {"alert_message": alert.message or "—", "fired_at": to_iso_z(alert.created_at), "resolved_at": to_iso_z(alert.resolved_at) or "—"},
+                 "variables": {"node_name": host_name or str(alert.host_id or ""), "node_id": str(alert.host_id or ""),
                      "alert_type": alert.alert_type, "alert_type_label": alert_type_label(alert.alert_type),
                      "severity": alert.severity, "severity_label": severity_label(alert.severity),
                      "message": alert.message or "", "fired_at": str(alert.created_at), "resolved_at": str(alert.resolved_at or "")}},
@@ -48,7 +50,10 @@ async def certificate_alert(db: AsyncSession, *, cert: Any, alert_type: str, sev
         db, event_key=f"certificate:{cert.id}:{alert_type}:{target}:{utc_naive_now().date()}",
         category="certificate", severity=severity, title=f"证书告警 · {cert.name}",
         body=f"{alert_type_label(alert_type)}\n{message}", path="/admin/certificates",
-        context={"certificate_id": cert.id, "problem_key": f"certificate:{cert.id}:{alert_type}:{target}"},
+        context={"certificate_id": cert.id, "problem_key": f"certificate:{cert.id}:{alert_type}:{target}",
+            "wecom_template": "certificate", "wecom_variables": {"certificate_id": cert.id, "certificate_name": cert.name,
+                "alert_type_label": alert_type_label(alert_type), "expires_at": to_iso_z(cert.source_not_after) or "—",
+                "target": target or "—", "error": cert.source_last_error or "—"}},
     )
 
 
@@ -63,7 +68,9 @@ async def billing_incident(db: AsyncSession, incident: Any) -> None:
         body += f"\n订单 ID：{incident.order_id}"
     if incident.server_id:
         body += f"\n服务器 ID：{incident.server_id}"
-    context = {"incident_id": incident.id}
+    context = {"incident_id": incident.id, "wecom_template": "billing_incident",
+        "wecom_variables": {"incident_id": incident.id, "incident_type_label": labels.get(incident.kind, incident.kind),
+            "order_id": incident.order_id or "—", "server_id": incident.server_id or "—"}}
     if incident.kind == "apply_retries_exhausted" and incident.order_id:
         from app.db.models.billing import BillingOrder
 
@@ -86,7 +93,7 @@ async def billing_apply(db: AsyncSession, order: Any) -> None:
         db, event_key=f"billing:apply:{order.id}:{order.status}", category="billing", severity="warning",
         title="订单开通异常", body=f"订单号：{order.order_no}\n重试次数：{order.apply_retry_count}\n请查看订单处理状态。",
         path=f"/admin/billing?tab=orders&order={order.id}",
-        context={"order_id": order.id, **await order_apply_alert_context(db, order)},
+        context={"order_id": order.id, **await order_apply_alert_context(db, order), "wecom_template": "billing_apply"},
     )
 
 
@@ -108,7 +115,8 @@ async def audit_failure(db: AsyncSession, *, actor: str, category: str, status: 
         severity="critical" if status == "failed" else "warning", title=f"{categories[category]}异常",
         body=f"操作人：{actor}\n系统检测到{'失败' if status == 'failed' else '部分失败'}的操作，请在活动日志中查看详情。" + (f"\n关联对象：{target}" if target else ""),
         path="/admin/activity-logs",
-        context={"issue_key": f"audit:{category}:{detail_key}:{target}"},
+        context={"issue_key": f"audit:{category}:{detail_key}:{target}", "wecom_template": "audit_failure",
+            "wecom_variables": {"actor": actor, "operation": categories[category], "status_label": "失败" if status == "failed" else "部分失败", "target": target or "—"}},
     )
 
 
@@ -123,7 +131,7 @@ async def task_failure(job_id: str, when: datetime, error_type: str) -> None:
             await enqueue_safely(
                 db, event_key=f"task:{job_id}:{int(when.timestamp()) // 1800}", category="system", severity="critical",
                 title="后台任务运行异常", body=f"任务：{job_id}\n异常类型：{error_type}\n请检查后台运行日志。", path="/admin/activity-logs",
-                context={"issue_key": f"task:{job_id}"},
+                context={"issue_key": f"task:{job_id}", "wecom_template": "task_failure", "wecom_variables": {"job_id": job_id, "error_type": error_type}},
             )
             await db.commit()
     except Exception as exc:

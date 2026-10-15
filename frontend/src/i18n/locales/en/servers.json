@@ -59,9 +59,9 @@
     "suspend": "Suspend",
     "unsuspend": "Unsuspend",
     "renew": "Renew",
-    "email": "Send Notification",
+    "email": "Email",
     "delete": "Delete",
-    "update_plan": "Change Plan"
+    "update_plan": "Plan"
   },
   "confirm": {
     "delete_title": "Delete Server",

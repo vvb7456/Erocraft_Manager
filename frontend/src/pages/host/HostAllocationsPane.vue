@@ -130,6 +130,9 @@ function toggleSelect(id: number) {
 function clearSelection() {
   selectedIds.value = new Set()
 }
+function invertSelection() {
+  selectedIds.value = new Set(selectableIds.value.filter(id => !selectedIds.value.has(id)))
+}
 
 // ── Modal ──
 const createOpen = ref(false)
@@ -296,7 +299,7 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
     <PageHeaderActions>
       <BaseButton size="sm" variant="primary" :disabled="batchBusy" @click="createOpen = true"><MsIcon name="add" size="xs" />{{ t('hosts.allocations.actions.create') }}</BaseButton>
     </PageHeaderActions>
-    <ListToolbar :selected-count="selectedIds.size" :busy="batchBusy" @clear="clearSelection">
+    <ListToolbar :selected-count="selectedIds.size" :busy="batchBusy" @select-all="allSelected = true" @invert="invertSelection" @clear="clearSelection">
       <template #start>
         <div class="tb-search-row">
           <FilterInput

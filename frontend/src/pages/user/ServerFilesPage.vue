@@ -241,7 +241,7 @@ async function onCreateFile() {
     </aside>
 
     <!-- Right top: Toolbar (standalone) -->
-    <ListToolbar class="files-toolbar" :selected-count="ops.selectedFiles.value.size" :busy="ops.operating.value || ops.compressing.value" @clear="ops.clearSelection">
+    <ListToolbar class="files-toolbar" :selected-count="ops.selectedFiles.value.size" :busy="ops.operating.value || ops.compressing.value" @select-all="ops.selectAll" @invert="ops.invertSelection" @clear="ops.clearSelection">
       <template #start>
         <FilterInput
           v-model="ops.searchTerm.value"
@@ -264,9 +264,6 @@ async function onCreateFile() {
         <BaseButton size="sm" :disabled="ops.operating.value" @click="ops.triggerUpload"><MsIcon name="upload" size="xs" />{{ t('userServers.file.upload') }}</BaseButton>
       </template>
       <template #selection-actions>
-        <BaseButton size="sm" variant="ghost" :aria-label="ops.allSelected.value ? t('userServers.file.deselectAll') : t('userServers.file.selectAll')" :title="ops.allSelected.value ? t('userServers.file.deselectAll') : t('userServers.file.selectAll')" @click="ops.toggleSelectAll">
-          <MsIcon :name="ops.allSelected.value ? 'deselect' : 'select_all'" size="sm" />
-        </BaseButton>
         <BaseButton size="sm" variant="ghost" :aria-label="t('userServers.file.move')" :title="t('userServers.file.move')" @click="ops.moveSelected">
           <MsIcon name="drive_file_move" size="xs" />
           <span class="selection-action-label">{{ t('userServers.file.move') }}</span>

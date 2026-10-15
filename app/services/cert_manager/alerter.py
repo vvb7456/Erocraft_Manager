@@ -20,7 +20,8 @@ async def run_certificate_alerts(db: AsyncSession, *, expiry_only: bool = False)
         cert_id = int(problem["key"].split(":")[1])
         ids = await enqueue_safely(db, event_key=f"{problem['key']}:{utc_naive_now().date()}",
             category="certificate", severity=problem["severity"], title=problem["title"],
-            body=problem["body"], path=problem["path"], context={"certificate_id": cert_id, "problem_key": problem["key"]})
+            body=problem["body"], path=problem["path"], context={"certificate_id": cert_id, "problem_key": problem["key"], "wecom_template": "certificate",
+                "wecom_variables": problem["variables"]})
         results.append({"certificate_id": cert_id, "type": kind, "queued": len(ids)})
     await db.commit()
     return results

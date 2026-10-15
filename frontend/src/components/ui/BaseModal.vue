@@ -111,7 +111,7 @@ watch(() => props.modelValue, (open) => {
     unlockBodyScroll()
     hasBodyLock.value = false
   }
-})
+}, { immediate: true })
 
 // Ensure scroll lock is released on unmount
 onUnmounted(() => {

@@ -109,7 +109,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
   }
 
   const hasSelection = computed(() => selectedFiles.value.size > 0)
-  const allSelected = computed(() => sortedFiles.value.length > 0 && selectedFiles.value.size === sortedFiles.value.length)
+  const allSelected = computed(() => sortedFiles.value.length > 0 && sortedFiles.value.every(file => selectedFiles.value.has(file.name)))
 
   // ── Helpers ──
   function isEditable(f: FileEntry): boolean {
@@ -188,10 +188,18 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
 
   function toggleSelectAll() {
     if (allSelected.value) {
-      selectedFiles.value = new Set()
+      clearSelection()
     } else {
-      selectedFiles.value = new Set(sortedFiles.value.map(f => f.name))
+      selectAll()
     }
+  }
+
+  function selectAll() {
+    selectedFiles.value = new Set(sortedFiles.value.map(file => file.name))
+  }
+
+  function invertSelection() {
+    selectedFiles.value = new Set(sortedFiles.value.filter(file => !selectedFiles.value.has(file.name)).map(file => file.name))
   }
 
   function clearSelection() {
@@ -628,7 +636,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
     // Helpers
     isEditable, isArchive, fileIcon, formatSize, formatDate,
     // Operations
-    loadFiles, toggleSelect, toggleSelectAll, clearSelection,
+    loadFiles, toggleSelect, toggleSelectAll, selectAll, invertSelection, clearSelection,
     openNewFile, createFile, openNewFolder, createFolder,
     openRename, doRename, openMove, doMove,
     deleteFiles, deleteSelected, deleteSingle,

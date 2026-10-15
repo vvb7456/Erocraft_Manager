@@ -7,6 +7,19 @@
   "supportDelay": "客服消息合并等待（秒）", "reload": "重新加载",
   "category": { "support": "客服消息", "monitoring": "监控告警", "certificate": "证书异常", "billing": "订单与支付异常", "system": "系统与任务异常" },
   "severity": { "info": "全部等级", "warning": "警告及严重告警", "critical": "仅严重告警" },
+  "wecomTemplates": {
+    "heading": "通知标题", "body": "通知正文", "saved": "微信通知模板已保存", "previewFailed": "无法预览，请检查标题和模板内容。",
+    "types": { "support": "客服新消息", "alert_fired": "监控告警", "alert_resolved": "监控恢复", "certificate": "证书异常", "billing_incident": "订单与支付异常", "billing_apply": "订单开通异常", "audit_failure": "操作异常", "task_failure": "任务异常" },
+    "variables": {
+      "brand_name": "品牌名称", "site_name": "站点域名", "notification_id": "通知编号", "severity_label": "告警等级",
+      "username": "用户名", "message_count": "未读消息数量", "messages": "最新未读消息摘要（最多五条）",
+      "node_name": "主机名称", "node_id": "主机 ID", "alert_type_label": "告警类型", "alert_message": "触发告警时的监测记录", "fired_at": "触发时间（UTC）", "resolved_at": "恢复时间（UTC）",
+      "certificate_id": "证书 ID", "certificate_name": "证书名称", "expires_at": "证书到期时间（UTC）", "error": "证书读取或部署的错误记录",
+      "incident_id": "异常记录 ID", "incident_type_label": "订单异常类型", "order_id": "订单 ID", "server_id": "服务器 ID",
+      "order_no": "订单号", "plan_name": "套餐名称", "total_yuan": "订单金额", "currency_code": "币种", "apply_retry_count": "开通重试次数", "apply_error": "开通失败说明",
+      "actor": "操作人", "operation": "操作类型", "status_label": "失败或部分失败", "target": "部署目标或关联对象", "job_id": "任务名称", "error_type": "异常类型"
+    }
+  },
   "center": {
     "subtitles": {
       "wecom": "通过企业微信自建应用向内部成员发送客服、业务与监控通知。",
@@ -26,7 +39,7 @@
     "globalRules": "全局规则", "globalRecipients": "全局接收组",
     "channelDisabled": "渠道未启用",
     "more": "加载更多",
-    "alerts": "当前告警", "rules": "通知规则", "channels": "通知渠道", "templates": "消息模板",
+    "alerts": "当前告警", "rules": "通知规则", "channels": "通知渠道", "templates": "邮件模板", "wecomTemplates": "微信通知模板",
     "notificationType": "通知类型", "recipient": "接收人", "serverOwner": "服务器所属用户", "delivery": "通知方式", "reminderPolicy": "提醒策略", "conditions": "触发条件", "reminderSchedule": "发送时间",
     "emailGroup": "邮件接收组", "wecomGroup": "企业微信接收组", "wecomResolved": "企业微信恢复通知", "channelTest": "渠道测试", "usedBy": "关联规则", "groupCount": "共 {count} 个接收组",
     "inheritValue": "继承全局（{value}）", "selectedAdmins": "指定管理员", "selectAdmin": "请选择至少一位管理员", "minutes": "{count} 分钟", "customCooldown": "自定义间隔（分钟）",

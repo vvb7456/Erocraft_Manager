@@ -254,6 +254,10 @@ function toggleSelect(id: number) {
   selectedIds.value = s
 }
 
+function invertSelection() {
+  selectedIds.value = new Set(paginated.value.filter(server => !selectedIds.value.has(server.pteroId)).map(server => server.pteroId))
+}
+
 // ── Status helpers ──
 function statusColor(s: ServerItem): string {
   if (s.isSuspended) return 'var(--red)'
@@ -557,7 +561,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
     </section>
 
     <!-- Toolbar -->
-    <ListToolbar :selected-count="selectedIds.size" :busy="batchBusy" @clear="selectedIds = new Set()">
+    <ListToolbar :selected-count="selectedIds.size" :busy="batchBusy" @select-all="allSelected = true" @invert="invertSelection" @clear="selectedIds = new Set()">
       <template #start>
         <div class="tb-search-row">
           <FilterInput

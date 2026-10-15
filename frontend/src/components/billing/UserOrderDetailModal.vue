@@ -1,34 +1,29 @@
 <script setup lang="ts">
-/**
- * UserOrderDetailPage — `/orders/:id`
- *
- * 单一“账单卡片”视图。设计文档：docs/BILLING_FRONTEND_DESIGN_OrderDetailPage.md
- *
- * 仅显示用户应见字段：套餐 / 周期 / 金额 / 网关大类 / 服务器名（如已开通）。
- * 严格隐藏所有内部 ID（plan_id / server_id / invoice_id / transaction_id /
- * gateway_prepay_id 等）。
- *
- * PageHeader 仅含 title，遵守项目硬规则。
- */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/app'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { useFormatDate } from '@/composables/useFormatDate'
-import PageHeader from '@/components/layout/PageHeader.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
-import SupportModal from '@/components/billing/SupportModal.vue'
 
-defineOptions({ name: 'UserOrderDetailPage' })
+defineOptions({ name: 'UserOrderDetailModal' })
+
+const props = defineProps<{ modelValue: boolean; orderId: number | null }>()
+const emit = defineEmits<{
+  'update:modelValue': [open: boolean]
+  updated: []
+  contact: []
+}>()
 
 interface OrderInvoice {
   id: number
@@ -72,7 +67,6 @@ interface Order {
 }
 
 const { t } = useI18n({ useScope: 'global' })
-const route = useRoute()
 const router = useRouter()
 const { get, del } = useApiFetch()
 const { confirm } = useConfirm()
@@ -86,26 +80,30 @@ const loading = ref(true)
 const loadFailed = ref(false)
 const cancelling = ref(false)
 const downloading = ref(false)
-const supportOpen = ref(false)
+const billCard = ref<InstanceType<typeof BaseCard> | null>(null)
+const busy = computed(() => cancelling.value || downloading.value)
+const open = computed({ get: () => props.modelValue, set: value => emit('update:modelValue', value) })
+let loadRevision = 0
 
-const orderId = computed(() => Number(route.params.id))
-
-const headerBreadcrumbs = computed(() => [
-  { label: t('billing.orders.pageTitle'), to: { name: 'user-orders' } },
-  { label: order.value?.order_no || t('billing.orderDetail.pageTitle') },
-])
-
-async function loadOrder(silent = false) {
-  if (!silent) loading.value = true
+async function loadOrder() {
+  if (!props.orderId || !open.value) return
+  const revision = ++loadRevision
+  loading.value = true
   loadFailed.value = false
-  const data = await get<Order>(`/api/user/orders/${orderId.value}`, { silent })
-  if (data) {
-    order.value = data
-  } else if (!silent) {
-    loadFailed.value = true
-  }
+  const data = await get<Order>(`/api/user/orders/${props.orderId}`)
+  if (revision !== loadRevision) return
+  order.value = data
+  loadFailed.value = !data
   loading.value = false
 }
+
+watch([() => props.modelValue, () => props.orderId], () => {
+  loadRevision++
+  order.value = null
+  loadFailed.value = false
+  if (open.value) void loadOrder()
+}, { immediate: true })
+onBeforeUnmount(() => { loadRevision++ })
 
 // ── Display helpers ──
 function fenToYuan(fen: number): string {
@@ -195,21 +193,29 @@ function goServer() {
 }
 
 async function doCancel() {
-  if (!order.value) return
-  const ok = await confirm({
-    title: t('billing.orderDetail.actions.cancelConfirmTitle'),
-    message: t('billing.orderDetail.actions.cancelConfirmMessage'),
-    confirmText: t('billing.orderDetail.actions.cancelConfirmBtn'),
-    variant: 'danger',
-  })
-  if (!ok) return
+  if (!order.value || !canCancel.value || busy.value) return
+  const id = order.value.id
   cancelling.value = true
-  const res = await del<Order>(`/api/user/orders/${order.value.id}`)
-  cancelling.value = false
-  if (res) {
-    toast(t('billing.orderDetail.actions.cancelOk'), 'success')
-    order.value = res
-  }
+  try {
+    const ok = await confirm({
+      title: t('billing.orderDetail.actions.cancelConfirmTitle'),
+      message: t('billing.orderDetail.actions.cancelConfirmMessage'),
+      confirmText: t('billing.orderDetail.actions.cancelConfirmBtn'),
+      variant: 'danger',
+    })
+    if (!ok) return
+    const res = await del<Order>(`/api/user/orders/${id}`)
+    if (res) {
+      toast(t('billing.orderDetail.actions.cancelOk'), 'success')
+      if (props.orderId === id && open.value) order.value = res
+      emit('updated')
+    }
+  } finally { cancelling.value = false }
+}
+
+function contactSupport() {
+  open.value = false
+  emit('contact')
 }
 
 function doPrint() {
@@ -217,13 +223,10 @@ function doPrint() {
 }
 
 async function doDownloadPdf() {
-  if (!order.value || downloading.value) return
+  const card = billCard.value?.$el as HTMLElement | undefined
+  if (!order.value || busy.value || !card) return
+  const orderNo = order.value.order_no
   downloading.value = true
-  const card = document.querySelector('.bill-card') as HTMLElement | null
-  if (!card) {
-    downloading.value = false
-    return
-  }
   card.classList.add('bill-card--print-mode')
   try {
     const mod = await import('html2pdf.js')
@@ -231,7 +234,7 @@ async function doDownloadPdf() {
     await html2pdf()
       .set({
         margin: 10,
-        filename: `order-${order.value.order_no}.pdf`,
+        filename: `order-${orderNo}.pdf`,
         image: { type: 'jpeg', quality: 0.95 },
         html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
@@ -243,20 +246,16 @@ async function doDownloadPdf() {
     downloading.value = false
   }
 }
-
-onMounted(loadOrder)
 </script>
 
 <template>
-  <PageHeader icon="receipt_long" :title="t('billing.orderDetail.pageTitle')" :breadcrumbs="headerBreadcrumbs" />
-
-  <div class="page-body">
+  <BaseModal v-model="open" :title="t('billing.orderDetail.pageTitle')" icon="receipt_long" size="lg" density="compact" :persistent="busy">
     <LoadingCenter v-if="loading" />
 
     <EmptyState
       v-else-if="loadFailed || !order"
       icon="error_outline"
-      :text="t('billing.orderDetail.loadFailed')"
+      :title="t('billing.orderDetail.loadFailed')"
     >
       <BaseButton variant="primary" size="sm" @click="loadOrder()">
         {{ t('billing.orderDetail.retry') }}
@@ -264,7 +263,7 @@ onMounted(loadOrder)
     </EmptyState>
 
     <div v-else class="bill-wrap">
-      <BaseCard class="bill-card" variant="bg2">
+      <BaseCard ref="billCard" class="bill-card" variant="bg2">
         <!-- Header -->
         <header class="bill-head">
           <div class="bill-title">
@@ -364,36 +363,32 @@ onMounted(loadOrder)
             </a>
           </div>
         </div>
-
-        <!-- Actions footer -->
-        <div class="bill-actions">
-          <BaseButton size="sm" @click="doDownloadPdf" :loading="downloading">
-            <MsIcon name="download" size="xs" /> {{ t('billing.orderDetail.actions.downloadPdf') }}
-          </BaseButton>
-          <BaseButton size="sm" @click="doPrint">
-            <MsIcon name="print" size="xs" /> {{ t('billing.orderDetail.actions.print') }}
-          </BaseButton>
-          <BaseButton v-if="canPay" size="sm" variant="primary" @click="goPay">
-            <MsIcon name="paid" size="xs" /> {{ t('billing.orderDetail.actions.pay') }}
-          </BaseButton>
-          <BaseButton v-if="canCancel" size="sm" variant="danger" :loading="cancelling" @click="doCancel">
-            <MsIcon name="cancel" size="xs" /> {{ t('billing.orderDetail.actions.cancel') }}
-          </BaseButton>
-          <BaseButton size="sm" @click="supportOpen = true">
-            <MsIcon name="support_agent" size="xs" /> {{ t('billing.orderDetail.actions.contactSupport') }}
-          </BaseButton>
-        </div>
       </BaseCard>
     </div>
 
-    <SupportModal v-model="supportOpen" />
-  </div>
+    <template v-if="order && !loading" #footer>
+      <BaseButton size="sm" @click="doDownloadPdf" :loading="downloading" :disabled="busy">
+        <MsIcon name="download" size="xs" /> {{ t('billing.orderDetail.actions.downloadPdf') }}
+      </BaseButton>
+      <BaseButton size="sm" :disabled="busy" @click="doPrint">
+        <MsIcon name="print" size="xs" /> {{ t('billing.orderDetail.actions.print') }}
+      </BaseButton>
+      <BaseButton v-if="canPay" size="sm" variant="primary" :disabled="busy" @click="goPay">
+        <MsIcon name="paid" size="xs" /> {{ t('billing.orderDetail.actions.pay') }}
+      </BaseButton>
+      <BaseButton v-if="canCancel" size="sm" variant="danger" :loading="cancelling" :disabled="busy" @click="doCancel">
+        <MsIcon name="cancel" size="xs" /> {{ t('billing.orderDetail.actions.cancel') }}
+      </BaseButton>
+      <BaseButton size="sm" :disabled="busy" @click="contactSupport">
+        <MsIcon name="support_agent" size="xs" /> {{ t('billing.orderDetail.actions.contactSupport') }}
+      </BaseButton>
+    </template>
+  </BaseModal>
 </template>
 
 <style scoped>
 .bill-wrap {
-  max-width: 760px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .bill-card {
@@ -580,14 +575,6 @@ onMounted(loadOrder)
   text-decoration: underline;
 }
 
-/* Actions */
-.bill-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  justify-content: flex-end;
-}
-
 .mono {
   font-family: var(--font-mono);
 }
@@ -607,18 +594,26 @@ onMounted(loadOrder)
 .bill-card--print-mode .bill-meta-value {
   color: #111 !important;
 }
-.bill-card--print-mode .bill-actions {
-  display: none !important;
-}
 
 @media print {
-  :global(body *) { visibility: hidden !important; }
-  :global(.bill-card),
-  :global(.bill-card *) { visibility: visible !important; }
-  :global(.bill-card) {
-    position: absolute !important;
-    inset: 0 auto auto 0;
-    width: 100%;
+  /* The modal's fixed positioning and scroll containers would otherwise clip the bill. */
+  :global(body:has(.bill-wrap)) { overflow: visible !important; }
+  :global(body:has(.bill-wrap) > :not(.modal-overlay:has(.bill-wrap))) { display: none !important; }
+  :global(.modal-overlay:has(.bill-wrap)) { position: static !important; display: block !important; padding: 0 !important; background: transparent !important; }
+  :global(.modal-box:has(.bill-wrap)) {
+    display: block !important;
+    max-width: none !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  :global(.modal-box:has(.bill-wrap) > .modal-header),
+  :global(.modal-box:has(.bill-wrap) > .modal-footer) { display: none; }
+  :global(.modal-body:has(.bill-wrap)) { overflow: visible !important; padding: 0 !important; }
+  .bill-card {
     background: #ffffff !important;
     color: #111 !important;
     border: none !important;
@@ -626,12 +621,11 @@ onMounted(loadOrder)
     padding: 16mm 14mm !important;
     max-width: none !important;
   }
-  :global(.bill-card *) {
+  .bill-card :deep(*) {
     color: #111 !important;
     background: transparent !important;
     border-color: #ddd !important;
   }
-  :global(.bill-actions) { display: none !important; }
 }
 
 /* ── Responsive ── */
@@ -647,6 +641,5 @@ onMounted(loadOrder)
   .bill-meta { align-items: flex-start; }
   .bill-status { justify-self: start; }
   .bill-title { font-size: 1.4rem; letter-spacing: 4px; }
-  .bill-actions { justify-content: stretch; }
 }
 </style>
