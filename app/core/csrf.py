@@ -36,6 +36,9 @@ UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 EXEMPT_PREFIXES: tuple[str, ...] = (
     "/api/webhook/",
     "/api/cert/source-changed",
+    # Native clients send a servicewechat.com Referer; these routes never use cookies.
+    "/api/miniprogram/",
+    "/api/payments/wechat/mini/",
 )
 
 

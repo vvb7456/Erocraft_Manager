@@ -773,6 +773,7 @@ onBeforeUnmount(() => {
 
 .command-input {
   flex: 1;
+  min-width: 0;
   background: none;
   border: none;
   outline: none;
@@ -937,7 +938,8 @@ onBeforeUnmount(() => {
   }
 
   .terminal-container {
-    height: clamp(250px, 45vh, 500px);
+    height: clamp(120px, 45dvh, 500px);
   }
 }
+@media (pointer: coarse) { .command-input { font-size: 16px; } }
 </style>

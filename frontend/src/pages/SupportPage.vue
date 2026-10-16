@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useSupportEvents } from '@/composables/useSupportEvents'
 import { useSupportStore } from '@/stores/support'
 import SupportChat from '@/components/support/SupportChat.vue'
+import SupportChatFrame from '@/components/support/SupportChatFrame.vue'
 import SupportConnectionBadge from '@/components/support/SupportConnectionBadge.vue'
 import SupportContactMenu from '@/components/support/SupportContactMenu.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -18,6 +19,7 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 defineOptions({ name: 'SupportPage' })
 
 const route = useRoute()
+const router = useRouter()
 const support = useSupportStore()
 const admin = computed(() => !!route.meta.admin)
 const { t, locale } = useI18n()
@@ -40,7 +42,10 @@ const hasFilters = computed(() => !!search.value.trim() || filter.value !== 'all
 const hasMore = ref(false)
 const failed = ref(false)
 const loading = ref(false)
-const viewportHeight = ref(window.visualViewport?.height || window.innerHeight)
+const media = window.matchMedia('(max-width: 900px), (max-width: 1000px) and (pointer: coarse)')
+const mobile = ref(media.matches)
+const fullscreen = computed(() => mobile.value && !!selected.value)
+function updateMedia() { mobile.value = media.matches }
 const chatHeading = ref<HTMLElement | null>(null)
 const searchInput = ref<InstanceType<typeof FilterInput> | null>(null)
 const filterKey = computed(() => JSON.stringify([search.value.trim(), filter.value]))
@@ -48,12 +53,11 @@ let pendingRefresh = false
 let alive = true
 let linkedRequest = 0
 let searchTimer: ReturnType<typeof setTimeout> | null = null
-function updateViewport() { viewportHeight.value = window.visualViewport?.height || window.innerHeight }
 async function select(item: Conversation) {
   linkedRequest++
   selected.value = item.id
   selectedContact.value = item
-  if (window.matchMedia('(max-width: 900px)').matches) {
+  if (mobile.value) {
     await nextTick()
     if (alive && selected.value === item.id) chatHeading.value?.focus({ preventScroll: true })
   }
@@ -126,22 +130,21 @@ watch(() => [admin.value, route.query?.conversation], async () => {
 }, { immediate: true })
 useSupportEvents(() => { if (admin.value && document.visibilityState === 'visible') void load() })
 onMounted(() => {
+  media.addEventListener('change', updateMedia)
   void load()
-  window.addEventListener('resize', updateViewport)
-  window.visualViewport?.addEventListener('resize', updateViewport)
 })
 onBeforeUnmount(() => {
   alive = false
+  media.removeEventListener('change', updateMedia)
   if (searchTimer) clearTimeout(searchTimer)
-  window.removeEventListener('resize', updateViewport)
-  window.visualViewport?.removeEventListener('resize', updateViewport)
 })
 </script>
 
 <template>
+  <div class="support-page">
   <PageHeader icon="support_agent" :title="admin ? t('support.inbox') : t('support.title')" />
-  <div class="page-body support-workspace" :class="{ 'with-list': admin, 'has-selection': !!selected, compact: viewportHeight < 500 }" :style="{ '--support-height': `${viewportHeight}px` }">
-    <aside v-if="admin" class="conversation-list" :aria-label="t('support.back')">
+  <div class="support-workspace" :class="{ 'with-list': admin }">
+    <aside v-if="admin && (!mobile || !selected)" class="conversation-list" :aria-label="t('support.back')">
       <FilterInput ref="searchInput" v-model="search" class="list-search" maxlength="100" :placeholder="t('support.search')" />
       <TabSwitcher class="list-filters" :tabs="filterOptions" :model-value="filter" @update:model-value="filter = $event as ConversationFilter" />
       <p class="list-caption">{{ t('support.recentMessages') }}</p>
@@ -168,14 +171,14 @@ onBeforeUnmount(() => {
       </div>
     </aside>
 
-    <section class="chat-pane" :class="{ 'is-empty': admin && !selected }" :aria-label="t('support.history')">
-      <header v-if="selected || !admin" ref="chatHeading" class="conversation-heading" tabindex="-1">
-        <BaseButton v-if="admin" variant="ghost" size="sm" square class="back-to-list" :aria-label="t('support.back')" @click="backToList"><MsIcon name="arrow_back" size="sm" /></BaseButton>
+    <SupportChatFrame v-if="!admin || !mobile || selected" :fullscreen="fullscreen" :empty="admin && !selected" :role="fullscreen ? 'dialog' : undefined" :aria-modal="fullscreen ? 'true' : undefined" :aria-label="t('support.history')">
+      <header v-if="selected || !admin" ref="chatHeading" class="conversation-heading" :class="{ 'conversation-heading--mobile': mobile }" tabindex="-1">
+        <BaseButton v-if="mobile" variant="ghost" size="sm" square class="back-to-list" :aria-label="admin ? t('support.back') : t('common.btn.close')" @click="admin ? backToList() : router.push({ name: 'user-home' })"><MsIcon :name="admin ? 'arrow_back' : 'close'" size="sm" /></BaseButton>
         <span v-if="admin" class="customer-avatar">{{ selectedContact?.username.slice(0, 1).toLocaleUpperCase() }}</span><span v-else class="support-avatar"><MsIcon name="support_agent" size="sm" /></span>
         <div class="heading-text"><SupportContactMenu v-if="admin && selectedContact" :key="selectedContact.id" :username="selectedContact.username" /><h3 v-else>{{ t('support.title') }}</h3><span v-if="admin && selectedContact" class="contact-id">{{ t('support.userId', { id: selectedContact.user_id }) }}</span></div>
         <SupportConnectionBadge />
       </header>
-      <SupportChat v-if="selected" :key="`${admin}:${selected}`" :conversation-id="selected" :admin="admin" :customer-name="selectedContact?.username" layout="workspace" :compact="viewportHeight < 500" />
+      <SupportChat v-if="selected" :key="`${admin}:${selected}`" :conversation-id="selected" :admin="admin" :customer-name="selectedContact?.username" :mobile="mobile" layout="workspace" />
       <LoadingCenter v-else-if="!admin && loading" />
       <div v-else class="chat-empty">
         <SupportConnectionBadge v-if="admin" class="empty-status" />
@@ -184,12 +187,14 @@ onBeforeUnmount(() => {
         <p v-if="admin">{{ t('support.selectConversationHint') }}</p>
         <BaseButton v-if="failed && !admin" size="sm" @click="load()">{{ t('support.retry') }}</BaseButton>
       </div>
-    </section>
+    </SupportChatFrame>
+  </div>
   </div>
 </template>
 
 <style scoped>
-.support-workspace { height: calc(var(--support-height, 100dvh) - var(--app-header-h, 64px)); min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: clamp(20px, 2vw, 32px); overflow: hidden; }
+.support-page { height: 100dvh; min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+.support-workspace { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: clamp(20px, 2vw, 32px); padding: var(--sp-3) clamp(28px, 2.5vw, 42px) clamp(20px, 2vw, 32px); overflow: hidden; }
 .with-list { grid-template-columns: clamp(264px, 23vw, 336px) minmax(0, 1fr); }
 .conversation-list { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .list-filters { margin-top: var(--sp-3); }
@@ -216,8 +221,6 @@ onBeforeUnmount(() => {
 .list-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 12px; color: var(--t3); text-align: center; }
 .list-empty p { margin: 0; color: var(--t2); font-size: var(--text-sm); }
 .list-more { display: flex; justify-content: center; padding: 12px; }
-.chat-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--bd); border-radius: 18px; background: var(--bg2); overflow: hidden; }
-.chat-pane.is-empty { border-style: dashed; background: color-mix(in srgb, var(--bg2) 45%, transparent); }
 .conversation-heading { flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 10px 20px; border-bottom: 1px solid var(--bd); outline: none; }
 .conversation-heading .customer-avatar, .conversation-heading .support-avatar { width: 32px; height: 32px; border-radius: 11px; }
 .heading-text { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
@@ -228,21 +231,17 @@ onBeforeUnmount(() => {
 .empty-avatar { display: grid; place-items: center; width: 64px; height: 64px; margin-bottom: 6px; border-radius: 22px; background: color-mix(in srgb, var(--ac) 8%, var(--bg2)); color: var(--ac); }
 .chat-empty h3 { margin: 0; color: var(--t1); font-size: var(--text-base); font-weight: 550; }
 .chat-empty p { max-width: 30ch; margin: 0; color: var(--t3); font-size: var(--text-sm); line-height: 1.7; }
-.back-to-list { display: none; }
+.back-to-list { flex-shrink: 0; width: 40px; height: 40px; }
 .conversation:focus-visible { outline: 2px solid var(--ac); outline-offset: -2px; }
 @media (max-width: 1100px) and (min-width: 901px) { .support-workspace { padding-inline: 20px; gap: 20px; } .with-list { grid-template-columns: 260px minmax(0, 1fr); } .contact-id { display: none; } }
-@media (max-width: 900px) {
-  .support-workspace { padding: 12px 12px max(12px, env(safe-area-inset-bottom)); gap: 0; }
+@media (max-width: 900px), (max-width: 1000px) and (pointer: coarse) {
+  .support-workspace { padding: 0; gap: 0; }
+  .conversation-list { padding: 12px; }
   .with-list { grid-template-columns: minmax(0, 1fr); }
-  .with-list.has-selection .conversation-list { display: none; }
-  .with-list:not(.has-selection) .chat-pane { display: none; }
   .conversation { padding-block: 16px; }
-  .chat-pane { border-radius: 14px; }
-  .conversation-heading { gap: 8px; padding: 8px 10px; }
   .contact-id { display: none; }
-  .back-to-list { display: inline-flex; }
   .list-search { --filter-input-font: 16px; }
 }
-@media (pointer: coarse) { .back-to-list { width: 40px; height: 40px; } }
+.conversation-heading--mobile { gap: 8px; padding: max(8px, env(safe-area-inset-top)) 10px 8px; }
 @media (prefers-reduced-motion: reduce) { .conversation { transition: none; } }
 </style>

@@ -165,6 +165,12 @@
     "forgot_password": {
       "site_url_not_configured": "系统未配置网站地址，请联系管理员"
     },
+    "miniprogram": {
+      "binding_conflict": "该微信或艾萝工坊账号已绑定，请先解除原绑定",
+      "binding_required": "请先绑定艾萝工坊账号",
+      "login_failed": "微信身份验证失败，请重试微信登录",
+      "login_unavailable": "小程序登录尚未配置"
+    },
     "notification": {
       "delivery_failed": "通知发送失败",
       "not_configured": "请先完成通知渠道配置"

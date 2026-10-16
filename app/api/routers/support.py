@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
-from app.api.deps.auth import get_current_user, require_admin
+from app.api.deps.auth import require_admin
+from app.api.deps.support import SupportUser, get_support_user
 from app.api.deps.db import get_db
 from app.core.runtime_settings import SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
@@ -54,7 +55,7 @@ def message_out(message: SupportMessage) -> dict:
     }
 
 
-async def conversation(db: AsyncSession, cid: int, user: PteroUser, *, lock: bool = False) -> SupportConversation:
+async def conversation(db: AsyncSession, cid: int, user: SupportUser, *, lock: bool = False) -> SupportConversation:
     stmt = select(SupportConversation).where(SupportConversation.id == cid)
     if not user.root_admin:
         stmt = stmt.where(SupportConversation.user_id == user.id)
@@ -67,7 +68,7 @@ async def conversation(db: AsyncSession, cid: int, user: PteroUser, *, lock: boo
 
 
 @router.post("/conversation")
-async def my_conversation(user: PteroUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+async def my_conversation(user: SupportUser = Depends(get_support_user), db: AsyncSession = Depends(get_db)) -> dict:
     uid = user.id
     row = await db.scalar(select(SupportConversation).where(SupportConversation.user_id == uid))
     if row is None:
@@ -95,7 +96,7 @@ async def my_conversation(user: PteroUser = Depends(get_current_user), db: Async
 
 
 @router.get("/unread")
-async def unread_count(user: PteroUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+async def unread_count(user: SupportUser = Depends(get_support_user), db: AsyncSession = Depends(get_db)) -> dict:
     read_id = SupportConversation.admin_read_id if user.root_admin else SupportConversation.user_read_id
     # Arrival tracking is independent of read receipts, which can advance before the sound check.
     stmt = select(
@@ -164,7 +165,7 @@ async def list_conversations(
 @router.get("/conversations/{cid}/messages")
 async def messages(
     cid: int, after: int = Query(0, ge=0), before: int = Query(0, ge=0),
-    user: PteroUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+    user: SupportUser = Depends(get_support_user), db: AsyncSession = Depends(get_db),
 ) -> dict:
     row = await conversation(db, cid, user)
     stmt = select(SupportMessage).where(SupportMessage.conversation_id == cid)
@@ -200,7 +201,7 @@ def normalize_image(data: bytes) -> tuple[bytes, str]:
 
 
 @router.post("/conversations/{cid}/messages")
-async def send_message(cid: int, request: Request, user: PteroUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+async def send_message(cid: int, request: Request, user: SupportUser = Depends(get_support_user), db: AsyncSession = Depends(get_db)) -> dict:
     await conversation(db, cid, user)
     await db.commit()
     image_data = None
@@ -254,7 +255,7 @@ async def send_message(cid: int, request: Request, user: PteroUser = Depends(get
 
 
 @router.post("/conversations/{cid}/read")
-async def mark_read(cid: int, payload: ReadInput, user: PteroUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+async def mark_read(cid: int, payload: ReadInput, user: SupportUser = Depends(get_support_user), db: AsyncSession = Depends(get_db)) -> dict:
     row = await conversation(db, cid, user)
     cursor = min(payload.message_id, row.last_message_id)
     column = SupportConversation.admin_read_id if user.root_admin else SupportConversation.user_read_id
@@ -264,7 +265,7 @@ async def mark_read(cid: int, payload: ReadInput, user: PteroUser = Depends(get_
 
 
 @router.get("/messages/{mid}/image")
-async def image(mid: int, user: PteroUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> Response:
+async def image(mid: int, user: SupportUser = Depends(get_support_user), db: AsyncSession = Depends(get_db)) -> Response:
     message = await db.get(SupportMessage, mid)
     if message is None or not message.image_type:
         raise HTTPException(404, "截图不存在")
@@ -274,7 +275,7 @@ async def image(mid: int, user: PteroUser = Depends(get_current_user), db: Async
 
 
 @router.get("/events")
-async def events(request: Request, user: PteroUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> StreamingResponse:
+async def events(request: Request, user: SupportUser = Depends(get_support_user), db: AsyncSession = Depends(get_db)) -> StreamingResponse:
     uid, admin = user.id, bool(user.root_admin)
     await db.commit()
 

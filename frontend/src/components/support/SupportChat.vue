@@ -9,13 +9,12 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseTextarea from '@/components/form/BaseTextarea.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
-import SplitButton from '@/components/ui/SplitButton.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import MessageText from './MessageText.vue'
 
 defineOptions({ name: 'SupportChat' })
 
-const props = withDefaults(defineProps<{ conversationId: number; admin?: boolean; active?: boolean; customerName?: string; layout?: 'widget' | 'workspace'; compact?: boolean }>(), { active: true, layout: 'widget' })
+const props = withDefaults(defineProps<{ conversationId: number; admin?: boolean; active?: boolean; customerName?: string; layout?: 'widget' | 'workspace'; mobile?: boolean }>(), { active: true, layout: 'widget' })
 const emit = defineEmits<{ navigate: [] }>()
 const { t, locale } = useI18n()
 const { get, post, raw, handleError } = useApiFetch()
@@ -48,6 +47,7 @@ let alive = true
 let reading = false
 let receiveCursor = 0
 let observer: ResizeObserver | null = null
+let viewportHeight = 0
 const canSend = computed(() => !!(content.value.trim() || draft.value.file) && !draft.value.sending)
 const mine = (message: Message) => message.is_admin === !!props.admin
 const sameGroup = (a?: Message, b?: Message) => !!a && !!b && a.is_admin === b.is_admin && !!a.automated === !!b.automated
@@ -87,6 +87,7 @@ async function markRead() {
   } catch (failure) { handleError(failure) } finally { reading = false }
 }
 function onScroll() {
+  if (viewport.value && viewport.value.clientHeight !== viewportHeight) return
   following.value = atBottom()
   if (following.value) { newMessages.value = 0; void markRead() }
 }
@@ -176,7 +177,7 @@ function resizeInput() {
   const el = input.value?.element
   if (!el) return
   el.style.height = 'auto'
-  el.style.height = `${Math.min(144, el.scrollHeight)}px`
+  el.style.height = `${el.scrollHeight}px`
 }
 async function send() {
   if (!canSend.value) return
@@ -238,7 +239,10 @@ watch(() => draft.value.file, file => {
   imagePreview.value = file ? URL.createObjectURL(file) : ''
 }, { immediate: true })
 onMounted(() => {
-  observer = new ResizeObserver(() => { if (following.value && props.active) void scrollDown() })
+  observer = new ResizeObserver(() => {
+    viewportHeight = viewport.value?.clientHeight || 0
+    if (following.value && props.active) void scrollDown()
+  })
   if (viewport.value) observer.observe(viewport.value)
   resizeInput()
 })
@@ -251,7 +255,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="chat" :class="{ 'chat--workspace': layout === 'workspace', 'chat--compact': compact }">
+  <section class="chat" :class="{ 'chat--workspace': layout === 'workspace', 'chat--mobile': mobile }">
     <div class="history">
       <div ref="viewport" class="messages" role="log" :aria-label="t('support.history')" :aria-live="active ? 'polite' : 'off'" @scroll="onScroll">
         <div v-if="hasOlder" class="older"><BaseButton size="sm" variant="ghost" :loading="loadingOlder" @click="older"><MsIcon name="history" size="sm" />{{ t('support.older') }}</BaseButton></div>
@@ -278,10 +282,11 @@ onBeforeUnmount(() => {
     <form class="compose-area" @submit.prevent="send">
       <div class="composer" :class="{ 'send-failed': sendFailed }">
         <div v-if="imagePreview" class="attachment"><img :src="imagePreview" :alt="t('support.image')" /><span>{{ draft.file?.name || t('support.image') }}</span><BaseButton type="button" size="sm" variant="ghost" square :aria-label="t('support.remove')" :disabled="draft.sending" @click="setFile(null)"><MsIcon name="close" size="sm" /></BaseButton></div>
-        <BaseTextarea ref="input" v-model="content" class="message-input" :disabled="draft.sending" :rows="2" maxlength="4000" enterkeyhint="send" :placeholder="t('support.placeholder')" :aria-label="t('support.placeholder')" @paste="paste" @keydown="keydown" />
-        <div class="compose-actions">
+        <div class="compose-row">
           <input ref="picker" type="file" accept="image/png,image/jpeg,image/webp" hidden @change="setFile(($event.target as HTMLInputElement).files?.[0] || null)" />
-          <SplitButton :label="draft.sending ? t('support.sending') : t('support.send')" icon="arrow_upward" :loading="draft.sending" :main-disabled="!canSend" :menu-label="t('support.attach')" :options="[{ key: 'attach', label: t('support.attach'), icon: 'image' }]" placement="top" @click="send" @select="picker?.click()" />
+          <BaseButton class="compose-button" variant="ghost" square :disabled="draft.sending" :aria-label="t('support.attach')" :title="t('support.attach')" @click="picker?.click()"><MsIcon name="image" size="sm" /></BaseButton>
+          <BaseTextarea ref="input" v-model="content" class="message-input" :readonly="draft.sending" :rows="1" maxlength="4000" enterkeyhint="send" :placeholder="t('support.placeholder')" :aria-label="t('support.placeholder')" @paste="paste" @keydown="keydown" />
+          <BaseButton type="submit" class="compose-button" variant="primary" square :loading="draft.sending" :disabled="!canSend" :aria-label="draft.sending ? t('support.sending') : t('support.send')" :title="t('support.send')" @pointerdown.prevent><MsIcon name="arrow_upward" size="sm" /></BaseButton>
         </div>
       </div>
       <p v-if="sendFailed" class="send-error" role="alert">{{ t('support.sendFailed') }}</p>
@@ -325,12 +330,13 @@ onBeforeUnmount(() => {
 .new-messages { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; white-space: nowrap; border: 1px solid var(--bd); border-radius: 24px; background: var(--bg2); color: var(--ac); font: inherit; font-size: var(--text-xs); box-shadow: 0 4px 20px #0002; cursor: pointer; }
 .retry { display: flex; justify-content: center; padding: 4px 12px; }
 .compose-area { flex-shrink: 0; padding: 0 16px 16px; }
-.composer { border: 1px solid var(--bd); border-radius: 18px; background: var(--bg); transition: border-color .18s; }
+.composer { border: 1px solid var(--bd); border-radius: var(--r-lg); background: var(--bg); transition: border-color .18s; }
 .composer:focus-within { border-color: color-mix(in srgb, var(--ac) 65%, var(--bd)); }
 .composer.send-failed { border-color: var(--red); }
-.message-input { display: block; width: 100%; min-height: 72px; max-height: 144px; resize: none; padding: 14px 14px 8px; border: 0; border-radius: 18px 18px 0 0; background: transparent; line-height: 1.6; scrollbar-width: thin; }
+.message-input { flex: 1; display: block; width: 0; min-width: 0; min-height: 44px; max-height: 144px; resize: none; padding: 10px 4px; border: 0; border-radius: 0; background: transparent; line-height: 24px; scrollbar-width: thin; }
 .message-input:focus { box-shadow: none; }
-.compose-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 0 10px 10px 14px; }
+.compose-row { display: flex; align-items: flex-end; gap: 4px; padding: 6px; }
+.compose-button { flex: 0 0 44px; height: 44px; border-radius: 12px; }
 .attachment { display: flex; gap: 10px; align-items: center; margin: 10px 10px 0; padding: 8px; background: var(--bg3); border-radius: 12px; }
 .attachment img { height: 44px; width: 52px; object-fit: cover; border-radius: 6px; }
 .attachment span { flex: 1; min-width: 0; font-size: var(--text-xs); color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -338,15 +344,14 @@ onBeforeUnmount(() => {
 .image-lightbox { display: block; max-width: 100%; max-height: 72dvh; margin: auto; object-fit: contain; border-radius: 8px; }
 .message-image:focus-visible, .new-messages:focus-visible { outline: 2px solid var(--ac); outline-offset: 3px; }
 @media (pointer: coarse) { .message-input { font-size: 16px; } }
-@media (max-width: 600px) { .messages { padding-inline: 16px; } .compose-area { padding: 0 12px 12px; } .message-main { max-width: 85%; } }
 .chat--workspace .messages { padding-inline: max(var(--sp-6), calc((100% - 880px) / 2)); }
 .chat--workspace .compose-area { width: 100%; max-width: 928px; margin-inline: auto; padding: var(--sp-3) var(--sp-6) var(--sp-5); }
-.chat--workspace .composer { border-radius: var(--r-lg); }
-@media (max-width: 900px) {
-  .chat--workspace .messages { padding-inline: var(--sp-4); }
-  .chat--workspace .compose-area { padding: var(--sp-2) var(--sp-3) var(--sp-3); }
-}
-.chat--compact .message-input { min-height: 48px; max-height: 96px; }
-.chat--compact .compose-area { padding-bottom: var(--sp-2); }
+.chat--mobile .messages { padding-inline: var(--sp-4); }
+.chat--mobile .compose-area { max-width: none; padding: 6px 8px; border-top: 1px solid var(--bd); background: var(--bg2); }
+.chat--mobile .composer { border: 0; background: transparent; }
+.chat--mobile .compose-row { padding: 0; gap: 6px; }
+.chat--mobile .message-input { max-height: 44px; padding-inline: 10px; border-radius: 12px; background: var(--bg); font-size: 16px; }
+.chat--mobile .attachment { margin: 0 0 6px; }
+.chat--mobile .composer.send-failed .message-input { box-shadow: inset 0 0 0 1px var(--red); }
 @media (prefers-reduced-motion: reduce) { .composer { transition: none; } }
 </style>

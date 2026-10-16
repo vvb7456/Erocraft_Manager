@@ -164,6 +164,12 @@
     "forgot_password": {
       "site_url_not_configured": "The site URL is not configured. Contact an administrator"
     },
+    "miniprogram": {
+      "binding_conflict": "This WeChat or Erocraft account is already linked. Unlink it first",
+      "binding_required": "Link your Erocraft account first",
+      "login_failed": "WeChat verification failed. Please sign in with WeChat again",
+      "login_unavailable": "Mini program sign-in is not configured"
+    },
     "notification": {
       "delivery_failed": "Notification delivery failed",
       "not_configured": "Configure the notification channel first"
