@@ -1,6 +1,8 @@
 """OpenAPI declarations for the shared HTTP error and operation contracts."""
 
-from typing import Any
+from __future__ import annotations
+
+from typing import Any, Dict, Union
 
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
@@ -8,7 +10,7 @@ from fastapi.openapi.utils import get_openapi
 from .contracts import ProblemDetails
 
 
-PROBLEM_RESPONSES: dict[int | str, dict[str, Any]] = {
+PROBLEM_RESPONSES: Dict[Union[int, str], Dict[str, Any]] = {
     family: {"model": ProblemDetails, "description": description}
     for family, description in (
         ("4XX", "请求无法执行；code 标识原因，fields 按需提供字段问题。"),
@@ -30,7 +32,7 @@ OPERATION_HEADERS = {
 
 
 def install_contract_openapi(app: FastAPI, *, operation_headers: bool = False) -> None:
-    def openapi() -> dict[str, Any]:
+    def openapi() -> Dict[str, Any]:
         if app.openapi_schema is None:
             schema = get_openapi(title=app.title, version=app.version, description=app.description, routes=app.routes)
             for path in schema["paths"].values():

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 from .contracts import CommandFailure, CommandSuccess
@@ -93,7 +93,7 @@ class CommandRequest(BaseModel):
     params: Optional[Dict[str, Any]] = None
 
 
-CommandResponse = CommandSuccess | CommandFailure
+CommandResponse = Union[CommandSuccess, CommandFailure]
 
 
 # ---------- agent self status ----------
