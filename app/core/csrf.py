@@ -38,7 +38,6 @@ EXEMPT_PREFIXES: tuple[str, ...] = (
     "/api/cert/source-changed",
     # Native clients send a servicewechat.com Referer; these routes never use cookies.
     "/api/miniprogram/",
-    "/api/payments/wechat/mini/",
 )
 
 

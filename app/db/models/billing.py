@@ -49,8 +49,6 @@ ORDER_STATUS_VALUES = (
 INVOICE_STATUS_VALUES = ("pending", "paid", "void")
 TX_STATUS_VALUES = ("succeeded", "failed", "refunded")
 EFFECT_TYPE_VALUES = ("renew", "new_purchase", "upgrade", "convert")
-REFUND_STATUS_VALUES = ("pending", "succeeded", "failed")
-REFUND_PREV_STATUS_VALUES = ("applied", "apply_failed", "manual_review")
 INCIDENT_KIND_VALUES = (
     "manual_review_required",
     "apply_retries_exhausted",
@@ -164,7 +162,7 @@ class BillingOrder(Base):
         Enum(*ORDER_KIND_VALUES, name="billing_order_kind"), nullable=False
     )
     channel: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="alipay"
+        String(32), nullable=False, default=""
     )
     external_order_id: Mapped[str | None] = mapped_column(
         String(64), nullable=True
@@ -216,6 +214,7 @@ class BillingOrder(Base):
     applied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    close_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_naive_now
     )
@@ -245,15 +244,34 @@ class BillingInvoice(Base):
     due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     gateway_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    gateway_prepay_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    gateway_code_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    gateway_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_naive_now
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_naive_now, onupdate=utc_naive_now
     )
+
+
+class BillingPayment(Base):
+    __tablename__ = "manager_billing_payments"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("manager_billing_orders.id"), index=True)
+    invoice_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("manager_billing_invoices.id"))
+    request_id: Mapped[str] = mapped_column(String(100), unique=True)
+    request_body: Mapped[dict[str, Any]] = mapped_column(JSON)
+    gateway_id: Mapped[str | None] = mapped_column(String(64), unique=True)
+    checkout_url: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    method: Mapped[str | None] = mapped_column(String(32))
+    close_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    channel_refunding: Mapped[bool] = mapped_column(Boolean, default=False)
+    transaction_id: Mapped[str | None] = mapped_column(String(64))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime)
+    delivery_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_naive_now)
 
 
 class BillingInvoiceItem(Base):
@@ -289,14 +307,13 @@ class BillingInvoiceTransaction(Base):
         nullable=False,
     )
     gateway_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    payment_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("manager_billing_payments.id"), unique=True)
     transaction_id: Mapped[str] = mapped_column(String(64), nullable=False)
     amount_fen: Mapped[int] = mapped_column(Integer, nullable=False)
-    fee_fen: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(
         Enum(*TX_STATUS_VALUES, name="billing_tx_status"), nullable=False
     )
     refunded_fen: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    raw_event_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_naive_now
     )
@@ -329,26 +346,24 @@ class BillingRefund(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     refund_no: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
-    transaction_id: Mapped[int] = mapped_column(
+    transaction_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("manager_billing_invoice_transactions.id"),
-        nullable=False,
+        nullable=True,
     )
+    payment_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("manager_billing_payments.id"), index=True)
+    request_id: Mapped[str | None] = mapped_column(String(100), unique=True)
+    automatic: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     order_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("manager_billing_orders.id"), nullable=False
     )
     amount_fen: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(
-        Enum(*REFUND_STATUS_VALUES, name="billing_refund_status"),
+        String(32),
         nullable=False,
         default="pending",
     )
     reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    previous_order_status: Mapped[str] = mapped_column(
-        Enum(*REFUND_PREV_STATUS_VALUES, name="billing_refund_prev_status"),
-        nullable=False,
-        default="applied",
-    )
     gateway_refund_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -366,11 +381,11 @@ class BillingPaymentEvent(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     gateway_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    gateway_event_id: Mapped[str | None] = mapped_column(String(64), unique=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     signature_ok: Mapped[bool] = mapped_column(Boolean, nullable=False)
     invoice_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     transaction_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    raw_headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     raw_body: Mapped[str] = mapped_column(Text(length=(1 << 32) - 1), nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

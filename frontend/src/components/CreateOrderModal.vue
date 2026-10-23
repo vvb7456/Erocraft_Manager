@@ -1,44 +1,13 @@
 <script setup lang="ts">
-/**
- * CreateOrderModal — universal cashier modal.
- *
- * Two modes share this component:
- *   - ``mode='new_purchase'`` (default): launched from PlanCard. Submits
- *     ``{ kind: 'new_purchase', plan_code, period_count, gateway_code }``.
- *   - ``mode='renew'``: launched from any "renew" button on user-server
- *     surfaces. Submits ``{ kind: 'renew', target_server_id, period_count,
- *     gateway_code }``. The plan is pre-resolved by the caller (via
- *     ``useRenewFlow`` → ``GET /api/user/plans/{id}``) and passed in as
- *     a prop.
- *
- *   - ``mode='upgrade'``: launched from server surfaces. Fetches upgrade
- *     options from ``GET /api/user/servers/{id}/upgrade-options`` and lets
- *     the user pick a target plan. Submits ``{ kind: 'upgrade',
- *     target_server_id, plan_code, period_count: 1, gateway_code }``.
- *     The diff price (``diffFen``) is shown instead of the full plan price.
- *
- * Both modes display the same hero, resource strip, period selector,
- * gateway picker and cost breakdown. On confirm both POST to
- * ``/api/user/orders`` and route to ``/pay/:id`` for actual payment.
- *
- * Gateway list comes from ``GET /api/user/payment-gateways`` — backend
- * returns clean user-facing labels; this component never displays the
- * underlying vendor brand.
- *
- * See: docs/BILLING_FRONTEND_DESIGN_CreateOrderModal.md
- *      docs/BILLING_FRONTEND_DESIGN_RenewFlow.md
- */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
-import { useToast } from '@/composables/useToast'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import Badge from '@/components/ui/Badge.vue'
-import PaymentGatewaySelect, { type PaymentGatewayOption } from '@/components/billing/PaymentGatewaySelect.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
@@ -80,14 +49,7 @@ interface UpgradeOptionsResponse {
   options: UpgradeOption[]
 }
 interface OrderCreated {
-  order: {
-    id: number
-    invoice: {
-      pay_url: string | null
-      pay_url_h5: string | null
-      code_url: string | null
-    } | null
-  }
+  order: { id: number }
 }
 interface UsableCoupon {
   id: number
@@ -151,7 +113,6 @@ const emit = defineEmits<{
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
 const { get, post, handleError } = useApiFetch()
-const { toast } = useToast()
 
 const open = computed({
   get: () => props.modelValue,
@@ -236,26 +197,6 @@ const diskLabel = computed(() =>
   props.plan ? formatResource(props.plan.disk_mb / 1024) : '',
 )
 
-// ── Payment gateways ──
-const gateways = ref<PaymentGatewayOption[]>([])
-const gatewayLoading = ref(false)
-const gatewayFailed = ref(false)
-const selectedGateway = ref<string>('')
-
-async function loadGateways() {
-  gatewayLoading.value = true
-  gatewayFailed.value = false
-  const data = await get<PaymentGatewayOption[]>('/api/user/payment-gateways', { silent: true })
-    .catch(error => { gatewayFailed.value = true; throw error })
-    .finally(() => { gatewayLoading.value = false })
-  if (data && data.length > 0) {
-    gateways.value = data
-    selectedGateway.value = data[0].code
-  } else {
-    gatewayFailed.value = true
-  }
-}
-
 // ── Mode flags (must be declared before the immediate watch below) ──
 const isRenew = computed(() => props.mode === 'renew')
 const isUpgrade = computed(() => props.mode === 'upgrade')
@@ -264,7 +205,6 @@ const isConvert = computed(() => props.mode === 'convert')
 watch(
   () => props.modelValue,
   (v) => {
-    if (v && gateways.value.length === 0 && !gatewayFailed.value) void loadGateways().catch(handleError)
     if (v && isUpgrade.value) void loadUpgradeOptions().catch(handleError)
   },
   { immediate: true },
@@ -375,7 +315,7 @@ const modalTitle = computed(() => {
 })
 
 const canSubmit = computed(() => {
-  if (!selectedGateway.value || submitting.value) return false
+  if (submitting.value) return false
   if (isUpgrade.value) return !!(selectedUpgradePlan.value && props.targetServerId)
   if (!props.plan) return false
   if ((isRenew.value || isConvert.value) && !props.targetServerId) return false
@@ -385,6 +325,7 @@ const canSubmit = computed(() => {
 async function onConfirm() {
   if (!canSubmit.value) return
   submitting.value = true
+  let createdOrderId: number | undefined
   try {
     let body: Record<string, unknown>
     if (isUpgrade.value) {
@@ -393,28 +334,24 @@ async function onConfirm() {
         target_server_id: props.targetServerId!,
         plan_code: selectedUpgradePlan.value,
         period_count: 1,
-        gateway_code: selectedGateway.value,
       }
     } else if (isRenew.value) {
       body = {
         kind: 'renew' as const,
         target_server_id: props.targetServerId!,
         period_count: selectedPeriod.value.count,
-        gateway_code: selectedGateway.value,
       }
     } else if (isConvert.value) {
       body = {
         kind: 'convert' as const,
         target_server_id: props.targetServerId!,
         period_count: selectedPeriod.value.count,
-        gateway_code: selectedGateway.value,
       }
     } else {
       body = {
         kind: 'new_purchase' as const,
         plan_code: props.plan!.code,
         period_count: selectedPeriod.value.count,
-        gateway_code: selectedGateway.value,
       }
     }
     if (selectedCouponCode.value) {
@@ -425,14 +362,16 @@ async function onConfirm() {
       body.coupon_code = selectedCouponCode.value
     }
     const res = await post<OrderCreated>('/api/user/orders', body)
-    if (res?.order?.id) {
+    createdOrderId = res.order.id
+    const payment = await post<{ checkout_url: string }>(`/api/user/orders/${res.order.id}/payments`, {})
+    open.value = false
+    window.location.assign(payment.checkout_url)
+  } catch (error) {
+    if (createdOrderId !== undefined) {
       open.value = false
-      router.push({ path: `/pay/${res.order.id}` })
-    } else {
-      toast(t('billing.cashier.createFailed'), 'error')
+      await router.push({ path: '/orders', query: { order: createdOrderId } })
     }
-  } catch {
-    toast(t('billing.cashier.createFailed'), 'error')
+    handleError(error)
   } finally {
     submitting.value = false
   }
@@ -493,21 +432,6 @@ function onCancel() {
               <span class="upgrade-row__diff mono">¥{{ fenToYuan(opt.priceFen) }}</span>
             </label>
           </div>
-        </section>
-
-        <section class="section">
-          <div class="section__title">{{ t('billing.cashier.gatewaySection') }}</div>
-          <div v-if="gatewayLoading" class="gateway-loading"><Spinner /></div>
-          <AlertBanner v-else-if="gatewayFailed" tone="danger" :closable="false">
-            {{ t('billing.cashier.gatewayLoadFailed') }}
-          </AlertBanner>
-          <PaymentGatewaySelect
-            v-else
-            v-model="selectedGateway"
-            :options="gateways"
-            :label="t('billing.cashier.gatewaySection')"
-            :disabled="submitting"
-          />
         </section>
 
         <BaseCard v-if="selectedUpgradeOption" variant="bg3" radius="md" class="summary-card">
@@ -596,22 +520,6 @@ function onCancel() {
             <span v-else class="period-saved" />
           </label>
         </div>
-      </section>
-
-      <!-- Payment gateway -->
-      <section class="section">
-        <div class="section__title">{{ t('billing.cashier.gatewaySection') }}</div>
-        <div v-if="gatewayLoading" class="gateway-loading"><Spinner /></div>
-        <AlertBanner v-else-if="gatewayFailed" tone="danger" :closable="false">
-          {{ t('billing.cashier.gatewayLoadFailed') }}
-        </AlertBanner>
-        <PaymentGatewaySelect
-          v-else
-          v-model="selectedGateway"
-          :options="gateways"
-          :label="t('billing.cashier.gatewaySection')"
-          :disabled="submitting"
-        />
       </section>
 
       <!-- Coupon picker -->

@@ -3,8 +3,7 @@
 Single public coroutine :func:`apply_paid_order` that drives a paid
 order through the four-stage idempotent flow:
 
-1. **I1 验证** — there must be at least one ``succeeded`` or ``refunded``
-   transaction for the order; nudge ``status: pending → processing``.
+1. **I1 验证** — 订单等待交付，且存在未退回、未进入退款的有效付款。
 2. **I3 抢锁** — ``lock_token`` + ``locked_until`` + ``next_apply_at``
    gates concurrent retries.
 3. **业务效果 + 后置动作** — three convergent paths:
@@ -26,8 +25,8 @@ from __future__ import annotations
 import enum
 import logging
 import uuid
-from datetime import date, timedelta
-from typing import Literal
+from datetime import date, datetime, timedelta
+from typing import Literal, cast
 
 from sqlalchemy import exists, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +37,8 @@ from app.db.models.billing import (
     BillingInvoiceTransaction,
     BillingOrder,
     BillingOrderEffect,
+    BillingPayment,
+    BillingRefund,
 )
 from app.db.models.manager import ServerMeta
 from app.db.models.pterodactyl import PteroServer
@@ -99,53 +100,18 @@ async def apply_paid_order(
     """Drive a paid order to ``applied`` (or schedule retry / fail)."""
     now = utc_naive_now()
 
-    # ── Stage 1: I1 fact check + push to processing
-    if not await _has_succeeded_payment(db, order_id):
-        return ApplyResult.NOT_PAID
-
-    await db.execute(
-        update(BillingOrder)
-        .where(
-            BillingOrder.id == order_id,
-            BillingOrder.status == "pending",
-        )
-        .values(status="processing")
-    )
-    await db.commit()
-
-    order = await db.get(BillingOrder, order_id)
-    if order is None or order.status != "processing":
-        # Already applied / cancelled / refunded / closed / etc.
+    from app.services.billing.payments import locked_order
+    order = await locked_order(db, order_id)
+    if order.status != "processing":
+        await db.commit()
         return ApplyResult.NOT_OUR_BUSINESS
-
-    # ── Stage 2: claim lock (I3)
-    my_token = uuid.uuid4().hex
-    rc = await db.execute(
-        update(BillingOrder)
-        .where(
-            BillingOrder.id == order_id,
-            BillingOrder.status == "processing",
-            or_(
-                BillingOrder.lock_token.is_(None),
-                BillingOrder.locked_until.is_(None),
-                BillingOrder.locked_until < now,
-            ),
-            or_(
-                BillingOrder.next_apply_at.is_(None),
-                BillingOrder.next_apply_at <= now,
-            ),
-        )
-        .values(
-            lock_token=my_token,
-            locked_until=now + timedelta(seconds=APPLY_LEASE_SECONDS),
-        )
-    )
-    await db.commit()
-    if rc.rowcount == 0:
+    if (order.lock_token and cast(datetime, order.locked_until) > now) or (order.next_apply_at and order.next_apply_at > now):
+        await db.commit()
         return ApplyResult.LOCK_NOT_ACQUIRED
-
-    # Re-fetch with lock-acquired snapshot.
-    await db.refresh(order)
+    my_token = uuid.uuid4().hex
+    order.lock_token = my_token
+    order.locked_until = now + timedelta(seconds=APPLY_LEASE_SECONDS)
+    await db.commit()
 
     # ── Stage 3: business effect + post actions
     try:
@@ -173,26 +139,18 @@ async def apply_paid_order(
     coupon_id = order.coupon_id
     coupon_discount_fen = order.coupon_discount_fen or 0
 
-    # ── Stage 4: processing → applied
-    apply_now = utc_naive_now()
-    rc = await db.execute(
-        update(BillingOrder)
-        .where(
-            BillingOrder.id == order_id,
-            BillingOrder.lock_token == my_token,
-        )
-        .values(
-            status="applied",
-            applied_at=apply_now,
-            lock_token=None,
-            locked_until=None,
-            next_apply_at=None,
-            last_apply_error=None,
-        )
-    )
-    await db.commit()
-    if rc.rowcount == 0:
+    order = await locked_order(db, order_id)
+    if order.lock_token != my_token:
+        await db.commit()
         return ApplyResult.LOCK_LOST
+    order.applied_at = utc_naive_now()
+    order.lock_token = None
+    order.locked_until = None
+    order.next_apply_at = None
+    order.last_apply_error = None
+    from app.services.billing.payments import update_order_state
+    await update_order_state(db, order)
+    await db.commit()
 
     await log_manager_activity(
         db,
@@ -272,9 +230,8 @@ async def apply_paid_order(
 # --------------------------------------------------------------------------- #
 
 
-async def _has_succeeded_payment(db: AsyncSession, order_id: int) -> bool:
-    """I1: at least one succeeded/refunded transaction on any of the
-    order's invoices (refunded still counts as 'we received money')."""
+async def has_usable_payment(db: AsyncSession, order_id: int) -> bool:
+    """交付重试与正常退款通知可能重叠；已退或退款中的付款不再启动交付。"""
     found = await db.scalar(
         select(
             exists().where(
@@ -283,7 +240,15 @@ async def _has_succeeded_payment(db: AsyncSession, order_id: int) -> bool:
                         BillingInvoice.order_id == order_id
                     )
                 ),
-                BillingInvoiceTransaction.status.in_(["succeeded", "refunded"]),
+                BillingInvoiceTransaction.status == "succeeded",
+                ~exists().where(
+                    BillingPayment.id == BillingInvoiceTransaction.payment_id,
+                    or_(BillingPayment.status != "paid", BillingPayment.channel_refunding.is_(True)),
+                ),
+                ~exists().where(
+                    BillingRefund.transaction_id == BillingInvoiceTransaction.id,
+                    BillingRefund.status.in_(("pending", "unknown", "processing", "action_required", "succeeded")),
+                ),
             )
         )
     )
@@ -512,16 +477,6 @@ async def _effect_new_purchase(db: AsyncSession, order: BillingOrder) -> int:
         raise ApplyOrphanError(f"placeholder server {server_id} 不存在")
 
     target_external = f"order:{order.id}"
-    # Idempotency: external_id already promoted + effect row exists → done.
-    if server.external_id == target_external:
-        existing = await db.scalar(
-            select(BillingOrderEffect).where(
-                BillingOrderEffect.order_id == order.id
-            )
-        )
-        if existing is not None:
-            return server_id
-
     # 1) Outside-tx Wings push (idempotent — Wings returns OK on duplicate uuid).
     try:
         await wings_service.create_server(db, server.node_id, server.uuid)
@@ -613,9 +568,7 @@ async def _run_post_actions(
     db: AsyncSession, order: BillingOrder, server_id: int
 ) -> None:
     order_id = order.id
-    effect = await db.get(BillingOrderEffect, order_id)
-    if effect is None:  # pragma: no cover — caller ensures effect exists
-        raise ApplyError(f"order {order_id} 后置动作: effect 行丢失")
+    effect = (await db.scalars(select(BillingOrderEffect).where(BillingOrderEffect.order_id == order_id))).one()
 
     # 1) Sync panel description's 到期 line.
     await server_lifecycle.update_server_expiration_description(
@@ -700,9 +653,18 @@ async def _record_failure_and_release(
         return ApplyResult.LOCK_LOST
 
     row.last_apply_error = last_error
-    row.apply_retry_count = (row.apply_retry_count or 0) + 1
     row.lock_token = None
     row.locked_until = None
+    # Wings 请求期间可能完成退款；失败收尾不能把退款状态改回交付重试。
+    if row.status != "processing":
+        from app.services.billing.payments import update_order_state
+        await update_order_state(db, row)
+        await db.commit()
+        if row.status == "refunded":
+            from app.services.billing.orders import cleanup_unapplied_order
+            await cleanup_unapplied_order(row.id)
+        return ApplyResult.NOT_OUR_BUSINESS
+    row.apply_retry_count += 1
     if row.apply_retry_count > len(RETRY_DELAYS):
         row.status = "apply_failed"
         row.next_apply_at = None
@@ -791,7 +753,8 @@ async def _terminate_apply(
         await db.rollback()
         return ApplyResult.LOCK_LOST
 
-    row.status = "apply_failed"
+    if row.status == "processing":
+        row.status = "apply_failed"
     row.last_apply_error = last_error
     row.next_apply_at = None
     row.lock_token = None

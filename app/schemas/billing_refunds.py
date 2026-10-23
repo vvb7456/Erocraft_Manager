@@ -17,7 +17,7 @@ class RefundCreateRequest(_Forbid):
     """
 
     transaction_id: int = Field(gt=0, description="本地 invoice_transactions.id")
-    reason: str | None = Field(default=None, max_length=255)
+    reason: str = Field(min_length=1, max_length=80)
 
 
 class RefundOut(BaseModel):
@@ -25,12 +25,12 @@ class RefundOut(BaseModel):
 
     id: int
     refund_no: str
-    transaction_id: int
+    transaction_id: int | None
+    payment_id: int | None
     order_id: int
     amount_fen: int
     status: str
     reason: str | None
-    previous_order_status: str
     gateway_refund_id: str | None
     retry_count: int
     last_error: str | None

@@ -10,19 +10,25 @@ Routes (mounted under ``/api`` in :mod:`app.api.routers`):
 
 from __future__ import annotations
 
+from typing import cast
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
 from app.core.time import to_iso_z
-from app.db.models.billing import BillingInvoice, BillingInvoiceTransaction, BillingOrder, BillingPlan
+from app.db.models.billing import BillingInvoice, BillingOrder, BillingPayment
+from sqlalchemy import select
+from app.services.billing import payments
+from app.services.billing.gateway_client import GatewayError
 from app.db.models.pterodactyl import PteroServer, PteroUser
 from app.schemas.billing_orders import (
     CreateOrderRequest,
     CreateOrderResponse,
     OrderInvoiceOut,
     OrderOut,
+    CheckoutOut,
 )
 from app.services.billing import orders as orders_service
 from app.services.billing.orders import (
@@ -44,17 +50,7 @@ router = APIRouter(prefix="/user/orders", tags=["billing"])
 # --------------------------------------------------------------------------- #
 
 
-def serialize_invoice(
-    invoice: BillingInvoice | None,
-    *,
-    transaction_id: str | None = None,
-) -> OrderInvoiceOut | None:
-    if invoice is None:
-        return None
-    payload = invoice.gateway_payload or {}
-    payable = invoice.status == "pending"
-    pay_url = payload.get("url") if payable and isinstance(payload, dict) else None
-    pay_url_h5 = payload.get("url_h5") if payable and isinstance(payload, dict) else None
+def serialize_invoice(invoice: BillingInvoice) -> OrderInvoiceOut:
     return OrderInvoiceOut(
         id=invoice.id,
         invoice_no=invoice.invoice_no,
@@ -63,26 +59,7 @@ def serialize_invoice(
         currency_code=invoice.currency_code,
         due_at=to_iso_z(invoice.due_at) if invoice.due_at else None,
         paid_at=to_iso_z(invoice.paid_at) if invoice.paid_at else None,
-        gateway_code=invoice.gateway_code,
-        gateway_prepay_id=invoice.gateway_prepay_id,
-        transaction_id=transaction_id,
-        code_url=invoice.gateway_code_url if payable else None,
-        pay_url=pay_url,
-        pay_url_h5=pay_url_h5,
-        payment_scene=payload.get("scene") if invoice.gateway_code == "wechat_pay" else None,
-    )
-
-
-async def _latest_transaction_id(
-    db: AsyncSession, invoice_id: int
-) -> str | None:
-    from sqlalchemy import select
-
-    return await db.scalar(
-        select(BillingInvoiceTransaction.transaction_id)
-        .where(BillingInvoiceTransaction.invoice_id == invoice_id)
-        .order_by(BillingInvoiceTransaction.id.desc())
-        .limit(1)
+        gateway_code=payments.PAYMENT_CHANNELS[invoice.gateway_code] if invoice.gateway_code is not None else None,
     )
 
 
@@ -116,24 +93,23 @@ def _serialize_order(
     order: BillingOrder,
     invoice: BillingInvoice | None,
     *,
-    transaction_id: str | None = None,
     target_server_name: str | None = None,
     coupon_code: str | None = None,
 ) -> OrderOut:
-    snap = order.plan_snapshot or {}
+    snap = order.plan_snapshot
     return OrderOut(
         id=order.id,
         order_no=order.order_no,
         user_id=order.user_id,
         plan_id=order.plan_id,
-        plan_code=str(snap.get("plan_code", "")),
-        plan_name=str(snap.get("plan_name", "")),
+        plan_code=snap["plan_code"],
+        plan_name=snap["plan_name"],
         kind=order.kind,
         period_count=order.period_count,
         discount_pct=float(order.discount_pct),
         total_fen=order.total_fen,
         total_days=order.total_days,
-        currency_code=str(snap.get("currency_code", "CNY")),
+        currency_code=snap["currency_code"],
         target_server_id=order.target_server_id,
         target_server_name=target_server_name,
         status=order.status,
@@ -144,7 +120,7 @@ def _serialize_order(
         applied_at=to_iso_z(order.applied_at) if order.applied_at else None,
         closed_at=to_iso_z(order.closed_at) if order.closed_at else None,
         cancelled_at=to_iso_z(order.cancelled_at) if order.cancelled_at else None,
-        invoice=serialize_invoice(invoice, transaction_id=transaction_id),
+        invoice=serialize_invoice(invoice) if invoice is not None else None,
         coupon_id=order.coupon_id,
         coupon_code=coupon_code,
         coupon_discount_fen=(
@@ -249,20 +225,6 @@ async def list_orders_endpoint(
     invoices_by_order: dict[int, BillingInvoice] = {
         inv.order_id: inv for inv in invoice_rows.scalars().all()
     }
-    # Bulk fetch latest transaction_id per invoice.
-    invoice_ids = [inv.id for inv in invoices_by_order.values()]
-    tx_by_invoice: dict[int, str] = {}
-    if invoice_ids:
-        tx_rows = await db.execute(
-            select(
-                BillingInvoiceTransaction.invoice_id,
-                BillingInvoiceTransaction.transaction_id,
-            )
-            .where(BillingInvoiceTransaction.invoice_id.in_(invoice_ids))
-            .order_by(BillingInvoiceTransaction.id.desc())
-        )
-        for inv_id, tx_id in tx_rows.all():
-            tx_by_invoice.setdefault(inv_id, tx_id)
     coupon_codes = await _bulk_resolve_coupon_codes(
         db, [o.coupon_id for o in rows if o.coupon_id]
     )
@@ -270,15 +232,43 @@ async def list_orders_endpoint(
         _serialize_order(
             o,
             invoices_by_order.get(o.id),
-            transaction_id=(
-                tx_by_invoice.get(invoices_by_order[o.id].id)
-                if o.id in invoices_by_order
-                else None
-            ),
             coupon_code=coupon_codes.get(o.coupon_id) if o.coupon_id else None,
         )
         for o in rows
     ]
+
+
+@router.get("/resolve", response_model=dict[str, int])
+async def resolve_order_endpoint(
+    business_order_id: str | None = None, payment_id: str | None = None,
+    user: PteroUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    query = select(BillingOrder).where(BillingOrder.user_id == user.id)
+    if business_order_id:
+        query = query.where(BillingOrder.order_no == business_order_id)
+    elif payment_id:
+        query = query.join(BillingPayment).where(BillingPayment.gateway_id == payment_id)
+    else:
+        raise HTTPException(400, "请提供订单编号")
+    order = await db.scalar(query)
+    if order is None:
+        raise HTTPException(404, "订单不存在")
+    return {"id": order.id}
+
+
+@router.post("/{order_id}/payments", response_model=CheckoutOut)
+async def checkout_endpoint(
+    order_id: int, replace: bool = False,
+    user: PteroUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> CheckoutOut:
+    try:
+        await orders_service.get_order(db, user, order_id)
+        payment = await payments.checkout(db, order_id, replace=replace)
+    except OrderError as exc:
+        raise _http_for(exc) from exc
+    except GatewayError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    return CheckoutOut(checkout_url=cast(str, payment.checkout_url))
 
 
 @router.get("/{order_id}", response_model=OrderOut)
@@ -291,12 +281,16 @@ async def get_order_endpoint(
         order = await orders_service.get_order(db, user, order_id)
     except OrderError as exc:
         raise _http_for(exc) from exc
+    try:
+        await payments.sync_order(db, order.id)
+    except GatewayError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    await db.refresh(order)
     invoice = await orders_service.get_invoice_for_order(db, order.id)
-    tx_id = await _latest_transaction_id(db, invoice.id) if invoice else None
     server_name = await _resolve_target_server_name(db, order.target_server_id)
     coupon_code = await _resolve_coupon_code(db, order.coupon_id)
     return _serialize_order(
-        order, invoice, transaction_id=tx_id,
+        order, invoice,
         target_server_name=server_name, coupon_code=coupon_code,
     )
 
@@ -312,8 +306,7 @@ async def cancel_order_endpoint(
     except OrderError as exc:
         raise _http_for(exc) from exc
     invoice = await orders_service.get_invoice_for_order(db, order.id)
-    tx_id = await _latest_transaction_id(db, invoice.id) if invoice else None
     coupon_code = await _resolve_coupon_code(db, order.coupon_id)
     return _serialize_order(
-        order, invoice, transaction_id=tx_id, coupon_code=coupon_code
+        order, invoice, coupon_code=coupon_code
     )

@@ -80,52 +80,22 @@
     "save_ok": "Saved and published"
   },
   "payment": {
-    "title": "Payment Channels",
-    "gatewayDescriptions": {
-      "hupijiao": "Collect website order payments through Hupijiao.",
-      "alipay_direct": "Collect order payments directly with your Alipay merchant account.",
-      "wechat_pay": "Collect order payments by QR code, in WeChat, or through the payment mini program."
+    "title": "Payments & Mini-program",
+    "gateway": {
+      "title": "Payment gateway",
+      "desc": "Configure the payment service URL and application credentials.",
+      "url": "Gateway URL",
+      "appId": "Application ID",
+      "secret": "Signing secret"
     },
-    "wechat": {
-      "officialAccountDesc": "Service account credentials for payments within WeChat.",
-      "miniProgramDesc": "Mini program credentials for mobile order payments."
-    },
-    "gateways": {
-      "enabled": "Enable Gateway",
-      "hupijiao": "Hupijiao",
-      "alipay_direct": "Alipay"
-    },
-    "credentials": {
-      "title": "Gateway Credentials",
-      "desc": "Application, merchant identity, and authentication details for the payment platform.",
-      "displayName": "Display Name",
-      "appid": "AppID",
-      "appsecret": "AppSecret"
-    },
-    "urls": {
-      "title": "Payment Endpoints",
-      "desc": "Request origin and endpoints for connecting to Hupijiao."
-    },
-    "referer": "Referer",
-    "referer_tip": "Referer header sent with payment requests, usually your site root URL.",
-    "gatewayEndpoints": "Gateway Endpoints",
-    "gatewayEndpoints_tip": "Comma-separated fallback endpoints tried in order.",
+    "miniLogin": "Mini-program login",
+    "miniHint": "Used for account binding, server management and support.",
     "quotas": {
-      "title": "Payment & Refund Time Limits",
-      "desc": "Set payment validity and the time limit for overdue refund alerts."
+      "title": "Payment deadline",
+      "desc": "The original business order deadline also applies when changing payment methods."
     },
-    "payTimeout": "QR Code Validity (min)",
-    "payTimeout_tip": "QR code validity is capped at 5 minutes. Keeping it at 5 is recommended.",
-    "refundStuckHours": "Refund Stuck Alert (hours)",
-    "refundStuckHours_tip": "Refunds pending longer than this become manual incidents.",
-    "alipay": {
-      "appPrivateKey": "App private key",
-      "alipayPublicKey": "Alipay public key",
-      "gateway": "Gateway URL",
-      "gateway_tip": "Alipay open gateway; sandbox uses https://openapi-sandbox.dl.alipaydev.com/gateway.do",
-      "gatewayDesc": "Configure Alipay open-platform gateway and seller PID.",
-      "sellerId": "Seller PID"
-    }
+    "payTimeout": "Payment validity (minutes)",
+    "payTimeout_tip": "Starts when the order is created. Expiry closes payments and releases reserved resources."
   },
   "defaults": {
     "title": "Server Defaults",

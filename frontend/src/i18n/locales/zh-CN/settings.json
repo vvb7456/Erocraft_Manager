@@ -80,52 +80,22 @@
     "save_ok": "已保存并生效"
   },
   "payment": {
-    "title": "支付渠道",
-    "gatewayDescriptions": {
-      "hupijiao": "通过虎皮椒支付为网站订单收款。",
-      "alipay_direct": "使用支付宝商户账户直接收取订单款项。",
-      "wechat_pay": "通过扫码、微信内支付和付款小程序收取订单款项。"
+    "title": "支付与小程序",
+    "gateway": {
+      "title": "支付网关",
+      "desc": "配置支付服务的地址和应用凭据。",
+      "url": "网关地址",
+      "appId": "应用 ID",
+      "secret": "应用签名密钥"
     },
-    "wechat": {
-      "officialAccountDesc": "用于微信内网页付款的服务号身份。",
-      "miniProgramDesc": "用于手机端订单付款的小程序身份。"
-    },
-    "gateways": {
-      "enabled": "启用网关",
-      "hupijiao": "虎皮椒",
-      "alipay_direct": "支付宝"
-    },
-    "credentials": {
-      "title": "网关凭据",
-      "desc": "支付平台的应用、商户身份与认证信息。",
-      "displayName": "前端展示名称",
-      "appid": "AppID",
-      "appsecret": "AppSecret"
-    },
-    "urls": {
-      "title": "支付接口",
-      "desc": "连接虎皮椒支付服务的请求来源与接口地址。"
-    },
-    "referer": "Referer",
-    "referer_tip": "发起支付请求时携带的 Referer，通常为站点根 URL。",
-    "gatewayEndpoints": "网关接口地址",
-    "gatewayEndpoints_tip": "逗号分隔的备用接口，依次尝试直到成功。",
+    "miniLogin": "小程序登录",
+    "miniHint": "用于小程序账户绑定、服务器管理和客服。",
     "quotas": {
-      "title": "支付与退款时限",
-      "desc": "设置付款有效期与退款异常提醒时限。"
+      "title": "付款有效期",
+      "desc": "业务订单的付款期限，更换付款方式时沿用原期限。"
     },
-    "payTimeout": "二维码有效期 (分钟)",
-    "payTimeout_tip": "支付 QR 码有效期上限为 5 分钟，建议保持 5。",
-    "refundStuckHours": "退款超时告警 (小时)",
-    "refundStuckHours_tip": "退款处于 pending 状态超过此时限后进入人工介入列表。",
-    "alipay": {
-      "appPrivateKey": "应用私钥",
-      "alipayPublicKey": "支付宝公钥",
-      "gateway": "网关地址",
-      "gateway_tip": "支付宝开放平台网关；沙箱用 https://openapi-sandbox.dl.alipaydev.com/gateway.do",
-      "gatewayDesc": "配置支付宝开放平台网关与商户 PID。",
-      "sellerId": "卖家 PID"
-    }
+    "payTimeout": "付款有效期 (分钟)",
+    "payTimeout_tip": "从创建业务订单开始计时，到期后关闭付款并释放预留资源。"
   },
   "defaults": {
     "title": "服务器默认配置",

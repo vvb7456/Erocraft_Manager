@@ -76,6 +76,7 @@ class OrderTransactionOut(BaseModel):
     id: int
     invoice_id: int
     gateway_code: str
+    payment_id: int | None
     transaction_id: str
     amount_fen: int
     refunded_fen: int
@@ -102,11 +103,11 @@ class OrderRefundSummary(BaseModel):
 
     id: int
     refund_no: str
-    transaction_id: int
+    transaction_id: int | None
+    payment_id: int | None
     amount_fen: int
     status: str
     reason: str | None
-    previous_order_status: str
     gateway_refund_id: str | None
     retry_count: int
     last_error: str | None
@@ -127,9 +128,9 @@ class AdminOrderListItem(BaseModel):
     plan_code: str
     plan_name: str
     kind: str
-    channel: str = "alipay"
+    channel: str
     external_order_id: str | None = None
-    operator: str = "system"
+    operator: str
     channel_note: str | None = None
     period_count: int
     total_fen: int
@@ -165,10 +166,6 @@ class AdminInvoiceOut(BaseModel):
     due_at: str | None
     paid_at: str | None
     gateway_code: str | None
-    gateway_prepay_id: str | None
-    code_url: str | None
-    pay_url: str | None
-    pay_url_h5: str | None = None
     created_at: str
     updated_at: str
 
@@ -183,9 +180,9 @@ class AdminOrderOut(BaseModel):
     plan_id: int | None
     plan_snapshot: PlanSnapshotOut
     kind: str
-    channel: str = "alipay"
+    channel: str
     external_order_id: str | None = None
-    operator: str = "system"
+    operator: str
     channel_note: str | None = None
     period_count: int
     discount_pct: float

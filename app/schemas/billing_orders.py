@@ -35,7 +35,6 @@ class CreateOrderRequest(_Forbid):
     plan_code: str | None = Field(default=None, max_length=64)
     target_server_id: int | None = Field(default=None, gt=0)
     period_count: int = Field(default=1, ge=1, le=24)
-    gateway_code: str = Field(min_length=1, max_length=32)
     # Optional coupon code applied at order placement. See
     # ``REFERRAL_AND_COUPON_DESIGN.md`` §6. Empty/whitespace is treated as
     # absent so the frontend can ship a value-less ``<select>`` cleanly.
@@ -80,12 +79,10 @@ class OrderInvoiceOut(BaseModel):
     due_at: str | None
     paid_at: str | None
     gateway_code: str | None
-    gateway_prepay_id: str | None = None
-    transaction_id: str | None = None
-    code_url: str | None
-    pay_url: str | None
-    pay_url_h5: str | None = None
-    payment_scene: str | None = None
+
+
+class CheckoutOut(BaseModel):
+    checkout_url: str
 
 
 class OrderOut(BaseModel):

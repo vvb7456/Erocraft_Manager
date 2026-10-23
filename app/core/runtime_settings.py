@@ -420,116 +420,16 @@ NOTIFICATION_SPECS: dict[str, SettingSpec] = _register({
 
 
 BILLING_SPECS: dict[str, SettingSpec] = _register({
-    # ---- Hupijiao gateway credentials (B-class, UI-editable, sensitive) ----
-    "HUPIJIAO_APPID": SettingSpec(
-        "HUPIJIAO_APPID", "billing",
-        lambda: _env_str("HUPIJIAO_APPID", ""),
-        _normalize_str,
-        sensitive=True,
-    ),
-    "HUPIJIAO_APPSECRET": SettingSpec(
-        "HUPIJIAO_APPSECRET", "billing",
-        lambda: _env_str("HUPIJIAO_APPSECRET", ""),
-        _normalize_str,
-        sensitive=True,
-    ),
-    "HUPIJIAO_ENABLED": SettingSpec(
-        "HUPIJIAO_ENABLED", "billing",
-        lambda: _env_bool("HUPIJIAO_ENABLED", False),
-        _normalize_bool,
-    ),
-    "HUPIJIAO_DISPLAY_NAME": SettingSpec(
-        "HUPIJIAO_DISPLAY_NAME", "billing",
-        lambda: _env_str("HUPIJIAO_DISPLAY_NAME", "支付宝"),
-        _normalize_str,
-    ),
-    # ---- Hupijiao gateway runtime config (B-class, UI-editable) ----
-    # NOTE: notify_url + return_url are auto-derived from SITE_URL by the
-    # backend (see app/services/billing/orders.py::_runtime_site_url) and
-    # therefore not exposed here. Only fields that genuinely require admin
-    # input (REFERER for Hupijiao server-side check, endpoint pool) remain.
-    "HUPIJIAO_REFERER": SettingSpec(
-        "HUPIJIAO_REFERER", "billing",
-        lambda: _env_str("HUPIJIAO_REFERER", "https://app.erocraft.com/"),
-        _normalize_str,
-    ),
-    "HUPIJIAO_GATEWAY_ENDPOINTS": SettingSpec(
-        "HUPIJIAO_GATEWAY_ENDPOINTS", "billing",
-        lambda: _env_str(
-            "HUPIJIAO_GATEWAY_ENDPOINTS",
-            "https://api.xunhupay.com,https://api.dpweixin.com",
-        ),
-        _normalize_str,
-    ),
-    # ---- Alipay direct gateway (open-platform, RSA2, H5/wap channel) ----
-    # Distinct from 虎皮椒: talks straight to open.alipay.com gateway.
-    "ALIPAY_DIRECT_ENABLED": SettingSpec(
-        "ALIPAY_DIRECT_ENABLED", "billing",
-        lambda: _env_bool("ALIPAY_DIRECT_ENABLED", False),
-        _normalize_bool,
-    ),
-    "ALIPAY_DIRECT_APPID": SettingSpec(
-        "ALIPAY_DIRECT_APPID", "billing",
-        lambda: _env_str("ALIPAY_DIRECT_APPID", ""),
-        _normalize_str,
-        sensitive=True,
-    ),
-    "ALIPAY_DIRECT_APP_PRIVATE_KEY": SettingSpec(
-        "ALIPAY_DIRECT_APP_PRIVATE_KEY", "billing",
-        lambda: _env_str("ALIPAY_DIRECT_APP_PRIVATE_KEY", ""),
-        _normalize_str,
-        sensitive=True,
-    ),
-    "ALIPAY_DIRECT_ALIPAY_PUBLIC_KEY": SettingSpec(
-        "ALIPAY_DIRECT_ALIPAY_PUBLIC_KEY", "billing",
-        lambda: _env_str("ALIPAY_DIRECT_ALIPAY_PUBLIC_KEY", ""),
-        _normalize_str,
-        sensitive=True,
-    ),
-    "ALIPAY_DIRECT_GATEWAY": SettingSpec(
-        "ALIPAY_DIRECT_GATEWAY", "billing",
-        lambda: _env_str(
-            "ALIPAY_DIRECT_GATEWAY",
-            "https://openapi.alipay.com/gateway.do",
-        ),
-        _normalize_str,
-    ),
-    "ALIPAY_DIRECT_SELLER_ID": SettingSpec(
-        "ALIPAY_DIRECT_SELLER_ID", "billing",
-        lambda: _env_str("ALIPAY_DIRECT_SELLER_ID", ""),
-        _normalize_str,
-    ),
-    "ALIPAY_DIRECT_DISPLAY_NAME": SettingSpec(
-        "ALIPAY_DIRECT_DISPLAY_NAME", "billing",
-        lambda: _env_str("ALIPAY_DIRECT_DISPLAY_NAME", "支付宝"),
-        _normalize_str,
-    ),
-    "WECHAT_PAY_ENABLED": SettingSpec(
-        "WECHAT_PAY_ENABLED", "billing", lambda: _env_bool("WECHAT_PAY_ENABLED", False), _normalize_bool,
-    ),
-    "WECHAT_PAY_DISPLAY_NAME": SettingSpec(
-        "WECHAT_PAY_DISPLAY_NAME", "billing", lambda: _env_str("WECHAT_PAY_DISPLAY_NAME", "微信支付"), _normalize_str,
-    ),
     **{key: SettingSpec(key, "billing", partial(_env_str, key, ""), _normalize_str, sensitive=secret)
        for key, secret in (
-           ("WECHAT_PAY_MCHID", False), ("WECHAT_PAY_APPID", False),
-           ("WECHAT_PAY_APP_SECRET", True), ("WECHAT_PAY_MINIPROGRAM_APPID", False),
-           ("WECHAT_PAY_MINIPROGRAM_APP_SECRET", True), ("WECHAT_PAY_MERCHANT_SERIAL_NO", False),
-           ("WECHAT_PAY_MERCHANT_PRIVATE_KEY", True), ("WECHAT_PAY_API_V3_KEY", True),
-           ("WECHAT_PAY_PUBLIC_KEY_ID", False), ("WECHAT_PAY_PUBLIC_KEY", False),
+           ("PAYMENT_GATEWAY_URL", False), ("PAYMENT_GATEWAY_APP_ID", False), ("PAYMENT_GATEWAY_SECRET", True),
+           ("MINIPROGRAM_APPID", False), ("MINIPROGRAM_APP_SECRET", True),
        )},
     # ---- Billing runtime parameters ----
-    # 5 min hard cap — payment QR codes typically valid up to 5 min.
     "BILLING_ORDER_PAY_TIMEOUT_MIN": SettingSpec(
         "BILLING_ORDER_PAY_TIMEOUT_MIN", "billing",
         lambda: _env_int("BILLING_ORDER_PAY_TIMEOUT_MIN", 5),
         _int_clamper(3, 5, 5),
-    ),
-    # A refund still pending beyond this many hours becomes a manager incident.
-    "BILLING_REFUND_STUCK_HOURS": SettingSpec(
-        "BILLING_REFUND_STUCK_HOURS", "billing",
-        lambda: _env_int("BILLING_REFUND_STUCK_HOURS", 24),
-        _int_clamper(1, 168, 24),
     ),
     # ---- Referral / coupon system (docs/REFERRAL_AND_COUPON_DESIGN.md) ----
     # Master switch — when False, the invite link still works (capturing

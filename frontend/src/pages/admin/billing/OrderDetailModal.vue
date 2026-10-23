@@ -16,23 +16,23 @@ import { useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import Badge from '@/components/ui/Badge.vue'
+import AlertBanner from '@/components/ui/AlertBanner.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import BaseSelect from '@/components/form/BaseSelect.vue'
+import { orderChannelColor, type OrderChannel, type OrderInvoice, type PaymentChannel } from '@/types/billing'
 
 defineOptions({ name: 'OrderDetailModal' })
 
 interface Transaction {
-  id: number; invoice_id: number; gateway_code: string; transaction_id: string
+  payment_id: number | null
+  id: number; invoice_id: number; gateway_code: PaymentChannel; transaction_id: string
   amount_fen: number; refunded_fen: number; status: string
   created_at: string; updated_at: string
 }
 
-interface Invoice {
-  id: number; invoice_no: string; status: string; total_fen: number
-  currency_code: string; due_at: string | null; paid_at: string | null
-  gateway_code: string | null; gateway_prepay_id: string | null
-  code_url: string | null; pay_url: string | null; pay_url_h5?: string | null
+interface Invoice extends OrderInvoice {
   created_at: string; updated_at: string
 }
 
@@ -44,8 +44,9 @@ interface Effect {
 }
 
 interface Refund {
-  id: number; refund_no: string; transaction_id: number; amount_fen: number
-  status: string; reason: string | null; previous_order_status: string
+  payment_id: number | null
+  id: number; refund_no: string; transaction_id: number | null; amount_fen: number
+  status: string; reason: string | null
   gateway_refund_id: string | null; retry_count: number; last_error: string | null
   initiated_by: number | null; initiated_by_username: string | null
   created_at: string; updated_at: string
@@ -55,7 +56,7 @@ interface OrderDetail {
   id: number; order_no: string; user_id: number
   owner_username: string | null
   plan_id: number | null; plan_snapshot: Record<string, any>
-  kind: string; channel: string; external_order_id: string | null; operator: string; channel_note: string | null
+  kind: string; channel: OrderChannel; external_order_id: string | null; operator: string; channel_note: string | null
   period_count: number; discount_pct: number
   total_fen: number; total_days: number
   target_server_id: number | null; target_server_name: string | null
@@ -145,7 +146,7 @@ async function loadOrder() {
 }
 
 let refundPollTimer: ReturnType<typeof setInterval> | null = null
-watch(() => props.modelValue && order.value?.id === props.orderId && order.value?.status === 'refunding', (active) => {
+watch(() => props.modelValue && order.value?.id === props.orderId && order.value?.refunds.some(r => ['pending', 'unknown', 'processing', 'action_required'].includes(r.status)), (active) => {
   if (refundPollTimer !== null) clearInterval(refundPollTimer)
   refundPollTimer = active ? setInterval(() => {
     if (document.visibilityState === 'visible' && !loading.value && !detailLoading.value) void loadOrder()
@@ -201,30 +202,16 @@ function kindColor(k: string): string {
 }
 
 function channelLabel(ch: string): string {
-  if (ch === 'wechat') return t('wechat.title')
-  if (ch === 'taobao') return t('billing.channel.taobao')
-  if (ch === 'xianyu') return t('billing.channel.xianyu')
-  if (ch === 'other') return t('billing.channel.other')
-  return t('billing.channel.alipay')
-}
-
-function channelColor(ch: string): string {
-  if (ch === 'taobao') return 'var(--amber)'
-  if (ch === 'xianyu') return 'var(--amber)'
-  if (ch === 'other') return 'var(--t3)'
-  return 'var(--green)'
+  return ch === '' ? '—' : t('billing.channel.' + ch)
 }
 
 // ── Action conditions ──
-const isGatewayOrder = computed(() => order.value?.channel === 'alipay' || order.value?.channel === 'wechat')
+const isGatewayOrder = computed(() => order.value!.invoices.length > 0)
+const refundableTransactions = computed(() => order.value?.transactions.filter(tx => tx.payment_id !== null && tx.status === 'succeeded'
+  && !order.value!.refunds.some(r => r.transaction_id === tx.id && r.status !== 'failed')) || [])
 
 function canRefund(): boolean {
-  if (!order.value) return false
-  // 外部电商或人工订单（淘宝/闲鱼/其他）由外部平台处理交易退款，无系统网关交易记录，禁止系统退款
-  if (!isGatewayOrder.value) return false
-  const s = order.value.status
-  return (s === 'applied' || s === 'apply_failed' || s === 'manual_review')
-    && order.value.received_fen > order.value.refunded_fen
+  return refundableTransactions.value.length > 0
 }
 
 function canForceApply(): boolean {
@@ -239,7 +226,7 @@ function canForceClose(): boolean {
 
 function canCleanup(): boolean {
   if (!order.value) return false
-  return order.value.effect === null && order.value.target_server_id != null
+  return order.value.kind === 'new_purchase' && order.value.effect === null && order.value.target_server_id != null
 }
 
 // ── Actions ──
@@ -284,17 +271,28 @@ async function doCleanup() {
 // ── Refund (全额退款唯一动作) ──
 const refundOpen = ref(false)
 const refundReason = ref('')
+const selectedTransaction = ref<number>(0)
+const refundBusy = ref(false)
+const queryingRefundId = ref<number | null>(null)
+const refundOptions = computed(() => refundableTransactions.value.map(tx => ({ value: tx.id, label: `${tx.transaction_id} · ¥${fenToYuan(tx.amount_fen)}` })))
 
 function openRefund() {
   if (!order.value) return
-  const tx = order.value.transactions.find(tx => tx.status === 'succeeded')
+  const tx = refundableTransactions.value[0]
   if (!tx) return
+  selectedTransaction.value = tx.id
   refundReason.value = ''
   refundOpen.value = true
 }
 
+function refundAgain(refund: Refund) {
+  selectedTransaction.value = refund.transaction_id!
+  refundReason.value = refund.reason || ''
+  refundOpen.value = true
+}
+
 const refundTx = computed(() =>
-  order.value?.transactions.find(tx => tx.status === 'succeeded') || null
+  refundableTransactions.value.find(tx => tx.id === selectedTransaction.value) || null
 )
 
 const refundAmount = computed(() =>
@@ -310,16 +308,20 @@ async function doRefund() {
     confirmText: t('billing.admin.detail.refund'),
   })
   if (!ok) return
-  const res = await post(`/api/admin/billing/orders/${order.value.id}/refund`, {
-    transaction_id: refundTx.value.id,
-    reason: refundReason.value || undefined,
-  })
-  if (res) {
-    toast(t('billing.admin.detail.refundOk'), 'success')
+  refundBusy.value = true
+  try {
+    await post(`/api/admin/billing/orders/${order.value.id}/refund`, { transaction_id: refundTx.value.id, reason: refundReason.value.trim() })
+    toast(t('billing.admin.detail.refundOk'), 'info')
     refundOpen.value = false
-    loadOrder()
-    emit('saved')
-  }
+  } catch (failure) { handleError(failure) }
+  finally { refundBusy.value = false; await loadOrder(); emit('saved') }
+}
+
+async function queryRefund(refund: Refund) {
+  queryingRefundId.value = refund.id
+  try { await post(`/api/admin/billing/orders/${order.value!.id}/refunds/${refund.id}/reconcile`, {}) }
+  catch (failure) { handleError(failure) }
+  finally { await loadOrder(); queryingRefundId.value = null; emit('saved') }
 }
 </script>
 
@@ -361,7 +363,7 @@ async function doRefund() {
           <dd><Badge :color="kindColor(order.kind)">{{ kindLabel(order.kind) }}</Badge></dd>
 
           <dt>{{ t('billing.admin.orders.col.channel') }}</dt>
-          <dd><Badge :color="channelColor(order.channel)">{{ channelLabel(order.channel) }}</Badge></dd>
+          <dd><Badge :color="orderChannelColor(order.channel)">{{ channelLabel(order.channel) }}</Badge></dd>
 
           <dt>{{ t('billing.admin.orders.col.user') }}</dt>
           <dd>
@@ -432,7 +434,7 @@ async function doRefund() {
 
             <dt>{{ t('billing.admin.detail.channel') }}</dt>
             <dd>
-              <Badge :color="channelColor(order.channel)">{{ channelLabel(order.channel) }}</Badge>
+              <Badge :color="orderChannelColor(order.channel)">{{ channelLabel(order.channel) }}</Badge>
             </dd>
 
             <dt>{{ t('billing.admin.detail.operator') }}</dt>
@@ -461,10 +463,7 @@ async function doRefund() {
             <dd class="mono">¥{{ fenToYuan(inv.total_fen) }}</dd>
 
             <dt>{{ t('billing.admin.detail.invoiceGateway') }}</dt>
-            <dd>{{ inv.gateway_code || '—' }}</dd>
-
-            <dt>{{ t('billing.admin.detail.invoicePrepayId') }}</dt>
-            <dd><code v-if="inv.gateway_prepay_id">{{ inv.gateway_prepay_id }}</code><span v-else class="muted">—</span></dd>
+            <dd>{{ inv.gateway_code === null ? '—' : channelLabel(inv.gateway_code) }}</dd>
 
             <dt>{{ t('billing.admin.detail.invoiceDue') }}</dt>
             <dd>{{ fmtTs(inv.due_at) }}</dd>
@@ -477,6 +476,7 @@ async function doRefund() {
             <thead>
               <tr>
                 <th>{{ t('billing.admin.detail.txId') }}</th>
+                <th>{{ t('billing.admin.orders.col.channel') }}</th>
                 <th class="r">{{ t('billing.admin.orders.col.amount') }}</th>
                 <th class="r">{{ t('billing.admin.detail.refunded') }}</th>
                 <th>{{ t('billing.admin.orders.col.status') }}</th>
@@ -486,6 +486,7 @@ async function doRefund() {
             <tbody>
               <tr v-for="tx in order.transactions.filter(tx => tx.invoice_id === inv.id)" :key="tx.id">
                 <td><code>{{ tx.transaction_id }}</code></td>
+                <td>{{ channelLabel(tx.gateway_code) }}</td>
                 <td class="mono r">¥{{ fenToYuan(tx.amount_fen) }}</td>
                 <td class="mono r">{{ tx.refunded_fen > 0 ? '¥' + fenToYuan(tx.refunded_fen) : '—' }}</td>
                 <td><Badge :color="tx.status === 'succeeded' ? 'var(--green)' : tx.status === 'refunded' ? 'var(--t2)' : 'var(--red)'">{{ t('billing.admin.detail.txStatus_' + tx.status) }}</Badge></td>
@@ -549,8 +550,10 @@ async function doRefund() {
             <dt>{{ t('billing.admin.detail.refundGatewayId') }}</dt>
             <dd><code v-if="r.gateway_refund_id">{{ r.gateway_refund_id }}</code><span v-else class="muted">—</span></dd>
 
-            <dt>{{ t('billing.admin.detail.refundRetries') }}</dt>
-            <dd>{{ r.retry_count }}</dd>
+            <template v-if="!r.payment_id">
+              <dt>{{ t('billing.admin.detail.refundRetries') }}</dt>
+              <dd>{{ r.retry_count }}</dd>
+            </template>
 
             <dt>{{ t('billing.admin.detail.refundInitiatedBy') }}</dt>
             <dd>{{ r.initiated_by_username || '—' }}</dd>
@@ -558,7 +561,10 @@ async function doRefund() {
             <dt>{{ t('billing.admin.orders.col.time') }}</dt>
             <dd>{{ fmtTs(r.created_at) }}</dd>
           </dl>
-          <div v-if="r.last_error" class="err-block">{{ r.last_error }}</div>
+          <AlertBanner v-if="r.status === 'action_required'" class="refund-feedback" tone="warning" dense>{{ t('billing.admin.detail.refundMerchantAction') }}</AlertBanner>
+          <AlertBanner v-else-if="r.last_error" class="refund-feedback" :tone="r.status === 'failed' ? 'danger' : 'warning'" dense>{{ r.last_error }}</AlertBanner>
+          <BaseButton v-if="r.payment_id && !['succeeded', 'failed'].includes(r.status)" class="refund-feedback" size="sm" :loading="queryingRefundId === r.id" :disabled="loading || queryingRefundId !== null" @click="queryRefund(r)">{{ t('billing.admin.detail.refundQuery') }}</BaseButton>
+          <BaseButton v-if="r.status === 'failed' && refundableTransactions.some(tx => tx.id === r.transaction_id)" class="refund-feedback" size="sm" :disabled="loading || queryingRefundId !== null" @click="refundAgain(r)">{{ t('billing.admin.detail.refundAgain') }}</BaseButton>
         </div>
       </div>
 
@@ -599,6 +605,7 @@ async function doRefund() {
 
   <BaseModal v-model="refundOpen" :title="t('billing.admin.detail.refund')" icon="payments" size="sm">
     <div class="refund-form">
+      <BaseSelect v-if="refundOptions.length > 1" v-model="selectedTransaction" :options="refundOptions" :label="t('billing.admin.detail.txId')" />
       <div class="refund-tx-info mono">
         <span class="muted">{{ t('billing.admin.detail.txId') }}</span>
         <code>{{ refundTx?.transaction_id }}</code>
@@ -607,13 +614,13 @@ async function doRefund() {
       </div>
       <div class="form-row">
         <label>{{ t('billing.admin.detail.refundReason') }}</label>
-        <input v-model="refundReason" class="form-input" maxlength="255" :placeholder="t('billing.admin.detail.refundReasonPlaceholder')" />
+        <input v-model="refundReason" class="form-input" maxlength="80" :placeholder="t('billing.admin.detail.refundReasonPlaceholder')" />
       </div>
     </div>
     <template #footer>
       <div class="footer-actions">
         <BaseButton size="sm" @click="refundOpen = false">{{ t('common.btn.cancel') }}</BaseButton>
-        <BaseButton size="sm" variant="danger" :disabled="refundAmount <= 0" @click="doRefund">
+        <BaseButton size="sm" variant="danger" :loading="refundBusy" :disabled="refundAmount <= 0 || !refundReason.trim() || refundBusy" @click="doRefund">
           <MsIcon name="payments" size="xs" /> {{ t('billing.admin.detail.refund') }}
         </BaseButton>
       </div>
@@ -673,6 +680,7 @@ async function doRefund() {
 .actions-row { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 
 /* ── Refund form ── */
+.refund-feedback { margin-top: var(--sp-3); }
 .refund-form { display: flex; flex-direction: column; gap: var(--sp-4); }
 .refund-tx-info {
   display: grid; grid-template-columns: auto 1fr;

@@ -1,10 +1,4 @@
 {
-  "title": "WeChat Pay", "pay": "Pay with WeChat", "preparing": "Preparing…", "reopen": "Reopen WeChat Pay",
-  "officialAccount": "Official account", "miniProgram": "Mini program",
-  "scan": "Scan with WeChat to pay", "scanOtherPhone": "This order uses QR payment. Scan with WeChat on another phone.", "check": "I have paid — check status",
-  "cancelled": "Payment cancelled. You can try again.", "confirming": "Confirming payment with WeChat…", "failed": "Payment was not completed. Check the order before retrying.",
-  "bridgeUnavailable": "Please reopen the order in WeChat", "originalBrowser": "Continue in the original WeChat browser, or cancel and place a new order", "authFailed": "WeChat authorization was not completed. Please try again.",
-  "MCHID": "Merchant ID", "APPID": "Official account AppID", "APP_SECRET": "Official account AppSecret", "MINIPROGRAM_APPID": "Mini program AppID", "MINIPROGRAM_APP_SECRET": "Mini program AppSecret",
-  "MERCHANT_SERIAL_NO": "Merchant certificate serial", "MERCHANT_PRIVATE_KEY": "Merchant private key PEM", "API_V3_KEY": "APIv3 key", "PUBLIC_KEY_ID": "WeChat Pay public key ID", "PUBLIC_KEY": "WeChat Pay public key PEM",
-  "configured": "Configured; enter a value to replace"
+  "MINIPROGRAM_APPID": "Mini-program AppID",
+  "MINIPROGRAM_APP_SECRET": "Mini-program AppSecret"
 }

@@ -15,48 +15,9 @@ import CardTap from '@/components/ui/CardTap.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import SupportModal from '@/components/billing/SupportModal.vue'
 import UserOrderDetailModal from '@/components/billing/UserOrderDetailModal.vue'
+import type { UserOrder } from '@/types/billing'
 
 defineOptions({ name: 'UserOrdersListTab' })
-
-interface OrderInvoice {
-  id: number
-  invoice_no: string
-  status: string
-  total_fen: number
-  currency_code: string
-  due_at: string | null
-  paid_at: string | null
-  gateway_code: string | null
-  gateway_prepay_id: string | null
-  transaction_id: string | null
-  code_url: string | null
-  pay_url: string | null
-  pay_url_h5?: string | null
-}
-
-interface Order {
-  id: number
-  order_no: string
-  plan_id: number
-  plan_code: string
-  plan_name: string
-  kind: string
-  period_count: number
-  discount_pct: number
-  total_fen: number
-  total_days: number
-  currency_code: string
-  target_server_id: number | null
-  status: string
-  received_fen: number
-  refunded_fen: number
-  created_at: string
-  updated_at: string
-  applied_at: string | null
-  closed_at: string | null
-  cancelled_at: string | null
-  invoice: OrderInvoice | null
-}
 
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
@@ -64,7 +25,7 @@ const route = useRoute()
 const { get, handleError } = useApiFetch()
 const { formatDateTime: formatDate } = useFormatDate()
 
-const orders = ref<Order[]>([])
+const orders = ref<UserOrder[]>([])
 const initialLoading = ref(true)
 const searchTerm = ref('')
 const statusFilter = ref<string>('all')
@@ -108,7 +69,7 @@ function stopPolling() {
 }
 
 async function loadOrders(silent = false) {
-  const data = await get<Order[]>('/api/user/orders', { silent }).finally(() => { initialLoading.value = false })
+  const data = await get<UserOrder[]>('/api/user/orders', { silent }).finally(() => { initialLoading.value = false })
   if (data) {
     orders.value = data
     if (hasActiveOrders.value) startPolling()
@@ -201,7 +162,7 @@ function statusLabel(status: string): string {
   return t(`billing.orders.status.${status}`)
 }
 
-function goDetail(o: Order) {
+function goDetail(o: UserOrder) {
   void router.push({ query: { ...route.query, order: String(o.id) } })
 }
 

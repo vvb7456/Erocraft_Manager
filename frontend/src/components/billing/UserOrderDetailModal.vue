@@ -15,6 +15,7 @@ import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import type { UserOrder } from '@/types/billing'
 
 defineOptions({ name: 'UserOrderDetailModal' })
 
@@ -25,63 +26,23 @@ const emit = defineEmits<{
   contact: []
 }>()
 
-interface OrderInvoice {
-  id: number
-  invoice_no: string
-  status: string
-  total_fen: number
-  currency_code: string
-  due_at: string | null
-  paid_at: string | null
-  gateway_code: string | null
-  gateway_prepay_id: string | null
-  transaction_id: string | null
-  code_url: string | null
-  pay_url: string | null
-  pay_url_h5?: string | null
-}
-
-interface Order {
-  id: number
-  order_no: string
-  plan_name: string
-  kind: string
-  period_count: number
-  discount_pct: number
-  total_fen: number
-  total_days: number
-  currency_code: string
-  target_server_id: number | null
-  target_server_name: string | null
-  status: string
-  received_fen: number
-  refunded_fen: number
-  created_at: string
-  applied_at: string | null
-  closed_at: string | null
-  cancelled_at: string | null
-  invoice: OrderInvoice | null
-  coupon_id: number | null
-  coupon_code: string | null
-  coupon_discount_fen: number | null
-}
-
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
-const { get, del } = useApiFetch()
+const { get, post, del, handleError } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 const appStore = useAppStore()
 const { displayName } = storeToRefs(appStore)
 const { formatDate } = useFormatDate()
 
-const order = ref<Order | null>(null)
+const order = ref<UserOrder | null>(null)
 const loading = ref(true)
 const loadFailed = ref(false)
 const cancelling = ref(false)
+const paying = ref(false)
 const downloading = ref(false)
 const billCard = ref<InstanceType<typeof BaseCard> | null>(null)
-const busy = computed(() => cancelling.value || downloading.value)
+const busy = computed(() => cancelling.value || downloading.value || paying.value)
 const open = computed({ get: () => props.modelValue, set: value => emit('update:modelValue', value) })
 let loadRevision = 0
 
@@ -91,7 +52,7 @@ async function loadOrder() {
   loading.value = true
   loadFailed.value = false
   try {
-    const data = await get<Order>(`/api/user/orders/${props.orderId}`)
+    const data = await get<UserOrder>(`/api/user/orders/${props.orderId}`)
     if (revision === loadRevision) order.value = data
   } catch {
     if (revision === loadRevision) loadFailed.value = true
@@ -128,14 +89,6 @@ function statusColor(status: string): string {
   }
 }
 
-function gatewayLabel(code: string | null): string {
-  if (!code) return t('billing.orderDetail.gateway.unknown')
-  const lc = code.toLowerCase()
-  if (lc.includes('alipay') || lc.includes('hupijiao')) return t('billing.orderDetail.gateway.alipay')
-  if (lc.includes('wx') || lc.includes('wechat')) return t('billing.orderDetail.gateway.wxpay')
-  return code
-}
-
 function kindLabel(kind: string): string {
   if (kind === 'renew') return t('billing.orderDetail.kindRenew')
   if (kind === 'upgrade') return t('billing.orderDetail.kindUpgrade')
@@ -170,7 +123,7 @@ const unitPriceFen = computed(() => {
 const showReceived = computed(() => {
   const o = order.value
   if (!o) return false
-  return o.received_fen > 0 || !!o.invoice?.paid_at
+  return o.received_fen > 0
 })
 
 const showRefunded = computed(() => (order.value?.refunded_fen ?? 0) > 0)
@@ -184,9 +137,14 @@ const canPay = computed(() => order.value?.status === 'pending')
 const canCancel = computed(() => order.value?.status === 'pending')
 
 // ── Actions ──
-function goPay() {
-  if (!order.value) return
-  router.push({ path: `/pay/${order.value.id}` })
+async function goPay() {
+  if (!order.value || busy.value) return
+  paying.value = true
+  try {
+    const payment = await post<{ checkout_url: string }>(`/api/user/orders/${order.value.id}/payments`, {})
+    window.location.assign(payment.checkout_url)
+  } catch (error) { handleError(error) }
+  finally { paying.value = false }
 }
 
 function goServer() {
@@ -207,13 +165,10 @@ async function doCancel() {
       variant: 'danger',
     })
     if (!ok) return
-    const res = await del<Order>(`/api/user/orders/${id}`)
-    if (res) {
-      toast(t('billing.orderDetail.actions.cancelOk'), 'success')
-      if (props.orderId === id && open.value) order.value = res
-      emit('updated')
-    }
-  } finally { cancelling.value = false }
+    await del<UserOrder>(`/api/user/orders/${id}`)
+    toast(t('billing.orderDetail.actions.cancelOk'), 'success')
+    emit('updated')
+  } finally { await loadOrder(); cancelling.value = false }
 }
 
 function contactSupport() {
@@ -353,10 +308,10 @@ async function doDownloadPdf() {
         </div>
 
         <!-- Meta lines -->
-        <div v-if="order.invoice?.paid_at || showLinkedServer" class="bill-meta-extra">
-          <div v-if="order.invoice?.paid_at" class="bill-meta-extra-row">
+        <div v-if="order.invoice?.status === 'paid' || showLinkedServer" class="bill-meta-extra">
+          <div v-if="order.invoice?.status === 'paid'" class="bill-meta-extra-row">
             <span class="ex-label">{{ t('billing.orderDetail.meta.payMethod') }}：</span>
-            <span class="ex-value">{{ gatewayLabel(order.invoice.gateway_code) }}</span>
+            <span class="ex-value">{{ order.invoice.gateway_code === null ? '—' : t('billing.channel.' + order.invoice.gateway_code) }}</span>
           </div>
           <div v-if="showLinkedServer" class="bill-meta-extra-row">
             <span class="ex-label">{{ t('billing.orderDetail.meta.linkedServer') }}：</span>

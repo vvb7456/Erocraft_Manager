@@ -20,9 +20,6 @@ from app.core.contract_openapi import PROBLEM_RESPONSES, install_contract_openap
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
-    # Payment gateway adapters are now loaded lazily from DB-backed runtime
-    # settings (see ``app.services.billing.gateway.registry.ensure_loaded``).
-    # No fail-fast here — admins configure credentials via the settings page.
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):

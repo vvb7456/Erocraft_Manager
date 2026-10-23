@@ -51,8 +51,8 @@ from app.schemas.billing_admin_orders import (
 )
 from app.schemas.billing_refunds import RefundCreateRequest, RefundOut
 from app.services.audit import log_manager_activity
-from app.services.billing import admin_actions, refunds
-from app.services.billing.gateway.base import GatewayError
+from app.services.billing import admin_actions, payments, refunds
+from app.services.billing.gateway_client import GatewayError
 
 router = APIRouter(prefix="/admin/billing/orders", tags=["billing"])
 
@@ -71,19 +71,19 @@ def _list_item(
     owner_username: str | None = None,
     target_server_name: str | None = None,
 ) -> AdminOrderListItem:
-    snap = order.plan_snapshot or {}
+    snap = order.plan_snapshot
     return AdminOrderListItem(
         id=order.id,
         order_no=order.order_no,
         user_id=order.user_id,
         owner_username=owner_username,
         plan_id=order.plan_id,
-        plan_code=str(snap.get("plan_code", "")),
-        plan_name=str(snap.get("plan_name", "")),
+        plan_code=snap["plan_code"],
+        plan_name=snap["plan_name"],
         kind=order.kind,
-        channel=getattr(order, "channel", "alipay") or "alipay",
+        channel=order.channel,
         external_order_id=order.external_order_id,
-        operator=getattr(order, "operator", "system") or "system",
+        operator=order.operator,
         channel_note=order.channel_note,
         period_count=order.period_count,
         total_fen=order.total_fen,
@@ -99,9 +99,6 @@ def _list_item(
 
 
 def _serialize_invoice(invoice: BillingInvoice) -> AdminInvoiceOut:
-    payload = invoice.gateway_payload or {}
-    pay_url = payload.get("url") if isinstance(payload, dict) else None
-    pay_url_h5 = payload.get("url_h5") if isinstance(payload, dict) else None
     return AdminInvoiceOut(
         id=invoice.id,
         invoice_no=invoice.invoice_no,
@@ -110,11 +107,7 @@ def _serialize_invoice(invoice: BillingInvoice) -> AdminInvoiceOut:
         currency_code=invoice.currency_code,
         due_at=_ts(invoice.due_at),
         paid_at=_ts(invoice.paid_at),
-        gateway_code=invoice.gateway_code,
-        gateway_prepay_id=invoice.gateway_prepay_id,
-        code_url=invoice.gateway_code_url,
-        pay_url=pay_url,
-        pay_url_h5=pay_url_h5,
+        gateway_code=payments.PAYMENT_CHANNELS[invoice.gateway_code] if invoice.gateway_code is not None else None,
         created_at=to_iso_z(invoice.created_at),
         updated_at=to_iso_z(invoice.updated_at),
     )
@@ -124,7 +117,8 @@ def _serialize_transaction(tx: BillingInvoiceTransaction) -> OrderTransactionOut
     return OrderTransactionOut(
         id=tx.id,
         invoice_id=tx.invoice_id,
-        gateway_code=tx.gateway_code,
+        gateway_code=payments.PAYMENT_CHANNELS[tx.gateway_code],
+        payment_id=tx.payment_id,
         transaction_id=tx.transaction_id,
         amount_fen=tx.amount_fen,
         refunded_fen=tx.refunded_fen,
@@ -161,10 +155,10 @@ def _serialize_refund_summary(
         id=refund.id,
         refund_no=refund.refund_no,
         transaction_id=refund.transaction_id,
+        payment_id=refund.payment_id,
         amount_fen=refund.amount_fen,
         status=refund.status,
         reason=refund.reason,
-        previous_order_status=refund.previous_order_status,
         gateway_refund_id=refund.gateway_refund_id,
         retry_count=refund.retry_count,
         last_error=refund.last_error,
@@ -180,11 +174,11 @@ def _serialize_refund(refund: BillingRefund) -> RefundOut:
         id=refund.id,
         refund_no=refund.refund_no,
         transaction_id=refund.transaction_id,
+        payment_id=refund.payment_id,
         order_id=refund.order_id,
         amount_fen=refund.amount_fen,
         status=refund.status,
         reason=refund.reason,
-        previous_order_status=refund.previous_order_status,
         gateway_refund_id=refund.gateway_refund_id,
         retry_count=refund.retry_count,
         last_error=refund.last_error,
@@ -208,7 +202,7 @@ async def list_orders_endpoint(
     q: str | None = Query(
         None,
         max_length=64,
-        description="模糊搜索：订单号/外部订单号/订单ID/用户名/邮箱/用户UUID/服务器名/服务器ID/服务器UUID/服务器短UUID/发票号/网关交易号/网关预支付ID",
+        description="模糊搜索：订单号/外部订单号/订单ID/用户名/邮箱/用户UUID/服务器名/服务器ID/服务器UUID/服务器短UUID/发票号/渠道交易号",
     ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -234,12 +228,8 @@ async def list_orders_endpoint(
         if token:
             needle = f"%{token}%"
 
-            # 子查询：发票号 / 网关预支付ID 命中的 order_id 集合
             inv_subq = select(BillingInvoice.order_id).where(
-                or_(
-                    BillingInvoice.invoice_no.ilike(needle),
-                    BillingInvoice.gateway_prepay_id.ilike(needle),
-                )
+                BillingInvoice.invoice_no.ilike(needle)
             )
 
             # 子查询：网关交易号命中 invoice -> order_id 集合
@@ -348,6 +338,11 @@ async def get_order_endpoint(
     )
     if order is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="订单不存在")
+    try:
+        await payments.sync_order(db, order_id)
+    except GatewayError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    await db.refresh(order)
 
     invoices = (
         await db.execute(
@@ -403,11 +398,11 @@ async def get_order_endpoint(
         user_id=order.user_id,
         owner_username=owner_username,
         plan_id=order.plan_id,
-        plan_snapshot=order.plan_snapshot or {},
+        plan_snapshot=order.plan_snapshot,
         kind=order.kind,
-        channel=getattr(order, "channel", "alipay") or "alipay",
+        channel=order.channel,
         external_order_id=order.external_order_id,
-        operator=getattr(order, "operator", "system") or "system",
+        operator=order.operator,
         channel_note=order.channel_note,
         period_count=order.period_count,
         discount_pct=float(order.discount_pct),
@@ -467,12 +462,10 @@ async def refund_order_endpoint(
         )
     except refunds.CannotRefund as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except refunds.GatewayUnavailableForRefund as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     except GatewayError as exc:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            detail=f"网关退款失败：{exc}",
+            detail=str(exc),
         ) from exc
 
     await log_manager_activity(
@@ -500,18 +493,18 @@ async def reconcile_refund_endpoint(
     admin: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> RefundOut:
-    """Manually drive a refund one step forward (query gateway / re-issue).
-
-    Equivalent to a single tick of the ``billing_refund_retry`` job, but
-    scoped to one refund row. Used when admins want immediate feedback
-    instead of waiting for the next scheduled query.
-    """
+    """查询原退款；明确失败的退款由新请求重新申请。"""
     refund = await db.scalar(
         select(BillingRefund).where(BillingRefund.id == refund_id)
     )
     if refund is None or refund.order_id != order_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="退款记录不存在")
-    outcome = await refunds.reconcile_refund_once(db, refund_id)
+    try:
+        outcome = await refunds.reconcile_refund_once(db, refund_id, query_channel=True)
+    except refunds.CannotRefund as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except GatewayError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
     refund = await db.scalar(
         select(BillingRefund).where(BillingRefund.id == refund_id)
     )

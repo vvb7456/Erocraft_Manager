@@ -9,7 +9,7 @@ Server rental management platform whose only runtime dependency is Wings. Adds a
 **Key features:**
 
 - **Server lifecycle** — create / suspend / delete / reinstall with Wings; real-time console (WebSocket), file manager, startup variable editor
-- **Billing & plans** — subscription plans with configurable resource limits, trial plans with auto-convert to standard, Alipay direct payment gateway
+- **计费与套餐** — 订阅套餐、试用转正、统一支付网关收银、逐笔退款与交付确认
 - **Coupons & referral** — coupon templates (fixed-amount / percentage), invite codes with referral rewards
 - **Free LLM quota** — per-plan AI API quota via NewAPI gateway; keys provisioned automatically on order, managed by admins (reset / revoke / adjust quota & models)
 - **Tunnels** — Cloudflare tunnel management per server (user-side + admin-side)
@@ -346,6 +346,20 @@ curl -fsS http://127.0.0.1:5001/api/version                  # health check
 ---
 
 ## 4. 接口结果与错误
+
+### 支付接入
+
+新付款通过独立支付网关完成。Manager 保存业务订单、每次付款及退款记录，并负责服务器开通、续费、优惠券和邀请奖励。渠道账号配置在网关；Manager 后台只填写 `PAYMENT_GATEWAY_URL`、`PAYMENT_GATEWAY_APP_ID` 和 `PAYMENT_GATEWAY_SECRET`。
+
+每个用户最多保留一张待付款订单。已付款订单的开通、退款与重试独立推进，不阻塞后续购买。
+
+确认购买和继续付款直接进入网关；返回页展示付款结果，成功后自动进入服务器列表。订单来源显示实际的支付宝或微信，未选择时留空。管理端沿用现有账单、交易和退款区域。
+
+新付款的渠道、交易号、金额和付款时间以网关记录为准；页面只负责翻译渠道名称。网关未提供付款时间时保留为空，账单和邮件都不以本地时间代替。历史渠道按已知旧值明确对应，旧收银字段仅保留在数据库中存档，不参与新付款流程。
+
+网关通知地址为 `https://<Manager域名>/api/webhook/payment-gateway`，返回地址为 `https://<Manager域名>/#/pay`。登录后按返回的订单编号恢复原单。小程序登录使用独立的 `MINIPROGRAM_APPID`、`MINIPROGRAM_APP_SECRET`。
+
+结构变更集中在迁移 `20261022_payment_gateway`。生产切换前，先用旧版本停止产生付款链接并核对、收尾所有在途付款和退款，再执行迁移并发布。本版本仅保留旧支付宝通知接收入口；历史账目保留，旧退款人工处理。开发验证使用 `tests/test_payment_gateway_integration.py`；真实付款、退款及小程序拉起需单独联调。
 
 - 网页和付款小程序接口成功时直接返回业务数据；204 没有响应体。失败使用 `application/problem+json`，固定包含 `type`、`title`、`status`、`code`，按需提供错误详情、字段问题和业务结果。
 - 错误码集中在 `contracts/error-codes.json`。修改后运行 `python3 scripts/generate-contracts.py`；CI 使用 `--check` 检查生成物与中英文文案一致。

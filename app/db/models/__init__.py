@@ -18,7 +18,6 @@ from app.db.models.manager import (
 from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
 from app.db.models.notifications import NotificationDelivery, NotificationIssue
 from app.db.models.support import SupportConversation, SupportMessage
-from app.db.models.wechat import WechatPaymentSession
 from app.db.models.miniprogram import MiniProgramBinding, MiniProgramSession
 from app.db.models.pterodactyl import (
     ActivityLog,
@@ -41,7 +40,6 @@ __all__ = [
     "MiniProgramSession",
     "NotificationDelivery",
     "NotificationIssue",
-    "WechatPaymentSession",
     "SupportConversation",
     "SupportMessage",
     "ActivityLog",

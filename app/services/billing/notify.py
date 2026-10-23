@@ -15,14 +15,14 @@ transaction. SMTP/template errors are swallowed and logged.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
 
 from app.core.runtime_settings import SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
-from app.core.time import utc_naive_now
-from app.db.models.billing import BillingOrder, BillingRefund
+from app.db.models.billing import BillingInvoice, BillingOrder, BillingRefund
 from app.db.models.pterodactyl import PteroUser
 from app.db.session import get_session_factory
 from app.services.email import (
@@ -47,25 +47,19 @@ _USER_KIND_GREETING = {
 }
 
 
-def _fmt_dt(dt: Any) -> str:
-    if dt is None:
-        return ""
-    try:
-        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-    except Exception:  # noqa: BLE001
-        return str(dt)
+def _fmt_dt(dt: datetime | None) -> str:
+    return dt.strftime("%Y-%m-%d %H:%M:%S UTC") if dt is not None else ""
 
 
-def _yuan(fen: int | None) -> str:
-    if fen is None:
-        return ""
+def _yuan(fen: int) -> str:
     return f"{fen / 100:.2f}"
 
 
 async def _build_order_variables(
     db, order: BillingOrder, *, refund: BillingRefund | None = None
 ) -> dict[str, str]:
-    snap = order.plan_snapshot or {}
+    snap = order.plan_snapshot
+    paid_at = await db.scalar(select(BillingInvoice.paid_at).where(BillingInvoice.order_id == order.id))
     server_uuid = ""
     if order.target_server_id is not None:
         from app.db.models.pterodactyl import PteroServer
@@ -82,17 +76,17 @@ async def _build_order_variables(
     variables: dict[str, str] = {
         "brand_name": str(brand_name),
         "order_no": order.order_no,
-        "plan_name": str(snap.get("display_name") or snap.get("plan_name") or ""),
+        "plan_name": snap["plan_name"],
         "period_count": str(order.period_count),
         "total_days": str(order.total_days),
         "total_fen": str(order.total_fen),
         "total_yuan": _yuan(order.total_fen),
-        "currency_code": str(snap.get("currency_code") or "CNY"),
-        "paid_at": _fmt_dt(order.applied_at) if order.applied_at else _fmt_dt(order.updated_at),
+        "currency_code": snap["currency_code"],
+        "paid_at": _fmt_dt(paid_at),
         "applied_at": _fmt_dt(order.applied_at),
         "server_uuid": server_uuid,
         "apply_error": str(order.last_apply_error or ""),
-        "apply_retry_count": str(order.apply_retry_count or 0),
+        "apply_retry_count": str(order.apply_retry_count),
     }
     if refund is not None:
         variables.update(
@@ -101,7 +95,7 @@ async def _build_order_variables(
                 "refund_amount_fen": str(refund.amount_fen),
                 "refund_amount_yuan": _yuan(refund.amount_fen),
                 "refund_reason": str(refund.reason or ""),
-                "refunded_at": _fmt_dt(refund.updated_at or utc_naive_now()),
+                "refunded_at": _fmt_dt(refund.updated_at),
             }
         )
     return variables
@@ -202,9 +196,7 @@ async def _send_user_email(
                 return
 
             variables = await _build_order_variables(session, order, refund=refund)
-            action_text, action_path = _USER_KIND_GREETING.get(
-                template_key, ("查看", "/")
-            )
+            action_text, action_path = _USER_KIND_GREETING[template_key]
             await _send_one(
                 session,
                 template_key=template_key,

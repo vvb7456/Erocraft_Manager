@@ -32,9 +32,9 @@ from app.schemas.miniprogram import (
     MiniServer, MiniServerStatus, MiniUser,
 )
 from app.schemas.user_servers import PowerActionRequest
-from app.services import wechat_client
+from app.services import wechat_identity
 from app.services.audit import log_manager_activity
-from app.services.billing.gateway.base import GatewayBusinessError, GatewayTransientError
+from app.services.wechat_identity import WechatLoginError, WechatUnavailable
 from app.services.wings import WingsServiceError, wings_service
 
 
@@ -68,15 +68,18 @@ def new_session(db: AsyncSession, appid: str, openid: str, binding_id: int | Non
 @router.post("/login", response_model=MiniLoginOut)
 @limiter.limit("20/minute")
 async def login(payload: MiniLoginInput, request: Request, db: AsyncSession = Depends(get_db)) -> MiniLoginOut:
-    values = await get_settings_store().get_many(db, {"WECHAT_PAY_MINIPROGRAM_APPID": "", "WECHAT_PAY_MINIPROGRAM_APP_SECRET": ""})
-    appid, secret = str(values["WECHAT_PAY_MINIPROGRAM_APPID"]), str(values["WECHAT_PAY_MINIPROGRAM_APP_SECRET"])
+    from app.core.runtime_settings import BILLING_SPECS
+    values = await get_settings_store().get_many(db, {
+        key: BILLING_SPECS[key].default_value() for key in ("MINIPROGRAM_APPID", "MINIPROGRAM_APP_SECRET")
+    })
+    appid, secret = values["MINIPROGRAM_APPID"], values["MINIPROGRAM_APP_SECRET"]
     if not appid or not secret:
         raise ApiError(503, "miniprogram.login_unavailable")
     try:
-        openid = await wechat_client.openid(appid, secret, payload.code, mini=True)
-    except GatewayTransientError as exc:
+        openid = await wechat_identity.openid(appid, secret, payload.code)
+    except WechatUnavailable as exc:
         raise ApiError(502, "dependency.unreachable") from exc
-    except GatewayBusinessError as exc:
+    except WechatLoginError as exc:
         raise ApiError(422, "miniprogram.login_failed") from exc
     binding = await db.scalar(select(MiniProgramBinding).where(MiniProgramBinding.appid == appid, MiniProgramBinding.openid == openid))
     user = await db.get(PteroUser, binding.user_id) if binding else None
@@ -196,9 +199,9 @@ async def orders(offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=5
     rows = list((await db.scalars(select(BillingOrder).where(BillingOrder.user_id == user.id)
                                  .order_by(BillingOrder.created_at.desc(), BillingOrder.id.desc()).offset(offset).limit(limit + 1))).all())
     return MiniOrders(items=[MiniOrder(
-        id=o.id, order_no=o.order_no, title=str((o.plan_snapshot or {}).get("plan_name") or "服务订单"),
+        id=o.id, order_no=o.order_no, title=o.plan_snapshot["plan_name"],
         kind=o.kind, status=o.status, total_fen=o.total_fen, received_fen=o.received_fen, refunded_fen=o.refunded_fen,
-        total_days=o.total_days, currency=str((o.plan_snapshot or {}).get("currency_code", "CNY")),
+        total_days=o.total_days, currency=o.plan_snapshot["currency_code"],
         created_at=to_iso_z(o.created_at), applied_at=to_iso_z(o.applied_at) if o.applied_at else None,
     ) for o in rows[:limit]], has_more=len(rows) > limit)
 

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.db import get_db
 from app.core.api_errors import ApiError
+from app.core.runtime_settings import BILLING_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.time import utc_naive_now
 from app.db.models.miniprogram import MiniProgramBinding, MiniProgramSession
@@ -31,7 +32,7 @@ async def get_mini_session(
     if credentials is None:
         raise session_required()
     session = await db.get(MiniProgramSession, token_hash(credentials.credentials))
-    appid = await get_settings_store().get(db, "WECHAT_PAY_MINIPROGRAM_APPID", "")
+    appid = await get_settings_store().get(db, "MINIPROGRAM_APPID", BILLING_SPECS["MINIPROGRAM_APPID"].default_value())
     if session is None or session.expires_at <= utc_naive_now() or session.appid != appid:
         raise session_required()
     return session

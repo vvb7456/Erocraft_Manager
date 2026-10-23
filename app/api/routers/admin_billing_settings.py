@@ -1,10 +1,4 @@
-"""Admin routes for billing runtime settings.
-
-All billing-related keys (gateway credentials, gateway display names, gateway
-URLs, billing quotas, refund policy) are now B-class (DB-backed, UI-editable).
-Sensitive keys (e.g. ``HUPIJIAO_APPSECRET``) are marked ``sensitive=True`` on
-their :class:`SettingSpec` and are encrypted at rest.
-"""
+"""管理网关接入、小程序登录及计费业务配置。"""
 
 from __future__ import annotations
 
@@ -65,11 +59,7 @@ async def billing_settings_post(
 
     by_category: dict[str, dict[str, Any]] = {}
     for key, value in payload.settings.items():
-        spec = BILLING_SPECS.get(key)
-        if spec is None:
-            # Silently ignore unknown keys (e.g. removed/legacy settings still
-            # held in stale frontend state). Avoids 404 storms after spec changes.
-            continue
+        spec = BILLING_SPECS[key]
         try:
             normalized = spec.normalize(value)
         except ValueError as exc:
@@ -80,27 +70,9 @@ async def billing_settings_post(
         by_category.setdefault(spec.category, {})[key] = normalized
 
     store = get_settings_store()
-    candidate = await store.get_many(db, defaults_for(BILLING_SPECS))
-    candidate.update(by_category.get("billing", {}))
-    if candidate.get("WECHAT_PAY_ENABLED"):
-        from app.services.billing.gateway.wechat_pay import WechatPayGateway
-
-        try:
-            WechatPayGateway.from_settings(candidate)
-            if not candidate.get("WECHAT_PAY_APP_SECRET"):
-                raise ValueError("请填写服务号AppSecret")
-            if bool(candidate.get("WECHAT_PAY_MINIPROGRAM_APPID")) != bool(candidate.get("WECHAT_PAY_MINIPROGRAM_APP_SECRET")):
-                raise ValueError("小程序AppID和AppSecret必须同时填写")
-        except (ValueError, TypeError) as exc:
-            raise HTTPException(400, f"微信支付配置错误：{exc}") from exc
     for category, items in by_category.items():
         if items:
             await store.set_values(db, items, category=category)
-
-    # Rebuild gateway registry so credential / enabled / display_name changes
-    # take effect immediately for the next request.
-    from app.services.billing.gateway import registry as gateway_registry
-    await gateway_registry.ensure_loaded(db, force=True)
 
     await log_manager_activity(
         db,

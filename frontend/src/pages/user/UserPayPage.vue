@@ -1,606 +1,170 @@
 <script setup lang="ts">
-/**
- * UserPayPage — full-screen payment page at /pay/:id (blank layout).
- *
- * Single-tab flow: after order creation in CreateOrderModal we
- * ``router.push('/pay/:id')`` here. This page renders the QR code, polls
- * ``GET /api/user/orders/:id`` and auto-advances to /servers when the
- * order reaches a paid state.
- *
- * Visual shell: AuthShell (theme + language toggle in top-right, no
- * sidebar/exit) so the experience matches the login page.
- *
- */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import SupportModal from '@/components/billing/SupportModal.vue'
-import WechatPayPanel from '@/components/billing/WechatPayPanel.vue'
-import { useToast } from '@/composables/useToast'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
-import { useOrderPolling, type OrderDetail } from '@/composables/useOrderPolling'
-
-defineOptions({ name: 'UserPayPage' })
+import { useOrderPolling } from '@/composables/useOrderPolling'
+import { useToast } from '@/composables/useToast'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n({ useScope: 'global' })
-const { toast } = useToast()
-const { del } = useApiFetch()
+const { get, post, del, handleError } = useApiFetch()
 const { confirm } = useConfirm()
-const cancelling = ref(false)
-// Keep the OAuth failure flag after removing it from the address bar.
-const wechatAuthFailed = route.query.wechat === 'auth_failed'
+const { toast } = useToast()
+const orderId = ref<string | number | null>(route.params.id ? String(route.params.id) : null)
+const { data: order, error, refresh } = useOrderPolling(orderId)
+const resolveFailed = ref(false)
+const busy = ref(false)
+const supportOpen = ref(false)
+const countdown = ref(5)
+let redirectTimer: ReturnType<typeof setInterval> | undefined
 
-// ── Order id ──
-const orderId = computed(() => {
-  const raw = route.params.id
-  return Array.isArray(raw) ? raw[0] : raw
+const paid = computed(() => order.value?.invoice?.status === 'paid'
+  && !['closed', 'cancelled', 'refunding', 'refunded', 'manual_review'].includes(order.value.status))
+const subtitle = computed(() => {
+  if (error.value || resolveFailed.value) return t('billing.pay.queryFailed')
+  if (!order.value) return t('billing.pay.statusLoading')
+  if (paid.value) return t('billing.pay.successTitle')
+  return order.value.status === 'pending' ? t('billing.pay.incompleteTitle') : t('billing.pay.closedTitle')
 })
 
-// ── Polling ──
-const { data, refresh, stop } = useOrderPolling(orderId)
-
-const order = computed(() => data.value ?? null)
-const invoice = computed(() => data.value?.invoice ?? null)
-const isWechatPay = computed(() => invoice.value?.gateway_code === 'wechat_pay')
-
-// ── State machine derived from order.status / countdown ──
-type Phase = 'loading' | 'pending' | 'paid' | 'expired' | 'closed'
-
-const now = ref(Date.now())
-let tickTimer: ReturnType<typeof setInterval> | null = null
-
-const dueAtMs = computed(() => {
-  const due = invoice.value?.due_at
-  if (!due) return null
-  const ts = Date.parse(due)
-  return Number.isNaN(ts) ? null : ts
+watch(paid, success => {
+  clearInterval(redirectTimer)
+  if (!success) return
+  countdown.value = 5
+  redirectTimer = setInterval(() => {
+    countdown.value--
+    if (countdown.value <= 0) goToServers()
+  }, 1000)
 })
-
-const remainingMs = computed(() => {
-  if (dueAtMs.value === null) return null
-  return Math.max(0, dueAtMs.value - now.value)
-})
-
-const isExpired = computed(() => remainingMs.value === 0)
-
-const phase = computed<Phase>(() => {
-  if (!order.value) return 'loading'
-  const s = order.value.status
-  if (
-    s === 'closed' ||
-    s === 'cancelled' ||
-    s === 'refunded' ||
-    s === 'refunding' ||
-    s === 'manual_review'
-  ) {
-    return 'closed'
-  }
-  if (invoice.value?.status === 'paid' || s === 'paid' || s === 'applied') return 'paid'
-  if (isExpired.value) return 'expired'
-  return 'pending'
-})
-
-const countdownLabel = computed(() => {
-  if (remainingMs.value === null) return ''
-  const total = Math.floor(remainingMs.value / 1000)
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-})
-
-// ── Status badge ──
-const statusColor = computed(() => {
-  switch (phase.value) {
-    case 'paid':
-      return 'var(--green)'
-    case 'pending':
-      return 'var(--amber)'
-    case 'expired':
-      return 'var(--t3)'
-    case 'closed':
-      return 'var(--t3)'
-    default:
-      return 'var(--t2)'
-  }
-})
-
-const statusLabel = computed(() => {
-  switch (phase.value) {
-    case 'pending':
-      return t('billing.pay.statusPending')
-    case 'paid':
-      return t('billing.pay.statusPaid')
-    case 'expired':
-      return t('billing.pay.statusExpired')
-    case 'closed':
-      return t('billing.pay.statusClosed')
-    default:
-      return t('billing.pay.statusLoading')
-  }
-})
-
-// ── QR image ──
-// Hupijiao 文档：`url_qrcode` 字段本身就是已渲染好的 PC 端二维码图片地址，
-// 直接 <img src> 展示即可，不要再做二次 QR 编码。
-// 支付宝直连（alipay_direct）走 alipay.trade.page.pay：返回的是收银台跳转
-// URL,无预渲染 QR，前端直接「同窗口跳转」到支付页面 (付完支付宝点「返回
-// 商户」跳回 return_url = /#/pay/:id，原页继续轮询)。
-const qrImageUrl = computed(() => invoice.value?.code_url ?? null)
-const qrError = ref(false)
-
-function onQrImageError() {
-  qrError.value = true
-}
-
-function onQrImageLoad() {
-  qrError.value = false
-}
-
-// ── PC vs mobile detection ──
-// hupijiao: 移动端在浏览器内打开支付宝 H5 收银台；PC 端展示二维码图片。
-// alipay_direct: 不分 PC/H5，支付宝 page.pay 按 UA 自动切换收银台形态，
-// 都走同窗口跳转 (return_url 跳回 /pay/:id)。
-const isMobile = (() => {
-  if (typeof navigator === 'undefined') return false
-  const ua = navigator.userAgent || ''
-  if (/Android|iPhone|iPad|iPod|Mobile|Opera Mini|IEMobile/i.test(ua)) return true
-  if (typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches && window.innerWidth < 768) return true
-  return false
-})()
-
-// 前端按 isMobile 选 PC(page.pay) 或 H5(wap.pay) 收银台 URL
-const payUrl = computed(() => {
-  if (!invoice.value) return null
-  if (isMobile && invoice.value.pay_url_h5) return invoice.value.pay_url_h5
-  return invoice.value.pay_url ?? null
-})
-const h5Launched = ref(false)
-const redirecting = ref(false)
-
-function launchH5Pay() {
-  if (!payUrl.value || phase.value !== 'pending' || cancelling.value) return
-  h5Launched.value = true
-  // PC: 新标签打开, 原页继续轮询, 付完自动捕获到账。
-  // 移动端: iOS Safari 拦截 setTimeout 后的 window.open, 只能同窗口跳;
-  //         付完支付宝「返回商户」跳回 return_url=/#/pay/:id 恢复轮询。
-  if (isMobile) {
-    window.location.href = payUrl.value
-  } else {
-    window.open(payUrl.value, '_blank')
-  }
-}
-
-// 所有平台统一: 拿到 pay_url 后先显示「正在跳转到支付宝…」600ms 再跳,
-// 让用户有时间看清页面。手动按钮始终 enabled, 用户可随时点跳过等待。
-const REDIRECT_DELAY_MS = 600
-let launchTimer: ReturnType<typeof setTimeout> | null = null
-watch(payUrl, (url) => {
-  if (!url) return
-  if (h5Launched.value) return
-  if (phase.value !== 'pending') return
-  if (!isMobile && qrImageUrl.value) return  // hupijiao PC: 展示 QR 不跳
-  redirecting.value = true
-  launchTimer = setTimeout(() => {
-    if (!h5Launched.value && phase.value === 'pending' && payUrl.value) {
-      launchH5Pay()
-    }
-  }, REDIRECT_DELAY_MS)
-})
-
-// 副标题: 唯一主提示, 按状态切换
-const subtitleText = computed(() => {
-  if (!order.value) return t('billing.pay.redirecting')
-  switch (phase.value) {
-    case 'paid': return t('billing.pay.successTitle')
-    case 'expired': return t('billing.pay.expiredTitle')
-    case 'closed': return t('billing.pay.closedTitle')
-    default:
-      if (isWechatPay.value) return t('wechat.title')
-      if (redirecting.value) return t('billing.pay.redirecting')
-      return qrImageUrl.value
-        ? t('billing.pay.subtitleQR')
-        : t('billing.pay.subtitleRedirect')
-  }
-})
-
-// ── Auto-redirect on success ──
-const redirectCountdown = ref(5)
-let redirectTimer: ReturnType<typeof setInterval> | null = null
-
-watch(phase, (p) => {
-  if (redirectTimer !== null) {
-    clearInterval(redirectTimer)
-    redirectTimer = null
-  }
-  if (p === 'paid') {
-    redirectCountdown.value = 5
-    redirectTimer = setInterval(() => {
-      redirectCountdown.value -= 1
-      if (redirectCountdown.value <= 0) goToServers()
-    }, 1000)
-  }
-})
+onBeforeUnmount(() => clearInterval(redirectTimer))
 
 function goToServers() {
-  if (redirectTimer !== null) {
-    clearInterval(redirectTimer)
-    redirectTimer = null
-  }
-  router.push('/servers')
+  clearInterval(redirectTimer)
+  void router.push('/servers')
 }
 
-function goToPlans() {
-  router.push('/plans')
-}
-
-async function cancelOrder() {
-  if (!order.value || order.value.status !== 'pending' || cancelling.value) return
-  const id = order.value.id
-  cancelling.value = true
+async function continuePayment() {
+  if (!order.value || busy.value) return
+  busy.value = true
   try {
-    const ok = await confirm({
-      title: t('billing.orderDetail.actions.cancelConfirmTitle'),
-      message: t('billing.orderDetail.actions.cancelConfirmMessage'),
-      confirmText: t('billing.orderDetail.actions.cancelConfirmBtn'),
-      variant: 'danger',
-    })
-    if (!ok) return
-    const result = await del<OrderDetail>(`/api/user/orders/${id}`)
-    if (result) {
-      stop()
-      data.value = result
-      toast(t('billing.orderDetail.actions.cancelOk'), 'success')
-    } else {
-      await refresh()
-    }
-  } finally {
-    cancelling.value = false
-  }
+    const payment = await post<{ checkout_url: string }>(`/api/user/orders/${order.value.id}/payments`, {})
+    window.location.assign(payment.checkout_url)
+  } catch (failure) { handleError(failure); await refresh() }
+  finally { busy.value = false }
 }
 
-// ── Copy order no ──
 async function copyOrderNo() {
-  if (!order.value?.order_no) return
+  if (!order.value) return
   try {
     await navigator.clipboard.writeText(order.value.order_no)
     toast(t('billing.pay.orderNoCopied'), 'success')
-  } catch {
-    toast(t('billing.pay.copyFailed'), 'error')
-  }
+  } catch { toast(t('billing.pay.copyFailed'), 'error') }
 }
 
-// ── Support modal ──
-const supportOpen = ref(false)
-
-// ── Lifecycle ──
-onMounted(() => {
-  if (wechatAuthFailed) {
-    toast(t('wechat.authFailed'), 'error')
-    void router.replace({ query: {} })
-  }
-  tickTimer = setInterval(() => {
-    now.value = Date.now()
-  }, 1000)
-})
-
-onBeforeUnmount(() => {
-  if (tickTimer !== null) clearInterval(tickTimer)
-  if (redirectTimer !== null) clearInterval(redirectTimer)
-  if (launchTimer !== null) clearTimeout(launchTimer)
-  stop()
-})
-
-// ── Helpers ──
-function fenToYuan(fen: number | null | undefined): string {
-  if (fen == null) return '0.00'
-  return (fen / 100).toFixed(2)
+async function cancelOrder() {
+  if (!order.value || busy.value) return
+  if (!await confirm({
+    title: t('billing.orderDetail.actions.cancelConfirmTitle'),
+    message: t('billing.orderDetail.actions.cancelConfirmMessage'),
+    confirmText: t('billing.orderDetail.actions.cancelConfirmBtn'),
+    variant: 'danger',
+  })) return
+  busy.value = true
+  try { await del(`/api/user/orders/${order.value.id}`) }
+  catch (failure) { handleError(failure) }
+  finally { await refresh(); busy.value = false }
 }
+
+async function resolveOrder() {
+  if (orderId.value !== null) { await refresh(); return }
+  resolveFailed.value = false
+  try {
+    const query = new URLSearchParams()
+    if (route.query.business_order_id) query.set('business_order_id', String(route.query.business_order_id))
+    else if (route.query.payment_id) query.set('payment_id', String(route.query.payment_id))
+    const result = await get<{ id: number }>(`/api/user/orders/resolve?${query}`)
+    orderId.value = result.id
+    await router.replace(`/pay/${result.id}`)
+  } catch (failure) { resolveFailed.value = true; handleError(failure) }
+}
+
+onMounted(() => { if (orderId.value === null) void resolveOrder() })
 </script>
 
 <template>
-  <AuthShell icon="receipt_long" :subtitle="subtitleText">
+  <AuthShell icon="receipt_long" :subtitle="subtitle">
     <div class="pay-content">
-      <!-- QR (hupijiao PC, pending only) -->
-      <WechatPayPanel
-        v-if="phase === 'pending' && isWechatPay && invoice"
-        :order-id="orderId"
-        :scene="invoice.payment_scene"
-        :code-url="invoice.code_url"
-        :auto-start="!wechatAuthFailed"
-        :disabled="cancelling"
-        @refresh="refresh"
-      />
-      <div v-else-if="phase === 'pending' && qrImageUrl && !isMobile" class="qr-wrap">
-        <img v-if="!qrError" :src="qrImageUrl" alt="QR" class="qr-image" width="240" height="240" @load="onQrImageLoad" @error="onQrImageError" />
-        <div v-else class="qr-error">
-          <MsIcon name="error_outline" size="lg" />
-          <p>{{ t('billing.pay.qrError') }}</p>
-          <BaseButton size="sm" variant="ghost" @click="refresh">{{ t('billing.pay.retry') }}</BaseButton>
-        </div>
+      <div class="pay-status" :class="{ 'pay-status--success': paid }">
+        <MsIcon v-if="order || error || resolveFailed" :name="paid ? 'check_circle' : 'error_outline'" size="lg" />
+        <p v-if="paid" class="status-sub">{{ t('billing.pay.successCountdown', { n: countdown }) }}</p>
+        <BaseButton v-if="error || resolveFailed" size="sm" variant="ghost" @click="resolveOrder">{{ t('billing.pay.retry') }}</BaseButton>
       </div>
 
-      <!-- Button (loading + non-QR pending) -->
-      <div v-else-if="phase === 'loading' || phase === 'pending'" class="pay-action">
-        <BaseButton variant="primary" :disabled="!payUrl || phase !== 'pending' || cancelling" @click="launchH5Pay">
-          <MsIcon name="open_in_new" size="sm" />
-          {{ h5Launched ? t('billing.pay.buttonReopen') : t('billing.pay.buttonOpen') }}
-        </BaseButton>
-      </div>
-
-      <!-- Terminal states (all platforms unified) -->
-      <div v-else-if="phase === 'paid'" class="pay-status pay-status--success">
-        <MsIcon name="check_circle" size="lg" />
-        <p class="status-sub">{{ t('billing.pay.successCountdown', { n: redirectCountdown }) }}</p>
-      </div>
-      <div v-else-if="phase === 'expired'" class="pay-status pay-status--expired">
-        <MsIcon name="error_outline" size="lg" />
-        <p class="status-sub">{{ t('billing.pay.expiredTitle') }}</p>
-      </div>
-      <div v-else-if="phase === 'closed'" class="pay-status pay-status--closed">
-        <MsIcon name="error_outline" size="lg" />
-        <p class="status-sub">{{ t('billing.pay.closedTitle') }}</p>
-      </div>
-
-      <!-- Amount -->
-      <div v-if="order" class="amount-row">
-        <span class="amount-label">{{ t('billing.pay.amountLabel') }}</span>
-        <span class="amount">¥{{ fenToYuan(order.total_fen) }}</span>
-      </div>
-
-      <div class="divider" />
-
-      <!-- Summary -->
-      <dl v-if="order" class="summary">
-        <div class="summary-row">
-          <dt>{{ t('billing.pay.summaryPlan') }}</dt>
-          <dd>{{ order.plan_name }}</dd>
+      <template v-if="order">
+        <div class="amount-row">
+          <span class="amount-label">{{ t('billing.pay.amountLabel') }}</span>
+          <span class="amount">¥{{ (order.total_fen / 100).toFixed(2) }}</span>
         </div>
-        <div class="summary-row">
-          <dt>{{ t('billing.pay.summaryDuration') }}</dt>
-          <dd>{{ t('billing.pay.summaryDays', { days: order.total_days }) }}</dd>
-        </div>
-        <div v-if="order.coupon_id && order.coupon_discount_fen" class="summary-row">
-          <dt>{{ t('billing.coupons.applyHint') }}</dt>
-          <dd>
-            <span v-if="order.coupon_code" class="mono">{{ order.coupon_code }}</span>
-            <span class="discount-amount mono">−¥{{ fenToYuan(order.coupon_discount_fen) }}</span>
-          </dd>
-        </div>
-        <div class="summary-row">
-          <dt>{{ t('billing.pay.summaryOrderNo') }}</dt>
-          <dd class="order-no-cell">
-            <span class="mono">{{ order.order_no }}</span>
-            <button class="copy-btn" :title="t('billing.pay.copy')" @click="copyOrderNo">
-              <MsIcon name="content_copy" size="sm" />
-            </button>
-          </dd>
-        </div>
-        <div class="summary-row">
-          <dt>{{ t('billing.pay.summaryStatus') }}</dt>
-          <dd class="status-cell">
-            <Badge :color="statusColor">{{ statusLabel }}</Badge>
-            <span v-if="phase === 'pending' && remainingMs !== null" class="countdown mono">
-              {{ countdownLabel }}
-            </span>
-          </dd>
-        </div>
-      </dl>
+        <div class="divider" />
+        <dl class="summary">
+          <div class="summary-row"><dt>{{ t('billing.pay.summaryPlan') }}</dt><dd>{{ order.plan_name }}</dd></div>
+          <div class="summary-row"><dt>{{ t('billing.pay.summaryDuration') }}</dt><dd>{{ t('billing.pay.summaryDays', { days: order.total_days }) }}</dd></div>
+          <div v-if="order.coupon_id && order.coupon_discount_fen" class="summary-row">
+            <dt>{{ t('billing.coupons.applyHint') }}</dt>
+            <dd><span v-if="order.coupon_code" class="mono">{{ order.coupon_code }}</span><span class="discount-amount mono">−¥{{ (order.coupon_discount_fen / 100).toFixed(2) }}</span></dd>
+          </div>
+          <div class="summary-row">
+            <dt>{{ t('billing.pay.summaryOrderNo') }}</dt>
+            <dd class="order-no-cell">
+              <span class="mono">{{ order.order_no }}</span>
+              <button class="copy-btn" :title="t('billing.pay.copy')" @click="copyOrderNo"><MsIcon name="content_copy" size="sm" /></button>
+            </dd>
+          </div>
+        </dl>
+        <div class="divider" />
+      </template>
 
-      <div class="divider" />
-
-      <!-- Actions -->
       <div class="actions">
-        <BaseButton v-if="phase === 'paid'" variant="primary" @click="goToServers">
-          {{ t('billing.pay.btnGoServersNow') }}
-        </BaseButton>
-        <BaseButton v-else-if="phase === 'expired' || phase === 'closed'" variant="primary" @click="goToPlans">
-          {{ t('billing.pay.btnReorder') }}
-        </BaseButton>
-        <BaseButton v-if="order?.status === 'pending'" variant="ghost" :disabled="cancelling" @click="cancelOrder">
-          {{ t('billing.orderDetail.actions.cancel') }}
-        </BaseButton>
-        <BaseButton variant="ghost" @click="goToServers">
-          <MsIcon name="home" size="sm" />
-          {{ t('billing.pay.btnDashboard') }}
-        </BaseButton>
+        <BaseButton v-if="paid" variant="primary" @click="goToServers">{{ t('billing.pay.btnGoServersNow') }}</BaseButton>
+        <BaseButton v-else-if="order?.status === 'pending'" variant="primary" :loading="busy" @click="continuePayment">{{ t('billing.orderDetail.actions.pay') }}</BaseButton>
+        <BaseButton v-else-if="order" variant="primary" @click="router.push('/plans')">{{ t('billing.pay.btnReorder') }}</BaseButton>
+        <BaseButton v-if="order?.status === 'pending'" variant="ghost" :disabled="busy" @click="cancelOrder">{{ t('billing.orderDetail.actions.cancel') }}</BaseButton>
+        <BaseButton v-if="!paid" variant="ghost" @click="goToServers"><MsIcon name="home" size="sm" />{{ t('billing.pay.btnDashboard') }}</BaseButton>
       </div>
-
-      <p class="support-hint">
-        {{ t('billing.pay.supportHint') }}
-        <a href="#" class="support-link" @click.prevent="supportOpen = true">
-          {{ t('billing.pay.supportLink') }}
-        </a>
-      </p>
+      <p class="support-hint">{{ t('billing.pay.supportHint') }} <a href="#" class="support-link" @click.prevent="supportOpen = true">{{ t('billing.pay.supportLink') }}</a></p>
     </div>
-
     <SupportModal v-model="supportOpen" />
   </AuthShell>
 </template>
 
 <style scoped>
-.pay-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-3);
-}
-
-/* ── QR (hupijiao PC) ── */
-.qr-wrap {
-  position: relative;
-  width: 240px;
-  height: 240px;
-  background: #fff;
-  border-radius: var(--r-md);
-  padding: var(--sp-2);
-  box-sizing: content-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.qr-image {
-  display: block;
-  width: 240px;
-  height: 240px;
-  object-fit: contain;
-  background: #fff;
-}
-.qr-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-2);
-  text-align: center;
-  color: var(--red);
-}
-
-/* ── Button (loading + non-QR pending) ── */
-.pay-action {
-  display: flex;
-  justify-content: center;
-  min-height: 44px;
-  align-items: center;
-}
-
-/* ── Terminal states (all platforms) ── */
-.pay-status {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-2);
-  text-align: center;
-  padding: var(--sp-4) 0;
-  min-height: 80px;
-  justify-content: center;
-}
-.pay-status :deep(.ms-icon) {
-  font-size: 36px;
-  line-height: 1;
-}
+.pay-content { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); }
+.pay-status { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); text-align: center; padding: var(--sp-4) 0; min-height: 80px; justify-content: center; color: var(--t3); }
+.pay-status :deep(.ms-icon) { font-size: 36px; line-height: 1; }
 .pay-status--success :deep(.ms-icon) { color: var(--green); }
-.pay-status--expired :deep(.ms-icon),
-.pay-status--closed :deep(.ms-icon) { color: var(--t3); }
-.status-sub {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--t2);
-}
-
-/* ── Amount ── */
-.amount-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  width: 100%;
-  margin-top: var(--sp-2);
-}
-.amount-label {
-  color: var(--t2);
-  font-size: var(--text-sm);
-}
-.amount {
-  font-family: var(--font-mono);
-  font-size: var(--text-xl);
-  font-weight: 700;
-  color: var(--ac);
-  text-align: right;
-}
-
-.divider {
-  width: 100%;
-  height: 1px;
-  background: var(--bd);
-  margin: var(--sp-2) 0;
-}
-
-.summary {
-  width: 100%;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-.summary-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-.summary-row dt {
-  color: var(--t2);
-  font-size: var(--text-sm);
-  margin: 0;
-}
-.summary-row dd {
-  color: var(--t1);
-  font-size: var(--text-sm);
-  margin: 0;
-  text-align: right;
-  min-width: 0;
-  word-break: break-all;
-}
-.order-no-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-1);
-}
-.discount-amount {
-  color: var(--green);
-  margin-left: var(--sp-2);
-}
-.copy-btn {
-  background: transparent;
-  border: none;
-  color: var(--t2);
-  cursor: pointer;
-  padding: 2px;
-  border-radius: var(--r-xs);
-  display: inline-flex;
-  align-items: center;
-}
-.copy-btn:hover {
-  background: var(--bg-in);
-  color: var(--ac);
-}
-.status-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-.countdown {
-  color: var(--t2);
-  font-size: var(--text-xs);
-}
-.mono {
-  font-family: var(--font-mono);
-}
-
-.actions {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-
-.support-hint {
-  margin: var(--sp-2) 0 0;
-  text-align: center;
-  color: var(--t3);
-  font-size: var(--text-xs);
-}
-.support-link {
-  color: var(--ac);
-  text-decoration: none;
-  cursor: pointer;
-}
-.support-link:hover {
-  text-decoration: underline;
-}
+.status-sub { margin: 0; font-size: var(--text-sm); color: var(--t2); }
+.amount-row { display: flex; align-items: baseline; justify-content: space-between; width: 100%; margin-top: var(--sp-2); }
+.amount-label { color: var(--t2); font-size: var(--text-sm); }
+.amount { font-family: var(--font-mono); font-size: var(--text-xl); font-weight: 700; color: var(--ac); text-align: right; }
+.divider { width: 100%; height: 1px; background: var(--bd); margin: var(--sp-2) 0; }
+.summary { width: 100%; margin: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.summary-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.summary-row dt { color: var(--t2); font-size: var(--text-sm); margin: 0; }
+.summary-row dd { color: var(--t1); font-size: var(--text-sm); margin: 0; text-align: right; min-width: 0; word-break: break-all; }
+.order-no-cell { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.discount-amount { color: var(--green); margin-left: var(--sp-2); }
+.copy-btn { background: transparent; border: none; color: var(--t2); cursor: pointer; padding: 2px; border-radius: var(--r-xs); display: inline-flex; align-items: center; }
+.copy-btn:hover { background: var(--bg-in); color: var(--ac); }
+.mono { font-family: var(--font-mono); }
+.actions { width: 100%; display: flex; flex-direction: column; gap: var(--sp-2); }
+.support-hint { margin: var(--sp-2) 0 0; text-align: center; color: var(--t3); font-size: var(--text-xs); }
+.support-link { color: var(--ac); text-decoration: none; cursor: pointer; }
+.support-link:hover { text-decoration: underline; }
 </style>

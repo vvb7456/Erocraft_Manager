@@ -86,6 +86,8 @@ async def force_apply(
     etc.) back to the admin UI.
     """
     await _ensure_order_exists(db, order_id)
+    if not await apply_engine.has_usable_payment(db, order_id):
+        raise CannotForceApply("该订单没有可用于交付的付款，请先核对退款结果")
     rc = await db.execute(
         update(BillingOrder)
         .where(
@@ -106,6 +108,9 @@ async def force_apply(
     await db.commit()
     # Outside the rowcount tx so apply_paid_order's own tx semantics apply.
     result = await apply_engine.apply_paid_order(db, order_id, source="admin-force")
+
+    if result != apply_engine.ApplyResult.APPLIED:
+        return result
 
     # Auto-resolve open incidents on this order
     now = utc_naive_now()
@@ -170,32 +175,10 @@ async def force_close(
         )
     )
 
-    target_sid = await db.scalar(
-        select(BillingOrder.target_server_id).where(BillingOrder.id == order_id)
-    )
-    effect_exists = bool(
-        await db.scalar(
-            select(exists().where(BillingOrderEffect.order_id == order_id))
-        )
-    )
     await db.commit()
-
-    # Same separation as §10.4: only nuke the placeholder when effect not written.
-    if target_sid is not None and not effect_exists:
-        try:
-            await server_lifecycle.delete_server(db, target_sid)
-        except Exception as exc:  # noqa: BLE001 — best-effort, incident records details
-            logger.exception(
-                "force_close placeholder cleanup failed order=%s server=%s",
-                order_id,
-                target_sid,
-            )
-            await incidents.log_incident(
-                "placeholder_cleanup_failed",
-                order_id=order_id,
-                server_id=target_sid,
-                payload={"phase": "force_close", "error": str(exc)[:500]},
-            )
+    from app.services.billing.orders import cleanup_unapplied_order
+    order = (await db.scalars(select(BillingOrder).where(BillingOrder.id == order_id))).one()
+    await cleanup_unapplied_order(order.id)
     logger.info(
         "force_close executed by admin=%s order=%s note=%s",
         admin_id,

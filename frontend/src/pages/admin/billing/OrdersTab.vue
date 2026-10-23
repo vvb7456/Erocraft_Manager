@@ -26,6 +26,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
 import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
+import { orderChannelColor, type OrderChannel } from '@/types/billing'
 
 defineOptions({ name: 'OrdersTab' })
 
@@ -35,7 +36,7 @@ interface OrderItem {
   id: number; order_no: string; user_id: number
   owner_username: string | null
   plan_id: number | null; plan_code: string; plan_name: string
-  kind: string; channel: string; external_order_id: string | null; operator: string; channel_note: string | null
+  kind: string; channel: OrderChannel; external_order_id: string | null; operator: string; channel_note: string | null
   period_count: number; total_fen: number; total_days: number
   target_server_id: number | null; target_server_name: string | null
   status: string; received_fen: number; refunded_fen: number
@@ -89,7 +90,7 @@ const kindOptions = [
 const channelOptions = [
   { value: '',        label: t('billing.admin.orders.filterAllChannel') },
   { value: 'alipay',  label: t('billing.channel.alipay') },
-  { value: 'wechat',  label: t('wechat.title') },
+  { value: 'wechat',  label: t('billing.channel.wechat') },
   { value: 'taobao',  label: t('billing.channel.taobao') },
   { value: 'xianyu',  label: t('billing.channel.xianyu') },
   { value: 'other',   label: t('billing.channel.other') },
@@ -233,18 +234,7 @@ function kindLabel(k: string): string {
 }
 
 function channelLabel(ch: string): string {
-  if (ch === 'wechat') return t('wechat.title')
-  if (ch === 'taobao') return t('billing.channel.taobao')
-  if (ch === 'xianyu') return t('billing.channel.xianyu')
-  if (ch === 'other') return t('billing.channel.other')
-  return t('billing.channel.alipay')
-}
-
-function channelColor(ch: string): string {
-  if (ch === 'taobao') return 'var(--amber)'
-  if (ch === 'xianyu') return 'var(--amber)'
-  if (ch === 'other') return 'var(--t3)'
-  return 'var(--green)'
+  return ch === '' ? '—' : t('billing.channel.' + ch)
 }
 
 // ── Actions ──
@@ -385,7 +375,7 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
       <td class="col-time mono">{{ formatTime(o.created_at) }}</td>
       <td class="col-orderno"><a href="#" class="cell-link" @click.prevent="emit('selectOrder', o.id)"><code>{{ o.order_no }}</code></a></td>
       <td class="col-channel">
-        <Badge :color="channelColor(o.channel)">{{ channelLabel(o.channel) }}</Badge>
+        <Badge :color="orderChannelColor(o.channel)">{{ channelLabel(o.channel) }}</Badge>
       </td>
       <td class="col-kind">
         <Badge :color="kindColor(o.kind)">{{ kindLabel(o.kind) }}</Badge>

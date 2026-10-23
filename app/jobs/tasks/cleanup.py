@@ -14,7 +14,6 @@ from app.db.models.manager import (
     ManagerPendingRegistration,
 )
 from app.db.models.monitoring import HostMetrics, HostProbeResult
-from app.db.models.wechat import WechatPaymentSession
 from app.db.models.miniprogram import MiniProgramSession
 from app.db.models.notifications import NotificationDelivery, NotificationIssue
 from app.db.session import get_session_factory
@@ -60,7 +59,6 @@ async def run_token_cleanup() -> None:
                 res_pwd.rowcount,
                 res_eml.rowcount,
             )
-            await db.execute(delete(WechatPaymentSession).where(WechatPaymentSession.expires_at < cutoff))
             await db.execute(delete(MiniProgramSession).where(MiniProgramSession.expires_at < cutoff))
             await db.execute(delete(NotificationDelivery).where(
                 NotificationDelivery.created_at < utc_naive_now() - timedelta(days=90),
