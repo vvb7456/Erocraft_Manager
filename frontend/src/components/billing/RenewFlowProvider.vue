@@ -13,7 +13,7 @@ import CreateOrderModal from '@/components/CreateOrderModal.vue'
 
 defineOptions({ name: 'RenewFlowProvider' })
 
-const { open, plan, targetServerId, serverName } = useRenewFlow()
+const { open, plan, targetServerId, serverName, expirationDate } = useRenewFlow()
 </script>
 
 <template>
@@ -23,5 +23,6 @@ const { open, plan, targetServerId, serverName } = useRenewFlow()
     :plan="plan"
     :target-server-id="targetServerId"
     :server-name="serverName"
+    :current-expiration-date="expirationDate"
   />
 </template>

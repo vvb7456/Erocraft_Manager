@@ -312,7 +312,7 @@ async function onRenew(s: Server) {
     await onConvert(s)
     return
   }
-  await openRenew({ serverId: s.id, serverName: s.name, planId: s.planId })
+  await openRenew({ serverId: s.id, serverName: s.name, planId: s.planId, expirationDate: s.expirationDate })
 }
 
 async function onConvert(s: Server) {
@@ -568,6 +568,7 @@ function openMobileAction(s: Server) {
       mode="convert"
       :target-server-id="convertServer.id"
       :server-name="convertServer.name"
+      :current-expiration-date="convertServer.expirationDate"
     />
   </div>
 </template>

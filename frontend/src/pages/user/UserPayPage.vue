@@ -34,6 +34,10 @@ const subtitle = computed(() => {
   if (paid.value) return t('billing.pay.successTitle')
   return order.value.status === 'pending' ? t('billing.pay.incompleteTitle') : t(`billing.orders.status.${order.value.status}`)
 })
+const reorderTarget = computed(() => {
+  if (order.value?.kind === 'new_purchase') return '/plans'
+  return order.value?.target_server_id ? `/servers/${order.value.target_server_id}/console` : '/servers'
+})
 
 watch(paid, success => {
   clearInterval(redirectTimer)
@@ -135,7 +139,7 @@ onMounted(() => { if (orderId.value === null) void resolveOrder() })
       <div class="actions">
         <BaseButton v-if="paid" variant="primary" @click="goToServers">{{ t('billing.pay.btnGoServersNow') }}</BaseButton>
         <BaseButton v-else-if="order?.status === 'pending'" variant="primary" :loading="busy === 'pay'" :disabled="busy !== null" @click="continuePayment">{{ t('billing.orderDetail.actions.pay') }}</BaseButton>
-        <BaseButton v-else-if="order && ['closed', 'cancelled'].includes(order.status)" variant="primary" @click="router.push('/plans')">{{ t('billing.pay.btnReorder') }}</BaseButton>
+        <BaseButton v-else-if="order && ['closed', 'cancelled'].includes(order.status)" variant="primary" @click="router.push(reorderTarget)">{{ t('billing.pay.btnReorder') }}</BaseButton>
         <BaseButton v-if="order?.status === 'pending'" variant="ghost" :loading="busy === 'cancel'" :disabled="busy !== null" @click="cancelOrder">{{ t('billing.orderDetail.actions.cancel') }}</BaseButton>
         <BaseButton v-if="!paid" variant="ghost" @click="goToServers"><MsIcon name="home" size="sm" />{{ t('billing.pay.btnDashboard') }}</BaseButton>
       </div>

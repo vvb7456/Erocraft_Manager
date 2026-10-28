@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
+import { useToday } from '@/composables/useToday'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -74,11 +75,13 @@ const props = withDefaults(
     mode?: CashierMode
     targetServerId?: number | null
     serverName?: string
+    currentExpirationDate?: string | null
   }>(),
   {
     mode: 'new_purchase',
     targetServerId: null,
     serverName: '',
+    currentExpirationDate: null,
   },
 )
 
@@ -113,6 +116,7 @@ const emit = defineEmits<{
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
 const { get, post, handleError } = useApiFetch()
+const today = useToday()
 
 const open = computed({
   get: () => props.modelValue,
@@ -166,6 +170,14 @@ const savedFen = computed(() => basePriceFen.value - finalPriceFen.value)
 const totalDays = computed(() => {
   if (!props.plan) return 0
   return props.plan.days * selectedPeriod.value.count
+})
+const renewedExpirationDate = computed(() => {
+  const base = props.currentExpirationDate && props.currentExpirationDate > today.value
+    ? props.currentExpirationDate
+    : today.value
+  const date = new Date(`${base}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + totalDays.value)
+  return date.toISOString().slice(0, 10)
 })
 const hasDiscount = computed(() => savedFen.value > 0)
 
@@ -470,7 +482,8 @@ function onCancel() {
             <span class="renew-hint__label">{{ t('billing.cashier.renewTarget') }}：</span>
             <span class="renew-hint__server">{{ serverName }}</span>
           </div>
-          <div class="renew-hint__sub">{{ t('billing.cashier.renewHint') }}</div>
+          <div class="renew-hint__sub">{{ t('billing.cashier.renewBefore', { date: currentExpirationDate ?? t('userServers.permanent') }) }}</div>
+          <div class="renew-hint__sub">{{ t('billing.cashier.renewAfter', { date: renewedExpirationDate }) }}</div>
         </div>
       </div>
 

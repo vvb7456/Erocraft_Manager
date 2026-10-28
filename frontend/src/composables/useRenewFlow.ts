@@ -40,6 +40,7 @@ export interface RenewTarget {
   serverId: number
   serverName: string
   planId: number
+  expirationDate: string | null
 }
 
 // ── Global singleton state (HMR-safe across module reloads) ──
@@ -48,6 +49,7 @@ type RenewFlowState = {
   plan: Ref<RenewPlan | null>
   targetServerId: Ref<number | null>
   serverName: Ref<string>
+  expirationDate: Ref<string | null>
   loading: Ref<boolean>
 }
 
@@ -60,6 +62,7 @@ const state: RenewFlowState = g.__erocraftRenewFlowState ?? {
   plan: ref<RenewPlan | null>(null),
   targetServerId: ref<number | null>(null),
   serverName: ref<string>(''),
+  expirationDate: ref<string | null>(null),
   loading: ref(false),
 }
 
@@ -85,6 +88,7 @@ export function useRenewFlow() {
       state.plan.value = data
       state.targetServerId.value = target.serverId
       state.serverName.value = target.serverName
+      state.expirationDate.value = target.expirationDate
       state.open.value = true
     } catch {
       // Keep a visible user feedback path even if fetch/composable internals throw unexpectedly.
@@ -99,6 +103,7 @@ export function useRenewFlow() {
     plan: state.plan,
     targetServerId: state.targetServerId,
     serverName: state.serverName,
+    expirationDate: state.expirationDate,
     loading: state.loading,
     openRenew,
   }

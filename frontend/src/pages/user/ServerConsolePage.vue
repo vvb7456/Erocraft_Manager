@@ -75,6 +75,7 @@ async function onRenew() {
     serverId: server.value.id,
     serverName: server.value.name,
     planId: server.value.planId,
+    expirationDate: server.value.expirationDate,
   })
 }
 
@@ -579,6 +580,7 @@ onBeforeUnmount(() => {
     mode="convert"
     :target-server-id="server.id"
     :server-name="server.name"
+    :current-expiration-date="server.expirationDate"
   />
 
   <!-- Mobile: long-press terminal action sheet -->
