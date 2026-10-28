@@ -281,11 +281,6 @@ async def get_order_endpoint(
         order = await orders_service.get_order(db, user, order_id)
     except OrderError as exc:
         raise _http_for(exc) from exc
-    try:
-        await payments.sync_order(db, order.id)
-    except GatewayError as exc:
-        raise HTTPException(exc.status, str(exc)) from exc
-    await db.refresh(order)
     invoice = await orders_service.get_invoice_for_order(db, order.id)
     server_name = await _resolve_target_server_name(db, order.target_server_id)
     coupon_code = await _resolve_coupon_code(db, order.coupon_id)

@@ -52,12 +52,12 @@ class GatewayClient:
             try:
                 response = await client.request(method, self.url + path, content=raw, headers=headers)
             except httpx.RequestError as exc:
-                raise GatewayError("gateway_unreachable", "暂未取得支付网关响应，将继续同步原请求") from exc
+                raise GatewayError("gateway_unreachable", "支付服务暂时无法连接，请稍后重试") from exc
         if response.is_error:
             if response.headers.get("content-type", "").startswith("application/problem+json"):
                 problem = response.json()
                 raise GatewayError(problem["code"], problem["title"], response.status_code)
-            raise GatewayError("gateway_unreachable", "支付网关暂时无法连接，将继续同步原请求")
+            raise GatewayError("gateway_unreachable", "支付服务暂时无法连接，请稍后重试")
         return response.json() if response.status_code != 204 else None
 
     def verify(self, headers, method: str, path: str, raw: bytes) -> bool:

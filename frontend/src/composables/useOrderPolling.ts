@@ -5,8 +5,7 @@ import type { UserOrder } from '@/types/billing'
 export function useOrderPolling(orderId: Ref<number | string | null | undefined>) {
   const { get } = useApiFetch()
   const data = ref<UserOrder | null>(null)
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+  const error = ref(false)
   let timer: ReturnType<typeof setTimeout> | undefined
   let revision = 0
   let stopped = false
@@ -23,23 +22,31 @@ export function useOrderPolling(orderId: Ref<number | string | null | undefined>
     if (stopped || orderId.value == null) return
     clearTimeout(timer)
     const current = ++revision
-    loading.value = true
     try {
       const result = await get<UserOrder>(`/api/user/orders/${orderId.value}`, { silent: true })
       if (current !== revision || stopped) return
       data.value = result
-      error.value = null
-    } catch (failure) {
-      if (current === revision) error.value = String(failure)
+      error.value = false
+    } catch {
+      if (current === revision && !stopped) error.value = data.value === null
     } finally {
-      if (current === revision) { loading.value = false; schedule() }
+      if (current === revision) schedule()
     }
   }
 
+  function setOrder(order: UserOrder) {
+    revision++
+    data.value = order
+    error.value = false
+    schedule()
+  }
+
   function stop() { stopped = true; revision++; clearTimeout(timer) }
-  function visible() { if (document.visibilityState === 'visible') void refresh() }
-  watch(orderId, () => { revision++; data.value = null; void refresh() }, { immediate: true })
+  function visible() {
+    if (document.visibilityState === 'visible' && (!data.value || data.value.status === 'pending')) void refresh()
+  }
+  watch(orderId, () => { revision++; clearTimeout(timer); data.value = null; error.value = false; void refresh() }, { immediate: true })
   document.addEventListener('visibilitychange', visible)
   onBeforeUnmount(() => { stop(); document.removeEventListener('visibilitychange', visible) })
-  return { data, loading, error, refresh, stop }
+  return { data, error, refresh, setOrder }
 }

@@ -359,7 +359,7 @@ curl -fsS http://127.0.0.1:5001/api/version                  # health check
 
 网关通知地址为 `https://<Manager域名>/api/webhook/payment-gateway`，返回地址为 `https://<Manager域名>/#/pay`。登录后按返回的订单编号恢复原单。小程序登录使用独立的 `MINIPROGRAM_APPID`、`MINIPROGRAM_APP_SECRET`。
 
-结构变更集中在迁移 `20261022_payment_gateway`。生产切换前，先用旧版本停止产生付款链接并核对、收尾所有在途付款和退款，再执行迁移并发布。本版本仅保留旧支付宝通知接收入口；历史账目保留，旧退款人工处理。开发验证使用 `tests/test_payment_gateway_integration.py`；真实付款、退款及小程序拉起需单独联调。
+迁移 `20261022_payment_gateway` 从生产版本 `20260902_order_attr` 一次完成客服、通知、审计、小程序表结构与支付接入，并清理已停用的支付及其他旧配置。生产切换前，先用旧版本停止产生付款链接并核对、收尾所有在途付款和退款，再执行迁移并发布。旧支付宝通知验签资料会转入 `LEGACY_ALIPAY_*`；历史账目保留，旧退款人工处理。开发库沿用已执行的迁移终点，旧配置需单独清理。开发验证使用 `tests/test_payment_gateway_integration.py`；真实付款、退款及小程序拉起需单独联调。
 
 - 网页和付款小程序接口成功时直接返回业务数据；204 没有响应体。失败使用 `application/problem+json`，固定包含 `type`、`title`、`status`、`code`，按需提供错误详情、字段问题和业务结果。
 - 错误码集中在 `contracts/error-codes.json`。修改后运行 `python3 scripts/generate-contracts.py`；CI 使用 `--check` 检查生成物与中英文文案一致。

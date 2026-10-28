@@ -95,7 +95,6 @@
     "successTitle": "支付成功",
     "successCountdown": "{n} 秒后自动跳转到我的服务器",
     "incompleteTitle": "支付未完成",
-    "closedTitle": "订单已关闭",
     "queryFailed": "暂时无法确认付款结果",
     "retry": "重试",
     "summaryPlan": "套餐",

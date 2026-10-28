@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.db import get_db
-from app.api.deps.miniprogram import get_mini_session, get_mini_user, session_required, token_hash
+from app.api.deps.miniprogram import get_mini_session, get_mini_user, token_hash
 from app.api.deps.support import SupportUser
 from app.api.routers import support, user_servers
 from app.api.utils.wings_errors import translate_wings_error
@@ -45,7 +45,7 @@ def no_store(response: Response) -> None:
 router = APIRouter(prefix="/miniprogram", tags=["miniprogram"], dependencies=[Depends(no_store)])
 
 
-async def record(db: AsyncSession, action: str, key: str, user: PteroUser | None, error: ErrorInfo | None = None) -> OperationResult:
+async def record(db: AsyncSession, action: str, key: str, user: PteroUser | MiniUser | None, error: ErrorInfo | None = None) -> OperationResult:
     operation = OperationResult(
         action=action, phase="request" if error else "execution", outcome="failed" if error else "success",
         target={"user_id": user.id} if user else {}, error=error,
@@ -106,25 +106,21 @@ async def bind(payload: MiniBindInput, request: Request, session: MiniProgramSes
         operation = await record(db, "auth.wechat.bind", "wechat_binding", user, ErrorInfo(code="auth.invalid_credentials"))
         raise ApiError(422, "auth.invalid_credentials", operation=operation)
     assert user is not None
-    locked = await db.scalar(select(MiniProgramSession).where(MiniProgramSession.token_hash == session.token_hash).with_for_update())
-    if locked is None or locked.expires_at <= utc_naive_now():
-        raise session_required()
-    binding = MiniProgramBinding(appid=locked.appid, openid=locked.openid, user_id=user.id, created_at=utc_naive_now())
+    identity = MiniUser(id=user.id, username=user.username)
+    binding = MiniProgramBinding(appid=session.appid, openid=session.openid, user_id=user.id, created_at=utc_naive_now())
     db.add(binding)
     try:
         await db.flush()
-        token, authenticated = new_session(db, locked.appid, locked.openid, binding.id)
-        await db.delete(locked)
+        token, authenticated = new_session(db, session.appid, session.openid, binding.id)
+        await db.delete(session)
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        # Rollback expires ORM values; reload before writing the audit entry.
-        user = await user_repository.get_by_username_or_email(db, payload.username.strip())
-        operation = await record(db, "auth.wechat.bind", "wechat_binding", user, ErrorInfo(code="miniprogram.binding_conflict"))
+        operation = await record(db, "auth.wechat.bind", "wechat_binding", identity, ErrorInfo(code="miniprogram.binding_conflict"))
         raise ApiError(409, "miniprogram.binding_conflict", operation=operation) from exc
-    operation = await record(db, "auth.wechat.bind", "wechat_binding", user)
+    operation = await record(db, "auth.wechat.bind", "wechat_binding", identity)
     return MiniLoginOut(token=token, expires_at=to_iso_z(authenticated.expires_at),
-                        user=MiniUser(id=user.id, username=user.username), operation=operation)
+                        user=identity, operation=operation)
 
 
 @router.get("/me", response_model=MiniUser)

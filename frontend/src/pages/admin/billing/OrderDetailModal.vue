@@ -137,11 +137,6 @@ async function loadOrder() {
     }
     if (incData.status === 'fulfilled') incidents.value = incData.value
     else handleError(incData.reason)
-  } catch (error) {
-    if (request === loadRequest) {
-      loadFailed.value = true
-      orderMissing.value = error instanceof ApiError && error.status === 404
-    }
   } finally { if (request === loadRequest) detailLoading.value = false }
 }
 
@@ -345,7 +340,7 @@ async function queryRefund(refund: Refund) {
     <LoadingCenter v-if="detailLoading && !order" />
 
     <EmptyState
-      v-else-if="loadFailed"
+      v-else-if="loadFailed && (!order || orderMissing)"
       icon="error_outline"
       :title="orderMissing ? t('billing.orderDetail.notFound', { id: orderId }) : t('billing.orderDetail.loadFailed')"
     >

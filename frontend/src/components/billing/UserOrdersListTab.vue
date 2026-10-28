@@ -42,9 +42,11 @@ const detailOpen = computed({
     if (!value) void router.replace({ query: { ...route.query, order: undefined } })
   },
 })
+const detailSummary = computed(() => orders.value.find(order => order.id === detailOrderId.value) ?? null)
 
 const TERMINAL_STATES = new Set(['applied', 'closed', 'cancelled', 'refunded'])
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let loadRevision = 0
 
 const hasActiveOrders = computed(() =>
   orders.value.some((o) => !TERMINAL_STATES.has(o.status))
@@ -69,12 +71,20 @@ function stopPolling() {
 }
 
 async function loadOrders(silent = false) {
+  const revision = ++loadRevision
   const data = await get<UserOrder[]>('/api/user/orders', { silent }).finally(() => { initialLoading.value = false })
-  if (data) {
+  if (revision === loadRevision) {
     orders.value = data
     if (hasActiveOrders.value) startPolling()
     else stopPolling()
   }
+}
+
+function updateOrder(order: UserOrder) {
+  loadRevision++
+  orders.value = orders.value.map(row => row.id === order.id ? order : row)
+  if (hasActiveOrders.value) startPolling()
+  else stopPolling()
 }
 
 const statusOptions = computed(() => [
@@ -120,16 +130,8 @@ const filtered = computed(() => {
 })
 
 function statusBucket(status: string): string {
-  if (
-    status === 'pending' ||
-    status === 'processing' ||
-    status === 'apply_failed' ||
-    status === 'manual_review' ||
-    status === 'refunding'
-  ) return 'pending'
   if (status === 'closed' || status === 'cancelled') return 'closed'
-  if (status === 'refunded') return 'refunded'
-  if (status === 'applied') return 'applied'
+  if (status === 'refunding' || status === 'refunded') return 'refunded'
   return status
 }
 
@@ -171,6 +173,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  loadRevision++
   stopPolling()
 })
 </script>
@@ -280,7 +283,7 @@ onBeforeUnmount(() => {
     </template>
   </DataTable>
 
-  <UserOrderDetailModal v-model="detailOpen" :order-id="detailOrderId" @updated="loadOrders(true)" @contact="supportOpen = true" />
+  <UserOrderDetailModal v-model="detailOpen" :order-id="detailOrderId" :summary="detailSummary" @updated="updateOrder" @contact="supportOpen = true" />
   <SupportModal v-model="supportOpen" />
 </template>
 

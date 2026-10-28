@@ -95,7 +95,6 @@
     "successTitle": "Payment successful",
     "successCountdown": "Redirecting to your servers in {n}s",
     "incompleteTitle": "Payment not completed",
-    "closedTitle": "Order closed",
     "queryFailed": "Payment result is temporarily unavailable",
     "retry": "Retry",
     "summaryPlan": "Plan",

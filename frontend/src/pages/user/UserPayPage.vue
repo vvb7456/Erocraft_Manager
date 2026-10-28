@@ -10,6 +10,7 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
 import { useOrderPolling } from '@/composables/useOrderPolling'
 import { useToast } from '@/composables/useToast'
+import type { UserOrder } from '@/types/billing'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,9 +19,9 @@ const { get, post, del, handleError } = useApiFetch()
 const { confirm } = useConfirm()
 const { toast } = useToast()
 const orderId = ref<string | number | null>(route.params.id ? String(route.params.id) : null)
-const { data: order, error, refresh } = useOrderPolling(orderId)
+const { data: order, error, refresh, setOrder } = useOrderPolling(orderId)
 const resolveFailed = ref(false)
-const busy = ref(false)
+const busy = ref<'pay' | 'cancel' | null>(null)
 const supportOpen = ref(false)
 const countdown = ref(5)
 let redirectTimer: ReturnType<typeof setInterval> | undefined
@@ -31,7 +32,7 @@ const subtitle = computed(() => {
   if (error.value || resolveFailed.value) return t('billing.pay.queryFailed')
   if (!order.value) return t('billing.pay.statusLoading')
   if (paid.value) return t('billing.pay.successTitle')
-  return order.value.status === 'pending' ? t('billing.pay.incompleteTitle') : t('billing.pay.closedTitle')
+  return order.value.status === 'pending' ? t('billing.pay.incompleteTitle') : t(`billing.orders.status.${order.value.status}`)
 })
 
 watch(paid, success => {
@@ -52,12 +53,12 @@ function goToServers() {
 
 async function continuePayment() {
   if (!order.value || busy.value) return
-  busy.value = true
+  busy.value = 'pay'
   try {
     const payment = await post<{ checkout_url: string }>(`/api/user/orders/${order.value.id}/payments`, {})
     window.location.assign(payment.checkout_url)
   } catch (failure) { handleError(failure); await refresh() }
-  finally { busy.value = false }
+  finally { busy.value = null }
 }
 
 async function copyOrderNo() {
@@ -76,10 +77,10 @@ async function cancelOrder() {
     confirmText: t('billing.orderDetail.actions.cancelConfirmBtn'),
     variant: 'danger',
   })) return
-  busy.value = true
-  try { await del(`/api/user/orders/${order.value.id}`) }
-  catch (failure) { handleError(failure) }
-  finally { await refresh(); busy.value = false }
+  busy.value = 'cancel'
+  try { setOrder(await del<UserOrder>(`/api/user/orders/${order.value.id}`)) }
+  catch (failure) { handleError(failure); await refresh() }
+  finally { busy.value = null }
 }
 
 async function resolveOrder() {
@@ -133,9 +134,9 @@ onMounted(() => { if (orderId.value === null) void resolveOrder() })
 
       <div class="actions">
         <BaseButton v-if="paid" variant="primary" @click="goToServers">{{ t('billing.pay.btnGoServersNow') }}</BaseButton>
-        <BaseButton v-else-if="order?.status === 'pending'" variant="primary" :loading="busy" @click="continuePayment">{{ t('billing.orderDetail.actions.pay') }}</BaseButton>
-        <BaseButton v-else-if="order" variant="primary" @click="router.push('/plans')">{{ t('billing.pay.btnReorder') }}</BaseButton>
-        <BaseButton v-if="order?.status === 'pending'" variant="ghost" :disabled="busy" @click="cancelOrder">{{ t('billing.orderDetail.actions.cancel') }}</BaseButton>
+        <BaseButton v-else-if="order?.status === 'pending'" variant="primary" :loading="busy === 'pay'" :disabled="busy !== null" @click="continuePayment">{{ t('billing.orderDetail.actions.pay') }}</BaseButton>
+        <BaseButton v-else-if="order && ['closed', 'cancelled'].includes(order.status)" variant="primary" @click="router.push('/plans')">{{ t('billing.pay.btnReorder') }}</BaseButton>
+        <BaseButton v-if="order?.status === 'pending'" variant="ghost" :loading="busy === 'cancel'" :disabled="busy !== null" @click="cancelOrder">{{ t('billing.orderDetail.actions.cancel') }}</BaseButton>
         <BaseButton v-if="!paid" variant="ghost" @click="goToServers"><MsIcon name="home" size="sm" />{{ t('billing.pay.btnDashboard') }}</BaseButton>
       </div>
       <p class="support-hint">{{ t('billing.pay.supportHint') }} <a href="#" class="support-link" @click.prevent="supportOpen = true">{{ t('billing.pay.supportLink') }}</a></p>

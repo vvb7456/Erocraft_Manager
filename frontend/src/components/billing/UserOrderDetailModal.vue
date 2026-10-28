@@ -19,10 +19,10 @@ import type { UserOrder } from '@/types/billing'
 
 defineOptions({ name: 'UserOrderDetailModal' })
 
-const props = defineProps<{ modelValue: boolean; orderId: number | null }>()
+const props = defineProps<{ modelValue: boolean; orderId: number | null; summary: UserOrder | null }>()
 const emit = defineEmits<{
   'update:modelValue': [open: boolean]
-  updated: []
+  updated: [order: UserOrder]
   contact: []
 }>()
 
@@ -55,7 +55,7 @@ async function loadOrder() {
     const data = await get<UserOrder>(`/api/user/orders/${props.orderId}`)
     if (revision === loadRevision) order.value = data
   } catch {
-    if (revision === loadRevision) loadFailed.value = true
+    if (revision === loadRevision) loadFailed.value = order.value === null
   } finally {
     if (revision === loadRevision) loading.value = false
   }
@@ -68,6 +68,16 @@ watch([() => props.modelValue, () => props.orderId], () => {
   if (open.value) void loadOrder()
 }, { immediate: true })
 onBeforeUnmount(() => { loadRevision++ })
+watch(() => props.summary, summary => {
+  if (!summary || !order.value || summary.id !== order.value.id) return
+  const applied = order.value.status !== 'applied' && summary.status === 'applied'
+  loadRevision++
+  // 列表不查询服务器名称，保留详情中已经取得的名称。
+  order.value = { ...summary, target_server_name: order.value.target_server_name }
+  loading.value = false
+  loadFailed.value = false
+  if (applied) void loadOrder()
+})
 
 // ── Display helpers ──
 function fenToYuan(fen: number): string {
@@ -134,16 +144,15 @@ const showLinkedServer = computed(() => {
 })
 
 const canPay = computed(() => order.value?.status === 'pending')
-const canCancel = computed(() => order.value?.status === 'pending')
 
 // ── Actions ──
 async function goPay() {
-  if (!order.value || busy.value) return
+  if (!order.value || !canPay.value || busy.value) return
   paying.value = true
   try {
     const payment = await post<{ checkout_url: string }>(`/api/user/orders/${order.value.id}/payments`, {})
     window.location.assign(payment.checkout_url)
-  } catch (error) { handleError(error) }
+  } catch (error) { handleError(error); await loadOrder() }
   finally { paying.value = false }
 }
 
@@ -154,21 +163,24 @@ function goServer() {
 }
 
 async function doCancel() {
-  if (!order.value || !canCancel.value || busy.value) return
+  if (!order.value || !canPay.value || busy.value) return
   const id = order.value.id
+  const ok = await confirm({
+    title: t('billing.orderDetail.actions.cancelConfirmTitle'),
+    message: t('billing.orderDetail.actions.cancelConfirmMessage'),
+    confirmText: t('billing.orderDetail.actions.cancelConfirmBtn'),
+    variant: 'danger',
+  })
+  if (!ok) return
   cancelling.value = true
   try {
-    const ok = await confirm({
-      title: t('billing.orderDetail.actions.cancelConfirmTitle'),
-      message: t('billing.orderDetail.actions.cancelConfirmMessage'),
-      confirmText: t('billing.orderDetail.actions.cancelConfirmBtn'),
-      variant: 'danger',
-    })
-    if (!ok) return
-    await del<UserOrder>(`/api/user/orders/${id}`)
-    toast(t('billing.orderDetail.actions.cancelOk'), 'success')
-    emit('updated')
-  } finally { await loadOrder(); cancelling.value = false }
+    const result = await del<UserOrder>(`/api/user/orders/${id}`)
+    loadRevision++
+    order.value = result
+    if (result.status === 'cancelled') toast(t('billing.orderDetail.actions.cancelOk'), 'success')
+    emit('updated', result)
+  } catch (error) { handleError(error); await loadOrder() }
+  finally { cancelling.value = false }
 }
 
 function contactSupport() {
@@ -208,7 +220,7 @@ async function doDownloadPdf() {
 
 <template>
   <BaseModal v-model="open" :title="t('billing.orderDetail.pageTitle')" icon="receipt_long" size="lg" density="compact" :persistent="busy">
-    <LoadingCenter v-if="loading" />
+    <LoadingCenter v-if="loading && !order" />
 
     <EmptyState
       v-else-if="loadFailed || !order"
@@ -324,17 +336,17 @@ async function doDownloadPdf() {
       </BaseCard>
     </div>
 
-    <template v-if="order && !loading" #footer>
+    <template v-if="order" #footer>
       <BaseButton size="sm" @click="doDownloadPdf" :loading="downloading" :disabled="busy">
         <MsIcon name="download" size="xs" /> {{ t('billing.orderDetail.actions.downloadPdf') }}
       </BaseButton>
       <BaseButton size="sm" :disabled="busy" @click="doPrint">
         <MsIcon name="print" size="xs" /> {{ t('billing.orderDetail.actions.print') }}
       </BaseButton>
-      <BaseButton v-if="canPay" size="sm" variant="primary" :disabled="busy" @click="goPay">
+      <BaseButton v-if="canPay" size="sm" variant="primary" :loading="paying" :disabled="busy" @click="goPay">
         <MsIcon name="paid" size="xs" /> {{ t('billing.orderDetail.actions.pay') }}
       </BaseButton>
-      <BaseButton v-if="canCancel" size="sm" variant="danger" :loading="cancelling" :disabled="busy" @click="doCancel">
+      <BaseButton v-if="canPay" size="sm" variant="danger" :loading="cancelling" :disabled="busy" @click="doCancel">
         <MsIcon name="cancel" size="xs" /> {{ t('billing.orderDetail.actions.cancel') }}
       </BaseButton>
       <BaseButton size="sm" :disabled="busy" @click="contactSupport">

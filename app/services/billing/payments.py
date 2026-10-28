@@ -295,16 +295,9 @@ async def close_payment(db: AsyncSession, payment: BillingPayment, client: Gatew
     return True
 
 
-async def sync_order(db: AsyncSession, order_id: int) -> None:
-    rows = (await db.scalars(select(BillingPayment).where(BillingPayment.order_id == order_id))).all()
-    if not rows:
-        return
-    client = await GatewayClient.load(db)
-    for payment in rows:
-        await sync_payment(db, payment, client)
-
-
 async def receive_event(db: AsyncSession, event: dict, client: GatewayClient) -> None:
+    if await db.scalar(select(BillingPaymentEvent.id).where(BillingPaymentEvent.gateway_event_id == event["id"])):
+        return
     gateway_id = event["data"]["id"] if event["type"] == "payment.paid" else event["data"]["payment_id"]
     await db.commit()
     data = await client.request("GET", f"/api/v1/payments/{gateway_id}")

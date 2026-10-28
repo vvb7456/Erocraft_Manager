@@ -338,11 +338,6 @@ async def get_order_endpoint(
     )
     if order is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="订单不存在")
-    try:
-        await payments.sync_order(db, order_id)
-    except GatewayError as exc:
-        raise HTTPException(exc.status, str(exc)) from exc
-    await db.refresh(order)
 
     invoices = (
         await db.execute(
