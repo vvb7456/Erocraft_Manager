@@ -5,8 +5,6 @@ import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/app'
 import { useApiFetch } from '@/composables/useApiFetch'
-import { useConfirm } from '@/composables/useConfirm'
-import { useToast } from '@/composables/useToast'
 import { useFormatDate } from '@/composables/useFormatDate'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -22,15 +20,12 @@ defineOptions({ name: 'UserOrderDetailModal' })
 const props = defineProps<{ modelValue: boolean; orderId: number | null; summary: UserOrder | null }>()
 const emit = defineEmits<{
   'update:modelValue': [open: boolean]
-  updated: [order: UserOrder]
   contact: []
 }>()
 
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
-const { get, post, del, handleError } = useApiFetch()
-const { confirm } = useConfirm()
-const { toast } = useToast()
+const { get } = useApiFetch()
 const appStore = useAppStore()
 const { displayName } = storeToRefs(appStore)
 const { formatDate } = useFormatDate()
@@ -38,11 +33,8 @@ const { formatDate } = useFormatDate()
 const order = ref<UserOrder | null>(null)
 const loading = ref(true)
 const loadFailed = ref(false)
-const cancelling = ref(false)
-const paying = ref(false)
 const downloading = ref(false)
 const billCard = ref<InstanceType<typeof BaseCard> | null>(null)
-const busy = computed(() => cancelling.value || downloading.value || paying.value)
 const open = computed({ get: () => props.modelValue, set: value => emit('update:modelValue', value) })
 let loadRevision = 0
 
@@ -143,44 +135,11 @@ const showLinkedServer = computed(() => {
   return !!o && o.status === 'applied' && !!o.target_server_name
 })
 
-const canPay = computed(() => order.value?.status === 'pending')
-
 // ── Actions ──
-async function goPay() {
-  if (!order.value || !canPay.value || busy.value) return
-  paying.value = true
-  try {
-    const payment = await post<{ checkout_url: string }>(`/api/user/orders/${order.value.id}/payments`, {})
-    window.location.assign(payment.checkout_url)
-  } catch (error) { handleError(error); await loadOrder() }
-  finally { paying.value = false }
-}
-
 function goServer() {
   const o = order.value
   if (!o?.target_server_id) return
   router.push({ path: `/servers/${o.target_server_id}` })
-}
-
-async function doCancel() {
-  if (!order.value || !canPay.value || busy.value) return
-  const id = order.value.id
-  const ok = await confirm({
-    title: t('billing.orderDetail.actions.cancelConfirmTitle'),
-    message: t('billing.orderDetail.actions.cancelConfirmMessage'),
-    confirmText: t('billing.orderDetail.actions.cancelConfirmBtn'),
-    variant: 'danger',
-  })
-  if (!ok) return
-  cancelling.value = true
-  try {
-    const result = await del<UserOrder>(`/api/user/orders/${id}`)
-    loadRevision++
-    order.value = result
-    if (result.status === 'cancelled') toast(t('billing.orderDetail.actions.cancelOk'), 'success')
-    emit('updated', result)
-  } catch (error) { handleError(error); await loadOrder() }
-  finally { cancelling.value = false }
 }
 
 function contactSupport() {
@@ -194,7 +153,7 @@ function doPrint() {
 
 async function doDownloadPdf() {
   const card = billCard.value?.$el as HTMLElement | undefined
-  if (!order.value || busy.value || !card) return
+  if (!order.value || downloading.value || !card) return
   const orderNo = order.value.order_no
   downloading.value = true
   card.classList.add('bill-card--print-mode')
@@ -219,7 +178,7 @@ async function doDownloadPdf() {
 </script>
 
 <template>
-  <BaseModal v-model="open" :title="t('billing.orderDetail.pageTitle')" icon="receipt_long" size="lg" density="compact" :persistent="busy">
+  <BaseModal v-model="open" :title="t('billing.orderDetail.pageTitle')" icon="receipt_long" size="lg" density="compact" :persistent="downloading">
     <LoadingCenter v-if="loading && !order" />
 
     <EmptyState
@@ -337,19 +296,13 @@ async function doDownloadPdf() {
     </div>
 
     <template v-if="order" #footer>
-      <BaseButton size="sm" @click="doDownloadPdf" :loading="downloading" :disabled="busy">
+      <BaseButton size="sm" @click="doDownloadPdf" :loading="downloading" :disabled="downloading">
         <MsIcon name="download" size="xs" /> {{ t('billing.orderDetail.actions.downloadPdf') }}
       </BaseButton>
-      <BaseButton size="sm" :disabled="busy" @click="doPrint">
+      <BaseButton size="sm" :disabled="downloading" @click="doPrint">
         <MsIcon name="print" size="xs" /> {{ t('billing.orderDetail.actions.print') }}
       </BaseButton>
-      <BaseButton v-if="canPay" size="sm" variant="primary" :loading="paying" :disabled="busy" @click="goPay">
-        <MsIcon name="paid" size="xs" /> {{ t('billing.orderDetail.actions.pay') }}
-      </BaseButton>
-      <BaseButton v-if="canPay" size="sm" variant="danger" :loading="cancelling" :disabled="busy" @click="doCancel">
-        <MsIcon name="cancel" size="xs" /> {{ t('billing.orderDetail.actions.cancel') }}
-      </BaseButton>
-      <BaseButton size="sm" :disabled="busy" @click="contactSupport">
+      <BaseButton size="sm" :disabled="downloading" @click="contactSupport">
         <MsIcon name="support_agent" size="xs" /> {{ t('billing.orderDetail.actions.contactSupport') }}
       </BaseButton>
     </template>
