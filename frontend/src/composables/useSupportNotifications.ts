@@ -1,7 +1,7 @@
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useSupportStore } from '@/stores/support'
-import { createSupportSound, playSupportSoundOnce } from '@/utils/supportSound'
+import { createSupportSound } from '@/utils/supportSound'
 import { useApiFetch } from './useApiFetch'
 import { useSupportConnection, useSupportEvents } from './useSupportEvents'
 
@@ -32,9 +32,7 @@ export function useSupportNotifications() {
       retryDelay = 2000
       support.unread = data.unread
       const incoming = data.latest_incoming_id || 0
-      if (latestId !== null && incoming > latestId) {
-        void playSupportSoundOnce(identity.value, incoming, sound.play, () => alive && version === generation, () => support.soundEnabled)
-      }
+      if (latestId !== null && incoming > latestId && support.soundEnabled) sound.play()
       latestId = Math.max(latestId ?? 0, incoming)
     } catch {
       if (alive && version === generation) {
@@ -59,6 +57,6 @@ export function useSupportNotifications() {
   watch(() => support.soundEnabled, enabled => { if (!enabled) sound.reset() })
   useSupportConnection(identity, () => { void app.fetchSessionUser({ force: true }) })
   useSupportEvents(() => void refresh(), enabled)
-  onMounted(() => { sound.start(); void refresh() })
+  onMounted(() => { void refresh() })
   onBeforeUnmount(() => { alive = false; generation++; clearTimeout(retry); sound.dispose() })
 }

@@ -1,10 +1,8 @@
 """Unified notification configuration and current alerts."""
 
-import hashlib
 from app.core.api_errors import ApiError
 from app.core.contracts import ErrorInfo, OperationResult
 from app.core.operation import set_operation
-import json
 import re
 from datetime import timedelta
 from typing import Any, Literal
@@ -72,15 +70,13 @@ async def get_center(_: PteroUser = Depends(require_admin), db: AsyncSession = D
     values = await get_settings_store().get_many(db, defaults_for(SPECS))
     policy = (await load_policy(db)).model_dump()
     certificates = [{"id": c.id, "name": c.name, "days": c.alert_threshold_days} for c in (await db.scalars(select(ManagerCertificate).order_by(ManagerCertificate.id))).all()]
-    revision = hashlib.sha256(json.dumps([values, policy, certificates], sort_keys=True).encode()).hexdigest()
     admins = [{"value": u.id, "label": f"{u.username} · {u.email}"} for u in (await db.scalars(select(PteroUser).where(PteroUser.root_admin.is_(True)))).all()]
     hosts = [{"id": h.id, "name": h.name, "kind": h.kind} for h in (await db.scalars(select(ManagerHost).order_by(ManagerHost.id))).all()]
-    return {"settings": values, "policy": policy, "certificates": certificates, "revision": revision, "admins": admins, "hosts": hosts}
+    return {"settings": values, "policy": policy, "certificates": certificates, "admins": admins, "hosts": hosts}
 
 
 class CenterInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    revision: str
     settings: dict[str, Any] = Field(default_factory=dict)
     policy: NotificationPolicy | None = None
     certificates: dict[int, int] = Field(default_factory=dict)
@@ -90,9 +86,6 @@ class CenterInput(BaseModel):
 async def save_center(body: CenterInput, admin: PteroUser = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> dict:
     store = get_settings_store()
     store.clear()
-    current = await get_center(admin, db)
-    if body.revision != current["revision"]:
-        raise HTTPException(409, "设置已在其他页面修改，请重新加载")
     changes = {}
     for key, value in body.settings.items():
         if key not in SPECS or isinstance(value, (dict, list)) or (isinstance(value, str) and len(value) > 8000):
@@ -105,7 +98,7 @@ async def save_center(body: CenterInput, admin: PteroUser = Depends(require_admi
     values = await store.get_many(db, defaults_for(SPECS))
     values.update(changes)
     policy = body.policy or await load_policy(db)
-    admin_ids = {a["value"] for a in current["admins"]}
+    admin_ids = set(await db.scalars(select(PteroUser.id).where(PteroUser.root_admin.is_(True))))
     if any(not set(g.admin_ids) <= admin_ids for g in policy.groups):
         raise HTTPException(400, "接收组包含不存在的管理员")
     if values["WECOM_ENABLED"]:

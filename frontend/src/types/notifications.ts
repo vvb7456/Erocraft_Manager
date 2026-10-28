@@ -48,7 +48,6 @@ export interface NotificationRule {
 }
 
 export interface NotificationConfig {
-  revision: string
   settings: NotificationSettings
   policy: {
     groups: NotificationGroup[]

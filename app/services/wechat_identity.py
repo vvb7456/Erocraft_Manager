@@ -1,7 +1,5 @@
 """小程序登录的微信身份交换，与付款无关。"""
 
-import logging
-
 import httpx
 
 
@@ -11,20 +9,6 @@ class WechatLoginError(Exception):
 
 class WechatUnavailable(Exception):
     pass
-
-
-class _HideWechatQuery(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        # 微信登录接口将 AppSecret 和一次性 code 放在查询字符串中。
-        if isinstance(record.args, tuple):
-            record.args = tuple(
-                value.copy_with(query=None) if isinstance(value, httpx.URL) and value.host == "api.weixin.qq.com" else value
-                for value in record.args
-            )
-        return True
-
-
-logging.getLogger("httpx").addFilter(_HideWechatQuery())
 
 
 async def openid(appid: str, secret: str, code: str) -> str:

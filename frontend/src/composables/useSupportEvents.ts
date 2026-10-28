@@ -16,7 +16,7 @@ export function useSupportConnection(identity: MaybeRefOrGetter<string>, onExpir
     stop = watch(() => toValue(identity), value => {
       disconnect?.()
       status.value = 'connecting'
-      disconnect = value ? createSupportConnection(value, {
+      disconnect = value ? createSupportConnection({
         change: notify,
         status: value => { status.value = value },
         expired: onExpired,

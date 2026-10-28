@@ -13,6 +13,9 @@ _NOISY_LOGGERS: tuple[str, ...] = (
     "uvicorn.access",
     "apscheduler.executors.default",
     "apscheduler.scheduler",
+    # 微信接口将密钥放在 URL 查询参数中，不记录 HTTP 库的请求明细。
+    "httpx",
+    "httpcore",
 )
 
 

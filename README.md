@@ -32,10 +32,12 @@ This repository ships two independently deployable units:
 
 The Manager backend is two processes:
 
-- `manager-web`: FastAPI + Uvicorn, listens on `:5001`. REST API + console WebSocket.
+- `manager-web`：FastAPI + Uvicorn，监听 `:5001`，以 `--workers 1` 运行 REST、控制台 WebSocket 和客服 SSE。客服实时提醒使用本进程事件。
 - `manager-jobs`: APScheduler in its own process. Runs metrics pull, auto-suspend, auto-delete, certificate renewals, etc.
 
 Both share the same `app/` codebase and database, and run independently of each other.
+
+`manager-jobs` 只运行一个实例，APScheduler 同一任务最多执行一个实例，通知发送依赖这个部署约定。
 
 ### 1.2 External Dependencies
 
@@ -44,7 +46,7 @@ Both share the same `app/` codebase and database, and run independently of each 
 | Dependency | Used for |
 |---|---|
 | Wings | Container lifecycle, power, console, files (per node; Manager calls `:8443` HTTPS and console WS directly) |
-| MySQL / MariaDB | Sole datastore. Manager's own tables use the `manager_` prefix; the server / node records Wings needs live in the same database |
+| MySQL / MariaDB | 结构化业务数据；Manager 表使用 `manager_` 前缀，与 Wings 所用的面板表共库。客服图片存放在本地磁盘。 |
 | nginx | Public reverse proxy; also serves the SPA static files |
 | acme.sh | Certificate issuance / renewal, invoked by Manager via CLI |
 
@@ -96,6 +98,7 @@ alembic/            Database migrations
 frontend/           Vue 3 SPA
 docs/               Architecture & design docs (ARCHITECTURE_V3 is authoritative)
 templates/          Email template JSON
+storage/support/    客服图片运行时目录（独立于 release）
 manager.sh          Backend service control script
 .env.example        Environment template
 ```
@@ -141,11 +144,12 @@ Required `.env` fields:
 Start:
 
 ```bash
-bash manager.sh start          # starts web + jobs; runs `alembic upgrade head` first
-bash manager.sh status
+venv/bin/alembic -c alembic.ini upgrade head
+systemctl start erocraft-manager-web erocraft-manager-jobs
+systemctl status erocraft-manager-web erocraft-manager-jobs
 ```
 
-Artifacts: `erocraft_manager_web.pid`, `erocraft_manager_jobs.pid`. Logs in `logs/`.
+服务由 systemd 管理；部署时配置对应的 unit，日志可通过 `journalctl` 或生产的 `logs/` 目录查看。
 
 ### 2.3 Frontend
 
@@ -239,7 +243,7 @@ bash scripts/deploy/deploy-agent.sh <node-host>  # remote node
 
 ### 2.7 Database Migrations
 
-`manager.sh start` runs migrations automatically. Manual:
+迁移显式执行，服务启动时不自动迁移：
 
 ```bash
 venv/bin/alembic -c alembic.ini current
@@ -257,10 +261,24 @@ All Manager-owned tables use the `manager_` prefix; migrations operate only on t
 ### 3.1 Service Control
 
 ```bash
-bash manager.sh start | stop | restart | status            # web + jobs
+systemctl restart erocraft-manager-web erocraft-manager-jobs
+systemctl status erocraft-manager-web erocraft-manager-jobs
 ```
 
-Startup runs `alembic upgrade head` first; if migration fails, check `logs/manager-web.log`.
+数据库迁移显式执行：`venv/bin/alembic -c alembic.ini upgrade head`，服务启动时不自动迁移。
+
+Web 停服先正常退出，最多等待 3 秒，超时后强制结束进程并断开长连接。部署脚本安装 `scripts/deploy/manager-web-stop.conf`；手动部署时执行：
+
+```bash
+install -D -m 644 scripts/deploy/manager-web-stop.conf /etc/systemd/system/erocraft-manager-web.service.d/stop.conf
+systemctl daemon-reload
+```
+
+### 客服图片存储
+
+`SUPPORT_IMAGE_DIR` 默认 `/opt/erocraft_manager/storage/support`，应使用服务可写、独立于版本目录的专用绝对路径。数据库仅保存文件名和类型，读取仍经过会话权限检查。单张最多 4 MiB，保留 PNG、JPEG、WebP 原文件。
+
+`SUPPORT_IMAGE_MAX_MB` 默认 `1024`（1 GiB，最小 4 MiB），限制所有会话图片的合计大小。每次写入前按文件保存时间清理最旧图片，聊天文字保留，旧图显示图片不可用图标。需要保存图片备份时，单独备份此目录。
 
 ### 3.2 Logs
 
@@ -320,7 +338,8 @@ cd /opt/erocraft_manager
 git pull
 venv/bin/pip install -r requirements.txt
 cd frontend && npm ci && npx vite build && cd ..
-bash manager.sh restart                     # auto-migrates
+venv/bin/alembic -c alembic.ini upgrade head
+systemctl restart erocraft-manager-web erocraft-manager-jobs
 bash scripts/deploy/deploy-agent.sh                # only when agent/ changed
 ```
 
@@ -328,7 +347,7 @@ bash scripts/deploy/deploy-agent.sh                # only when agent/ changed
 
 | Symptom | Where to look |
 |---|---|
-| `manager.sh start` fails immediately | `logs/manager-web.log`; usually a missing `.env` field or migration failure |
+| Web 服务启动失败 | `journalctl -u erocraft-manager-web` 或 `logs/manager-web.log`，检查环境配置与已执行的迁移版本 |
 | User console fails to connect | Verify nginx forwards `Upgrade/Connection` headers; verify wings `:8443` reachability from Manager |
 | No monitoring data | Host detail → Settings → Probe; `systemctl status erocraft-agent`; verify token match |
 | Certificate not renewed | grep `cert` in `logs/manager-jobs.log`; manually run `${CERT_ACME_SH_BIN} --renew -d <domain> --force` |

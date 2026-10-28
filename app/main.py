@@ -50,7 +50,7 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     register_exception_handlers(app)
     app.include_router(api_router, prefix="/api")
-    install_contract_openapi(app, operation_headers=True)
+    install_contract_openapi(app)
     return app
 
 

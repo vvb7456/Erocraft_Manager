@@ -130,6 +130,9 @@ else
 fi
 
 # ---- 5. 原子切换 + 6. 重启 ----
+install -D -m 644 "$SCRIPT_DIR/manager-web-stop.conf" \
+  /etc/systemd/system/erocraft-manager-web.service.d/stop.conf
+systemctl daemon-reload
 atomic_switch "$ROOT/releases" "$TAG" "$ROOT/current"
 systemctl restart erocraft-manager-web erocraft-manager-jobs
 

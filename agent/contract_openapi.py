@@ -18,20 +18,7 @@ PROBLEM_RESPONSES: Dict[Union[int, str], Dict[str, Any]] = {
     )
 }
 
-OPERATION_HEADERS = {
-    f"X-Operation-{name}": {"description": description, "schema": schema}
-    for name, description, schema in (
-        ("Action", "动作标识", {"type": "string"}),
-        ("Phase", "结果阶段", {"type": "string", "enum": ["request", "execution", "observation", "acceptance"]}),
-        ("Outcome", "本阶段结果", {"type": "string", "enum": ["success", "failed"]}),
-        ("Target", "对象标识的 JSON 摘要，不含批量 ID 列表；按需提供", {"type": "string"}),
-        ("Succeeded", "实际成功数量；按需提供", {"type": "integer"}),
-        ("Failed", "实际失败数量；按需提供", {"type": "integer"}),
-    )
-}
-
-
-def install_contract_openapi(app: FastAPI, *, operation_headers: bool = False) -> None:
+def install_contract_openapi(app: FastAPI) -> None:
     def openapi() -> Dict[str, Any]:
         if app.openapi_schema is None:
             schema = get_openapi(title=app.title, version=app.version, description=app.description, routes=app.routes)
@@ -42,8 +29,6 @@ def install_contract_openapi(app: FastAPI, *, operation_headers: bool = False) -
                             content = response["content"]
                             if content.get("application/json", {}).get("schema", {}).get("$ref") == "#/components/schemas/ProblemDetails":
                                 content["application/problem+json"] = content.pop("application/json")
-                        if operation_headers:
-                            response.setdefault("headers", {}).update(OPERATION_HEADERS)
             app.openapi_schema = schema
         return app.openapi_schema
 

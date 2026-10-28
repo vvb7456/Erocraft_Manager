@@ -4,7 +4,6 @@ import json
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.mysql import MEDIUMBLOB
 
 # 保留开发库已执行的终点编号；生产从此处的父版本直接升级。
 revision = "20261022_payment_gateway"
@@ -45,7 +44,7 @@ def upgrade() -> None:
         sa.Column("client_id", sa.String(64), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("image_type", sa.String(32)),
-        sa.Column("image_data", MEDIUMBLOB()),
+        sa.Column("image_path", sa.String(64)),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.UniqueConstraint("conversation_id", "sender_id", "client_id", name="uq_support_message_retry"),
     )

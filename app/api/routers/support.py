@@ -1,17 +1,13 @@
-"""Account-scoped support chat; durable cursors also work across web workers."""
+"""按账号隔离的客服聊天，实时提醒由单个 Web 进程推送。"""
 
 from __future__ import annotations
 
 import asyncio
-import io
-import json
-import warnings
 from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import Response, StreamingResponse
-from PIL import Image, UnidentifiedImageError
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import case, func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -28,10 +24,17 @@ from app.core.time import to_iso_z, utc_naive_now
 from app.db.models.pterodactyl import PteroServer, PteroUser
 from app.db.models.support import SupportConversation, SupportMessage
 from app.db.repositories.servers import exclude_placeholders
-from app.db.session import get_session_factory
+from app.services import support_images
 
 router = APIRouter(prefix="/support", tags=["support"])
 _MAX_IMAGE = 4 * 1024 * 1024
+_listeners: set[tuple[int, bool, asyncio.Event]] = set()
+
+
+def notify_change(user_id: int) -> None:
+    for uid, admin, event in _listeners:
+        if admin or uid == user_id:
+            event.set()
 
 
 class MessageInput(BaseModel):
@@ -88,6 +91,7 @@ async def my_conversation(user: SupportUser = Depends(get_support_user), db: Asy
                 row.last_message_id = message.id
                 row.updated_at = message.created_at
             await db.commit()
+            notify_change(uid)
         except IntegrityError:
             await db.rollback()
             row = await db.scalar(select(SupportConversation).where(SupportConversation.user_id == uid))
@@ -184,22 +188,6 @@ async def messages(
             "user_read_id": row.user_read_id, "admin_read_id": row.admin_read_id}
 
 
-def normalize_image(data: bytes) -> tuple[bytes, str]:
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(io.BytesIO(data)) as image:
-                if image.format not in {"PNG", "JPEG", "WEBP"} or image.width * image.height > 16_000_000:
-                    raise ValueError()
-                image.load()
-                image.thumbnail((2400, 2400))
-                output = io.BytesIO()
-                image.convert("RGB").save(output, format="JPEG", quality=88)
-                return output.getvalue(), "image/jpeg"
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
-        raise HTTPException(400, "请上传有效的 PNG、JPEG 或 WebP 截图（不超过1600万像素）") from exc
-
-
 @router.post("/conversations/{cid}/messages")
 async def send_message(cid: int, request: Request, user: SupportUser = Depends(get_support_user), db: AsyncSession = Depends(get_db)) -> dict:
     await conversation(db, cid, user)
@@ -215,7 +203,8 @@ async def send_message(cid: int, request: Request, user: SupportUser = Depends(g
                     data = await upload.read(_MAX_IMAGE + 1)
                     if len(data) > _MAX_IMAGE:
                         raise HTTPException(413, "截图不能超过4MB")
-                    image_data, image_type = await run_in_threadpool(normalize_image, data)
+                    image_type = support_images.image_type(data)
+                    image_data = data
         else:
             if len(await request.body()) > 20_000:
                 raise HTTPException(413, "消息过长")
@@ -238,9 +227,10 @@ async def send_message(cid: int, request: Request, user: SupportUser = Depends(g
     ))
     if count and count >= 30:
         raise HTTPException(429, "发送过于频繁，请稍后重试")
+    image_path = await run_in_threadpool(support_images.save_image, image_data, image_type) if image_data and image_type else None
     message = SupportMessage(
         conversation_id=cid, sender_id=user.id, is_admin=bool(user.root_admin),
-        client_id=payload.client_id, content=content, image_data=image_data, image_type=image_type,
+        client_id=payload.client_id, content=content, image_path=image_path, image_type=image_type,
     )
     db.add(message)
     await db.flush()
@@ -251,6 +241,7 @@ async def send_message(cid: int, request: Request, user: SupportUser = Depends(g
 
         await support_message(db, conversation_id=cid, message_id=message.id, username=user.username)
     await db.commit()
+    notify_change(row.user_id)
     return message_out(message)
 
 
@@ -259,19 +250,24 @@ async def mark_read(cid: int, payload: ReadInput, user: SupportUser = Depends(ge
     row = await conversation(db, cid, user)
     cursor = min(payload.message_id, row.last_message_id)
     column = SupportConversation.admin_read_id if user.root_admin else SupportConversation.user_read_id
+    changed = cursor > (row.admin_read_id if user.root_admin else row.user_read_id)
     await db.execute(update(SupportConversation).where(SupportConversation.id == cid, column < cursor).values({column.key: cursor}))
     await db.commit()
+    if changed:
+        notify_change(row.user_id)
     return {"ok": True}
 
 
 @router.get("/messages/{mid}/image")
-async def image(mid: int, user: SupportUser = Depends(get_support_user), db: AsyncSession = Depends(get_db)) -> Response:
+async def image(mid: int, user: SupportUser = Depends(get_support_user), db: AsyncSession = Depends(get_db)) -> FileResponse:
     message = await db.get(SupportMessage, mid)
-    if message is None or not message.image_type:
+    if message is None or not message.image_path:
         raise HTTPException(404, "截图不存在")
     await conversation(db, message.conversation_id, user)
-    data = await db.scalar(select(SupportMessage.image_data).where(SupportMessage.id == mid))
-    return Response(data, media_type=message.image_type, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+    path = support_images.image_path(message.image_path)
+    if not path.is_file():
+        raise HTTPException(410, "截图已清理")
+    return FileResponse(path, media_type=message.image_type, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/events")
@@ -280,26 +276,23 @@ async def events(request: Request, user: SupportUser = Depends(get_support_user)
     await db.commit()
 
     async def stream():
-        previous = None
-        yield "retry: 2000\n\n"
-        # Periodically reauthenticate the session cookie without reconnecting every minute.
-        for _ in range(300):
-            if await request.is_disconnected():
-                return
-            async with get_session_factory()() as db:
-                current = await db.get(PteroUser, uid)
-                if current is None or bool(current.root_admin) != admin:
-                    yield "event: expired\ndata: {}\n\n"
+        changed = asyncio.Event()
+        listener = (uid, admin, changed)
+        _listeners.add(listener)
+        try:
+            yield "retry: 2000\n\nevent: change\ndata: {}\n\n"
+            # 每十分钟重连，经正常请求认证重新核对登录身份。
+            until = asyncio.get_running_loop().time() + 600
+            while asyncio.get_running_loop().time() < until:
+                if await request.is_disconnected():
                     return
-                stmt = select(func.sum(SupportConversation.last_message_id), func.sum(SupportConversation.user_read_id), func.sum(SupportConversation.admin_read_id))
-                if not admin:
-                    stmt = stmt.where(SupportConversation.user_id == uid)
-                signature = tuple(str(x or 0) for x in (await db.execute(stmt)).one())
-            if signature != previous:
-                yield f"event: change\ndata: {json.dumps(signature)}\n\n"
-                previous = signature
-            else:
-                yield "event: heartbeat\ndata: {}\n\n"
-            await asyncio.sleep(2)
+                try:
+                    await asyncio.wait_for(changed.wait(), timeout=15)
+                    changed.clear()
+                    yield "event: change\ndata: {}\n\n"
+                except TimeoutError:
+                    yield "event: heartbeat\ndata: {}\n\n"
+        finally:
+            _listeners.discard(listener)
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

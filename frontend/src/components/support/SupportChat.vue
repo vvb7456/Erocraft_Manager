@@ -28,6 +28,7 @@ const content = computed({ get: () => draft.value.text, set: value => { draft.va
 const imagePreview = ref('')
 const imageOpen = ref(false)
 const selectedImage = ref('')
+const failedImages = ref(new Set<string>())
 const loading = ref(false)
 const failed = ref(false)
 const sendFailed = ref(false)
@@ -269,7 +270,10 @@ onBeforeUnmount(() => {
               <span v-if="message.groupStart && !mine(message)" class="sender"><span class="sender-name" :title="message.is_admin ? t('support.agent') : customerName">{{ message.is_admin ? t('support.agent') : (customerName || t('support.customer')) }}</span><span v-if="message.automated" class="automated">{{ t('support.automated') }}</span></span>
               <div class="bubble" :class="{ 'image-only': !message.content && message.image_url }">
                 <MessageText v-if="message.content" class="message-copy" :text="message.content" @navigate="emit('navigate')" />
-                <button v-if="message.image_url" type="button" class="message-image" :aria-label="t('support.viewImage')" @click="showImage(message.image_url)"><img :src="message.image_url" :alt="t('support.image')" @load="onImageLoad" /></button>
+                <template v-if="message.image_url">
+                  <span v-if="failedImages.has(message.image_url)" class="message-image image-unavailable" role="img" :aria-label="t('support.image')"><MsIcon name="image_not_supported" size="lg" /></span>
+                  <button v-else type="button" class="message-image" :aria-label="t('support.viewImage')" @click="showImage(message.image_url)"><img :src="message.image_url" :alt="t('support.image')" @load="onImageLoad" @error="failedImages.add(message.image_url)" /></button>
+                </template>
               </div>
               <div v-if="message.groupEnd" class="message-meta"><time :datetime="message.created_at" :title="message.fullTime">{{ message.time }}</time><span v-if="mine(message) && !message.automated" class="receipt" :class="{ read: message.id <= otherRead }"><MsIcon :name="message.id <= otherRead ? 'done_all' : 'check'" size="xs" />{{ message.id <= otherRead ? t('support.read') : t('support.sent') }}</span><span v-if="mine(message) && message.automated">{{ t('support.automated') }}</span></div>
             </div>
@@ -291,7 +295,10 @@ onBeforeUnmount(() => {
       </div>
       <p v-if="sendFailed" class="send-error" role="alert">{{ t('support.sendFailed') }}</p>
     </form>
-    <BaseModal v-model="imageOpen" :title="t('support.image')" size="lg"><img class="image-lightbox" :src="selectedImage" :alt="t('support.image')" /></BaseModal>
+    <BaseModal v-model="imageOpen" :title="t('support.image')" size="lg">
+      <span v-if="failedImages.has(selectedImage)" class="image-unavailable" role="img" :aria-label="t('support.image')"><MsIcon name="image_not_supported" size="lg" /></span>
+      <img v-else class="image-lightbox" :src="selectedImage" :alt="t('support.image')" @error="failedImages.add(selectedImage)" />
+    </BaseModal>
   </section>
 </template>
 
@@ -326,6 +333,7 @@ onBeforeUnmount(() => {
 .message-image { display: block; max-width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; border-radius: 10px; overflow: hidden; }
 .message-image img { display: block; max-width: 100%; max-height: 240px; min-height: 40px; object-fit: contain; }
 .message-copy + .message-image { margin-top: var(--sp-3); }
+.image-unavailable { display: grid; place-items: center; width: 64px; height: 48px; margin-inline: auto; cursor: default; opacity: .6; }
 .image-only { padding: 4px; }
 .new-messages { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; white-space: nowrap; border: 1px solid var(--bd); border-radius: 24px; background: var(--bg2); color: var(--ac); font: inherit; font-size: var(--text-xs); box-shadow: 0 4px 20px #0002; cursor: pointer; }
 .retry { display: flex; justify-content: center; padding: 4px 12px; }

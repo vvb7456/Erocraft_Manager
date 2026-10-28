@@ -1,4 +1,4 @@
-"""Transactional enqueue, per-recipient retries and cross-process dispatch exclusion."""
+"""通知入队及单个后台任务进程中的逐条发送与重试。"""
 
 import hashlib
 import logging
@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
-from sqlalchemy import case, func, select, text
+from sqlalchemy import case, func, select
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +14,7 @@ from app.core.runtime_settings import NOTIFICATION_SPECS, SETTINGS_SPECS, defaul
 from app.core.settings_store import get_settings_store
 from app.core.time import utc_naive_now
 from app.db.models.notifications import NotificationDelivery
-from app.db.session import get_engine
+from app.db.session import get_session_factory
 from app.services.notifications import wecom
 from app.services.notifications.templates import delivery_content
 from app.services.notifications.policy import load_policy
@@ -251,7 +251,7 @@ async def _dispatch(db: AsyncSession, row_id: int) -> None:
     row.status = "sending"
     row.attempts += 1
     row.last_attempt_at = now
-    # A killed worker leaves a recoverable lease; the advisory lock excludes live peers.
+    # 进程中断后，等待本次发送超时再按原内容重试。
     row.available_at = now + timedelta(minutes=2)
     await db.commit()
     try:
@@ -285,31 +285,20 @@ async def _dispatch(db: AsyncSession, row_id: int) -> None:
 
 
 async def run_notifications() -> None:
-    # GET_LOCK is connection-scoped: pin the connection across commits and HTTP calls.
-    async with get_engine().connect() as connection:
-        lock_name = "manager_notifications_dispatch"
-        acquired = await connection.scalar(text("SELECT GET_LOCK(:name, 0)"), {"name": lock_name})
-        await connection.commit()
-        if acquired != 1:
-            return
-        try:
-            async with AsyncSession(bind=connection, expire_on_commit=False, autoflush=False) as db:
-                ids = list((await db.scalars(select(NotificationDelivery.id).where(
-                    NotificationDelivery.status.in_(("pending", "sending")),
-                    NotificationDelivery.available_at <= utc_naive_now(),
-                ).order_by(case((NotificationDelivery.severity == "critical", 0), (NotificationDelivery.severity == "warning", 1), else_=2), NotificationDelivery.id).limit(30))).all())
-                await db.commit()
-                for row_id in ids:
-                    try:
-                        await _dispatch(db, row_id)
-                    except Exception as exc:
-                        await db.rollback()
-                        logger.error("notification dispatch failed id=%s error_type=%s", row_id, type(exc).__name__)
-                        failed = await db.get(NotificationDelivery, row_id)
-                        if failed is not None and failed.status in {"pending", "sending"}:
-                            failed.status, failed.last_error = "failed", f"发送处理异常（{type(exc).__name__}）"
-                            await db.commit()
-                    db.expunge_all()
-        finally:
-            await connection.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
-            await connection.commit()
+    async with get_session_factory()() as db:
+        ids = list((await db.scalars(select(NotificationDelivery.id).where(
+            NotificationDelivery.status.in_(("pending", "sending")),
+            NotificationDelivery.available_at <= utc_naive_now(),
+        ).order_by(case((NotificationDelivery.severity == "critical", 0), (NotificationDelivery.severity == "warning", 1), else_=2), NotificationDelivery.id).limit(30))).all())
+        await db.commit()
+        for row_id in ids:
+            try:
+                await _dispatch(db, row_id)
+            except Exception as exc:
+                await db.rollback()
+                logger.error("notification dispatch failed id=%s error_type=%s", row_id, type(exc).__name__)
+                failed = await db.get(NotificationDelivery, row_id)
+                if failed is not None and failed.status in {"pending", "sending"}:
+                    failed.status, failed.last_error = "failed", f"发送处理异常（{type(exc).__name__}）"
+                    await db.commit()
+            db.expunge_all()

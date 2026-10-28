@@ -33,4 +33,3 @@ pydantic>=2.10.0
 PyYAML>=6.0
 psutil>=6.0.0
 websockets>=14.0
-Pillow>=11.3.0

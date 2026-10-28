@@ -3,7 +3,6 @@
 from datetime import datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
-from sqlalchemy.dialects.mysql import MEDIUMBLOB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.time import utc_naive_now
@@ -35,5 +34,5 @@ class SupportMessage(Base):
     client_id: Mapped[str] = mapped_column(String(64), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     image_type: Mapped[str | None] = mapped_column(String(32))
-    image_data: Mapped[bytes | None] = mapped_column(MEDIUMBLOB, deferred=True)
+    image_path: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_naive_now, nullable=False)

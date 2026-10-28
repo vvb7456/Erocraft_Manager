@@ -45,7 +45,7 @@ export function useNotificationConfig(group?: DirtyFormGroup) {
       const settings = Object.fromEntries(Object.entries(submitted.settings).filter(([key, value]) => !sameFormValue(value, before.settings[key as keyof typeof before.settings])))
       const certificates = Object.fromEntries(submitted.certificates.filter(cert => cert.days !== before.certificates.find(old => old.id === cert.id)?.days).map(cert => [cert.id, cert.days]))
       const result = await put<NotificationConfig>('/api/admin/notifications/center', {
-        revision: data.value.revision, settings, certificates,
+        settings, certificates,
         policy: sameFormValue(submitted.policy, before.policy) ? null : submitted.policy,
       })
       if (!result || !alive) return false

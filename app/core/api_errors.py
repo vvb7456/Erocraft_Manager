@@ -13,7 +13,7 @@ from app.core.error_codes import ERROR_TITLES, ErrorCode
 
 HTTP_ERROR_CODES: dict[int, ErrorCode] = {
     400: "request.invalid", 401: "auth.invalid_token", 403: "auth.forbidden",
-    404: "resource.not_found", 405: "request.method_not_allowed", 409: "resource.conflict",
+    404: "resource.not_found", 405: "request.method_not_allowed", 409: "resource.conflict", 410: "resource.not_found",
     413: "request.too_large", 415: "request.unsupported_media_type", 422: "request.validation_failed",
     429: "request.rate_limited", 500: "system.internal_error", 501: "system.unsupported",
     502: "dependency.failed", 503: "system.unavailable", 504: "dependency.timeout",
@@ -55,12 +55,6 @@ def problem_response(
         if request_context is not None:
             request_context.result = operation
     response_headers = dict(headers or {})
-    if operation is not None:
-        response_headers.update({
-            "X-Operation-Action": operation.action,
-            "X-Operation-Phase": operation.phase,
-            "X-Operation-Outcome": operation.outcome,
-        })
     if status == 401:
         response_headers.setdefault("WWW-Authenticate", 'Session realm="manager"')
     return JSONResponse(body, status_code=status, headers=response_headers, media_type="application/problem+json")

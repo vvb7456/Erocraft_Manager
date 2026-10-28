@@ -3,20 +3,11 @@
 import asyncio
 import hashlib
 import html
-import logging
 import re
 import time
 from typing import Any
 
 import httpx
-
-
-class _HideCredentials(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        return "qyapi.weixin.qq.com" not in record.getMessage()
-
-
-logging.getLogger("httpx").addFilter(_HideCredentials())
 
 
 class DeliveryError(Exception):

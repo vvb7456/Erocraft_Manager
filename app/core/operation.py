@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass
-import json
-
-from starlette.datastructures import MutableHeaders
-from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.core.contracts import ErrorInfo, OperationResult
 
@@ -60,26 +57,7 @@ class OperationMiddleware:
         scope.setdefault("state", {})["operation"] = context
         token = _current.set(context)
 
-        async def send_response(message: Message) -> None:
-            if message["type"] == "http.response.start":
-                request_result = context.request_result(message["status"])
-                scope["state"]["request_result"] = request_result
-                result = context.result or request_result
-                scope["state"]["operation_result"] = result
-                headers = MutableHeaders(scope=message)
-                headers["X-Operation-Action"] = result.action
-                headers["X-Operation-Phase"] = result.phase
-                headers["X-Operation-Outcome"] = result.outcome
-                targets = {key: value for key, value in result.target.items() if not isinstance(value, list)}
-                if targets:
-                    headers["X-Operation-Target"] = json.dumps(targets, separators=(",", ":"))
-                if result.succeeded is not None:
-                    headers["X-Operation-Succeeded"] = str(result.succeeded)
-                if result.failed is not None:
-                    headers["X-Operation-Failed"] = str(result.failed)
-            await send(message)
-
         try:
-            await self.app(scope, receive, send_response)
+            await self.app(scope, receive, send)
         finally:
             _current.reset(token)

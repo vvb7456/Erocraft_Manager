@@ -65,6 +65,8 @@ class Settings:
     panel_app_key: str
     cert_acme_sh_home: str
     cert_acme_sh_bin: str
+    support_image_dir: str
+    support_image_max_mb: int
 
     @property
     def sync_database_url(self) -> str:
@@ -137,6 +139,8 @@ def _build_settings() -> Settings:
         panel_app_key=_env_first("PANEL_APP_KEY", "APP_KEY"),
         cert_acme_sh_home=_required_env("CERT_ACME_SH_HOME"),
         cert_acme_sh_bin=_required_env("CERT_ACME_SH_BIN"),
+        support_image_dir=os.getenv("SUPPORT_IMAGE_DIR", "/opt/erocraft_manager/storage/support"),
+        support_image_max_mb=max(4, _as_int(os.getenv("SUPPORT_IMAGE_MAX_MB"), 1024)),
     )
 
 

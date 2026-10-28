@@ -55,7 +55,9 @@ async def run_order_query() -> None:
     async with factory() as db:
         ids = (await db.scalars(select(BillingPayment.id).where(or_(
             BillingPayment.status.in_(("pending", "review")),
-            BillingPayment.created_at >= utc_naive_now() - timedelta(days=1),
+            (BillingPayment.status == "paid")
+            & (BillingPayment.created_at >= utc_naive_now() - timedelta(days=1))
+            & or_(BillingPayment.synced_at.is_(None), BillingPayment.synced_at <= utc_naive_now() - timedelta(hours=1)),
         )).order_by(BillingPayment.synced_at).limit(100))).all()
     for payment_id in ids:
         async with factory() as db:

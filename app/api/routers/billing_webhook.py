@@ -50,7 +50,9 @@ async def legacy_alipay_notify(request: Request, db: AsyncSession = Depends(get_
             raise ValueError("通知不属于本应用")
     except (KeyError, ValueError, InvalidSignature) as exc:
         raise HTTPException(401, "支付宝通知签名或应用身份无效") from exc
-    invoice = (await db.scalars(select(BillingInvoice).where(BillingInvoice.invoice_no == form["out_trade_no"]))).one()
+    invoice = await db.scalar(select(BillingInvoice).where(BillingInvoice.invoice_no == form["out_trade_no"]))
+    if invoice is None:
+        raise HTTPException(404, "旧账单不存在")
     if form["trade_status"] in ("TRADE_SUCCESS", "TRADE_FINISHED") and not form.get("refund_fee"):
         paid_at = form.get("gmt_payment")
         await payments.record_legacy_payment(db, invoice, transaction_id=form["trade_no"],

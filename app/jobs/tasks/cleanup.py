@@ -59,7 +59,7 @@ async def run_token_cleanup() -> None:
                 res_pwd.rowcount,
                 res_eml.rowcount,
             )
-            await db.execute(delete(MiniProgramSession).where(MiniProgramSession.expires_at < cutoff))
+            await db.execute(delete(MiniProgramSession).where(MiniProgramSession.expires_at < utc_naive_now()))
             await db.execute(delete(NotificationDelivery).where(
                 NotificationDelivery.created_at < utc_naive_now() - timedelta(days=90),
                 NotificationDelivery.status.in_(("sent", "skipped", "failed")),
