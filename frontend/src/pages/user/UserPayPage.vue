@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
+import Spinner from '@/components/ui/Spinner.vue'
 import SupportModal from '@/components/billing/SupportModal.vue'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useConfirm } from '@/composables/useConfirm'
@@ -26,12 +27,11 @@ const supportOpen = ref(false)
 const countdown = ref(5)
 let redirectTimer: ReturnType<typeof setInterval> | undefined
 
-const paid = computed(() => order.value?.invoice?.status === 'paid'
-  && !['closed', 'cancelled', 'refunding', 'refunded', 'manual_review'].includes(order.value.status))
+const applied = computed(() => order.value?.status === 'applied')
 const subtitle = computed(() => {
   if (error.value || resolveFailed.value) return t('billing.pay.queryFailed')
   if (!order.value) return t('billing.pay.statusLoading')
-  if (paid.value) return t('billing.pay.successTitle')
+  if (applied.value) return t('billing.pay.successTitle')
   return order.value.status === 'pending' ? t('billing.pay.incompleteTitle') : t(`billing.orders.status.${order.value.status}`)
 })
 const reorderTarget = computed(() => {
@@ -39,7 +39,7 @@ const reorderTarget = computed(() => {
   return order.value?.target_server_id ? `/servers/${order.value.target_server_id}/console` : '/servers'
 })
 
-watch(paid, success => {
+watch(applied, success => {
   clearInterval(redirectTimer)
   if (!success) return
   countdown.value = 5
@@ -106,9 +106,10 @@ onMounted(() => { if (orderId.value === null) void resolveOrder() })
 <template>
   <AuthShell icon="receipt_long" :subtitle="subtitle">
     <div class="pay-content">
-      <div class="pay-status" :class="{ 'pay-status--success': paid }">
-        <MsIcon v-if="order || error || resolveFailed" :name="paid ? 'check_circle' : 'error_outline'" size="lg" />
-        <p v-if="paid" class="status-sub">{{ t('billing.pay.successCountdown', { n: countdown }) }}</p>
+      <div class="pay-status" :class="{ 'pay-status--success': applied }">
+        <Spinner v-if="order?.status === 'processing'" />
+        <MsIcon v-else-if="order || error || resolveFailed" :name="applied ? 'check_circle' : 'error_outline'" size="lg" />
+        <p v-if="applied" class="status-sub">{{ t('billing.pay.successCountdown', { n: countdown }) }}</p>
         <BaseButton v-if="error || resolveFailed" size="sm" variant="ghost" @click="resolveOrder">{{ t('billing.pay.retry') }}</BaseButton>
       </div>
 
@@ -137,11 +138,11 @@ onMounted(() => { if (orderId.value === null) void resolveOrder() })
       </template>
 
       <div class="actions">
-        <BaseButton v-if="paid" variant="primary" @click="goToServers">{{ t('billing.pay.btnGoServersNow') }}</BaseButton>
+        <BaseButton v-if="applied" variant="primary" @click="goToServers">{{ t('billing.pay.btnGoServersNow') }}</BaseButton>
         <BaseButton v-else-if="order?.status === 'pending'" variant="primary" :loading="busy === 'pay'" :disabled="busy !== null" @click="continuePayment">{{ t('billing.orderDetail.actions.pay') }}</BaseButton>
         <BaseButton v-else-if="order && ['closed', 'cancelled'].includes(order.status)" variant="primary" @click="router.push(reorderTarget)">{{ t('billing.pay.btnReorder') }}</BaseButton>
         <BaseButton v-if="order?.status === 'pending'" variant="ghost" :loading="busy === 'cancel'" :disabled="busy !== null" @click="cancelOrder">{{ t('billing.orderDetail.actions.cancel') }}</BaseButton>
-        <BaseButton v-if="!paid" variant="ghost" @click="goToServers"><MsIcon name="home" size="sm" />{{ t('billing.pay.btnDashboard') }}</BaseButton>
+        <BaseButton v-if="!applied" variant="ghost" @click="goToServers"><MsIcon name="home" size="sm" />{{ t('billing.pay.btnDashboard') }}</BaseButton>
       </div>
       <p class="support-hint">{{ t('billing.pay.supportHint') }} <a href="#" class="support-link" @click.prevent="supportOpen = true">{{ t('billing.pay.supportLink') }}</a></p>
     </div>

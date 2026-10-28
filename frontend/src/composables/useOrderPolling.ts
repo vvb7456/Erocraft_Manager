@@ -14,7 +14,7 @@ export function useOrderPolling(orderId: Ref<number | string | null | undefined>
     clearTimeout(timer)
     if (stopped || orderId.value == null) return
     const order = data.value
-    const active = !order || order.status === 'pending'
+    const active = !order || ['pending', 'processing'].includes(order.status)
     if (active) timer = setTimeout(() => refresh(), document.visibilityState === 'hidden' ? 10000 : 3000)
   }
 
@@ -43,7 +43,7 @@ export function useOrderPolling(orderId: Ref<number | string | null | undefined>
 
   function stop() { stopped = true; revision++; clearTimeout(timer) }
   function visible() {
-    if (document.visibilityState === 'visible' && (!data.value || data.value.status === 'pending')) void refresh()
+    if (document.visibilityState === 'visible' && (!data.value || ['pending', 'processing'].includes(data.value.status))) void refresh()
   }
   watch(orderId, () => { revision++; clearTimeout(timer); data.value = null; error.value = false; void refresh() }, { immediate: true })
   document.addEventListener('visibilitychange', visible)

@@ -484,7 +484,7 @@ function onTabChange(next: string) {
                   {{ t('settings.payment.payTimeout') }}
                   <HelpTip :text="t('settings.payment.payTimeout_tip')" />
                 </template>
-                <NumberInput :modelValue="getBillingNum('BILLING_ORDER_PAY_TIMEOUT_MIN', 5)" @update:modelValue="setBillingNum('BILLING_ORDER_PAY_TIMEOUT_MIN', $event)" :min="3" :max="5" />
+                <NumberInput :modelValue="getBillingNum('BILLING_ORDER_PAY_TIMEOUT_MIN', 5)" @update:modelValue="setBillingNum('BILLING_ORDER_PAY_TIMEOUT_MIN', $event)" :min="3" :max="1440" />
               </FormField>
             </BaseCard>
           </template>

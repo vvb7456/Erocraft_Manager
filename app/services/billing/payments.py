@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import json
+import logging
 import uuid
 from typing import cast
 
@@ -15,6 +16,8 @@ from app.db.models.billing import (
 )
 from app.services.billing._ids import gen_refund_no
 from app.services.billing.gateway_client import GatewayClient, GatewayError
+
+logger = logging.getLogger(__name__)
 
 ACTIVE_REFUNDS = ("pending", "unknown", "processing", "action_required")
 PAYMENT_CHANNELS = {
@@ -266,6 +269,13 @@ async def record_snapshot(db: AsyncSession, payment_id: int, data: dict, *, even
     if order.status != previous_status and order.status in ("closed", "cancelled", "refunded") and order.applied_at is None and not order.lock_token:
         from app.services.billing.orders import cleanup_unapplied_order
         await cleanup_unapplied_order(order.id)
+    if order.status == "processing" and previous_status != "processing":
+        from app.services.billing.apply_engine import apply_paid_order
+        order_id = order.id
+        try:
+            await apply_paid_order(db, order_id, source="callback" if event is not None else "query")
+        except Exception:
+            logger.exception("收款后交付失败，等待后台重试，order=%s", order_id)
 
 
 async def sync_payment(db: AsyncSession, payment: BillingPayment, client: GatewayClient, *, refund: dict | None = None) -> None:

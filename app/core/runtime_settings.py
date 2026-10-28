@@ -429,7 +429,7 @@ BILLING_SPECS: dict[str, SettingSpec] = _register({
     "BILLING_ORDER_PAY_TIMEOUT_MIN": SettingSpec(
         "BILLING_ORDER_PAY_TIMEOUT_MIN", "billing",
         lambda: _env_int("BILLING_ORDER_PAY_TIMEOUT_MIN", 5),
-        _int_clamper(3, 5, 5),
+        _int_clamper(3, 1440, 5),
     ),
     # ---- Referral / coupon system (docs/REFERRAL_AND_COUPON_DESIGN.md) ----
     # Master switch — when False, the invite link still works (capturing
