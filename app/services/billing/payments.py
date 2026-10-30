@@ -177,7 +177,6 @@ async def update_order_state(db: AsyncSession, order: BillingOrder) -> None:
             order.status = "applied"
         elif order.status not in ("processing", "apply_failed"):
             order.status = "processing"
-            order.next_apply_at = utc_naive_now()
     elif order.received_fen:
         order.status = "refunded" if order.refunded_fen == order.received_fen else "refunding" if blocked else "manual_review"
         order.next_apply_at = None
@@ -337,6 +336,5 @@ async def record_legacy_payment(db: AsyncSession, invoice: BillingInvoice, *, tr
         invoice.status = "paid"
         invoice.paid_at = paid_at
         order.status = "processing"
-        order.next_apply_at = utc_naive_now()
     await db.commit()
     return tx
