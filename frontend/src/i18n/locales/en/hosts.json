@@ -271,7 +271,7 @@
         "notifyResolve": "Notify on resolve",
         "cooldown": "Cooldown (minutes)",
         "pullTimeout": "Pull timeout (seconds)",
-        "pullAttempts": "Pull attempts"
+        "pullAttempts": "Maximum pull attempts"
       },
       "tips": {
         "inherit": "Inherits the global default when unset: {v}",

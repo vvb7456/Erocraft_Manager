@@ -271,7 +271,7 @@
         "notifyResolve": "恢复后发送通知",
         "cooldown": "冷却时间（分钟）",
         "pullTimeout": "拉取超时（秒）",
-        "pullAttempts": "拉取重试次数"
+        "pullAttempts": "最多拉取次数"
       },
       "tips": {
         "inherit": "未设置时使用全局默认：{v}",

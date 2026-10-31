@@ -1,17 +1,6 @@
+"""Collect hosts independently, committing samples before evaluating alerts."""
+
 from __future__ import annotations
-"""Monitoring collection task — Pull from per-node Erocraft Agent V2.
-
-Each cycle (60s by default):
-  1. For every enabled ``wings_node`` manager_host: GET /v1/metrics (parallel).
-  2. Persist a complete HostMetrics row (system + wings + containers).
-  3. Run the public-side reachability probe (Manager -> wings public).
-  4. Evaluate alert rules and persist transitions.
-  5. Cleanup data older than retention.
-
-Per-host overrides fall back to the shared notification policy. Static
-defaults seed installations without a saved policy.
-"""
-
 
 import asyncio
 import json
@@ -22,10 +11,11 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
-from sqlalchemy import delete as sa_delete, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import alert_defaults
+from app.core.runtime_settings import MONITORING_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.time import to_iso_z, utc_naive_now
 from app.db.models.manager import (
@@ -35,6 +25,7 @@ from app.db.models.manager import (
     ManagerHost,
 )
 from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
+from app.db.models.pterodactyl import PanelNode
 from app.db.session import get_session_factory
 from app.services import host_registry
 from app.services.metrics_builder import build_metrics_row
@@ -43,21 +34,9 @@ logger = logging.getLogger(__name__)
 
 MONITORING_JOB_ID = "monitoring_collect"
 
-RETRY_BASE_DELAY = 3
-RETRY_MAX_ATTEMPTS = 5
-RETRY_BACKOFF_FACTOR = 2
-
-# Agent /v1/metrics pull retry policy.
-# Per-host timeout / attempt count now live in HostAlertConfig (sourced from
-# manager_host_alert_settings; defaults in alert_defaults.DEFAULT_AGENT_PULL_*).
-# The retry base delay + backoff factor below remain global because they
-# govern inter-attempt spacing, not how long a single attempt waits.
-# Total worst case at default 3 attempts = 5 + 2 + 5 + 4 + 5 = 21 s, well
-# within the 60 s cycle. A single missed pull must NOT fire an "agent
-# offline" alert (see audit 2026-05-22 + the sustain gate added 2026-08-03),
-# but we also must not delay a real-outage notification past the cycle window.
-AGENT_PULL_RETRY_BASE_DELAY = 2.0
-AGENT_PULL_RETRY_BACKOFF_FACTOR = 2.0
+PUBLIC_PROBE_TIMEOUT = 5.0
+PUBLIC_PROBE_ATTEMPTS = 3
+RETRY_BASE_DELAY = 2.0
 
 
 # ---------------------------------------------------------------------------
@@ -73,34 +52,23 @@ async def _probe_wings_public(
 ) -> dict:
     url = f"{scheme}://{fqdn}:{port}/api/system"
 
-    async def _try() -> dict:
-        start = time.monotonic()
-        try:
-            async with httpx.AsyncClient(timeout=5.0, verify=True, trust_env=False) as client:
-                resp = await client.get(url)
-            latency = round((time.monotonic() - start) * 1000, 1)
-            return {"ok": True, "latency_ms": latency}
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "error_msg": str(exc)[:200]}
-
-    result = await _try()
-    if result["ok"]:
-        return result
-
-    delay = RETRY_BASE_DELAY
-    for attempt in range(RETRY_MAX_ATTEMPTS):
-        await asyncio.sleep(delay)
-        result = await _try()
-        if result["ok"]:
-            logger.info("wings public probe node %d recovered on retry #%d", node_id, attempt + 1)
-            return result
-        delay = min(delay * RETRY_BACKOFF_FACTOR, 60)
-
-    logger.warning("wings public probe node %d failed after %d retries", node_id, RETRY_MAX_ATTEMPTS)
-    return result
+    error = ""
+    async with httpx.AsyncClient(timeout=PUBLIC_PROBE_TIMEOUT, verify=True, trust_env=False) as client:
+        for attempt in range(PUBLIC_PROBE_ATTEMPTS):
+            if attempt:
+                await asyncio.sleep(RETRY_BASE_DELAY * 2 ** (attempt - 1))
+            start = time.monotonic()
+            try:
+                async with asyncio.timeout(PUBLIC_PROBE_TIMEOUT):
+                    # An unauthenticated Wings response still proves reachability.
+                    await client.get(url)
+                return {"ok": True, "latency_ms": round((time.monotonic() - start) * 1000, 1)}
+            except (httpx.HTTPError, TimeoutError) as exc:
+                error = (str(exc) or type(exc).__name__)[:200]
+    logger.warning("wings public probe node %d failed after %d attempts: %s", node_id, PUBLIC_PROBE_ATTEMPTS, error)
+    return {"ok": False, "error_msg": error}
 
 
-# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Alert engine — per-host configuration
 # ---------------------------------------------------------------------------
@@ -112,8 +80,6 @@ class HostAlertConfig:
 
     host_id: int
     cooldown_min: int
-    # Per-host Manager -> Agent /v1/metrics pull tuning (NULL override =
-    # inherit DEFAULT_AGENT_PULL_*). Used by _pull() below.
     agent_pull_timeout: float
     agent_pull_attempts: int
     rules: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -417,11 +383,7 @@ def _audit_alert_event(
     host_name: str,
     duration_seconds: int | None = None,
 ) -> None:
-    """Persist a `monitoring.alert.{fired,resolved}` row in `manager_activity_logs`.
-
-    Uses the caller's session so the audit row is committed atomically with the
-    rest of the monitoring cycle (no separate transaction, no early commit).
-    """
+    """Commit the audit event atomically with its alert and notification queue."""
     from app.core.contracts import OperationResult
 
     params: dict[str, Any] = {
@@ -531,271 +493,141 @@ async def _auto_resolve(
 async def _check_probe_alerts(
     db: AsyncSession,
     *,
-    host_configs: dict[int, HostAlertConfig],
-    host_names: dict[int, str],
+    probes: list[HostProbeResult],
+    config: HostAlertConfig,
+    host_name: str,
 ) -> None:
-    """Per-node probe alerting.
-
-    ``HostProbeResult`` rows carry two orthogonal identifiers:
-
-    * ``source`` — ``"manager"`` for the public-side Wings probe, or
-      ``"agent:<host_id>"`` for agent-reported probes.
-    * ``probe_name`` — user-defined or ``wings_pub_<host_id>``.
-
-    We look at the latest row for each ``(source, probe_name)`` pair and
-    raise / auto-resolve one alert per node, using the corresponding
-    host's alert configuration.
-    """
+    """Evaluate this host's current probes, grouping shared alert types."""
     now = utc_naive_now()
     probe_alert_map = {
         "clash_proxy": ("clash_down", "warning"),
         "wings_pub": ("network_down", "critical"),
     }
 
-    cutoff = now - timedelta(minutes=5)
-    latest_ts_subq = (
-        select(
-            HostProbeResult.source,
-            HostProbeResult.probe_name,
-            func.max(HostProbeResult.ts).label("max_ts"),
-        )
-        .where(HostProbeResult.ts >= cutoff)
-        .group_by(HostProbeResult.source, HostProbeResult.probe_name)
-        .subquery()
-    )
-    latest_rows = await db.execute(
-        select(HostProbeResult).join(
-            latest_ts_subq,
-            (HostProbeResult.source == latest_ts_subq.c.source)
-            & (HostProbeResult.probe_name == latest_ts_subq.c.probe_name)
-            & (HostProbeResult.ts == latest_ts_subq.c.max_ts),
-        )
-    )
-
-    for probe in latest_rows.scalars().all():
-        matched: tuple[str, str] | None = None
-        for prefix, spec in probe_alert_map.items():
-            if probe.probe_name.startswith(prefix):
-                matched = spec
-                break
-        if matched is None:
+    for prefix, (alert_type, severity) in probe_alert_map.items():
+        matching = [p for p in probes if p.probe_name.startswith(prefix)]
+        if not matching:
             continue
-        alert_type, severity = matched
-
-        host_id: int | None = None
-        if probe.source and probe.source.startswith("agent:"):
-            try:
-                host_id = int(probe.source.split(":", 1)[1])
-            except ValueError:
-                host_id = None
-        elif probe.probe_name.startswith("wings_pub_"):
-            try:
-                host_id = int(probe.probe_name.rsplit("_", 1)[-1])
-            except ValueError:
-                host_id = None
-
-        host_name = host_names.get(host_id or -1, "") if host_id is not None else ""
-        config = host_configs.get(host_id) if host_id is not None else None
-
-        if not probe.ok:
+        failed = [p.probe_name for p in matching if not p.ok]
+        if failed:
             await _raise_or_skip(
-                db, host_id, alert_type, severity,
-                f"Probe {probe.probe_name} failed", now,
+                db, config.host_id, alert_type, severity,
+                f"Probe {', '.join(failed)} failed"[:500], now,
                 config=config, host_name=host_name,
             )
         else:
             await _auto_resolve(
-                db, host_id, alert_type, now,
+                db, config.host_id, alert_type, now,
                 config=config, host_name=host_name,
             )
 
 
 # ---------------------------------------------------------------------------
-# Cleanup
+# Collection
 # ---------------------------------------------------------------------------
 
 
-async def _cleanup_old_data(db: AsyncSession) -> None:
-    store = get_settings_store()
-    days = int(await store.get(db, "MONITOR_RETENTION_DAYS", 30))
-    cutoff = utc_naive_now() - timedelta(days=days)
-    await db.execute(sa_delete(HostMetrics).where(HostMetrics.ts < cutoff))
-    await db.execute(sa_delete(HostProbeResult).where(HostProbeResult.ts < cutoff))
-    await db.execute(
-        sa_delete(HostAlert).where(
-            HostAlert.resolved_at.isnot(None),
-            HostAlert.created_at < cutoff,
-        )
-    )
+async def _pull_agent_metrics(
+    endpoint: str, token: str, *, config: HostAlertConfig, budget: float,
+) -> dict | None:
+    last_error = ""
+    try:
+        async with asyncio.timeout(budget), httpx.AsyncClient(
+            timeout=config.agent_pull_timeout, verify=True, trust_env=False,
+        ) as client:
+            for attempt in range(config.agent_pull_attempts):
+                if attempt:
+                    await asyncio.sleep(RETRY_BASE_DELAY * 2 ** (attempt - 1))
+                try:
+                    response = await client.get(f"{endpoint}/v1/metrics", headers={"Authorization": f"Bearer {token}"})
+                    response.raise_for_status()
+                    return response.json()
+                except httpx.HTTPError as exc:
+                    last_error = str(exc) or type(exc).__name__
+                    logger.warning(
+                        "agent pull host %d failed (attempt %d/%d): %s",
+                        config.host_id, attempt + 1, config.agent_pull_attempts, last_error,
+                    )
+    except TimeoutError:
+        last_error = f"cycle budget exceeded ({budget:g}s)"
+    logger.warning("agent pull host %d unavailable: %s", config.host_id, last_error)
+    return None
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
+async def _collect_host(host: ManagerHost, *, interval: int) -> None:
+    try:
+        endpoint, token = host_registry.decrypt_credentials(host)
+    except host_registry.AgentNotConfigured:
+        return
+
+    session_factory = get_session_factory()
+    # Leave time to commit/evaluate alerts, then finish before the next scheduler tick.
+    cycle_budget = interval - 5.0
+    async with asyncio.timeout(cycle_budget):
+        async with session_factory() as db:
+            config = await _load_host_alert_config(db, host)
+            node = None
+            if host.kind == host_registry.KIND_WINGS_NODE and host.pterodactyl_node_id:
+                node = await db.get(PanelNode, host.pterodactyl_node_id)
+
+        async with asyncio.TaskGroup() as tasks:
+            agent_task = tasks.create_task(_pull_agent_metrics(
+                endpoint, token, config=config, budget=cycle_budget - 5.0,
+            ))
+            public_task = tasks.create_task(_probe_wings_public(
+                node.id, node.fqdn, node.scheme, node.daemon_listen,
+            )) if node else None
+
+        now = utc_naive_now()
+        payload = agent_task.result()
+        metrics = build_metrics_row(host.id, now, payload)
+        probes = [
+            HostProbeResult(
+                host_id=host.id, ts=now, source=f"agent:{host.id}",
+                probe_name=p.get("name", "?"), ok=bool(p.get("ok")),
+                latency_ms=p.get("latency_ms"), error_msg=p.get("error_msg"),
+            ) for p in (payload or {}).get("probes", [])
+        ]
+        if public_task:
+            public = public_task.result()
+            metrics.public_reachable = public["ok"]
+            probes.append(HostProbeResult(
+                host_id=host.id, ts=now, source="manager", probe_name=f"wings_pub_{host.id}",
+                ok=public["ok"], latency_ms=public.get("latency_ms"), error_msg=public.get("error_msg"),
+            ))
+
+        async with session_factory() as db:
+            db.add(metrics)
+            db.add_all(probes)
+            if payload:
+                await db.execute(update(ManagerHost).where(ManagerHost.id == host.id).values(last_seen_at=now))
+            await db.commit()
+
+        # Alert failures can roll back their own changes, but never an accepted sample.
+        async with session_factory() as db:
+            await _check_alerts(
+                db, metrics, config=config, host_name=host.name,
+                is_wings=host.kind == host_registry.KIND_WINGS_NODE,
+            )
+            await _check_probe_alerts(db, probes=probes, config=config, host_name=host.name)
+            await db.commit()
 
 
 async def run_monitoring_collect() -> None:
-    """One full pull cycle. Called every 60 s by the scheduler.
-
-    Iterates all enabled manager_hosts, pulls /v1/metrics from each agent,
-    stores metrics + probes keyed by host_id, and evaluates alert rules.
-    Wings hosts additionally get a public-side wings reachability probe.
-    """
     session_factory = get_session_factory()
     async with session_factory() as db:
-        now = utc_naive_now()
+        hosts = list((await db.scalars(select(ManagerHost).where(ManagerHost.enabled.is_(True)))).all())
+        default_interval = MONITORING_SPECS["MONITOR_INTERVAL_SEC"].default_factory()
+        interval = int(await get_settings_store().get(db, "MONITOR_INTERVAL_SEC", default_interval))
 
-        from app.db.models.pterodactyl import PanelNode
-
-        # All enabled hosts participate in the pull loop.
-        host_result = await db.execute(
-            select(ManagerHost).where(ManagerHost.enabled.is_(True))
-        )
-        hosts = host_result.scalars().all()
-        if not hosts:
-            return
-
-        # Pre-load panel nodes for wings hosts (public probe needs fqdn/scheme/port).
-        wings_hosts = [h for h in hosts if h.kind == host_registry.KIND_WINGS_NODE
-                       and h.pterodactyl_node_id is not None]
-        wings_nodes: dict[int, PanelNode] = {}
-        if wings_hosts:
-            nids = [h.pterodactyl_node_id for h in wings_hosts]
-            nresult = await db.execute(select(PanelNode).where(PanelNode.id.in_(nids)))
-            wings_nodes = {n.id: n for n in nresult.scalars().all()}
-
-        # Resolve credentials + alert config per host.
-        host_metas: list[tuple[ManagerHost, str, str]] = []
-        host_configs: dict[int, HostAlertConfig] = {}
-        for host in hosts:
-            config = await _load_host_alert_config(db, host)
-            host_configs[host.id] = config
-            try:
-                endpoint, token = host_registry.decrypt_credentials(host)
-            except host_registry.AgentNotConfigured:
-                continue
-            host_metas.append((host, endpoint, token))
-
-        async def _pull(
-            host: ManagerHost, endpoint: str, token: str, *, cfg: HostAlertConfig,
-        ) -> tuple[int, dict | None]:
-            url = f"{endpoint}/v1/metrics"
-            headers = {"Authorization": f"Bearer {token}"}
-            timeout = cfg.agent_pull_timeout
-            attempts = max(1, cfg.agent_pull_attempts)
-            last_err: str | None = None
-            delay = AGENT_PULL_RETRY_BASE_DELAY
-            for attempt in range(1, attempts + 1):
-                try:
-                    async with httpx.AsyncClient(
-                        timeout=timeout, verify=True, trust_env=False
-                    ) as client:
-                        resp = await client.get(url, headers=headers)
-                    if resp.status_code >= 400:
-                        last_err = f"HTTP {resp.status_code}"
-                        logger.warning(
-                            "agent pull host %d -> HTTP %d (attempt %d/%d)",
-                            host.id, resp.status_code, attempt, attempts,
-                        )
-                    else:
-                        if attempt > 1:
-                            logger.info(
-                                "agent pull host %d recovered on retry #%d",
-                                host.id, attempt - 1,
-                            )
-                        return host.id, resp.json()
-                except httpx.HTTPError as exc:
-                    last_err = str(exc) or exc.__class__.__name__
-                    logger.warning(
-                        "agent pull host %d transport: %s (attempt %d/%d)",
-                        host.id, last_err, attempt, attempts,
-                    )
-                if attempt < attempts:
-                    await asyncio.sleep(delay)
-                    # Cap the inter-attempt backoff so a high-attempt host
-                    # cannot block the whole gather for minutes on end
-                    # (audit M2). 30 s is plenty for transient jitter to
-                    # clear without letting one slow host starve the rest.
-                    delay = min(delay * AGENT_PULL_RETRY_BACKOFF_FACTOR, 30.0)
-            logger.warning(
-                "agent pull host %d failed after %d attempts: %s",
-                host.id, attempts, last_err,
-            )
-            return host.id, None
-
-        async def _collect(
-            host: ManagerHost, endpoint: str, token: str, *, cfg: HostAlertConfig,
-        ) -> tuple[int, dict | None, dict | None]:
-            public_task = None
-            node = None
-            if host.kind == host_registry.KIND_WINGS_NODE and host.pterodactyl_node_id:
-                node = wings_nodes.get(host.pterodactyl_node_id)
-                if node:
-                    public_task = asyncio.create_task(
-                        _probe_wings_public(host.pterodactyl_node_id, node.fqdn, node.scheme, node.daemon_listen)
-                    )
-            host_id, agent_payload = await _pull(host, endpoint, token, cfg=cfg)
-            pub_result = await public_task if public_task else None
-            return host_id, agent_payload, pub_result
-
-        raw_results = await asyncio.gather(
-            *[_collect(h, ep, tok, cfg=host_configs[h.id]) for h, ep, tok in host_metas],
-            return_exceptions=True,
-        )
-
-        results: list[tuple[int, dict | None, dict | None]] = []
-        for item in raw_results:
-            if isinstance(item, BaseException):
-                logger.warning("monitoring _collect failed: %r", item)
-            else:
-                results.append(item)
-
-        seen_host_ids: list[int] = []
-        for host_id, agent_payload, pub_result in results:
-            # Public probe (wings only).
-            if pub_result is not None:
-                db.add(HostProbeResult(
-                    host_id=host_id, ts=now, source="manager",
-                    probe_name=f"wings_pub_{host_id}",
-                    ok=pub_result["ok"],
-                    latency_ms=pub_result.get("latency_ms"),
-                    error_msg=pub_result.get("error_msg"),
-                ))
-
-            metrics_row = build_metrics_row(host_id, now, agent_payload)
-            if pub_result is not None:
-                metrics_row.public_reachable = pub_result["ok"]
-            db.add(metrics_row)
-
-            if agent_payload:
-                seen_host_ids.append(host_id)
-                for p in agent_payload.get("probes", []):
-                    db.add(HostProbeResult(
-                        host_id=host_id, ts=now,
-                        source=f"agent:{host_id}",
-                        probe_name=p.get("name", "?"),
-                        ok=bool(p.get("ok")),
-                        latency_ms=p.get("latency_ms"),
-                        error_msg=p.get("error_msg"),
-                    ))
-
-            host_config: HostAlertConfig | None = host_configs.get(host_id)
-            await db.flush()
-            if host_config is not None:
-                host_row: ManagerHost | None = next((h for h in hosts if h.id == host_id), None)
-                host_name = host_row.name if host_row else f"host-{host_id}"
-                host_is_wings = host_row.kind == host_registry.KIND_WINGS_NODE if host_row else False
-                await _check_alerts(db, metrics_row, config=host_config, host_name=host_name, is_wings=host_is_wings)
-
-        await _check_probe_alerts(db, host_configs=host_configs, host_names={h.id: h.name for h in hosts})
-        await _cleanup_old_data(db)
-
-        if seen_host_ids:
-            await db.execute(
-                update(ManagerHost)
-                .where(ManagerHost.id.in_(seen_host_ids))
-                .values(last_seen_at=now)
-            )
-
-        await db.commit()
-        logger.debug("agent-pull cycle committed for %d hosts", len(results))
+    results = await asyncio.gather(
+        *(_collect_host(host, interval=interval) for host in hosts), return_exceptions=True,
+    )
+    errors = []
+    for host, result in zip(hosts, results):
+        if isinstance(result, Exception):
+            logger.error("monitoring host %d failed", host.id, exc_info=result)
+            errors.append(result)
+    if errors:
+        raise RuntimeError(f"Monitoring failed for {len(errors)} host(s)") from errors[0]
+    logger.debug("agent-pull cycle completed for %d hosts", len(hosts))

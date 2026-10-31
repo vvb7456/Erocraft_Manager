@@ -298,11 +298,13 @@ Log level controlled by `LOG_LEVEL` in `.env` (`DEBUG / INFO / WARNING / ERROR`)
 | Job | Trigger | Source |
 |---|---|---|
 | Metrics pull (all hosts) | every `MONITOR_INTERVAL_SEC` (default 60) | `.env` + runtime setting |
-| Metrics pruning | daily | hardcoded 14-day retention (raw 1-min samples) |
+| Metrics / resolved alert pruning | hourly | `MONITOR_RETENTION_DAYS` (default 30 days) |
 | Auto-suspend / delete / reminder mail | daily at `AUTOMATION_RUN_HOUR:MINUTE` | runtime setting overrides |
 | Certificate renewal & expiry alerts | daily | acme.sh + scanner |
 
 `.env` is bootstrap fallback only. Runtime configuration lives in the database (admin → Settings).
+
+监控按主机并发执行，每台主机独立保存指标、探针和最后在线时间，再用单独事务处理告警及通知入队。一台主机的超时或告警异常不会回滚其他主机的数据。Wings 公网探测最多尝试三次，单次总超时 5 秒，重试间隔为 2、4 秒。每台主机的整轮处理在采集周期结束前 5 秒截止，Agent 拉取预算为采集周期减 10 秒；默认 60 秒周期下分别为 55、50 秒。主机设置的拉取次数是此预算内的最大尝试次数。关闭告警规则只停止相应告警，停用主机才会停止采集。
 
 ### 3.4 Certificates
 

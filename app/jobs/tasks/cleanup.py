@@ -13,7 +13,7 @@ from app.db.models.manager import (
     ManagerPasswordReset,
     ManagerPendingRegistration,
 )
-from app.db.models.monitoring import HostMetrics, HostProbeResult
+from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
 from app.db.models.miniprogram import MiniProgramSession
 from app.db.models.notifications import NotificationDelivery, NotificationIssue
 from app.db.session import get_session_factory
@@ -81,11 +81,17 @@ async def run_token_cleanup() -> None:
                 .where(HostProbeResult.ts < metrics_cutoff)
                 .execution_options(synchronize_session=False)
             )
+            res_ha = await db.execute(
+                delete(HostAlert)
+                .where(HostAlert.resolved_at.is_not(None), HostAlert.created_at < metrics_cutoff)
+                .execution_options(synchronize_session=False)
+            )
             await db.commit()
             logger.info(
-                "monitoring cleanup: deleted %s host_metrics, %s host_probes (cutoff=%s)",
+                "monitoring cleanup: deleted %s host_metrics, %s host_probes, %s resolved alerts (cutoff=%s)",
                 res_hm.rowcount,
                 res_hp.rowcount,
+                res_ha.rowcount,
                 metrics_cutoff.isoformat(),
             )
         except Exception:
