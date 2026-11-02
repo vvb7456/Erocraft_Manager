@@ -65,9 +65,6 @@ const deployments = computed<DeploymentRow[]>(() => {
         const t = certTargets.value.find(ct => ct.name === dep.target_name)
         targetType = t?.type ?? 'file'
         targetPath = targetPath || (t?.paths?.cert ?? null)
-        if (!targetPath && t?.type === 'synology_dsm') {
-          targetPath = t.dsm_cert_id ? `DSM ${t.dsm_cert_id}` : (t.certificate_desc ?? null)
-        }
       }
       rows.push({
         id: dep.id,
@@ -97,8 +94,7 @@ const targetOptions = computed(() => {
     opts.push({ value: '', label: t('hosts.certs.wingsDefaultOption') })
   }
   for (const ct of certTargets.value) {
-    const typeLabel = ct.type === 'synology_dsm' ? 'DSM' : 'file'
-    opts.push({ value: ct.name, label: `${ct.name} (${typeLabel})` })
+    opts.push({ value: ct.name, label: `${ct.name} (file)` })
   }
   return opts
 })

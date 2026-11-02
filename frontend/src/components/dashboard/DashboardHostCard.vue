@@ -46,7 +46,6 @@ const router = useRouter()
 const KIND_META: Record<string, { icon: string; color: string; label: string }> = {
   wings_node: { icon: 'deployed_code', color: 'var(--ac)', label: 'Wings' },
   generic_linux: { icon: 'terminal', color: 'var(--blue)', label: 'Linux' },
-  synology_dsm: { icon: 'storage', color: 'var(--amber)', label: 'Synology' },
 }
 const kindMeta = computed(() => KIND_META[props.host.kind] ?? KIND_META.generic_linux)
 const isWings = computed(() => props.host.kind === 'wings_node')

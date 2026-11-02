@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Mapping, Optional
+from collections.abc import Mapping
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -14,7 +14,7 @@ from .error_codes import ERROR_TITLES, ErrorCode
 
 
 def register_error_handlers(app: FastAPI) -> None:
-    def response(request: Request, status: int, code: ErrorCode, headers: Optional[Mapping[str, str]] = None) -> JSONResponse:
+    def response(request: Request, status: int, code: ErrorCode, headers: Mapping[str, str] | None = None) -> JSONResponse:
         error = ErrorInfo(code=code)
         operation = OperationResult(action="agent.http_request", phase="request", outcome="failed", error=error)
         response_headers = dict(headers or {})
@@ -28,7 +28,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
-        codes: Dict[int, ErrorCode] = {401: "auth.invalid_token", 403: "auth.forbidden", 404: "resource.not_found", 405: "request.method_not_allowed", 503: "system.unavailable"}
+        codes: dict[int, ErrorCode] = {401: "auth.invalid_token", 403: "auth.forbidden", 404: "resource.not_found", 405: "request.method_not_allowed", 503: "system.unavailable"}
         return response(request, exc.status_code, codes.get(exc.status_code, "request.invalid"), exc.headers)
 
     @app.exception_handler(RequestValidationError)

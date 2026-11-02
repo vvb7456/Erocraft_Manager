@@ -77,7 +77,6 @@ async function loadNodes() {
 const kindOptions = computed(() => [
   { value: 'wings_node', label: t('hosts.kind.wings_node') },
   { value: 'generic_linux', label: t('hosts.kind.generic_linux') },
-  { value: 'synology_dsm', label: t('hosts.kind.synology_dsm') },
 ])
 
 const nodeOptions = computed(() => {

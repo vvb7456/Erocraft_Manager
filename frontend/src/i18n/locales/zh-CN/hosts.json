@@ -27,8 +27,7 @@
   },
   "kind": {
     "wings_node": "Wings 主机",
-    "generic_linux": "Linux",
-    "synology_dsm": "Synology DSM"
+    "generic_linux": "Linux"
   },
   "status": {
     "online": "在线",

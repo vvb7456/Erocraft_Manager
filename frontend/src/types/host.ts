@@ -4,7 +4,7 @@
 export interface HostDetail {
   id: number
   name: string
-  kind: 'wings_node' | 'generic_linux' | 'synology_dsm' | string
+  kind: 'wings_node' | 'generic_linux' | string
   hostname: string
   agent_url: string
   pterodactyl_node_id: number | null

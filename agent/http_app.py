@@ -10,7 +10,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict
+from typing import Any, AsyncIterator
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -139,7 +139,7 @@ def create_app(cfg: AgentConfig, config_path: str) -> FastAPI:
     # ---- shared routes ----
 
     @app.get("/healthz")
-    async def healthz() -> Dict[str, str]:
+    async def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/v1/metrics", response_model=MetricsSnapshot, dependencies=[Depends(auth)])
@@ -147,7 +147,7 @@ def create_app(cfg: AgentConfig, config_path: str) -> FastAPI:
         return await snapshot.get()
 
     @app.get("/v1/cert/status", dependencies=[Depends(auth)])
-    async def get_cert_status() -> Dict[str, Any]:
+    async def get_cert_status() -> dict[str, Any]:
         try:
             payload = await cert_collector.status_with_targets(
                 cfg.wings.config_path,

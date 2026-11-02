@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 from .contracts import CommandFailure, CommandSuccess
@@ -14,7 +14,7 @@ from .contracts import CommandFailure, CommandSuccess
 class SystemMetrics(BaseModel):
     cpu_pct: float
     cpu_count: int
-    load_avg: List[float]
+    load_avg: list[float]
     mem_total_mb: int
     mem_used_mb: int
     mem_pct: float
@@ -23,17 +23,17 @@ class SystemMetrics(BaseModel):
     disk_total_mb: int
     disk_used_mb: int
     disk_pct: float
-    net_rx_bytes_sec: Optional[int] = None
-    net_tx_bytes_sec: Optional[int] = None
-    disk_read_bytes_sec: Optional[int] = None
-    disk_write_bytes_sec: Optional[int] = None
+    net_rx_bytes_sec: int | None = None
+    net_tx_bytes_sec: int | None = None
+    disk_read_bytes_sec: int | None = None
+    disk_write_bytes_sec: int | None = None
     uptime_sec: int
 
 
 class WingsStatus(BaseModel):
     ok: bool
-    version: Optional[str] = None
-    error: Optional[str] = None
+    version: str | None = None
+    error: str | None = None
 
 
 class ContainerAggregate(BaseModel):
@@ -50,32 +50,32 @@ class WingsConfigSummary(BaseModel):
     Sensitive fields (token) are excluded.
     """
 
-    api_host: Optional[str] = None
-    api_port: Optional[int] = None
-    api_ssl_enabled: Optional[bool] = None
-    api_upload_limit_mb: Optional[int] = None
-    sftp_bind_address: Optional[str] = None
-    sftp_bind_port: Optional[int] = None
-    system_data: Optional[str] = None
-    docker_socket: Optional[str] = None
-    debug: Optional[bool] = None
+    api_host: str | None = None
+    api_port: int | None = None
+    api_ssl_enabled: bool | None = None
+    api_upload_limit_mb: int | None = None
+    sftp_bind_address: str | None = None
+    sftp_bind_port: int | None = None
+    system_data: str | None = None
+    docker_socket: str | None = None
+    debug: bool | None = None
 
 
 class ProbeResult(BaseModel):
     name: str
     ok: bool
-    latency_ms: Optional[float] = None
-    error_msg: Optional[str] = None
+    latency_ms: float | None = None
+    error_msg: str | None = None
 
 
 class MetricsSnapshot(BaseModel):
     taken_at: datetime
-    node_id: Optional[int] = None
+    node_id: int | None = None
     system: SystemMetrics
     wings: WingsStatus
     containers: ContainerAggregate
-    wings_config: Optional[WingsConfigSummary] = None
-    probes: List[ProbeResult] = Field(default_factory=list)
+    wings_config: WingsConfigSummary | None = None
+    probes: list[ProbeResult] = Field(default_factory=list)
 
     @field_validator("taken_at")
     @classmethod
@@ -90,10 +90,10 @@ class MetricsSnapshot(BaseModel):
 class CommandRequest(BaseModel):
     id: int
     type: str
-    params: Optional[Dict[str, Any]] = None
+    params: dict[str, Any] | None = None
 
 
-CommandResponse = Union[CommandSuccess, CommandFailure]
+CommandResponse = CommandSuccess | CommandFailure
 
 
 # ---------- agent self status ----------
@@ -115,7 +115,7 @@ class AgentStatus(BaseModel):
     version: str
     started_at: datetime
     config_path: str
-    wings_config_path: Optional[str] = None
+    wings_config_path: str | None = None
     bind: str
     role: str
     capabilities: AgentCapabilities
@@ -127,8 +127,8 @@ class WingsServiceStatus(BaseModel):
     """systemd unit state for the wings service."""
 
     service_name: str
-    active_state: Optional[str] = None       # systemd ActiveState: active/inactive/failed/...
-    sub_state: Optional[str] = None          # SubState: running/dead/failed/...
-    main_pid: Optional[int] = None
-    since: Optional[datetime] = None         # when the unit entered current state
-    error: Optional[str] = None              # populated when probe fails entirely
+    active_state: str | None = None       # systemd ActiveState: active/inactive/failed/...
+    sub_state: str | None = None          # SubState: running/dead/failed/...
+    main_pid: int | None = None
+    since: datetime | None = None         # when the unit entered current state
+    error: str | None = None              # populated when probe fails entirely

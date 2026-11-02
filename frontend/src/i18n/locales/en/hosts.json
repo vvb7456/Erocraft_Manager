@@ -27,8 +27,7 @@
   },
   "kind": {
     "wings_node": "Wings host",
-    "generic_linux": "Linux",
-    "synology_dsm": "Synology DSM"
+    "generic_linux": "Linux"
   },
   "status": {
     "online": "Online",

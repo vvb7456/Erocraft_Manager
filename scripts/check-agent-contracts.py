@@ -1,4 +1,4 @@
-"""Check Agent imports, model evaluation and HTTP contracts on supported Python versions."""
+"""Check Agent models, OpenAPI and HTTP contracts."""
 
 from __future__ import annotations
 
@@ -95,9 +95,9 @@ async def check_http(role: str) -> None:
 
 async def main() -> None:
     check_models()
-    for role in ("synology_dsm", "generic_host", "wings_node"):
+    for role in ("generic_host", "wings_node"):
         await check_http(role)
-    print("Agent 契约检查通过：Python %s，三种角色的模型、OpenAPI、HTTP 错误和 RPC 结果均正常。" % sys.version.split()[0])
+    print("Agent 契约检查通过：Python %s，两种角色的模型、OpenAPI、HTTP 错误和 RPC 结果均正常。" % sys.version.split()[0])
 
 
 if __name__ == "__main__":

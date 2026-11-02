@@ -105,7 +105,6 @@ function formatAgo(iso: string | null): string {
 const KIND_BADGE_COLOR: Record<string, string> = {
   wings_node: 'var(--ac)',
   generic_linux: 'var(--t2)',
-  synology_dsm: 'var(--amber)',
 }
 
 // ── Options ──
@@ -113,7 +112,6 @@ const kindOptions = computed(() => [
   { value: 'all', label: t('hosts.toolbar.all') },
   { value: 'wings_node', label: t('hosts.kind.wings_node') },
   { value: 'generic_linux', label: t('hosts.kind.generic_linux') },
-  { value: 'synology_dsm', label: t('hosts.kind.synology_dsm') },
 ])
 
 const statusOptions = computed(() => [

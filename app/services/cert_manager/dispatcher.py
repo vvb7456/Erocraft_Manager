@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utc_naive_now
 from app.core.contracts import ErrorInfo, OperationResult
-from app.db.models.manager import ManagerCertDeployment, ManagerCertificate, ManagerHost
+from app.db.models.manager import ManagerCertDeployment, ManagerCertificate
 from app.services import agent_client, host_registry
 from app.services.audit import log_manager_activity
 
@@ -19,7 +19,6 @@ from .pem import CertPemError, load_source_material
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CERT_COMMAND_TIMEOUT = 30.0
-_DSM_CERT_COMMAND_TIMEOUT = 300.0
 
 
 async def redeploy_deployment(
@@ -46,12 +45,7 @@ async def redeploy_deployment(
     deployment.last_deploy_attempt_at = now
 
     try:
-        host = await db.get(ManagerHost, deployment.host_id)
-        command_timeout = (
-            _DSM_CERT_COMMAND_TIMEOUT
-            if host is not None and host.kind == host_registry.KIND_SYNOLOGY_DSM
-            else _DEFAULT_CERT_COMMAND_TIMEOUT
-        )
+        command_timeout = _DEFAULT_CERT_COMMAND_TIMEOUT
         request_timeout = max(90.0, command_timeout + 30.0)
 
         material = load_source_material(cert.source_path)

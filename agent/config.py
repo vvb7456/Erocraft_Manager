@@ -7,7 +7,7 @@ agent.yaml schema:
       node_id: 9                         # 可选；仅 Wings/Pterodactyl 兼容信息
 
     agent:
-      role: wings_node                   # wings_node | generic_host | synology_dsm
+      role: wings_node                   # wings_node | generic_host
       bind: "0.0.0.0:48765"
       token: "<node-specific bearer token>"
       allow_ips: ["203.0.113.7"]         # 可选；空 = 不限制
@@ -32,16 +32,10 @@ agent.yaml schema:
 
     cert_install_targets:
       - name: nginx_main
-        type: file                         # file | synology_dsm
+        type: file
         cert_path: /etc/nginx/ssl/example/fullchain.pem
         key_path: /etc/nginx/ssl/example/privkey.pem
         reload_cmd: systemctl reload nginx
-      - name: dsm_default
-        type: synology_dsm
-        synology:
-          certificate_desc: erocraft.com
-          create_if_missing: false
-          as_default: true
 
     logging:
       level: INFO
@@ -50,8 +44,7 @@ agent.yaml schema:
 from __future__ import annotations
 
 import secrets
-from typing import List, Literal, Optional, Union
-from typing_extensions import Annotated
+from typing import Literal
 
 from pathlib import Path
 
@@ -60,7 +53,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from .utils.atomic import atomic_write_text
 
-AgentRole = Literal["wings_node", "generic_host", "synology_dsm"]
+AgentRole = Literal["wings_node", "generic_host"]
 _AGENT_TOKEN_BYTES = 32
 #: Mode forced on any config file we've written a token into. The token is a
 #: bearer credential — keep it owner-read-only regardless of the user's umask
@@ -139,7 +132,7 @@ def _replace_token_in_yaml_text(text: str, new_token: str) -> str:
     raise ValueError("agent.token line not found in config file")
 
 
-def bootstrap_agent_token(path: str | Path) -> Optional[str]:
+def bootstrap_agent_token(path: str | Path) -> str | None:
     """Ensure ``agent.token`` exists in the config file.
 
     If the token is missing/empty, generate one and write it back **without
@@ -195,10 +188,10 @@ class ManagerSection(BaseModel):
     # Reserved for a future Push / registration mode where the agent calls
     # back to Manager. Phase-1 is strictly Pull (Manager -> Agent via
     # /v1/metrics), so url is never read by the agent at runtime.
-    url: Optional[str] = None
+    url: str | None = None
     # Legacy compatibility field for Wings/Pterodactyl nodes. Non-Wings hosts
     # are addressed by manager_hosts.id on the Manager side and should omit it.
-    node_id: Optional[int] = None
+    node_id: int | None = None
 
 
 class TLSSection(BaseModel):
@@ -226,8 +219,8 @@ class AgentSection(BaseModel):
     role: AgentRole = "wings_node"
     bind: str = "0.0.0.0:48765"
     token: str
-    allow_ips: List[str] = Field(default_factory=list)
-    tls: Optional[TLSSection] = None
+    allow_ips: list[str] = Field(default_factory=list)
+    tls: TLSSection | None = None
 
     @field_validator("bind")
     @classmethod
@@ -269,15 +262,7 @@ class ProbeConfig(BaseModel):
     target: str
     timeout: float = 5.0
     tls_verify: bool = True
-    proxy: Optional[str] = None
-
-
-# ---- Certificate install targets (discriminated union) ----
-
-class SynologyTarget(BaseModel):
-    certificate_desc: str
-    create_if_missing: bool = False
-    as_default: bool = True
+    proxy: str | None = None
 
 
 class CertInstallTargetFile(BaseModel):
@@ -285,7 +270,7 @@ class CertInstallTargetFile(BaseModel):
     type: Literal["file"] = "file"
     cert_path: str
     key_path: str
-    reload_cmd: Optional[str] = None
+    reload_cmd: str | None = None
 
     @field_validator("name")
     @classmethod
@@ -294,26 +279,6 @@ class CertInstallTargetFile(BaseModel):
         if not v:
             raise ValueError("name must not be empty")
         return v
-
-
-class CertInstallTargetDSM(BaseModel):
-    name: str
-    type: Literal["synology_dsm"] = "synology_dsm"
-    synology: SynologyTarget
-
-    @field_validator("name")
-    @classmethod
-    def _required_name(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("name must not be empty")
-        return v
-
-
-CertInstallTarget = Annotated[
-    Union[CertInstallTargetFile, CertInstallTargetDSM],
-    Field(discriminator="type"),
-]
 
 
 class LoggingSection(BaseModel):
@@ -327,8 +292,8 @@ class AgentConfig(BaseModel):
     agent: AgentSection
     wings: WingsSection = Field(default_factory=WingsSection)
     collect: CollectSection = Field(default_factory=CollectSection)
-    probes: List[ProbeConfig] = Field(default_factory=list)
-    cert_install_targets: List[CertInstallTarget] = Field(default_factory=list)
+    probes: list[ProbeConfig] = Field(default_factory=list)
+    cert_install_targets: list[CertInstallTargetFile] = Field(default_factory=list)
     logging: LoggingSection = Field(default_factory=LoggingSection)
 
     @field_validator("cert_install_targets", mode="before")

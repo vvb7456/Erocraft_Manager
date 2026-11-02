@@ -339,13 +339,7 @@ async def probe_host(
 class CertTargetOut(BaseModel):
     name: str
     type: str
-    exists: bool | None = None
     paths: dict[str, str] | None = None
-    certificate_desc: str | None = None
-    dsm_cert_id: str | None = None
-    is_default: bool | None = None
-    domains: list[str] | None = None
-    services: list[dict] | None = None
     current_cert: dict | None = None
     error: str | None = None
 
@@ -382,13 +376,7 @@ async def get_host_cert_targets(
         targets_out.append(CertTargetOut(
             name=item.get("name", ""),
             type=item.get("type", "file"),
-            exists=item.get("exists") if isinstance(item.get("exists"), bool) else None,
             paths=item.get("paths") if isinstance(item.get("paths"), dict) else None,
-            certificate_desc=item.get("certificate_desc"),
-            dsm_cert_id=str(item.get("dsm_cert_id")) if item.get("dsm_cert_id") else None,
-            is_default=item.get("is_default") if isinstance(item.get("is_default"), bool) else None,
-            domains=item.get("domains") if isinstance(item.get("domains"), list) else None,
-            services=item.get("services") if isinstance(item.get("services"), list) else None,
             current_cert=item.get("current_cert") if isinstance(item.get("current_cert"), dict) else None,
             error=item.get("error"),
         ))

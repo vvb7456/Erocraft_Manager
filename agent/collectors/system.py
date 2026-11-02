@@ -9,7 +9,6 @@ from __future__ import annotations
 import os
 import re
 import time
-from typing import Any
 
 from ..schemas import SystemMetrics
 
@@ -26,76 +25,6 @@ _DISK_WHOLE_DEV_RE = re.compile(
 # /proc/diskstats sector size is fixed at 512 bytes regardless of
 # physical sector size (see Documentation/admin-guide/iostats.rst).
 _DISK_SECTOR_BYTES = 512
-
-_PSEUDO_FS_TYPES = {
-    "proc",
-    "sysfs",
-    "devtmpfs",
-    "devpts",
-    "tmpfs",
-    "securityfs",
-    "cgroup",
-    "cgroup2",
-    "pstore",
-    "tracefs",
-    "configfs",
-    "fusectl",
-    "debugfs",
-    "mqueue",
-    "hugetlbfs",
-    "overlay",
-    "squashfs",
-    "ramfs",
-    "autofs",
-}
-
-
-def _is_synology_dsm() -> bool:
-    # DSM hosts expose both of these paths; regular Linux boxes typically don't.
-    return os.path.exists("/etc.defaults/VERSION") and os.path.isdir("/usr/syno")
-
-
-def _disk_usage_mountpoint() -> str:
-    """Return mount path used for disk usage percentage.
-
-    On DSM we should not use ``/`` (tiny system partition, often >90% by design).
-    Prefer the largest ``/volume*`` mount so reported disk_pct matches operator
-    expectations and actual data-capacity usage.
-    """
-    if not _is_synology_dsm():
-        return "/"
-
-    best_path: str | None = None
-    best_total = -1
-    try:
-        with open("/proc/mounts", "r", encoding="ascii") as f:
-            for line in f:
-                parts = line.split()
-                if len(parts) < 3:
-                    continue
-                mount_path = parts[1]
-                fs_type = parts[2]
-                if fs_type in _PSEUDO_FS_TYPES:
-                    continue
-                if not mount_path.startswith("/volume"):
-                    continue
-                try:
-                    st = os.statvfs(mount_path)
-                except OSError:
-                    continue
-                total = st.f_blocks * st.f_frsize
-                if total > best_total:
-                    best_total = total
-                    best_path = mount_path
-    except OSError:
-        pass
-
-    if best_path:
-        return best_path
-    if os.path.exists("/volume1"):
-        return "/volume1"
-    return "/"
-
 
 # ---- /proc/stat CPU% running state ----
 
@@ -298,6 +227,12 @@ def _read_uptime() -> int:
         return 0
 
 
+def _in_container() -> bool:
+    return any(os.path.exists(path) for path in (
+        "/run/systemd/container", "/.dockerenv", "/run/.containerenv",
+    ))
+
+
 # ---- public collector ----
 
 def collect_system() -> SystemMetrics:
@@ -309,12 +244,16 @@ def collect_system() -> SystemMetrics:
     global _prev_net_rx, _prev_net_tx, _prev_net_ts
     global _prev_disk_read, _prev_disk_write, _prev_disk_ts
 
+    in_container = _in_container()
     cpu_pct = _cpu_percent_since_last_call()
-    cpu_count = os.cpu_count() or 0
-    try:
-        load_avg = list(os.getloadavg())
-    except (OSError, AttributeError):
-        load_avg = [0.0, 0.0, 0.0]
+    cpu_count = len(os.sched_getaffinity(0))
+    # Load and physical disk IO belong to the shared host kernel in containers.
+    load_avg: list[float] = []
+    if not in_container:
+        try:
+            load_avg = list(os.getloadavg())
+        except OSError:
+            pass
 
     (
         mem_total_kib,
@@ -328,8 +267,7 @@ def collect_system() -> SystemMetrics:
     ) = _mem_swap_kib()
 
     try:
-        disk_path = _disk_usage_mountpoint()
-        st = os.statvfs(disk_path)
+        st = os.statvfs("/")
         # Match psutil.disk_usage("/") semantics:
         #   total = f_blocks * f_frsize  (full size, includes reserved)
         #   used  = (f_blocks - f_bfree) * f_frsize  (NOT free for ANY user)
@@ -374,18 +312,19 @@ def collect_system() -> SystemMetrics:
     # returns None (no baseline). Counters in /proc/diskstats can wrap
     # on 32-bit kernels or reset on device hot-swap — clamp negatives
     # to 0 so dashboard curves stay continuous.
-    dr_total, dw_total = _read_disk_io_totals()
     dr_bps: int | None = None
     dw_bps: int | None = None
-    if _prev_disk_read is not None and _prev_disk_ts is not None:
-        dt = now - _prev_disk_ts
-        if dt > 0:
-            dr_bps = max(0, int((dr_total - _prev_disk_read) / dt))
-            if _prev_disk_write is not None:
-                dw_bps = max(0, int((dw_total - _prev_disk_write) / dt))
-    _prev_disk_read = dr_total
-    _prev_disk_write = dw_total
-    _prev_disk_ts = now
+    if not in_container:
+        dr_total, dw_total = _read_disk_io_totals()
+        if _prev_disk_read is not None and _prev_disk_ts is not None:
+            dt = now - _prev_disk_ts
+            if dt > 0:
+                dr_bps = max(0, int((dr_total - _prev_disk_read) / dt))
+                if _prev_disk_write is not None:
+                    dw_bps = max(0, int((dw_total - _prev_disk_write) / dt))
+        _prev_disk_read = dr_total
+        _prev_disk_write = dw_total
+        _prev_disk_ts = now
 
     return SystemMetrics(
         cpu_pct=round(cpu_pct, 1),

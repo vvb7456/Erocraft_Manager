@@ -135,7 +135,7 @@ class ManagerHost(Base):
     HTTPS pull. ``kind`` identifies the host's role:
 
     * ``wings_node`` — a Pterodactyl wings node (``pterodactyl_node_id`` set)
-    * ``generic_linux`` / ``synology_dsm`` — generic agent-managed
+    * ``generic_linux`` — generic agent-managed
       host without a corresponding panel.nodes row
 
     The encrypted ``agent_token_enc`` is Fernet-sealed with

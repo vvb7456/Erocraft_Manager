@@ -217,11 +217,6 @@ def _cert_status_paths(payload: dict[str, Any], target_name: str) -> tuple[str |
         )
         if target is None:
             return None, None, f"agent target not found: {target_name}"
-        if target.get("type") == "synology_dsm":
-            dsm_id = target.get("dsm_cert_id")
-            desc = target.get("certificate_desc") or target_name
-            label = f"dsm:{dsm_id}" if dsm_id else f"dsm:{desc}"
-            return label, None, None
         paths = target.get("paths") if isinstance(target, dict) else None
     else:
         paths = payload.get("wings_yaml_paths")
