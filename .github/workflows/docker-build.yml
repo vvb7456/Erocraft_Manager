@@ -54,13 +54,11 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: 验证运行镜像启动与内存参数
+      - name: 核对生产运行环境与启动方式
         run: |
-          docker run --rm \
-            --mount "type=bind,source=$PWD/docker/sillytavern-runtime/verify-startup.mjs,target=/home/container/verify-startup.mjs,readonly" \
-            -e SERVER_MEMORY=512 -e NODE_HEAP_PCT=80 \
-            -e 'STARTUP=node --max-old-space-size=$((${SERVER_MEMORY}*${NODE_HEAP_PCT}/100)) verify-startup.mjs' \
-            sillytavern-runtime:verify
+          BASE=$(awk '/^FROM registry/ {print $2}' docker/sillytavern-runtime/Dockerfile)
+          docker pull "$BASE"
+          python3 docker/sillytavern-runtime/verify.py sillytavern-runtime:verify
 
       - name: 核对生产安装环境
         run: |
