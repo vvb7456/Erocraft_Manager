@@ -1,5 +1,6 @@
 {
   "listSep": "、",
+  "uncategorized": "未分类",
   "selection": {
     "count": "已选 {count} 项",
     "clear": "取消",

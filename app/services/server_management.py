@@ -144,7 +144,7 @@ async def get_server_detail(db: AsyncSession, server_id: int) -> AdminServerDeta
             is_installing=server.status == "installing" or server.installed_at is None,
             owner_id=int(server.owner_id),
             node_id=int(server.node_id),
-            nest_id=int(server.nest_id),
+            nest_id=server.nest_id,
             egg_id=int(server.egg_id),
             allocation_id=int(server.allocation_id),
             memory=int(server.memory),
@@ -188,7 +188,7 @@ async def get_server_detail(db: AsyncSession, server_id: int) -> AdminServerDeta
         egg=ServerEggSummary(
             id=int(server.egg.id),
             name=server.egg.name,
-            nest_id=int(server.egg.nest_id),
+            nest_id=server.egg.nest_id,
             startup=server.egg.startup,
             docker_images=_parse_docker_images(server.egg.docker_images),
         ),
@@ -583,7 +583,6 @@ async def switch_egg(
     db: AsyncSession,
     server_id: int,
     *,
-    nest_id: int,
     egg_id: int,
     environment: dict[str, str],
     image: str | None,
@@ -596,10 +595,6 @@ async def switch_egg(
     egg = await db.get(Egg, egg_id)
     if egg is None:
         raise ServerManagementValidationError(f"Egg {egg_id} 不存在")
-    if int(egg.nest_id) != int(nest_id):
-        raise ServerManagementValidationError(
-            f"Egg {egg_id} 实际归属 nest {egg.nest_id}，与传入 nestId 不一致"
-        )
 
     variable_rows = await db.execute(
         select(EggVariable).where(EggVariable.egg_id == egg_id).order_by(EggVariable.id.asc())
@@ -614,7 +609,7 @@ async def switch_egg(
             raise ServerManagementValidationError(str(exc)) from exc
         values[int(variable.id)] = str(value)
 
-    server.nest_id = int(nest_id)
+    server.nest_id = egg.nest_id
     server.egg_id = int(egg_id)
     if "image" in provided:
         value = (image or "").strip()

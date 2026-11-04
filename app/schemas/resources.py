@@ -46,6 +46,7 @@ class AllocationsResponse(BaseModel):
 class EggResource(BaseModel):
     id: int
     name: str
+    nest_id: int | None
     docker_image: str
     startup: str
 
@@ -64,16 +65,3 @@ class EggVariableResource(BaseModel):
 
 class EggVariablesResponse(BaseModel):
     variables: list[EggVariableResource]
-
-
-class ServerDefaultsResponse(BaseModel):
-    nest_id: int
-    egg_id: int
-    node_id: int
-    docker_image: str
-    cpu: int
-    memory: int
-    disk: int
-    databases: int
-    backups: int
-    allocations: int

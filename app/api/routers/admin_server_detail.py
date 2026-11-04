@@ -302,7 +302,6 @@ async def switch_admin_server_egg(
         await server_management.switch_egg(
             db,
             server_id,
-            nest_id=payload.nest_id,
             egg_id=payload.egg_id,
             environment=payload.environment,
             image=payload.image,

@@ -47,7 +47,7 @@ const { toast } = useToast()
 
 interface NodeRef { id: number; name: string }
 interface NestRef { id: number; name: string }
-interface EggRef  { id: number; name: string; nest_id: number }
+interface EggRef  { id: number; name: string; nest_id: number | null }
 
 const plans = ref<AdminPlan[]>([])
 const nodes = ref<Map<number, NodeRef>>(new Map())
@@ -126,21 +126,12 @@ async function loadNodes() {
 }
 
 async function loadNestsAndEggs() {
-  const data = await get<{ nests: NestRef[] }>('/api/admin/resources/nests', { silent: true })
-  if (!data?.nests) return
-  nests.value = new Map(data.nests.map((n) => [n.id, n]))
-  const eggLists = await Promise.allSettled(
-    data.nests.map((n) =>
-      get<{ eggs: EggRef[] }>(`/api/admin/resources/nests/${n.id}/eggs`, { silent: true }).then((r) =>
-        (r?.eggs ?? []).map((e) => ({ ...e, nest_id: n.id })),
-      ),
-    ),
-  )
-  eggs.value = new Map(eggLists.flatMap(result => {
-    if (result.status === 'fulfilled') return result.value
-    handleError(result.reason)
-    return []
-  }).map((e) => [e.id, e]))
+  const [nestData, eggData] = await Promise.all([
+    get<{ nests: NestRef[] }>('/api/admin/resources/nests', { silent: true }),
+    get<{ eggs: EggRef[] }>('/api/admin/resources/eggs', { silent: true }),
+  ])
+  nests.value = new Map((nestData?.nests ?? []).map((n) => [n.id, n]))
+  eggs.value = new Map((eggData?.eggs ?? []).map((e) => [e.id, e]))
 }
 
 async function loadAll() {

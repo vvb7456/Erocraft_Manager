@@ -39,14 +39,14 @@ class CreateServerRequest(BaseModel):
     node_id: int
     allocation_id: int
     expiration_days: int = Field(ge=1, le=3650)
-    docker_image: str = ""
+    docker_image: str = Field(min_length=1)
     environment: dict[str, str] = Field(default_factory=dict)
-    cpu: int | None = None
-    memory: int | None = None
-    disk: int | None = None
-    databases: int | None = None
-    backups: int | None = None
-    allocations: int | None = None
+    cpu: int = Field(ge=0)
+    memory: int = Field(ge=0)
+    disk: int = Field(ge=0)
+    databases: int = Field(ge=0)
+    backups: int = Field(ge=0)
+    allocations: int = Field(ge=0)
     plan_id: int | None = None
     channel: Literal["taobao", "xianyu", "other"] = "taobao"
     external_order_id: str | None = None

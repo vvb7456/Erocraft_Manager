@@ -6,7 +6,7 @@ Plans are immutable templates that orders/invoices reference. CRUD is
 admin-only. Saving a plan validates that:
 
 - All resource fields (cpu / memory_mb / disk_mb / node_id / egg_id /
-  nest_id / allocation_limit / docker_image / startup_command) are present
+  allocation_limit / docker_image / startup_command) are present
   and positive — enforced structurally by :class:`PlanIn`.
 - ``env_defaults`` covers every required egg variable and contains no
   unknown keys (validated by
@@ -30,7 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.billing import BillingPlan
-from app.db.models.pterodactyl import Egg, EggVariable, Nest, PanelNode
+from app.db.models.pterodactyl import Egg, EggVariable, PanelNode
 from app.schemas.billing_plans import PlanIn  # re-exported for routers
 from app.services.egg_validator import EggValidationError, validate_environment
 
@@ -162,20 +162,14 @@ async def _check_node_capacity(
         )
 
 
-async def _check_docker_image_in_egg(
-    db: AsyncSession, egg_id: int, docker_image: str
-) -> None:
+def _check_docker_image_in_egg(egg: Egg, docker_image: str) -> None:
     """Reject plans whose docker_image isn't declared by the egg.
 
     Wings refuses to install a server with an image not listed in the
     egg's ``docker_images`` map (panel.eggs.docker_images JSON dict). A
     plan with a stale image silently breaks every order it spawns.
     """
-    raw = (
-        await db.execute(
-            select(Egg.docker_images).where(Egg.id == egg_id)
-        )
-    ).scalar_one_or_none()
+    raw = egg.docker_images
     if not raw:
         # Egg has no images declared — let Wings deal with it; nothing
         # we can verify locally.
@@ -184,34 +178,16 @@ async def _check_docker_image_in_egg(
         images = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise PlanValidationError(
-            f"egg {egg_id} 的 docker_images 字段不是合法 JSON, 无法校验"
+            f"egg {egg.id} 的 docker_images 字段不是合法 JSON, 无法校验"
         ) from exc
     if not isinstance(images, dict):
         return
     allowed = {str(v) for v in images.values() if isinstance(v, str)}
     if docker_image not in allowed:
         raise PlanValidationError(
-            f"docker_image={docker_image!r} 不在 egg {egg_id} 声明的镜像列表中: "
+            f"docker_image={docker_image!r} 不在 egg {egg.id} 声明的镜像列表中: "
             f"{sorted(allowed)}"
         )
-
-
-async def _check_nest_egg_pair(
-    db: AsyncSession, nest_id: int, egg_id: int
-) -> None:
-    row = (
-        await db.execute(select(Egg.id, Egg.nest_id).where(Egg.id == egg_id))
-    ).first()
-    if row is None:
-        raise PlanValidationError(f"egg 不存在: id={egg_id}")
-    if row.nest_id != nest_id:
-        raise PlanValidationError(
-            f"egg {egg_id} 不属于 nest {nest_id} (实际属于 nest {row.nest_id})"
-        )
-    if not (
-        await db.execute(select(Nest.id).where(Nest.id == nest_id))
-    ).scalar_one_or_none():
-        raise PlanValidationError(f"nest 不存在: id={nest_id}")
 
 
 async def _validate_env_defaults(
@@ -280,8 +256,10 @@ async def validate_plan_payload(
         memory_mb=payload.memory_mb,
         disk_mb=payload.disk_mb,
     )
-    await _check_nest_egg_pair(db, payload.nest_id, payload.egg_id)
-    await _check_docker_image_in_egg(db, payload.egg_id, payload.docker_image)
+    egg = await db.get(Egg, payload.egg_id)
+    if egg is None:
+        raise PlanValidationError(f"egg 不存在: id={payload.egg_id}")
+    _check_docker_image_in_egg(egg, payload.docker_image)
     normalized_env = await _validate_env_defaults(
         db, payload.egg_id, payload.env_defaults
     )
@@ -301,6 +279,7 @@ async def validate_plan_payload(
         # Standard plan must not declare a linked plan.
         data["linked_plan_id"] = None
 
+    data["nest_id"] = egg.nest_id
     return data
 
 

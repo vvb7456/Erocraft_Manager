@@ -50,7 +50,7 @@ class PlanIn(_Forbid):
     # Resource / runtime spec — mandatory on every plan in v2.
     node_id: int = Field(gt=0)
     egg_id: int = Field(gt=0)
-    nest_id: int = Field(gt=0)
+    nest_id: int | None = None
     cpu: int = Field(gt=0, le=1_000_000)
     memory_mb: int = Field(gt=0, le=1_000_000)
     disk_mb: int = Field(gt=0, le=10_000_000)

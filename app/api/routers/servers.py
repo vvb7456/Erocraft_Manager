@@ -122,20 +122,6 @@ async def _get_today(db: AsyncSession) -> date:
     return local_today(str(timezone_name))
 
 
-async def _server_defaults(db: AsyncSession) -> dict[str, int | str]:
-    store = get_settings_store()
-    defaults = {
-        "DOCKER_IMAGE": SETTINGS_SPECS["DOCKER_IMAGE"].default_value(),
-        "DEFAULT_CPU": SETTINGS_SPECS["DEFAULT_CPU"].default_value(),
-        "DEFAULT_MEMORY": SETTINGS_SPECS["DEFAULT_MEMORY"].default_value(),
-        "DEFAULT_DISK": SETTINGS_SPECS["DEFAULT_DISK"].default_value(),
-        "DEFAULT_DATABASES": SETTINGS_SPECS["DEFAULT_DATABASES"].default_value(),
-        "DEFAULT_BACKUPS": SETTINGS_SPECS["DEFAULT_BACKUPS"].default_value(),
-        "DEFAULT_ALLOCATIONS": SETTINGS_SPECS["DEFAULT_ALLOCATIONS"].default_value(),
-    }
-    return await store.get_many(db, defaults)
-
-
 async def _apply_plan_change(
     db: AsyncSession,
     server: PteroServer,
@@ -314,7 +300,6 @@ async def create_server(
     db: AsyncSession = Depends(get_db),
 ) -> CreateServerResponse:
     actor_username = current_user.username
-    defaults = await _server_defaults(db)
     today = await _get_today(db)
     expiration_date = today + timedelta(days=payload.expiration_days)
 
@@ -353,12 +338,6 @@ async def create_server(
                 detail=f"外部订单号 '{ext_id}' 已在订单 #{dup_order} 中录入，请勿重复使用",
             )
 
-    # Resolve nest_id from egg (panel API used to derive it server-side)
-    egg_row = await db.execute(select(Egg.nest_id).where(Egg.id == payload.egg_id))
-    nest_id = egg_row.scalar_one_or_none()
-    if nest_id is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Egg {payload.egg_id} 不存在")
-
     description = f"到期时间：{expiration_date.strftime('%Y/%m/%d')}"
     await db.commit()
 
@@ -369,18 +348,17 @@ async def create_server(
             node_id=payload.node_id,
             allocation_id=payload.allocation_id,
             egg_id=payload.egg_id,
-            nest_id=int(nest_id),
             name=payload.server_name.strip(),
             description=description,
-            image=(payload.docker_image or str(defaults["DOCKER_IMAGE"])).strip(),
+            image=payload.docker_image.strip(),
             startup=payload.startup_command.strip(),
             environment=payload.environment,
-            cpu=int(payload.cpu if payload.cpu is not None else defaults["DEFAULT_CPU"]),
-            memory=int(payload.memory if payload.memory is not None else defaults["DEFAULT_MEMORY"]),
-            disk=int(payload.disk if payload.disk is not None else defaults["DEFAULT_DISK"]),
-            database_limit=int(payload.databases if payload.databases is not None else defaults["DEFAULT_DATABASES"]),
-            backup_limit=int(payload.backups if payload.backups is not None else defaults["DEFAULT_BACKUPS"]),
-            allocation_limit=int(payload.allocations if payload.allocations is not None else defaults["DEFAULT_ALLOCATIONS"]),
+            cpu=payload.cpu,
+            memory=payload.memory,
+            disk=payload.disk,
+            database_limit=payload.databases,
+            backup_limit=payload.backups,
+            allocation_limit=payload.allocations,
         )
     except LifecycleValidationError as exc:
         # User-correctable input error → 422 so the frontend can show a field-level message.

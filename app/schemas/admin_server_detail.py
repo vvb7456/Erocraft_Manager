@@ -40,7 +40,7 @@ class DockerImageOption(CamelModel):
 class ServerEggSummary(CamelModel):
     id: int
     name: str
-    nest_id: int = Field(alias="nestId")
+    nest_id: int | None = Field(alias="nestId")
     startup: str | None
     docker_images: list[DockerImageOption] = Field(alias="dockerImages")
 
@@ -86,7 +86,7 @@ class AdminServerSummary(CamelModel):
     is_installing: bool = Field(alias="isInstalling")
     owner_id: int = Field(alias="ownerId")
     node_id: int = Field(alias="nodeId")
-    nest_id: int = Field(alias="nestId")
+    nest_id: int | None = Field(alias="nestId")
     egg_id: int = Field(alias="eggId")
     allocation_id: int = Field(alias="allocationId")
     memory: int
@@ -170,7 +170,7 @@ class UpdateStartupRequest(CamelModel):
 
 
 class SwitchEggRequest(CamelModel):
-    nest_id: int = Field(alias="nestId")
+    nest_id: int | None = Field(default=None, alias="nestId")
     egg_id: int = Field(alias="eggId")
     environment: dict[str, str] = Field(default_factory=dict)
     image: str | None = Field(default=None, min_length=1)

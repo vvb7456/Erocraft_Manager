@@ -88,7 +88,7 @@ class BillingPlan(Base):
 
     node_id: Mapped[int] = mapped_column(Integer, nullable=False)
     egg_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    nest_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    nest_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cpu: Mapped[int] = mapped_column(Integer, nullable=False)
     memory_mb: Mapped[int] = mapped_column(Integer, nullable=False)
     disk_mb: Mapped[int] = mapped_column(Integer, nullable=False)

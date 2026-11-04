@@ -128,7 +128,7 @@ class Egg(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
-    nest_id: Mapped[int] = mapped_column(ForeignKey("nests.id"), nullable=False)
+    nest_id: Mapped[int | None] = mapped_column(ForeignKey("nests.id"), nullable=True)
     author: Mapped[str] = mapped_column(String(191), nullable=False)
     name: Mapped[str] = mapped_column(String(191), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -228,7 +228,7 @@ class PteroServer(Base):
     threads: Mapped[str | None] = mapped_column(String(191), nullable=True)
     oom_disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     allocation_id: Mapped[int] = mapped_column(ForeignKey("allocations.id"), nullable=False)
-    nest_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    nest_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     egg_id: Mapped[int] = mapped_column(ForeignKey("eggs.id"), nullable=False)
     startup: Mapped[str] = mapped_column(Text, nullable=False)
     image: Mapped[str] = mapped_column(String(191), nullable=False)

@@ -97,20 +97,6 @@
     "payTimeout": "付款有效期 (分钟)",
     "payTimeout_tip": "从创建业务订单开始计时，到期后关闭付款并释放预留资源。"
   },
-  "defaults": {
-    "title": "服务器默认配置",
-    "desc": "创建服务器时的默认资源和预设参数。",
-    "nest": "预设组 (Nest)",
-    "egg": "预设 (Egg)",
-    "node": "节点",
-    "cpu": "CPU (%)",
-    "memory": "内存 (MB)",
-    "disk": "磁盘 (MB)",
-    "databases": "数据库数量",
-    "backups": "备份数量",
-    "allocations": "额外端口",
-    "dockerImage": "Docker 镜像"
-  },
   "automation": {
     "title": "自动化任务",
     "time": {

@@ -7,8 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
-from app.core.runtime_settings import SETTINGS_SPECS, defaults_for
-from app.core.settings_store import get_settings_store
 from app.db.models.pterodactyl import PteroUser
 from app.db.repositories.resources import resource_repository
 from app.schemas.resources import (
@@ -22,7 +20,6 @@ from app.schemas.resources import (
     NestResource,
     NodesResponse,
     NodeResource,
-    ServerDefaultsResponse,
     SimpleUserResource,
     UsersResourceResponse,
 )
@@ -59,34 +56,6 @@ async def list_users_simple(
     )
 
 
-@router.get("/server-defaults", response_model=ServerDefaultsResponse)
-async def server_defaults(
-    _: PteroUser = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> ServerDefaultsResponse:
-    store = get_settings_store()
-    values = await store.get_many(
-        db,
-        {
-            key: default
-            for key, default in defaults_for(SETTINGS_SPECS).items()
-            if key.startswith("DEFAULT_") or key in {"DOCKER_IMAGE"}
-        },
-    )
-    return ServerDefaultsResponse(
-        nest_id=int(values["DEFAULT_NEST_ID"]),
-        egg_id=int(values["DEFAULT_EGG_ID"]),
-        node_id=int(values["DEFAULT_NODE_ID"]),
-        docker_image=str(values["DOCKER_IMAGE"]),
-        cpu=int(values["DEFAULT_CPU"]),
-        memory=int(values["DEFAULT_MEMORY"]),
-        disk=int(values["DEFAULT_DISK"]),
-        databases=int(values["DEFAULT_DATABASES"]),
-        backups=int(values["DEFAULT_BACKUPS"]),
-        allocations=int(values["DEFAULT_ALLOCATIONS"]),
-    )
-
-
 @router.get("/nodes/{node_id}/allocations", response_model=AllocationsResponse)
 async def node_allocations(
     node_id: int,
@@ -99,9 +68,10 @@ async def node_allocations(
     )
 
 
+@router.get("/eggs", response_model=EggsResponse)
 @router.get("/nests/{nest_id}/eggs", response_model=EggsResponse)
 async def nest_eggs(
-    nest_id: int,
+    nest_id: int | None = None,
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> EggsResponse:
@@ -111,6 +81,7 @@ async def nest_eggs(
             EggResource(
                 id=egg.id,
                 name=egg.name,
+                nest_id=egg.nest_id,
                 docker_image=egg.docker_image,
                 startup=egg.startup or "",
             )
@@ -119,15 +90,16 @@ async def nest_eggs(
     )
 
 
+@router.get("/eggs/{egg_id}/variables", response_model=EggVariablesResponse)
 @router.get("/nests/{nest_id}/eggs/{egg_id}/variables", response_model=EggVariablesResponse)
 async def egg_variables(
-    nest_id: int,
     egg_id: int,
+    nest_id: int | None = None,
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> EggVariablesResponse:
     egg = await resource_repository.get_egg(db, egg_id)
-    if egg is None or egg.nest_id != nest_id:
+    if egg is None or (nest_id is not None and egg.nest_id != nest_id):
         raise HTTPException(status_code=404, detail="Egg not found")
 
     variables = await resource_repository.list_egg_variables(db, egg_id)

@@ -208,7 +208,7 @@ async def _create_placeholder_server(db: AsyncSession, *, user: PteroUser, order
         raise InvalidOrderRequest(f"节点可用端口不足，套餐需要 {count} 个端口")
     primary, *extras = allocations
     server = await panel_db.create_server(
-        db, owner_id=user.id, node_id=plan.node_id, allocation_id=primary, egg_id=plan.egg_id, nest_id=plan.nest_id,
+        db, owner_id=user.id, node_id=plan.node_id, allocation_id=primary, egg_id=plan.egg_id,
         name=f"{user.username}-{order.order_no[-6:]}", memory=snapshot["memory_mb"], swap=snapshot["swap_mb"], disk=snapshot["disk_mb"],
         io=snapshot["io"], cpu=snapshot["cpu"], image=snapshot["docker_image"], startup=snapshot["startup_command"],
         environment={key: str(value) for key, value in snapshot["env_snapshot"].items()},

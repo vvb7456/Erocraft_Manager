@@ -25,7 +25,7 @@ export interface AdminPlan {
   period_options: PeriodOption[]
   node_id: number
   egg_id: number
-  nest_id: number
+  nest_id: number | null
   cpu: number
   memory_mb: number
   disk_mb: number
@@ -78,7 +78,7 @@ defineOptions({ name: 'PlanEditorModal' })
 
 interface NodeRef { id: number; name: string }
 interface NestRef { id: number; name: string }
-interface EggRef  { id: number; name: string; nest_id: number }
+interface EggRef  { id: number; name: string; nest_id: number | null }
 
 const props = defineProps<{
   modelValue: boolean
@@ -185,7 +185,7 @@ function fromAdminPlan(p: AdminPlan, mode: EditorMode): PlanFormState {
     description_md: p.description_md ?? '',
     is_active: p.is_active,
     node_id: p.node_id,
-    nest_id: p.nest_id,
+    nest_id: props.eggsMap.get(p.egg_id)?.nest_id ?? 0,
     egg_id: p.egg_id,
     cpu: p.cpu,
     memory_mb: p.memory_mb,
@@ -281,15 +281,16 @@ const nodeOptions = computed(() => Array.from(props.nodesMap.values()).map((n) =
   value: n.id,
   label: n.name,
 })))
-const nestOptions = computed(() => Array.from(props.nestsMap.values()).map((n) => ({
-  value: n.id,
-  label: n.name,
-})))
+const nestOptions = computed(() => [
+  ...Array.from(props.nestsMap.values()).map(n => ({ value: n.id, label: n.name })),
+  ...(Array.from(props.eggsMap.values()).some(e => e.nest_id === null)
+    ? [{ value: 0, label: t('common.uncategorized') }] : []),
+])
 const eggOptions = computed(() => {
   const nestId = form.value.nest_id
   if (nestId == null) return []
   return Array.from(props.eggsMap.values())
-    .filter((e) => e.nest_id === nestId)
+    .filter((e) => (e.nest_id ?? 0) === nestId)
     .map((e) => ({ value: e.id, label: e.name }))
 })
 
@@ -349,7 +350,7 @@ watch(() => props.modelValue, async (open) => {
     // options resolve correctly when computing dock_image_custom.
     await loadEggDetail(props.plan.egg_id).catch(handleError)
     form.value = fromAdminPlan(props.plan, props.mode)
-    if (props.plan.nest_id) await loadEggVariables(props.plan.egg_id).catch(handleError)
+    await loadEggVariables(props.plan.egg_id).catch(handleError)
   }
   orig.value = JSON.stringify(form.value)
 })
@@ -363,11 +364,9 @@ watch(() => form.value.egg_id, async (newId, oldId) => {
 
 // ── Loaders ──
 async function loadEggVariables(eggId: number) {
-  const nestId = form.value.nest_id ?? props.eggsMap.get(eggId)?.nest_id
-  if (!nestId) return
   loadingEggVars.value = true
   const data = await get<{ variables: EggVariable[] }>(
-    `/api/admin/resources/nests/${nestId}/eggs/${eggId}/variables`,
+    `/api/admin/resources/eggs/${eggId}/variables`,
     { silent: true },
   ).catch(failure => {
     eggVariables.value = []
@@ -393,11 +392,7 @@ async function loadEggVariables(eggId: number) {
 
 async function loadEggDetail(eggId: number) {
   if (eggDetailsCache.value.has(eggId)) return
-  const nestId = form.value.nest_id ?? props.eggsMap.get(eggId)?.nest_id
-  if (!nestId) return
-  // /api/nests/:nestId/eggs returns eggs list; we want one egg's detail.
-  // Use the same endpoint and pluck.
-  const data = await get<{ eggs: EggDetail[] }>(`/api/admin/resources/nests/${nestId}/eggs`, { silent: true })
+  const data = await get<{ eggs: EggDetail[] }>('/api/admin/resources/eggs', { silent: true })
   if (!data?.eggs) return
   for (const e of data.eggs) {
     eggDetailsCache.value.set(e.id, e)
@@ -509,7 +504,6 @@ const preflightErrors = computed<string[]>(() => {
     if (form.value.linked_plan_id == null) errs.push(t('billing.admin.plans.errors.linkedPlanRequired'))
   } else {
     if (form.value.node_id == null) errs.push(t('billing.admin.plans.errors.nodeRequired'))
-    if (form.value.nest_id == null) errs.push(t('billing.admin.plans.errors.nestRequired'))
     if (form.value.egg_id == null) errs.push(t('billing.admin.plans.errors.eggRequired'))
     if (!form.value.docker_image.trim()) errs.push(t('billing.admin.plans.errors.dockerImageRequired'))
     if (!form.value.startup_command.trim()) errs.push(t('billing.admin.plans.errors.startupRequired'))
@@ -529,7 +523,6 @@ function buildPayload(): Record<string, unknown> {
   let res = {
     node_id: form.value.node_id,
     egg_id: form.value.egg_id,
-    nest_id: form.value.nest_id,
     cpu: form.value.cpu,
     memory_mb: form.value.memory_mb,
     disk_mb: form.value.disk_mb,
@@ -549,7 +542,6 @@ function buildPayload(): Record<string, unknown> {
       res = {
         node_id: linked.node_id,
         egg_id: linked.egg_id,
-        nest_id: linked.nest_id,
         cpu: linked.cpu,
         memory_mb: linked.memory_mb,
         disk_mb: linked.disk_mb,

@@ -4,12 +4,12 @@
 // The first row pair is the nest+egg switcher (per the doc's "no separate
 // switch-egg section" rule). When the operator picks a different egg we
 // reload its docker image / startup defaults / variable definitions from
-// /api/admin/resources/nests/{nest}/eggs[/{egg}/variables] and reset
+// /api/admin/resources/eggs[/{egg}/variables] and reset
 // dependent fields.
 //
 // Save behaviour:
 //   - eggId changed  → destructive: confirm, then PUT /egg with the full
-//     payload (nestId/eggId/environment/image/startup/skipScripts).
+//     payload (eggId/environment/image/startup/skipScripts).
 //   - eggId same     → split: PATCH /startup if any of image/startup/skip
 //     changed, then PATCH /variables with only the changed env keys.
 //
@@ -45,7 +45,7 @@ const serverId = inject<Ref<number | null>>('adminServerId')!
 const reload = inject<() => Promise<void>>('reloadAdminServer', async () => {})
 
 interface NestOpt { id: number; name: string }
-interface EggOpt { id: number; name: string; docker_image: string; startup: string }
+interface EggOpt { id: number; name: string; nest_id: number | null; docker_image: string; startup: string }
 interface RawVarDef { name: string; env_variable: string; default_value: string; description: string; rules: string | null }
 interface VarDef { name: string; envVariable: string; defaultValue: string; description: string; rules: string | null }
 
@@ -53,10 +53,14 @@ const CUSTOM = '__custom__'
 
 // Loaded resource lists
 const nests = ref<NestOpt[]>([])
-const eggs = ref<EggOpt[]>([])
+const allEggs = ref<EggOpt[]>([])
+const eggs = computed(() => allEggs.value.filter(e => (e.nest_id ?? 0) === nestId.value))
+const nestOptions = computed(() => [
+  ...nests.value.map(n => ({ value: n.id, label: n.name })),
+  ...(allEggs.value.some(e => e.nest_id === null) ? [{ value: 0, label: t('common.uncategorized') }] : []),
+])
 
 // Initial state (from server detail)
-const initialNestId = ref(0)
 const initialEggId = ref(0)
 const initialImage = ref('')
 const initialStartup = ref('')
@@ -98,12 +102,11 @@ function syncFromDetail() {
   const v = detail.value?.variables ?? []
   if (!s) return
   syncing.value = true
-  initialNestId.value = s.nestId
   initialEggId.value = s.eggId
   initialImage.value = s.image
   initialStartup.value = s.startup
   initialSkip.value = s.skipScripts
-  nestId.value = s.nestId
+  nestId.value = detail.value!.egg.nestId ?? 0
   eggId.value = s.eggId
   startup.value = s.startup
   skipScripts.value = s.skipScripts
@@ -142,28 +145,30 @@ async function loadNests() {
   nests.value = r?.nests ?? []
 }
 
-async function loadEggs(nid: number) {
-  const r = await get<{ eggs: EggOpt[] }>(`/api/admin/resources/nests/${nid}/eggs`)
-  eggs.value = r?.eggs ?? []
+async function loadEggs() {
+  const r = await get<{ eggs: EggOpt[] }>('/api/admin/resources/eggs')
+  allEggs.value = r?.eggs ?? []
 }
 
 // Lazy load nests on first mount + eggs for the current nest.
 watch(detail, async (d) => {
   if (!d) return
   await loadNests().catch(handleError)
-  await loadEggs(d.server.nestId)
+  await loadEggs()
 }, { immediate: true })
 
-// Switching nests: reload eggs and clear pending egg pick (force user to
+// Switching nests: clear pending egg pick (force user to
 // re-select an egg under the new nest).
-async function onNestChange(v: string | number | boolean | (string | number | boolean)[]) {
-  if (typeof v !== 'number') return
-  nestId.value = v
-  eggs.value = []
-  await loadEggs(v).catch(handleError)
+function onNestChange(v: string | number | boolean | (string | number | boolean)[]) {
+  nestId.value = Number(v)
   // If the previously selected egg doesn't belong to the new nest, reset.
   if (!eggs.value.some(e => e.id === eggId.value)) {
     eggId.value = 0
+    imageMode.value = ''
+    customImage.value = ''
+    startup.value = ''
+    varDefs.value = []
+    vars.value = {}
   }
 }
 
@@ -171,17 +176,17 @@ async function onNestChange(v: string | number | boolean | (string | number | bo
 // working fields (image/startup/vars) so that if the user re-selects the
 // original egg we restore initial values cleanly.
 async function onEggChange(v: string | number | boolean | (string | number | boolean)[]) {
-  if (typeof v !== 'number') return
-  if (v === initialEggId.value) {
+  const id = Number(v)
+  if (id === initialEggId.value) {
     // Reverted to the original egg — restore initial state.
     syncFromDetail()
     return
   }
-  const egg = eggs.value.find(e => e.id === v)
+  const egg = eggs.value.find(e => e.id === id)
   if (!egg) return
   // Pull variable defs for the new egg
   const vr = await get<{ variables: RawVarDef[] }>(
-    `/api/admin/resources/nests/${nestId.value}/eggs/${v}/variables`,
+    `/api/admin/resources/eggs/${id}/variables`,
   )
   const defs: VarDef[] = (vr?.variables ?? []).map(d => ({
     name: d.name,
@@ -190,7 +195,7 @@ async function onEggChange(v: string | number | boolean | (string | number | boo
     description: d.description,
     rules: d.rules,
   }))
-  eggId.value = v
+  eggId.value = id
   varDefs.value = defs
   const env: Record<string, string> = {}
   for (const d of defs) env[d.envVariable] = d.defaultValue
@@ -260,6 +265,10 @@ function discard() { syncFromDetail() }
 
 async function save(): Promise<boolean> {
   if (!isDirty.value || !serverId.value) return true
+  if (!eggId.value) {
+    toast(t('adminServer.settings.startup.errors.eggRequired'), 'error')
+    return false
+  }
   if (validationErrors.value.length > 0) {
     toast(t('adminServer.settings.startup.errors.invalid', { n: validationErrors.value.length }), 'error')
     return false
@@ -280,7 +289,6 @@ async function save(): Promise<boolean> {
     })
     if (!ok) return false
     const body = {
-      nestId: nestId.value,
       eggId: eggId.value,
       environment: vars.value,
       image: effectiveImage.value,
@@ -345,7 +353,7 @@ useDirtyFormSection({ name: 'startup', isDirty, save, discard })
         <template #label>{{ t('adminServer.settings.startup.nest') }}</template>
         <BaseSelect
           :modelValue="nestId"
-          :options="nests.map(n => ({ value: n.id, label: n.name }))"
+          :options="nestOptions"
           searchable
           teleport
           @update:modelValue="onNestChange"

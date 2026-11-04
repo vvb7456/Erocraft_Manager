@@ -249,7 +249,6 @@ async def create_server(
     node_id: int,
     allocation_id: int,
     egg_id: int,
-    nest_id: int,
     name: str,
     description: str = "",
     memory: int,
@@ -298,10 +297,6 @@ async def create_server(
     egg = await db.get(Egg, egg_id)
     if egg is None:
         raise PanelDBValidationError(f"Egg {egg_id} 不存在")
-    if int(egg.nest_id) != int(nest_id):
-        raise PanelDBValidationError(
-            f"Egg {egg_id} 实际归属 nest {egg.nest_id}，与传入的 nest_id={nest_id} 不一致"
-        )
 
     # Validate primary allocation
     alloc = await db.get(Allocation, allocation_id)
@@ -362,7 +357,7 @@ async def create_server(
         threads=threads,
         oom_disabled=bool(oom_disabled),
         allocation_id=int(allocation_id),
-        nest_id=int(nest_id),
+        nest_id=egg.nest_id,
         egg_id=int(egg_id),
         startup=startup,
         image=image,

@@ -49,7 +49,7 @@ class PlanSnapshotOut(BaseModel):
     currency_code: str
     selected_period: PlanSnapshotPeriodOut
     egg_id: int
-    nest_id: int
+    nest_id: int | None
     node_id: int | None = None
     docker_image: str
     startup_command: str

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -46,7 +46,6 @@ const activeTab = computed(() => tabs.value.some(item => item.key === route.quer
 const tabs = computed<SettingsNavItem[]>(() => [
   { key: 'branding',   label: t('settings.branding.title'), icon: 'palette' },
   { key: 'agreements', label: t('settings.agreements.title'), icon: 'gavel' },
-  { key: 'defaults',   label: t('settings.defaults.title'), icon: 'tune' },
   { key: 'llm',        label: t('settings.llm.title'),        icon: 'smart_toy' },
   { key: 'payment',    label: t('settings.payment.title'),  icon: 'payments' },
   { key: 'marketing',  label: t('settings.marketing.title'), icon: 'campaign' },
@@ -121,24 +120,11 @@ function setLlmSecret(key: string, val: string) { setSetting('llm', key, val) }
 // ── Helpers ──
 function getStr(key: string, def = ''): string { return settings.value[key] ?? def }
 function setStr(key: string, val: string) { setSetting('settings', key, val) }
-function getNum(key: string, def = 0): number { return Number(settings.value[key] ?? def) }
-function setNum(key: string, val: string | number | boolean | (string | number | boolean)[]) {
-  const v = Array.isArray(val) ? val[0] : val
-  setSetting('settings', key, Number(v))
-}
 function getBool(key: string): boolean {
   const v = settings.value[key]
   return v === true || v === 'true' || v === '1'
 }
 function setBool(key: string, val: boolean) { setSetting('settings', key, val) }
-
-// ── Resources for selects ──
-const nestList = ref<any[]>([])
-const eggList = ref<any[]>([])
-const nodeList = ref<any[]>([])
-const nestOptions = computed(() => nestList.value.map((n: any) => ({ value: n.id, label: `${n.name} (#${n.id})` })))
-const eggOptions = computed(() => eggList.value.map((e: any) => ({ value: e.id, label: `${e.name} (#${e.id})` })))
-const nodeOptions = computed(() => nodeList.value.map((n: any) => ({ value: n.id, label: `${n.name} (#${n.id})` })))
 
 // Coupon templates — populated for the marketing tab so referral template
 // pickers don't ask the operator to type raw codes.
@@ -182,12 +168,6 @@ function setBillingKinds(value: unknown) {
   billingSettings.value.REFERRAL_QUALIFYING_KINDS = sameFormValue([...next].sort(), [...(original ?? ['new_purchase', 'renew', 'upgrade'])].sort()) ? original : next
 }
 
-watch(() => getNum('DEFAULT_NEST_ID'), async (nestId) => {
-  if (!nestId) { eggList.value = []; return }
-  const data = await get<{ eggs: any[] }>(`/api/admin/resources/nests/${nestId}/eggs`)
-  eggList.value = data?.eggs || []
-})
-
 // ── Fetch ──
 onMounted(async () => {
   try {
@@ -196,24 +176,15 @@ onMounted(async () => {
       get<Record<string, any>>('/api/admin/automation'),
       get<Record<string, any>>('/api/admin/billing/settings'),
       get<Record<string, any>>('/api/admin/llm/settings'),
-      get<{ nests: any[] }>('/api/admin/resources/nests'),
-      get<{ nodes: any[] }>('/api/admin/resources/nodes'),
       get<CouponTemplateLite[]>('/api/admin/billing/coupon-templates'),
     ])
-    const [settingsData, autoData, billingData, llmData, nestsRes, nodesRes, tplRes] = results
+    const [settingsData, autoData, billingData, llmData, tplRes] = results
     if (settingsData.status === 'fulfilled') settings.value = Object.fromEntries(Object.entries(settingsData.value).filter(([key]) => !key.startsWith('SMTP_') && !['SENDER_EMAIL', 'EMAIL_SEND_DELAY'].includes(key)))
     if (autoData.status === 'fulfilled') Object.assign(automation.value, Object.fromEntries(Object.keys(automation.value).map(key => [key, autoData.value[key]])))
     if (billingData.status === 'fulfilled') billingSettings.value = billingData.value
     if (llmData.status === 'fulfilled') llmSettings.value = llmData.value
-    if (nestsRes.status === 'fulfilled') nestList.value = nestsRes.value.nests
-    if (nodesRes.status === 'fulfilled') nodeList.value = nodesRes.value.nodes
     if (tplRes.status === 'fulfilled') couponTemplates.value = tplRes.value
     for (const result of results) if (result.status === 'rejected') handleError(result.reason)
-    const nestId = getNum('DEFAULT_NEST_ID')
-    if (nestId) {
-      const data = await get<{ eggs: any[] }>(`/api/admin/resources/nests/${nestId}/eggs`)
-      eggList.value = data.eggs
-    }
   } finally {
     snapshot()
     initialLoading.value = false
@@ -485,42 +456,6 @@ function onTabChange(next: string) {
                   <HelpTip :text="t('settings.payment.payTimeout_tip')" />
                 </template>
                 <NumberInput :modelValue="getBillingNum('BILLING_ORDER_PAY_TIMEOUT_MIN', 5)" @update:modelValue="setBillingNum('BILLING_ORDER_PAY_TIMEOUT_MIN', $event)" :min="3" :max="1440" />
-              </FormField>
-            </BaseCard>
-          </template>
-
-          <template v-else-if="activeTab === 'defaults'">
-            <BaseCard variant="bg2" density="compact">
-              <SectionHeader icon="tune" :subtitle="t('settings.defaults.desc')" flush>{{ t('settings.defaults.title') }}</SectionHeader>
-              <FormField :label="t('settings.defaults.nest')" layout="horizontal">
-                <BaseSelect teleport :modelValue="getNum('DEFAULT_NEST_ID')" :options="nestOptions" :placeholder="t('settings.defaults.nest')" @update:modelValue="setNum('DEFAULT_NEST_ID', $event)" />
-              </FormField>
-              <FormField :label="t('settings.defaults.egg')" layout="horizontal">
-                <BaseSelect teleport :modelValue="getNum('DEFAULT_EGG_ID')" :options="eggOptions" :placeholder="t('settings.defaults.egg')" :disabled="!getNum('DEFAULT_NEST_ID')" @update:modelValue="setNum('DEFAULT_EGG_ID', $event)" />
-              </FormField>
-              <FormField :label="t('settings.defaults.node')" layout="horizontal">
-                <BaseSelect teleport :modelValue="getNum('DEFAULT_NODE_ID')" :options="nodeOptions" :placeholder="t('settings.defaults.node')" @update:modelValue="setNum('DEFAULT_NODE_ID', $event)" />
-              </FormField>
-              <FormField :label="t('settings.defaults.dockerImage')" layout="horizontal">
-                <BaseInput :modelValue="getStr('DOCKER_IMAGE')" @update:modelValue="setStr('DOCKER_IMAGE', $event)" />
-              </FormField>
-              <FormField :label="t('settings.defaults.cpu')" layout="horizontal">
-                <NumberInput :modelValue="getNum('DEFAULT_CPU', 100)" @update:modelValue="setNum('DEFAULT_CPU', $event)" :min="0" />
-              </FormField>
-              <FormField :label="t('settings.defaults.memory')" layout="horizontal">
-                <NumberInput :modelValue="getNum('DEFAULT_MEMORY', 1024)" @update:modelValue="setNum('DEFAULT_MEMORY', $event)" :min="0" />
-              </FormField>
-              <FormField :label="t('settings.defaults.disk')" layout="horizontal">
-                <NumberInput :modelValue="getNum('DEFAULT_DISK', 5120)" @update:modelValue="setNum('DEFAULT_DISK', $event)" :min="0" />
-              </FormField>
-              <FormField :label="t('settings.defaults.databases')" layout="horizontal">
-                <NumberInput :modelValue="getNum('DEFAULT_DATABASES')" @update:modelValue="setNum('DEFAULT_DATABASES', $event)" :min="0" />
-              </FormField>
-              <FormField :label="t('settings.defaults.backups')" layout="horizontal">
-                <NumberInput :modelValue="getNum('DEFAULT_BACKUPS')" @update:modelValue="setNum('DEFAULT_BACKUPS', $event)" :min="0" />
-              </FormField>
-              <FormField :label="t('settings.defaults.allocations')" layout="horizontal">
-                <NumberInput :modelValue="getNum('DEFAULT_ALLOCATIONS', 1)" @update:modelValue="setNum('DEFAULT_ALLOCATIONS', $event)" :min="0" />
               </FormField>
             </BaseCard>
           </template>

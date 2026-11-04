@@ -30,7 +30,7 @@ export interface DockerImageOption {
 export interface ServerEggSummary {
   id: number
   name: string
-  nestId: number
+  nestId: number | null
   startup: string | null
   dockerImages: DockerImageOption[]
 }
@@ -76,7 +76,7 @@ export interface AdminServerSummary {
   isInstalling: boolean
   ownerId: number
   nodeId: number
-  nestId: number
+  nestId: number | null
   eggId: number
   allocationId: number
   memory: number

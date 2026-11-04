@@ -1,5 +1,6 @@
 {
   "listSep": ", ",
+  "uncategorized": "Uncategorized",
   "selection": {
     "count": "{count} selected",
     "clear": "Cancel",

@@ -56,7 +56,9 @@ const createForm = ref({
 // Dropdown data
 const userList = ref<{ id: number; username: string; email: string }[]>([])
 const nestList = ref<{ id: number; name: string }[]>([])
-const eggList = ref<{ id: number; name: string; docker_image: string; startup: string }[]>([])
+interface EggOption { id: number; name: string; nest_id: number | null; docker_image: string; startup: string }
+const allEggs = ref<EggOption[]>([])
+const eggList = computed(() => allEggs.value.filter(e => (e.nest_id ?? 0) === createForm.value.nest_id))
 const nodeList = ref<{ id: number; name: string }[]>([])
 const allocationList = ref<{ id: number; ip: string; port: number }[]>([])
 const eggVariables = ref<{ name: string; env_variable: string; default_value: string; description: string; rules: string }[]>([])
@@ -77,7 +79,6 @@ interface PlanOption {
   display_name: string
   price_fen: number
   is_active: boolean
-  nest_id: number
   egg_id: number
   node_id: number
   cpu: number
@@ -99,7 +100,10 @@ const channelOptions = computed(() => [
   { value: 'xianyu', label: t('servers.channel.xianyu') },
   { value: 'other', label: t('servers.channel.other') },
 ])
-const nestOptions = computed(() => nestList.value.map(n => ({ value: n.id, label: n.name })))
+const nestOptions = computed(() => [
+  ...nestList.value.map(n => ({ value: n.id, label: n.name })),
+  ...(allEggs.value.some(e => e.nest_id === null) ? [{ value: 0, label: t('common.uncategorized') }] : []),
+])
 const eggOptions = computed(() => eggList.value.map(e => ({ value: e.id, label: e.name })))
 const nodeOptions = computed(() => nodeList.value.map(n => ({ value: n.id, label: n.name })))
 const allocationOptions = computed(() => allocationList.value.map(a => ({ value: a.id, label: `${a.ip}:${a.port}` })))
@@ -119,46 +123,36 @@ watch(() => createForm.value.channel, (ch) => {
   }
 })
 
-// Load eggs when nest changes.
-// Increment a per-watcher request token before each load and only commit the
-// result if the token still matches when the response arrives. This prevents
-// a slow earlier request (eg. nest A) from clobbering a later one (nest B)
-// when the user clicks rapidly. (Audit FM7.)
-let eggReqSeq = 0
-watch(() => createForm.value.nest_id, async (nestId) => {
-  const seq = ++eggReqSeq
-  eggList.value = []
-  eggVariables.value = []
+function onNestChange() {
   createForm.value.egg_id = ''
-  createForm.value.startup_command = ''
-  if (!nestId) return
-  const data = await get<{ eggs: any[] }>(`/api/admin/resources/nests/${nestId}/eggs`)
-  if (seq !== eggReqSeq) return
-  if (data) eggList.value = data.eggs
-})
+  return onEggChange()
+}
 
-// Load egg details when egg changes (also guarded against stale responses).
+function onEggChange() {
+  const egg = allEggs.value.find(e => e.id === createForm.value.egg_id)
+  createForm.value.docker_image = egg?.docker_image ?? ''
+  createForm.value.startup_command = egg?.startup ?? ''
+  return loadEggVariables()
+}
+
 let varReqSeq = 0
-watch(() => createForm.value.egg_id, async (eggId) => {
+async function loadEggVariables(envDefaults: Record<string, string> = {}) {
   const seq = ++varReqSeq
+  const eggId = createForm.value.egg_id
   eggVariables.value = []
-  if (!eggId || !createForm.value.nest_id) return
-  const egg = eggList.value.find(e => e.id === eggId)
-  if (egg) {
-    if (egg.docker_image) createForm.value.docker_image = egg.docker_image
-    if (egg.startup) createForm.value.startup_command = egg.startup
-  }
-  const data = await get<{ variables: any[] }>(`/api/admin/resources/nests/${createForm.value.nest_id}/eggs/${eggId}/variables`)
+  createForm.value.environment = {}
+  if (!eggId) return
+  const data = await get<{ variables: typeof eggVariables.value }>(`/api/admin/resources/eggs/${eggId}/variables`).catch(handleError)
   if (seq !== varReqSeq) return
   if (data) {
     eggVariables.value = data.variables
     const env: Record<string, string> = {}
     for (const v of data.variables) {
-      env[v.env_variable] = v.default_value || ''
+      env[v.env_variable] = String(envDefaults[v.env_variable] ?? v.default_value ?? '')
     }
     createForm.value.environment = env
   }
-})
+}
 
 // Load allocations when node changes (stale-response guard).
 let allocReqSeq = 0
@@ -188,11 +182,10 @@ watch(() => createForm.value.user_id, (userId) => {
   }
 })
 
-// Plan selection → cascade values into the form. egg_id needs the eggList
-// to be loaded for the chosen nest first, so we wait for the nest watcher to
-// finish and then assign egg_id (which itself triggers the egg watcher to
-// load variables — we override env_defaults afterwards).
 async function applyPlan(plan: PlanOption) {
+  const egg = allEggs.value.find(e => e.id === plan.egg_id)
+  createForm.value.nest_id = egg ? (egg.nest_id ?? 0) : ''
+  createForm.value.egg_id = plan.egg_id
   createForm.value.docker_image = plan.docker_image
   createForm.value.startup_command = plan.startup_command
   createForm.value.cpu = plan.cpu
@@ -202,44 +195,12 @@ async function applyPlan(plan: PlanOption) {
   createForm.value.backups = plan.backup_limit
   createForm.value.allocations = plan.allocation_limit
   createForm.value.node_id = plan.node_id
-  createForm.value.nest_id = plan.nest_id
   if (isEcommerce.value) {
     createForm.value.amount_yuan = plan.price_fen / 100
   }
-  // Wait for egg list to populate, then pick egg.
-  const seq = ++planEggWaitSeq
-  const waitForEggs = (tries: number) => {
-    if (seq !== planEggWaitSeq) return
-    if (eggList.value.some(e => e.id === plan.egg_id)) {
-      createForm.value.egg_id = plan.egg_id
-      // Restore startup/docker/env after the egg watcher completes its own
-      // overrides (it runs after egg_id assignment + variable fetch).
-      const seq2 = ++planEnvWaitSeq
-      const restore = (tries2: number) => {
-        if (seq2 !== planEnvWaitSeq) return
-        if (eggVariables.value.length > 0 || tries2 > 30) {
-          createForm.value.docker_image = plan.docker_image
-          createForm.value.startup_command = plan.startup_command
-          const env: Record<string, string> = { ...createForm.value.environment }
-          for (const [k, v] of Object.entries(plan.env_defaults || {})) {
-            env[k] = String(v)
-          }
-          createForm.value.environment = env
-          return
-        }
-        setTimeout(() => restore(tries2 + 1), 100)
-      }
-      setTimeout(() => restore(0), 150)
-      return
-    }
-    if (tries > 50) return
-    setTimeout(() => waitForEggs(tries + 1), 100)
-  }
-  setTimeout(() => waitForEggs(0), 50)
+  await loadEggVariables(plan.env_defaults)
 }
 
-let planEggWaitSeq = 0
-let planEnvWaitSeq = 0
 watch(() => createForm.value.plan_id, (planId) => {
   if (!planId) return
   const plan = planList.value.find(p => p.id === planId)
@@ -273,7 +234,9 @@ watch(() => props.modelValue, async (open) => {
     amount_yuan: 0,
     channel_note: '',
   }
-  eggList.value = []
+  ++varReqSeq
+  planList.value = []
+  allEggs.value = []
   allocationList.value = []
   eggVariables.value = []
 
@@ -282,42 +245,18 @@ watch(() => props.modelValue, async (open) => {
     get<{ users: any[] }>('/api/admin/resources/users'),
     get<{ nests: any[] }>('/api/admin/resources/nests'),
     get<{ nodes: any[] }>('/api/admin/resources/nodes'),
-    get<Record<string, any>>('/api/admin/resources/server-defaults'),
     get<PlanOption[]>('/api/admin/billing/plans?include_inactive=false'),
+    get<{ eggs: EggOption[] }>('/api/admin/resources/eggs'),
   ])
-  const [usersData, nestsData, nodesData, defaultsResult, plansData] = results
+  const [usersData, nestsData, nodesData, plansData, eggsData] = results
   if (usersData.status === 'fulfilled') userList.value = usersData.value.users
   if (nestsData.status === 'fulfilled') nestList.value = nestsData.value.nests
   if (nodesData.status === 'fulfilled') nodeList.value = nodesData.value.nodes
+  if (eggsData.status === 'fulfilled') allEggs.value = eggsData.value.eggs
   if (plansData.status === 'fulfilled') {
     planList.value = plansData.value.filter(p => p.is_active !== false)
-    // 默认选中第一个套餐（会触发 watcher 自动套用）
-    if (planList.value.length > 0 && !createForm.value.plan_id) {
-      createForm.value.plan_id = planList.value[0].id
-    }
   }
-  if (defaultsResult.status === 'fulfilled') {
-    const defaultsData = defaultsResult.value
-    createForm.value.cpu = defaultsData.cpu
-    createForm.value.memory = defaultsData.memory
-    createForm.value.disk = defaultsData.disk
-    createForm.value.databases = defaultsData.databases
-    createForm.value.backups = defaultsData.backups
-    createForm.value.allocations = defaultsData.allocations
-    createForm.value.docker_image = defaultsData.docker_image
-    if (defaultsData.nest_id) createForm.value.nest_id = defaultsData.nest_id
-    if (defaultsData.node_id) createForm.value.node_id = defaultsData.node_id
-    if (defaultsData.egg_id) {
-      const waitEgg = () => {
-        if (eggList.value.length > 0) {
-          createForm.value.egg_id = defaultsData.egg_id
-        } else {
-          setTimeout(waitEgg, 100)
-        }
-      }
-      setTimeout(waitEgg, 100)
-    }
-  }
+  if (planList.value.length > 0) createForm.value.plan_id = planList.value[0].id
 
   // Pre-select user if specified
   if (props.preSelectUsername) {
@@ -329,7 +268,7 @@ watch(() => props.modelValue, async (open) => {
 
 async function doCreateServer() {
   const f = createForm.value
-  if (!f.user_id || !f.server_name || !f.egg_id || !f.startup_command || !f.node_id || !f.allocation_id) {
+  if (!f.user_id || !f.server_name || !f.egg_id || !f.docker_image || !f.startup_command || !f.node_id || !f.allocation_id) {
     toast(t('servers.create.validation.requiredFields'), 'error')
     return
   }
@@ -460,14 +399,14 @@ function close() {
       <!-- Preset & Image -->
       <CollapsibleGroup :title="t('servers.create.section_image')" icon="tune" :default-open="true">
         <div class="create-row">
-          <FormField :label="t('servers.create.nest')" required density="compact" class="create-col">
-            <BaseSelect v-model="createForm.nest_id" :options="nestOptions" :placeholder="t('servers.create.nest_placeholder')" />
+          <FormField :label="t('servers.create.nest')" density="compact" class="create-col">
+            <BaseSelect v-model="createForm.nest_id" :options="nestOptions" :placeholder="t('servers.create.nest_placeholder')" @update:modelValue="onNestChange" />
           </FormField>
-          <FormField :label="t('servers.create.egg')" required density="compact" class="create-col" :hint="!createForm.nest_id ? t('servers.create.egg_hint') : undefined">
-            <BaseSelect v-model="createForm.egg_id" :options="eggOptions" :placeholder="t('servers.create.egg_placeholder')" :disabled="!createForm.nest_id" />
+          <FormField :label="t('servers.create.egg')" required density="compact" class="create-col" :hint="createForm.nest_id === '' ? t('servers.create.egg_hint') : undefined">
+            <BaseSelect v-model="createForm.egg_id" :options="eggOptions" :placeholder="t('servers.create.egg_placeholder')" :disabled="createForm.nest_id === ''" @update:modelValue="onEggChange" />
           </FormField>
         </div>
-        <FormField :label="t('servers.create.docker_image')" density="compact">
+        <FormField :label="t('servers.create.docker_image')" required density="compact">
           <BaseInput v-model="createForm.docker_image" mono />
         </FormField>
         <FormField :label="t('servers.create.startup_command')" required density="compact">
@@ -478,24 +417,24 @@ function close() {
       <!-- Resources -->
       <CollapsibleGroup :title="t('servers.create.section_resources')" icon="memory" :default-open="false">
         <div class="create-row create-row--3">
-          <FormField :label="t('servers.create.cpu')" density="compact" class="create-col">
+          <FormField :label="t('servers.create.cpu')" required density="compact" class="create-col">
             <NumberInput v-model="createForm.cpu" :min="0" :max="10000" :step="10" />
           </FormField>
-          <FormField :label="t('servers.create.memory')" density="compact" class="create-col">
+          <FormField :label="t('servers.create.memory')" required density="compact" class="create-col">
             <NumberInput v-model="createForm.memory" :min="0" :max="1048576" :step="128" />
           </FormField>
-          <FormField :label="t('servers.create.disk')" density="compact" class="create-col">
+          <FormField :label="t('servers.create.disk')" required density="compact" class="create-col">
             <NumberInput v-model="createForm.disk" :min="0" :max="1048576" :step="512" />
           </FormField>
         </div>
         <div class="create-row create-row--3">
-          <FormField :label="t('servers.create.databases')" density="compact" class="create-col">
+          <FormField :label="t('servers.create.databases')" required density="compact" class="create-col">
             <NumberInput v-model="createForm.databases" :min="0" :max="100" />
           </FormField>
-          <FormField :label="t('servers.create.backups')" density="compact" class="create-col">
+          <FormField :label="t('servers.create.backups')" required density="compact" class="create-col">
             <NumberInput v-model="createForm.backups" :min="0" :max="100" />
           </FormField>
-          <FormField :label="t('servers.create.extra_allocations')" density="compact" class="create-col">
+          <FormField :label="t('servers.create.extra_allocations')" required density="compact" class="create-col">
             <NumberInput v-model="createForm.allocations" :min="0" :max="100" />
           </FormField>
         </div>

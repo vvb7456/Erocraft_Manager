@@ -97,20 +97,6 @@
     "payTimeout": "Payment validity (minutes)",
     "payTimeout_tip": "Starts when the order is created. Expiry closes payments and releases reserved resources."
   },
-  "defaults": {
-    "title": "Server Defaults",
-    "desc": "Default resources and presets when creating new servers.",
-    "nest": "Nest",
-    "egg": "Egg",
-    "node": "Node",
-    "cpu": "CPU (%)",
-    "memory": "Memory (MB)",
-    "disk": "Disk (MB)",
-    "databases": "Databases",
-    "backups": "Backups",
-    "allocations": "Extra Ports",
-    "dockerImage": "Docker Image"
-  },
   "automation": {
     "title": "Scheduled Tasks",
     "time": {

@@ -29,8 +29,11 @@ class ResourceRepository:
         )
         return list(result.scalars().all())
 
-    async def list_eggs(self, db: AsyncSession, nest_id: int) -> list[Egg]:
-        result = await db.execute(select(Egg).where(Egg.nest_id == nest_id).order_by(Egg.name.asc()))
+    async def list_eggs(self, db: AsyncSession, nest_id: int | None = None) -> list[Egg]:
+        stmt = select(Egg).order_by(Egg.name.asc())
+        if nest_id is not None:
+            stmt = stmt.where(Egg.nest_id == nest_id)
+        result = await db.execute(stmt)
         return list(result.scalars().all())
 
     async def get_egg(self, db: AsyncSession, egg_id: int) -> Egg | None:

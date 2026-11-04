@@ -238,66 +238,6 @@ SETTINGS_SPECS: dict[str, SettingSpec] = _register({
         lambda: _env_str("SUPPORT_WELCOME_MESSAGE", "你好，有什么可以帮你？\n请描述遇到的问题，也可以附上截图。"),
         _normalize_str,
     ),
-    "DEFAULT_NEST_ID": SettingSpec(
-        "DEFAULT_NEST_ID",
-        "server_defaults",
-        lambda: _env_int("DEFAULT_NEST_ID", 1),
-        _int_clamper(1, 999999, 1),
-    ),
-    "DEFAULT_EGG_ID": SettingSpec(
-        "DEFAULT_EGG_ID",
-        "server_defaults",
-        lambda: _env_int("DEFAULT_EGG_ID", 1),
-        _int_clamper(1, 999999, 1),
-    ),
-    "DEFAULT_NODE_ID": SettingSpec(
-        "DEFAULT_NODE_ID",
-        "server_defaults",
-        lambda: _env_int("DEFAULT_NODE_ID", 1),
-        _int_clamper(1, 999999, 1),
-    ),
-    "DOCKER_IMAGE": SettingSpec(
-        "DOCKER_IMAGE",
-        "server_defaults",
-        lambda: _env_str("DOCKER_IMAGE", "ghcr.io/pterodactyl/yolks:java_17"),
-        _normalize_str,
-    ),
-    "DEFAULT_CPU": SettingSpec(
-        "DEFAULT_CPU",
-        "server_defaults",
-        lambda: _env_int("DEFAULT_CPU", 100),
-        _int_clamper(0, 1000000, 100),
-    ),
-    "DEFAULT_MEMORY": SettingSpec(
-        "DEFAULT_MEMORY",
-        "server_defaults",
-        lambda: _env_int("DEFAULT_MEMORY", 1024),
-        _int_clamper(0, 1000000, 1024),
-    ),
-    "DEFAULT_DISK": SettingSpec(
-        "DEFAULT_DISK",
-        "server_defaults",
-        lambda: _env_int("DEFAULT_DISK", 5120),
-        _int_clamper(0, 1000000, 5120),
-    ),
-    "DEFAULT_DATABASES": SettingSpec(
-        "DEFAULT_DATABASES",
-        "server_defaults",
-        lambda: _env_int("DEFAULT_DATABASES", 0),
-        _int_clamper(0, 1000, 0),
-    ),
-    "DEFAULT_BACKUPS": SettingSpec(
-        "DEFAULT_BACKUPS",
-        "server_defaults",
-        lambda: _env_int("DEFAULT_BACKUPS", 0),
-        _int_clamper(0, 1000, 0),
-    ),
-    "DEFAULT_ALLOCATIONS": SettingSpec(
-        "DEFAULT_ALLOCATIONS",
-        "server_defaults",
-        lambda: _env_int("DEFAULT_ALLOCATIONS", 1),
-        _int_clamper(0, 1000, 1),
-    ),
 })
 
 AUTOMATION_SPECS: dict[str, SettingSpec] = _register({

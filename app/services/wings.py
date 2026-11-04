@@ -575,6 +575,7 @@ class WingsService:
         token = jwt.encode(
             {
                 "server_uuid": server_uuid,
+                "scope": "websocket file-upload",
                 "permissions": [
                     "*",
                     "admin.websocket.errors",
@@ -600,13 +601,17 @@ class WingsService:
             "uploadSize": node.upload_size,
         }
 
-    async def get_download_url(self, db: AsyncSession, node_id: int, server_uuid: str, file_path: str) -> str:
+    async def get_download_url(
+        self, db: AsyncSession, node_id: int, server_uuid: str, file_path: str, *, user_uuid: str,
+    ) -> str:
         node = await self._node_info(db, node_id)
         now = int(time.time())
         token = jwt.encode(
             {
                 "server_uuid": server_uuid,
                 "file_path": file_path,
+                "scope": "file-download",
+                "user_uuid": user_uuid,
                 "unique_id": str(uuid.uuid4()),
                 "iat": now,
                 "nbf": now,
@@ -617,12 +622,16 @@ class WingsService:
         )
         return f"{node.base_url}/download/file?token={token}"
 
-    async def get_upload_url(self, db: AsyncSession, node_id: int, server_uuid: str) -> str:
+    async def get_upload_url(
+        self, db: AsyncSession, node_id: int, server_uuid: str, *, user_uuid: str,
+    ) -> str:
         node = await self._node_info(db, node_id)
         now = int(time.time())
         token = jwt.encode(
             {
                 "server_uuid": server_uuid,
+                "scope": "file-upload",
+                "user_uuid": user_uuid,
                 "unique_id": str(uuid.uuid4()),
                 "iat": now,
                 "nbf": now,

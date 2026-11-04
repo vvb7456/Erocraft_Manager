@@ -230,7 +230,9 @@ async def get_user_server_download_url(
     db: AsyncSession = Depends(get_db),
 ) -> SignedUrlResponse:
     try:
-        url = await wings_service.get_download_url(db, server.node_id, server.uuid, file)
+        url = await wings_service.get_download_url(
+            db, server.node_id, server.uuid, file, user_uuid=current_user.uuid,
+        )
     except WingsServiceError as exc:
         raise translate_wings_error(exc) from exc
     await pterodactyl_activity_logger.log_server_activity(
@@ -247,11 +249,14 @@ async def get_user_server_download_url(
 
 @router.post("/servers/{server_id}/files/upload", response_model=SignedUrlResponse)
 async def get_user_server_upload_url(
+    current_user: PteroUser = Depends(get_current_user),
     server: PteroServer = Depends(get_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> SignedUrlResponse:
     try:
-        url = await wings_service.get_upload_url(db, server.node_id, server.uuid)
+        url = await wings_service.get_upload_url(
+            db, server.node_id, server.uuid, user_uuid=current_user.uuid,
+        )
     except WingsServiceError as exc:
         raise translate_wings_error(exc) from exc
     return SignedUrlResponse(url=url)
