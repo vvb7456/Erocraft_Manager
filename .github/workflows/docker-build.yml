@@ -1,0 +1,109 @@
+name: 构建 SillyTavern 镜像
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/sillytavern-installer/**'
+      - 'docker/sillytavern-runtime/**'
+      - '.github/workflows/docker-build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker/sillytavern-installer/**'
+      - 'docker/sillytavern-runtime/**'
+      - '.github/workflows/docker-build.yml'
+
+concurrency:
+  group: sillytavern-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 构建安装镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/sillytavern-installer
+          platforms: linux/amd64
+          load: true
+          tags: sillytavern-installer:verify
+          provenance: false
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: 构建运行镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/sillytavern-runtime
+          platforms: linux/amd64
+          load: true
+          tags: sillytavern-runtime:verify
+          provenance: false
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: 验证运行镜像启动与内存参数
+        run: |
+          docker run --rm \
+            --mount "type=bind,source=$PWD/docker/sillytavern-runtime/verify-startup.mjs,target=/home/container/verify-startup.mjs,readonly" \
+            -e SERVER_MEMORY=512 -e NODE_HEAP_PCT=80 \
+            -e 'STARTUP=node --max-old-space-size=$((${SERVER_MEMORY}*${NODE_HEAP_PCT}/100)) verify-startup.mjs' \
+            sillytavern-runtime:verify
+
+      - name: 核对生产安装环境
+        run: |
+          BASE=$(awk '/^FROM / {print $2}' docker/sillytavern-installer/Dockerfile)
+          docker pull "$BASE"
+          python3 docker/sillytavern-installer/verify.py sillytavern-installer:verify
+
+      - name: 验证新旧 SillyTavern 依赖安装
+        run: |
+          docker run --rm -e npm_config_registry=https://registry.npmjs.org \
+            sillytavern-installer:verify bash -euc '
+              for version in 1.12.14 1.19.0; do
+                git clone --depth 1 --branch "$version" https://github.com/SillyTavern/SillyTavern.git /tmp/st
+                cd /tmp/st
+                npm install
+                node --input-type=module -e '\''
+                  await import("express");
+                  await import("sillytavern-transformers");
+                  console.log("SillyTavern 依赖加载成功");
+                '\''
+                cd /
+                rm -rf /tmp/st
+              done
+            '
+
+      - name: 登录 GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 发布已验证镜像
+        if: github.event_name != 'pull_request'
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          for component in runtime installer; do
+            image="ghcr.io/${OWNER,,}/sillytavern-${component}:latest"
+            docker tag "sillytavern-${component}:verify" "$image"
+            docker push "$image"
+            docker buildx imagetools inspect "$image"
+            echo "- \`$image\`" >> "$GITHUB_STEP_SUMMARY"
+          done
