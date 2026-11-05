@@ -43,4 +43,5 @@ sudo systemctl enable --now erocraft-agent
 
 完整配置项示例见 [config.example.yaml](config.example.yaml)。
 
+- **证书部署**：在 `cert_install_targets` 中配置目标名称 `name`、证书路径 `cert_path`、私钥路径 `key_path` 和可选的重载命令 `reload_cmd`。Manager 按目标名称分发证书，Agent 写入文件后执行重载命令。
 - **容器环境兼容**：当 Agent 运行在容器（如 LXC / Docker）内时，内核暴露的 Load Average 与 `/proc/diskstats` 属于宿主机全局数据，不能代表当前容器。Agent 检测到容器环境后会将 `load_avg` 返回为空列表、整机磁盘读写速率返回为 `null`；CPU 核数使用当前进程实际允许调度的核心数（`sched_getaffinity`）。

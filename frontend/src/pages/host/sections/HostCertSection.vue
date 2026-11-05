@@ -49,7 +49,6 @@ interface DeploymentRow {
   certName: string
   certDomains: string
   targetName: string
-  targetType: string
   targetPath: string | null
   status: string
 }
@@ -59,11 +58,9 @@ const deployments = computed<DeploymentRow[]>(() => {
   for (const cert of certificates.value) {
     for (const dep of cert.deployments ?? []) {
       if (dep.host_id !== props.hostId) continue
-      let targetType = 'wings'
       let targetPath: string | null = dep.target_cert_path ?? null
       if (dep.target_name) {
         const t = certTargets.value.find(ct => ct.name === dep.target_name)
-        targetType = t?.type ?? 'file'
         targetPath = targetPath || (t?.paths?.cert ?? null)
       }
       rows.push({
@@ -72,7 +69,6 @@ const deployments = computed<DeploymentRow[]>(() => {
         certName: cert.name,
         certDomains: (cert.domains ?? []).join(', '),
         targetName: dep.target_name || t('hosts.certs.wingsDefault'),
-        targetType,
         targetPath,
         status: dep.status ?? 'unknown',
       })
@@ -94,7 +90,7 @@ const targetOptions = computed(() => {
     opts.push({ value: '', label: t('hosts.certs.wingsDefaultOption') })
   }
   for (const ct of certTargets.value) {
-    opts.push({ value: ct.name, label: `${ct.name} (file)` })
+    opts.push({ value: ct.name, label: ct.name })
   }
   return opts
 })

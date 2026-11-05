@@ -279,7 +279,7 @@ Log level is controlled by `LOG_LEVEL` in `.env` (`DEBUG / INFO / WARNING / ERRO
 
 - **Source**: Scans `CERT_ACME_SH_HOME` and acme.sh metadata
 - **Renewal**: Invokes `CERT_ACME_SH_BIN`
-- **Targets**: Wings default TLS paths or named `file` targets on remote hosts (written atomically via Agent with `reload_cmd`)
+- **Targets**: Wings default TLS paths or named certificate file targets on remote hosts (written atomically via Agent with `reload_cmd`)
 - **Webhook**: acme.sh `reloadcmd` / deploy hook can call `POST /api/certificates/webhook/renewed` with `X-Cert-Webhook-Token` (`CERT_WEBHOOK_TOKEN`) to trigger immediate source rescan and deployment
 
 ### 3.4 Hosts / Nodes

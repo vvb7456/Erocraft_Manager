@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.types import PrivateKeyTypes
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
-from ..config import CertInstallTargetFile
+from ..config import CertInstallTarget
 from ..utils.atomic import atomic_write_bytes
 from . import wings, wings_config, wings_service
 
@@ -151,7 +151,7 @@ def status(config_path: str) -> dict[str, Any]:
     }
 
 
-async def _target_status_one(target: CertInstallTargetFile) -> dict[str, Any]:
+async def _target_status_one(target: CertInstallTarget) -> dict[str, Any]:
     cert_path = Path(target.cert_path)
     current_cert: dict[str, Any] | None = None
     error: str | None = None
@@ -166,18 +166,17 @@ async def _target_status_one(target: CertInstallTargetFile) -> dict[str, Any]:
         error = f"cert file not found: {cert_path}"
     return {
         "name": target.name,
-        "type": "file",
         "paths": {"cert": target.cert_path, "key": target.key_path},
         "current_cert": current_cert,
         "error": error,
     }
 
 
-async def _target_status_async(targets: list[Any]) -> list[dict[str, Any]]:
+async def _target_status_async(targets: list[CertInstallTarget]) -> list[dict[str, Any]]:
     return [await _target_status_one(target) for target in targets]
 
 
-async def status_with_targets(config_path: str, targets: list[Any]) -> dict[str, Any]:
+async def status_with_targets(config_path: str, targets: list[CertInstallTarget]) -> dict[str, Any]:
     try:
         payload = status(config_path)
     except wings_config.WingsConfigError as exc:
@@ -257,7 +256,7 @@ async def _run_reload_cmd(cmd: str, timeout: float) -> dict[str, Any]:
 
 async def _install_named_target(
     *,
-    targets: list[Any],
+    targets: list[CertInstallTarget],
     target_name: str,
     cert_id: int | None,
     fullchain_pem: str,
@@ -296,7 +295,7 @@ async def install(
     *,
     config_path: str,
     service_name: str,
-    targets: list[Any] | None = None,
+    targets: list[CertInstallTarget] | None = None,
     target_name: str = "",
     cert_id: int | None,
     fullchain_pem: str,

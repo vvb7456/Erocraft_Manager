@@ -1,9 +1,7 @@
 # Erocraft Agent V2 — example configuration
 
-# Optional. Reserved for future push/registration mode. The running agent does
-# not call Manager directly today. Non-Wings hosts should omit this section.
+# Optional Wings/Pterodactyl node metadata. Non-Wings hosts can omit this section.
 # manager:
-#   url: http://manager.example.com
 #   node_id: 1                              # optional Wings/Pterodactyl legacy info
 
 agent:
@@ -54,7 +52,6 @@ probes:
 # Targets write PEM files to disk and optionally run reload_cmd.
 cert_install_targets:
   # - name: nginx
-  #   type: file
   #   cert_path: /etc/nginx/ssl/erocraft.com/fullchain.pem
   #   key_path: /etc/nginx/ssl/erocraft.com/privkey.pem
   #   reload_cmd: systemctl reload nginx

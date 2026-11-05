@@ -3,7 +3,6 @@
 agent.yaml schema:
 
     manager:
-      url: https://manager.example.com   # 信息性，运行时不主动调用
       node_id: 9                         # 可选；仅 Wings/Pterodactyl 兼容信息
 
     agent:
@@ -32,7 +31,6 @@ agent.yaml schema:
 
     cert_install_targets:
       - name: nginx_main
-        type: file
         cert_path: /etc/nginx/ssl/example/fullchain.pem
         key_path: /etc/nginx/ssl/example/privkey.pem
         reload_cmd: systemctl reload nginx
@@ -185,10 +183,6 @@ def _enforce_secret_mode(p: Path) -> None:
 
 
 class ManagerSection(BaseModel):
-    # Reserved for a future Push / registration mode where the agent calls
-    # back to Manager. Phase-1 is strictly Pull (Manager -> Agent via
-    # /v1/metrics), so url is never read by the agent at runtime.
-    url: str | None = None
     # Legacy compatibility field for Wings/Pterodactyl nodes. Non-Wings hosts
     # are addressed by manager_hosts.id on the Manager side and should omit it.
     node_id: int | None = None
@@ -265,9 +259,8 @@ class ProbeConfig(BaseModel):
     proxy: str | None = None
 
 
-class CertInstallTargetFile(BaseModel):
+class CertInstallTarget(BaseModel):
     name: str
-    type: Literal["file"] = "file"
     cert_path: str
     key_path: str
     reload_cmd: str | None = None
@@ -293,7 +286,7 @@ class AgentConfig(BaseModel):
     wings: WingsSection = Field(default_factory=WingsSection)
     collect: CollectSection = Field(default_factory=CollectSection)
     probes: list[ProbeConfig] = Field(default_factory=list)
-    cert_install_targets: list[CertInstallTargetFile] = Field(default_factory=list)
+    cert_install_targets: list[CertInstallTarget] = Field(default_factory=list)
     logging: LoggingSection = Field(default_factory=LoggingSection)
 
     @field_validator("cert_install_targets", mode="before")

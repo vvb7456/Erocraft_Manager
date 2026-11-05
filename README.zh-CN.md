@@ -279,7 +279,7 @@ sudo systemctl {start|stop|restart|status} erocraft-manager-web erocraft-manager
 
 - **来源**：扫描 `CERT_ACME_SH_HOME` 目录 + acme.sh 元数据
 - **续签**：调用 `CERT_ACME_SH_BIN`
-- **部署目标**：Wings 默认证书路径，或远程主机上命名的 `file` 目标（经 Agent 原子写入并执行 `reload_cmd`）
+- **部署目标**：Wings 默认证书路径，或远程主机上命名的证书文件目标（经 Agent 原子写入并执行 `reload_cmd`）
 - **Webhook**：acme.sh `reloadcmd` 或 `deploy hook` 可携带请求头 `X-Cert-Webhook-Token`（配置 `CERT_WEBHOOK_TOKEN`）回调 `POST /api/certificates/webhook/renewed`，触发即时重扫与自动下发
 
 ### 3.4 主机 / 节点维护

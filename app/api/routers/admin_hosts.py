@@ -338,7 +338,6 @@ async def probe_host(
 
 class CertTargetOut(BaseModel):
     name: str
-    type: str
     paths: dict[str, str] | None = None
     current_cert: dict | None = None
     error: str | None = None
@@ -375,7 +374,6 @@ async def get_host_cert_targets(
     for item in targets_raw:
         targets_out.append(CertTargetOut(
             name=item.get("name", ""),
-            type=item.get("type", "file"),
             paths=item.get("paths") if isinstance(item.get("paths"), dict) else None,
             current_cert=item.get("current_cert") if isinstance(item.get("current_cert"), dict) else None,
             error=item.get("error"),

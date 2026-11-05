@@ -73,7 +73,6 @@ export interface AcmeStatus {
 
 export interface CertTarget {
   name: string
-  type: 'file'
   paths: { cert: string; key: string } | null
   current_cert: Record<string, unknown> | null
   error: string | null
