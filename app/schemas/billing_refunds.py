@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 
 class _Forbid(BaseModel):
@@ -10,13 +12,10 @@ class _Forbid(BaseModel):
 
 
 class RefundCreateRequest(_Forbid):
-    """``POST /api/admin/billing/orders/:id/refund`` payload — §10.1.
+    """申请支付交易全额退款，或登记外部订单全额退款。"""
 
-    Always issues a **full** refund of the chosen transaction's remaining
-    refundable balance. Partial refunds are not supported.
-    """
-
-    transaction_id: int = Field(gt=0, description="本地 invoice_transactions.id")
+    transaction_id: int | None = Field(default=None, gt=0, description="本地 invoice_transactions.id")
+    external_refund_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)] | None = None
     reason: str = Field(min_length=1, max_length=80)
 
 
@@ -32,6 +31,7 @@ class RefundOut(BaseModel):
     status: str
     reason: str | None
     gateway_refund_id: str | None
+    external_refund_id: str | None
     retry_count: int
     last_error: str | None
     initiated_by: int | None

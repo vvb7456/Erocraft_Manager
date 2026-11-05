@@ -365,6 +365,7 @@ class BillingRefund(Base):
     )
     reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     gateway_refund_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    external_refund_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
     initiated_by: Mapped[int | None] = mapped_column(Integer, nullable=True)

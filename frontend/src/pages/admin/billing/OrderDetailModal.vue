@@ -47,7 +47,7 @@ interface Refund {
   payment_id: number | null
   id: number; refund_no: string; transaction_id: number | null; amount_fen: number
   status: string; reason: string | null
-  gateway_refund_id: string | null; retry_count: number; last_error: string | null
+  gateway_refund_id: string | null; external_refund_id: string | null; retry_count: number; last_error: string | null
   initiated_by: number | null; initiated_by_username: string | null
   created_at: string; updated_at: string
 }
@@ -201,11 +201,12 @@ function channelLabel(ch: string): string {
 }
 
 // ── Action conditions ──
-const isGatewayOrder = computed(() => order.value!.invoices.length > 0)
+const isGatewayOrder = computed(() => (order.value?.invoices.length ?? 0) > 0)
 const refundableTransactions = computed(() => order.value?.transactions.filter(tx => tx.payment_id !== null && tx.status === 'succeeded'
   && !order.value!.refunds.some(r => r.transaction_id === tx.id && r.status !== 'failed')) || [])
 
 function canRefund(): boolean {
+  if (!isGatewayOrder.value) return order.value?.status === 'applied'
   return refundableTransactions.value.length > 0
 }
 
@@ -266,17 +267,17 @@ async function doCleanup() {
 // ── Refund (全额退款唯一动作) ──
 const refundOpen = ref(false)
 const refundReason = ref('')
+const externalRefundId = ref('')
 const selectedTransaction = ref<number>(0)
 const refundBusy = ref(false)
 const queryingRefundId = ref<number | null>(null)
 const refundOptions = computed(() => refundableTransactions.value.map(tx => ({ value: tx.id, label: `${tx.transaction_id} · ¥${fenToYuan(tx.amount_fen)}` })))
 
 function openRefund() {
-  if (!order.value) return
   const tx = refundableTransactions.value[0]
-  if (!tx) return
-  selectedTransaction.value = tx.id
+  selectedTransaction.value = tx?.id || 0
   refundReason.value = ''
+  externalRefundId.value = ''
   refundOpen.value = true
 }
 
@@ -291,11 +292,13 @@ const refundTx = computed(() =>
 )
 
 const refundAmount = computed(() =>
-  refundTx.value ? refundTx.value.amount_fen - (refundTx.value.refunded_fen || 0) : 0
+  isGatewayOrder.value
+    ? (refundTx.value ? refundTx.value.amount_fen - (refundTx.value.refunded_fen || 0) : 0)
+    : order.value?.received_fen ?? 0
 )
 
 async function doRefund() {
-  if (!order.value || !refundTx.value || refundAmount.value <= 0) return
+  if (!order.value) return
   const ok = await confirm({
     title: t('billing.admin.detail.refund'),
     message: t('billing.admin.detail.refundConfirm', { amount: fenToYuan(refundAmount.value) }),
@@ -305,7 +308,10 @@ async function doRefund() {
   if (!ok) return
   refundBusy.value = true
   try {
-    await post(`/api/admin/billing/orders/${order.value.id}/refund`, { transaction_id: refundTx.value.id, reason: refundReason.value.trim() })
+    const reference = isGatewayOrder.value
+      ? { transaction_id: refundTx.value!.id }
+      : { external_refund_id: externalRefundId.value.trim() }
+    await post(`/api/admin/billing/orders/${order.value.id}/refund`, { ...reference, reason: refundReason.value.trim() })
     toast(t('billing.admin.detail.refundOk'), 'info')
     refundOpen.value = false
   } catch (failure) { handleError(failure) }
@@ -542,10 +548,10 @@ async function queryRefund(refund: Refund) {
             <dt>{{ t('billing.admin.detail.refundReason') }}</dt>
             <dd>{{ r.reason || '—' }}</dd>
 
-            <dt>{{ t('billing.admin.detail.refundGatewayId') }}</dt>
-            <dd><code v-if="r.gateway_refund_id">{{ r.gateway_refund_id }}</code><span v-else class="muted">—</span></dd>
+            <dt>{{ t(r.external_refund_id ? 'billing.admin.detail.externalRefundNo' : 'billing.admin.detail.refundGatewayId') }}</dt>
+            <dd><code v-if="r.external_refund_id || r.gateway_refund_id">{{ r.external_refund_id || r.gateway_refund_id }}</code><span v-else class="muted">—</span></dd>
 
-            <template v-if="!r.payment_id">
+            <template v-if="!r.payment_id && !r.external_refund_id">
               <dt>{{ t('billing.admin.detail.refundRetries') }}</dt>
               <dd>{{ r.retry_count }}</dd>
             </template>
@@ -602,10 +608,14 @@ async function queryRefund(refund: Refund) {
     <div class="refund-form">
       <BaseSelect v-if="refundOptions.length > 1" v-model="selectedTransaction" :options="refundOptions" :label="t('billing.admin.detail.txId')" />
       <div class="refund-tx-info mono">
-        <span class="muted">{{ t('billing.admin.detail.txId') }}</span>
-        <code>{{ refundTx?.transaction_id }}</code>
+        <span class="muted">{{ t(isGatewayOrder ? 'billing.admin.detail.txId' : 'billing.admin.detail.externalOrderNo') }}</span>
+        <code>{{ isGatewayOrder ? refundTx?.transaction_id : order?.external_order_id }}</code>
         <span class="muted">{{ t('billing.admin.detail.refundFullAmount') }}</span>
         <span class="mono">¥{{ fenToYuan(refundAmount) }}</span>
+      </div>
+      <div v-if="!isGatewayOrder" class="form-row">
+        <label>{{ t('billing.admin.detail.externalRefundNo') }}</label>
+        <input v-model="externalRefundId" class="form-input" maxlength="64" :placeholder="t('billing.admin.detail.externalRefundNoPlaceholder')" />
       </div>
       <div class="form-row">
         <label>{{ t('billing.admin.detail.refundReason') }}</label>
@@ -615,7 +625,7 @@ async function queryRefund(refund: Refund) {
     <template #footer>
       <div class="footer-actions">
         <BaseButton size="sm" @click="refundOpen = false">{{ t('common.btn.cancel') }}</BaseButton>
-        <BaseButton size="sm" variant="danger" :loading="refundBusy" :disabled="refundAmount <= 0 || !refundReason.trim() || refundBusy" @click="doRefund">
+        <BaseButton size="sm" variant="danger" :loading="refundBusy" :disabled="refundAmount <= 0 || !refundReason.trim() || (!isGatewayOrder && !externalRefundId.trim()) || refundBusy" @click="doRefund">
           <MsIcon name="payments" size="xs" /> {{ t('billing.admin.detail.refund') }}
         </BaseButton>
       </div>

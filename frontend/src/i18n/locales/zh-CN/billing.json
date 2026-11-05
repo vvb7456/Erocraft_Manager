@@ -206,6 +206,8 @@
       "refundNo": "退款单号",
       "refundReason": "原因",
       "refundGatewayId": "网关退款号",
+      "externalRefundNo": "外部退款编号",
+      "externalRefundNoPlaceholder": "请输入外部退款编号或售后单号",
       "refundRetries": "重试",
       "refund": "退款",
       "forceApply": "强制开通",

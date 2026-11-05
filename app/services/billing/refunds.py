@@ -1,4 +1,4 @@
-"""按具体支付单申请全额退款；明确失败后由管理员重新申请。"""
+"""按支付单申请全额退款，或登记外部渠道已完成的全额退款。"""
 
 import uuid
 
@@ -16,9 +16,30 @@ class CannotRefund(Exception):
     pass
 
 
-async def initiate_refund(db: AsyncSession, *, order_id: int, transaction_id: int, reason: str, admin_id: int | None) -> BillingRefund:
-    client = await GatewayClient.load(db)
+async def initiate_refund(
+    db: AsyncSession, *, order_id: int, transaction_id: int | None = None,
+    external_refund_id: str | None = None, reason: str, admin_id: int | None,
+) -> BillingRefund:
     order = await payments.locked_order(db, order_id)
+    if order.channel in ("taobao", "xianyu"):
+        if not external_refund_id:
+            raise CannotRefund("外部订单退款必须填写外部退款编号")
+        if order.status != "applied":
+            raise CannotRefund("订单当前状态不允许退款")
+        refund = BillingRefund(
+            refund_no=gen_refund_no(), order_id=order.id, amount_fen=order.received_fen,
+            status="succeeded", external_refund_id=external_refund_id,
+            reason=reason, initiated_by=admin_id, automatic=False,
+        )
+        db.add(refund)
+        order.refunded_fen = order.received_fen
+        order.status = "refunded"
+        await db.commit()
+        await db.refresh(refund)
+        return refund
+    if transaction_id is None:
+        raise CannotRefund("站内订单退款必须选择支付交易")
+    client = await GatewayClient.load(db)
     tx = (await db.scalars(select(BillingInvoiceTransaction).where(BillingInvoiceTransaction.id == transaction_id))).one()
     if tx.payment_id is None:
         raise CannotRefund("旧交易请在原商户平台人工处理退款")

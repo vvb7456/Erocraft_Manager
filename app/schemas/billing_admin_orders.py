@@ -109,6 +109,7 @@ class OrderRefundSummary(BaseModel):
     status: str
     reason: str | None
     gateway_refund_id: str | None
+    external_refund_id: str | None
     retry_count: int
     last_error: str | None
     initiated_by: int | None

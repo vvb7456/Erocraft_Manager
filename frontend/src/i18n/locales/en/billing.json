@@ -206,6 +206,8 @@
       "refundNo": "Refund No",
       "refundReason": "Reason",
       "refundGatewayId": "Gateway Refund ID",
+      "externalRefundNo": "External Refund No",
+      "externalRefundNoPlaceholder": "Enter the external refund or after-sales number",
       "refundRetries": "Retries",
       "refund": "Refund",
       "forceApply": "Force Apply",

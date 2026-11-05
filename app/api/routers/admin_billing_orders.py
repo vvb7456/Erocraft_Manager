@@ -160,6 +160,7 @@ def _serialize_refund_summary(
         status=refund.status,
         reason=refund.reason,
         gateway_refund_id=refund.gateway_refund_id,
+        external_refund_id=refund.external_refund_id,
         retry_count=refund.retry_count,
         last_error=refund.last_error,
         initiated_by=refund.initiated_by,
@@ -180,6 +181,7 @@ def _serialize_refund(refund: BillingRefund) -> RefundOut:
         status=refund.status,
         reason=refund.reason,
         gateway_refund_id=refund.gateway_refund_id,
+        external_refund_id=refund.external_refund_id,
         retry_count=refund.retry_count,
         last_error=refund.last_error,
         initiated_by=refund.initiated_by,
@@ -452,6 +454,7 @@ async def refund_order_endpoint(
             db,
             order_id=order_id,
             transaction_id=payload.transaction_id,
+            external_refund_id=payload.external_refund_id,
             reason=payload.reason,
             admin_id=admin.id,
         )
