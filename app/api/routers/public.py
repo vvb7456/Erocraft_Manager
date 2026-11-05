@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.db import get_db
 from app.core.rate_limit import limiter
-from app.core.runtime_settings import SETTINGS_SPECS
+from app.core.runtime_settings import BILLING_SPECS, SETTINGS_SPECS
 from app.core.security import SESSION_USER_ID_KEY
 from app.core.settings_store import get_settings_store
 from app.core.tokens import (
@@ -716,7 +716,7 @@ async def verify_registration(
                 await store.get(
                     db,
                     "REFERRAL_REWARD_ENABLED",
-                    SETTINGS_SPECS["REFERRAL_REWARD_ENABLED"].default_value(),
+                    BILLING_SPECS["REFERRAL_REWARD_ENABLED"].default_value(),
                 )
             )
             invitee_coupon = None
@@ -725,7 +725,7 @@ async def verify_registration(
                     await store.get(
                         db,
                         "REFERRAL_INVITEE_TEMPLATE_CODE",
-                        SETTINGS_SPECS["REFERRAL_INVITEE_TEMPLATE_CODE"].default_value(),
+                        BILLING_SPECS["REFERRAL_INVITEE_TEMPLATE_CODE"].default_value(),
                     )
                 )
                 tpl = (
