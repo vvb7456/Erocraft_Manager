@@ -76,8 +76,7 @@ async def check_http(role: str) -> None:
                 for command, params, code in (
                     ("ping", {}, None),
                     ("contract-check.unsupported", {}, "agent.command_unsupported"),
-                    ("cert.install", {"cert_id": {}}, "agent.command_invalid_params"),
-                    ("wings.restart", {"timeout": {}}, "agent.command_invalid_params"),
+                    ("cloudflared.write_config_minimal", {}, "agent.command_invalid_params"),
                 ):
                     response = await client.post("/v1/commands", json={"id": 2, "type": command, "params": params})
                     assert response.status_code == 200, response.text
