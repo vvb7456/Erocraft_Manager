@@ -125,9 +125,6 @@ async def apply_paid_order(
             # Path B
             await _run_post_actions(db, order, effect.server_id)
             await _mark_post_actions_done(db, order_id)
-        # Rollback expires ORM state even with expire_on_commit=False.
-        # Reload before finalizing so a failed refresh remains retryable.
-        await db.refresh(order)
     except ApplyOrphanError as exc:
         return await _terminate_apply(
             db, order_id, exc, my_token, reason="orphan_resource"
@@ -135,14 +132,13 @@ async def apply_paid_order(
     except Exception as exc:  # noqa: BLE001
         return await _record_failure_and_release(db, order_id, exc, my_token)
 
-    apply_retry_count = order.apply_retry_count
-    coupon_id = order.coupon_id
-    coupon_discount_fen = order.coupon_discount_fen or 0
-
     order = await locked_order(db, order_id)
     if order.lock_token != my_token:
         await db.commit()
         return ApplyResult.LOCK_LOST
+    apply_retry_count = order.apply_retry_count
+    coupon_id = order.coupon_id
+    coupon_discount_fen = order.coupon_discount_fen or 0
     order.applied_at = utc_naive_now()
     order.lock_token = None
     order.locked_until = None
