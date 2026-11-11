@@ -90,19 +90,24 @@ CREATE TABLE `manager_redemption_codes` (
         """
     )
     op.execute(
+        "ALTER TABLE `manager_billing_orders` DROP CONSTRAINT `chk_billing_orders_total_fen_pos`"
+    )
+    op.execute(
         """
 ALTER TABLE `manager_billing_orders`
-  DROP CONSTRAINT `chk_billing_orders_total_fen_pos`,
-  ADD CONSTRAINT `chk_billing_orders_total_fen_pos` CHECK ((`channel` = '' AND `total_fen` > 0) OR (`channel` <> '' AND `total_fen` >= 0))
+  ADD CONSTRAINT `chk_billing_orders_total_fen_pos`
+  CHECK ((`channel` = '' AND `total_fen` > 0) OR (`channel` <> '' AND `total_fen` >= 0))
         """
     )
 
 
 def downgrade() -> None:
     op.execute(
+        "ALTER TABLE `manager_billing_orders` DROP CONSTRAINT `chk_billing_orders_total_fen_pos`"
+    )
+    op.execute(
         """
 ALTER TABLE `manager_billing_orders`
-  DROP CONSTRAINT `chk_billing_orders_total_fen_pos`,
   ADD CONSTRAINT `chk_billing_orders_total_fen_pos` CHECK (`total_fen` > 0)
         """
     )
