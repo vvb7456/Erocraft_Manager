@@ -7,12 +7,13 @@
  * "其他" / "Others" section. Clicking "Buy now" posts to
  * ``POST /api/user/orders`` and redirects to ``/pay/:id``.
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useAppStore } from '@/stores/app'
 import { useConfirm } from '@/composables/useConfirm'
+import { useRedeemFlow } from '@/composables/useRedeemFlow'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -61,6 +62,7 @@ const { get, handleError } = useApiFetch()
 const router = useRouter()
 const app = useAppStore()
 const { confirm } = useConfirm()
+const { openRedeem, redeemedTick } = useRedeemFlow()
 
 const plans = ref<Plan[]>([])
 const initialLoading = ref(true)
@@ -137,6 +139,10 @@ async function handleBuy(plan: Plan, period: PeriodOption) {
   cashierOpen.value = true
 }
 
+watch(redeemedTick, () => {
+  void loadServerCount().catch(handleError)
+})
+
 onMounted(() => {
   loadPlans()
   void loadServerCount().catch(handleError)
@@ -144,7 +150,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageHeader icon="storefront" :title="t('billing.plans.pageTitle')" />
+  <PageHeader icon="storefront" :title="t('billing.plans.pageTitle')">
+    <template #controls>
+      <BaseButton size="sm" variant="primary" @click="openRedeem()">
+        <MsIcon name="redeem" size="xs" />{{ t('billing.redeem.openBtn') }}
+      </BaseButton>
+    </template>
+  </PageHeader>
 
   <AlertBanner
     v-if="!initialLoading && !loadFailed && plans.length > 0 && currentServerCount > 0"

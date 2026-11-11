@@ -206,7 +206,7 @@ const refundableTransactions = computed(() => order.value?.transactions.filter(t
   && !order.value!.refunds.some(r => r.transaction_id === tx.id && r.status !== 'failed')) || [])
 
 function canRefund(): boolean {
-  if (!isGatewayOrder.value) return order.value?.status === 'applied'
+  if (!isGatewayOrder.value) return order.value?.status === 'applied' && (order.value?.received_fen ?? 0) > 0
   return refundableTransactions.value.length > 0
 }
 

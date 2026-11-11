@@ -21,7 +21,9 @@ async def initiate_refund(
     external_refund_id: str | None = None, reason: str, admin_id: int | None,
 ) -> BillingRefund:
     order = await payments.locked_order(db, order_id)
-    if order.channel in ("taobao", "xianyu"):
+    if order.channel in ("taobao", "xianyu", "other"):
+        if order.received_fen <= 0:
+            raise CannotRefund("零元订单无需登记退款")
         if not external_refund_id:
             raise CannotRefund("外部订单退款必须填写外部退款编号")
         if order.status != "applied":

@@ -41,8 +41,12 @@ const groups = computed<NavGroup[]>(() => isUserLayout.value ? [
   { label: t('nav.operations'), items: [
     { page: 'servers', icon: 'dns', labelKey: 'servers.title' },
     { page: 'users', icon: 'group', labelKey: 'users.title' },
-    { page: 'admin-billing', icon: 'receipt_long', labelKey: 'billing.admin.title' },
     { page: 'admin-support', icon: 'support_agent', labelKey: 'support.inbox' },
+  ] },
+  { label: t('nav.adminBilling'), items: [
+    { page: 'admin-orders', icon: 'receipt_long', labelKey: 'nav.adminOrders' },
+    { page: 'admin-plans', icon: 'local_offer', labelKey: 'nav.adminPlans' },
+    { page: 'admin-vouchers', icon: 'confirmation_number', labelKey: 'nav.adminVouchers' },
   ] },
   { label: t('nav.infrastructure'), items: [
     { page: 'hosts', icon: 'dvr', labelKey: 'hosts.title' },

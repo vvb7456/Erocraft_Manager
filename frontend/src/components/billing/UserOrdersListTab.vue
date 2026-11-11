@@ -224,6 +224,10 @@ onBeforeUnmount(() => {
   loadRevision++
   stopPolling()
 })
+
+defineExpose({
+  reload: () => loadOrders(false),
+})
 </script>
 
 <template>

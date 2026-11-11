@@ -13,7 +13,8 @@
   "validate": {
     "header": "有 {n} 项需要修正才能保存",
     "invalidUrl": "必须以 http:// 或 https:// 开头",
-    "invalidEmail": "邮箱格式不正确"
+    "invalidEmail": "邮箱格式不正确",
+    "required": "不能为空"
   },
   "monitoring": {
     "title": "主机监控",
@@ -148,6 +149,20 @@
         "upgrade": "升级"
       }
     }
+  },
+  "redemption": {
+    "title": "自动发卡",
+    "enabled": "启用自动发卡接口",
+    "token": "接口密钥",
+    "generateToken": "随机生成",
+    "defaultChannel": "默认渠道",
+    "validDays": "默认有效天数",
+    "validDaysTip": "0 表示永不过期",
+    "guideTitle": "接口参数",
+    "guideUrl": "请求地址 (POST)",
+    "guideHeader": "请求头 (Headers)",
+    "guideBody": "请求体 JSON",
+    "guideJsonPath": "JSONPath"
   },
   "account": {
     "title": "账户设置"

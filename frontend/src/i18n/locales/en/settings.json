@@ -13,7 +13,8 @@
   "validate": {
     "header": "{n} item(s) need to be fixed before saving",
     "invalidUrl": "Must start with http:// or https://",
-    "invalidEmail": "Invalid email address"
+    "invalidEmail": "Invalid email address",
+    "required": "Required"
   },
   "monitoring": {
     "title": "Host monitoring",
@@ -148,6 +149,20 @@
         "upgrade": "Upgrade"
       }
     }
+  },
+  "redemption": {
+    "title": "Auto-Issuance",
+    "enabled": "Enable auto-issuance API",
+    "token": "API Token",
+    "generateToken": "Generate",
+    "defaultChannel": "Default channel",
+    "validDays": "Default valid days",
+    "validDaysTip": "0 means never expires",
+    "guideTitle": "API Parameters",
+    "guideUrl": "Endpoint URL (POST)",
+    "guideHeader": "Request Header",
+    "guideBody": "JSON Body",
+    "guideJsonPath": "JSONPath"
   },
   "account": {
     "title": "Account Settings"

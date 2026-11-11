@@ -70,6 +70,6 @@ async function openChat() {
 .contact-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .contact-label { font-size: var(--text-xs); color: var(--t3); }
 .contact-value { font-size: var(--text-sm); color: var(--t1); overflow-wrap: anywhere; }
-.footer-note { margin-top: var(--sp-4); color: var(--t3); font-size: var(--text-xs); }
+.footer-note { margin-top: var(--sp-4); color: var(--t3); font-size: var(--text-xs); text-align: center; }
 @media (prefers-reduced-motion: reduce) { .contact-row--online { transition: none; } }
 </style>

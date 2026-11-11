@@ -15,8 +15,10 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useClipboard } from '@/composables/useClipboard'
 import { useFormatDate } from '@/composables/useFormatDate'
 import { useToday } from '@/composables/useToday'
+import { useRedeemFlow } from '@/composables/useRedeemFlow'
 import { useAppStore } from '@/stores/app'
 import PageHeader from '@/components/layout/PageHeader.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import Badge from '@/components/ui/Badge.vue'
@@ -67,6 +69,7 @@ const { get, handleError } = useApiFetch()
 const { copy } = useClipboard()
 const { formatDate, formatDateTime } = useFormatDate()
 const appStore = useAppStore()
+const { openRedeem } = useRedeemFlow()
 const today = useToday()
 
 const loading = ref(true)
@@ -185,7 +188,13 @@ function couponConstraint(c: Coupon): string {
 </script>
 
 <template>
-  <PageHeader icon="redeem" :title="t('nav.promotions')" />
+  <PageHeader icon="redeem" :title="t('nav.promotions')">
+    <template #controls>
+      <BaseButton size="sm" variant="primary" @click="openRedeem()">
+        <MsIcon name="redeem" size="xs" />{{ t('billing.redeem.openBtn') }}
+      </BaseButton>
+    </template>
+  </PageHeader>
 
   <div class="page-body">
     <LoadingCenter v-if="loading">{{ t('common.loading') }}</LoadingCenter>

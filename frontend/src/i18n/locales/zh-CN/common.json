@@ -176,6 +176,17 @@
       "delivery_failed": "通知发送失败",
       "not_configured": "请先完成通知渠道配置"
     },
+    "redemption": {
+      "already_redeemed": "该兑换码已被兑换",
+      "api_disabled": "自动发卡接口未启用",
+      "expired": "该兑换码已过期",
+      "in_progress": "该兑换码正在处理中，请稍后刷新查看",
+      "not_found": "兑换码不存在，请核对后重试",
+      "plan_unavailable": "该兑换码关联的套餐已失效，请联系客服",
+      "server_incompatible": "所选服务器与该兑换码套餐不匹配",
+      "spec_not_found": "未找到对应的套餐或周期规格",
+      "voided": "该兑换码已作废"
+    },
     "register": {
       "agreement_required": "请阅读并同意所有必选协议后继续",
       "create_failed": "账号创建失败，请重新注册或联系管理员",

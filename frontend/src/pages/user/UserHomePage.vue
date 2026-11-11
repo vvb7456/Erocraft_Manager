@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToday } from '@/composables/useToday'
+import { useRedeemFlow } from '@/composables/useRedeemFlow'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
@@ -24,6 +25,7 @@ interface HomeServer {
 const { t, locale } = useI18n()
 const app = useAppStore()
 const { get } = useApiFetch()
+const { openRedeem, redeemedTick } = useRedeemFlow()
 const today = useToday()
 const dateLabel = computed(() => new Intl.DateTimeFormat(locale.value, {
   timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
@@ -49,11 +51,21 @@ function serverNote(server: HomeServer) {
   return server.daysLeft < 0 ? t('userServers.expired') : t('userServers.daysLeft', { n: server.daysLeft })
 }
 
+watch(redeemedTick, () => {
+  void load()
+})
+
 onMounted(load)
 </script>
 
 <template>
-  <PageHeader icon="home" :title="t('userHome.title')" />
+  <PageHeader icon="home" :title="t('userHome.title')">
+    <template #controls>
+      <BaseButton size="sm" variant="primary" @click="openRedeem()">
+        <MsIcon name="redeem" size="xs" />{{ t('billing.redeem.openBtn') }}
+      </BaseButton>
+    </template>
+  </PageHeader>
   <div class="home-page">
     <header class="welcome">
       <div class="welcome-meta"><span>{{ app.displayName }}</span><time :datetime="today">{{ dateLabel }}</time></div>

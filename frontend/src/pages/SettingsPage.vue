@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { useClipboard } from '@/composables/useClipboard'
 import { provideDirtyForm, useDirtyFormSection } from '@/composables/useDirtyForm'
 import { useAppStore } from '@/stores/app'
 import PageHeader from '@/components/layout/PageHeader.vue'
@@ -20,6 +21,7 @@ import SecretInput from '@/components/ui/SecretInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import HelpTip from '@/components/ui/HelpTip.vue'
+import MsIcon from '@/components/ui/MsIcon.vue'
 import FormField from '@/components/form/FormField.vue'
 import Badge from '@/components/ui/Badge.vue'
 import DirtyBar from '@/components/ui/DirtyBar.vue'
@@ -37,6 +39,7 @@ const { t } = useI18n({ useScope: 'global' })
 const { get, post, put, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
+const { copy: copyClipboard } = useClipboard()
 const app = useAppStore()
 const route = useRoute()
 const router = useRouter()
@@ -49,6 +52,7 @@ const tabs = computed<SettingsNavItem[]>(() => [
   { key: 'llm',        label: t('settings.llm.title'),        icon: 'smart_toy' },
   { key: 'payment',    label: t('settings.payment.title'),  icon: 'payments' },
   { key: 'marketing',  label: t('settings.marketing.title'), icon: 'campaign' },
+  { key: 'redemption', label: t('settings.redemption.title'), icon: 'redeem' },
   { key: 'automation', label: t('settings.automation.title'), icon: 'schedule' },
   { key: 'monitoring', label: t('settings.monitoring.title'), icon: 'monitoring' },
   { key: 'channels', label: t('notifications.center.channels'), icon: 'notifications' },
@@ -168,6 +172,38 @@ function setBillingKinds(value: unknown) {
   billingSettings.value.REFERRAL_QUALIFYING_KINDS = sameFormValue([...next].sort(), [...(original ?? ['new_purchase', 'renew', 'upgrade'])].sort()) ? original : next
 }
 
+const redemptionChannelOptions = computed(() => [
+  { value: 'taobao', label: t('billing.channel.taobao') },
+  { value: 'xianyu', label: t('billing.channel.xianyu') },
+  { value: 'other', label: t('billing.channel.other') },
+])
+
+function generateRedemptionToken() {
+  const bytes = new Uint8Array(24)
+  crypto.getRandomValues(bytes)
+  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  const token = 'rk_' + Array.from(bytes, b => alphabet[b % alphabet.length]).join('')
+  setBillingStr('REDEMPTION_API_TOKEN', token)
+}
+
+function onRedemptionEnabledChange(val: boolean) {
+  setBillingBool('REDEMPTION_API_ENABLED', val)
+  if (val && !getBillingStr('REDEMPTION_API_TOKEN').trim()) {
+    generateRedemptionToken()
+  }
+}
+
+const redemptionEndpointUrl = computed(() => {
+  const base = String(settings.value['SITE_URL'] || window.location.origin).replace(/\/+$/, '')
+  return `${base}/api/webhook/redemption/issue`
+})
+const redemptionAuthHeader = computed(() => {
+  const tok = getBillingStr('REDEMPTION_API_TOKEN').trim() || '<Token>'
+  return `Authorization: Bearer ${tok}`
+})
+const redemptionBodyTemplate = '{"planCode": "st-basic", "periodCount": 1, "orderId": "{$Oid}", "num": "{$Num}", "amountYuan": "{$Payment}"}'
+const redemptionJsonPath = '$.data.cards[*].cardNo'
+
 // ── Fetch ──
 onMounted(async () => {
   try {
@@ -265,6 +301,10 @@ function validateAll(): ValidationError[] {
     if (v && !URL_RE.test(v)) {
       errs.push({ tab: 'llm', label: t(labelKey), message: t('settings.validate.invalidUrl') })
     }
+  }
+
+  if (getBillingBool('REDEMPTION_API_ENABLED') && !getBillingStr('REDEMPTION_API_TOKEN').trim()) {
+    errs.push({ tab: 'redemption', label: t('settings.redemption.token'), message: t('settings.validate.required') })
   }
 
   return errs
@@ -565,6 +605,88 @@ function onTabChange(next: string) {
               </FormField>
             </BaseCard>
           </template>
+
+          <template v-else-if="activeTab === 'redemption'">
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="redeem" flush>{{ t('settings.redemption.title') }}</SectionHeader>
+              <FormField :label="t('settings.redemption.enabled')" layout="horizontal">
+                <ToggleSwitch
+                  :modelValue="getBillingBool('REDEMPTION_API_ENABLED')"
+                  size="sm"
+                  @update:modelValue="onRedemptionEnabledChange"
+                />
+              </FormField>
+              <FormField :label="t('settings.redemption.token')" layout="horizontal">
+                <div class="secret-with-btn">
+                  <SecretInput
+                    class="secret-with-btn__input"
+                    copyable
+                    :modelValue="getBillingStr('REDEMPTION_API_TOKEN')"
+                    @update:modelValue="setBillingStr('REDEMPTION_API_TOKEN', $event)"
+                  />
+                  <BaseButton size="sm" @click="generateRedemptionToken">
+                    <MsIcon name="refresh" size="xs" /> {{ t('settings.redemption.generateToken') }}
+                  </BaseButton>
+                </div>
+              </FormField>
+              <FormField :label="t('settings.redemption.defaultChannel')" layout="horizontal">
+                <BaseSelect
+                  teleport
+                  :modelValue="getBillingStr('REDEMPTION_API_DEFAULT_CHANNEL', 'taobao')"
+                  :options="redemptionChannelOptions"
+                  @update:modelValue="setBillingStr('REDEMPTION_API_DEFAULT_CHANNEL', String($event))"
+                />
+              </FormField>
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.redemption.validDays') }}
+                  <HelpTip :text="t('settings.redemption.validDaysTip')" />
+                </template>
+                <NumberInput
+                  :modelValue="getBillingNum('REDEMPTION_API_VALID_DAYS', 0)"
+                  :min="0"
+                  :max="3650"
+                  @update:modelValue="setBillingNum('REDEMPTION_API_VALID_DAYS', $event)"
+                />
+              </FormField>
+            </BaseCard>
+
+            <BaseCard variant="bg2" density="compact">
+              <SectionHeader icon="cable" flush>{{ t('settings.redemption.guideTitle') }}</SectionHeader>
+              <FormField :label="t('settings.redemption.guideUrl')" layout="horizontal">
+                <div class="copy-line">
+                  <code class="copy-line__code">{{ redemptionEndpointUrl }}</code>
+                  <BaseButton size="sm" variant="ghost" square :title="t('common.btn.copy')" @click="copyClipboard(redemptionEndpointUrl)">
+                    <MsIcon name="content_copy" size="xs" />
+                  </BaseButton>
+                </div>
+              </FormField>
+              <FormField :label="t('settings.redemption.guideHeader')" layout="horizontal">
+                <div class="copy-line">
+                  <code class="copy-line__code">{{ redemptionAuthHeader }}</code>
+                  <BaseButton size="sm" variant="ghost" square :title="t('common.btn.copy')" @click="copyClipboard(redemptionAuthHeader)">
+                    <MsIcon name="content_copy" size="xs" />
+                  </BaseButton>
+                </div>
+              </FormField>
+              <FormField :label="t('settings.redemption.guideBody')" layout="horizontal">
+                <div class="copy-line">
+                  <code class="copy-line__code">{{ redemptionBodyTemplate }}</code>
+                  <BaseButton size="sm" variant="ghost" square :title="t('common.btn.copy')" @click="copyClipboard(redemptionBodyTemplate)">
+                    <MsIcon name="content_copy" size="xs" />
+                  </BaseButton>
+                </div>
+              </FormField>
+              <FormField :label="t('settings.redemption.guideJsonPath')" layout="horizontal">
+                <div class="copy-line">
+                  <code class="copy-line__code">{{ redemptionJsonPath }}</code>
+                  <BaseButton size="sm" variant="ghost" square :title="t('common.btn.copy')" @click="copyClipboard(redemptionJsonPath)">
+                    <MsIcon name="content_copy" size="xs" />
+                  </BaseButton>
+                </div>
+              </FormField>
+            </BaseCard>
+          </template>
           <template v-else-if="activeTab === 'llm'">
             <BaseCard variant="bg2" density="compact">
               <SectionHeader icon="toggle_on" :subtitle="t('settings.llm.general.desc')" flush>{{ t('settings.llm.general.title') }}</SectionHeader>
@@ -637,4 +759,21 @@ function onTabChange(next: string) {
 
 .pay-gateway-config-card { display: flex; flex-direction: column; gap: var(--sp-4); }
 .pay-gateway-pane { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.secret-with-btn { display: flex; align-items: center; gap: var(--sp-2); width: 100%; }
+.secret-with-btn__input { flex: 1; min-width: 0; }
+.copy-line { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-width: 0; }
+.copy-line__code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--bg-in);
+  border: 1px solid var(--bd);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  color: var(--t1);
+  overflow-x: auto;
+  white-space: nowrap;
+}
 </style>

@@ -1,5 +1,10 @@
 """Typed ORM models for the FastAPI backend."""
 
+from app.db.models.billing import (
+    RedemptionBatch,
+    RedemptionCode,
+    RedemptionExport,
+)
 from app.db.models.manager import (
     HostAlertRule,
     HostAlertSettings,
@@ -64,6 +69,9 @@ __all__ = [
     "PteroDatabaseHost",
     "PteroServer",
     "PteroUser",
+    "RedemptionBatch",
+    "RedemptionCode",
+    "RedemptionExport",
     "ServerVariable",
     "ServerLlmKey",
     "ServerMeta",

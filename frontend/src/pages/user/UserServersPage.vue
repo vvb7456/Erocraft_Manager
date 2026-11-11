@@ -22,6 +22,7 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 import UsageBar from '@/components/ui/UsageBar.vue'
 import { getStatusDotKey, getStatusColor } from '@/utils/status'
 import { useRenewFlow } from '@/composables/useRenewFlow'
+import { useRedeemFlow } from '@/composables/useRedeemFlow'
 import CreateOrderModal from '@/components/CreateOrderModal.vue'
 
 defineOptions({ name: 'UserServersPage' })
@@ -33,6 +34,7 @@ const { confirm } = useConfirm()
 const { toast } = useToast()
 const resourceStore = useServerResourceStore()
 const pendingStore = usePowerPendingStore()
+const { openRedeem, redeemedTick } = useRedeemFlow()
 
 interface Server {
   id: number
@@ -77,6 +79,10 @@ const paginated = computed(() => {
 })
 
 // ── Load data ──
+watch(redeemedTick, () => {
+  void loadServers().catch(handleError)
+})
+
 async function loadServers() {
   const scope = 'owner'
   const data = await get<Server[]>(`/api/user/servers?scope=${scope}`).finally(() => { initialLoading.value = false })
@@ -351,7 +357,13 @@ function openMobileAction(s: Server) {
 </script>
 
 <template>
-  <PageHeader icon="dns" :title="t('userServers.title')" />
+  <PageHeader icon="dns" :title="t('userServers.title')">
+    <template #controls>
+      <BaseButton size="sm" variant="primary" @click="openRedeem()">
+        <MsIcon name="redeem" size="xs" />{{ t('billing.redeem.openBtn') }}
+      </BaseButton>
+    </template>
+  </PageHeader>
 
   <div class="page-body">
     <!-- Toolbar -->

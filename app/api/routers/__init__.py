@@ -9,6 +9,7 @@ from app.api.routers.admin_billing_orders import router as admin_billing_orders_
 from app.api.routers.admin_billing_incidents import router as admin_billing_incidents_router
 from app.api.routers.admin_billing_coupon_templates import router as admin_billing_coupon_templates_router
 from app.api.routers.admin_billing_coupons import router as admin_billing_coupons_router
+from app.api.routers.admin_billing_redemption import router as admin_billing_redemption_router
 from app.api.routers.admin_agreements import router as admin_agreements_router
 from app.api.routers.admin_certificates import router as admin_certificates_router
 from app.api.routers.admin_global_defaults import router as admin_global_defaults_router
@@ -20,6 +21,7 @@ from app.api.routers.admin_llm_settings import router as admin_llm_settings_rout
 from app.api.routers.admin_server_detail import router as admin_server_detail_router
 from app.api.routers.admin_server_llm import router as admin_server_llm_router
 from app.api.routers.billing_webhook import router as billing_webhook_router
+from app.api.routers.redemption_webhook import router as redemption_webhook_router
 from app.api.routers.email_templates import router as email_templates_router
 from app.api.routers.integrations import router as integrations_router
 from app.api.routers.logs import router as logs_router
@@ -35,6 +37,7 @@ from app.api.routers.user_billing import router as user_billing_router
 from app.api.routers.user_billing_invoices import router as user_billing_invoices_router
 from app.api.routers.user_billing_plans import router as user_billing_plans_router
 from app.api.routers.user_coupons import router as user_coupons_router
+from app.api.routers.user_redemption import router as user_redemption_router
 from app.api.routers.user_invite import router as user_invite_router
 from app.api.routers.user_files import router as user_files_router
 from app.api.routers.user_servers import router as user_servers_router
@@ -52,6 +55,7 @@ api_router.include_router(admin_billing_orders_router)
 api_router.include_router(admin_billing_incidents_router)
 api_router.include_router(admin_billing_coupon_templates_router)
 api_router.include_router(admin_billing_coupons_router)
+api_router.include_router(admin_billing_redemption_router)
 api_router.include_router(admin_agreements_router)
 api_router.include_router(admin_certificates_router)
 api_router.include_router(admin_global_defaults_router)
@@ -63,6 +67,7 @@ api_router.include_router(admin_llm_settings_router)
 api_router.include_router(admin_server_detail_router)
 api_router.include_router(admin_server_llm_router)
 api_router.include_router(billing_webhook_router)
+api_router.include_router(redemption_webhook_router)
 api_router.include_router(email_templates_router)
 api_router.include_router(integrations_router)
 api_router.include_router(logs_router)
@@ -78,6 +83,7 @@ api_router.include_router(user_billing_router)
 api_router.include_router(user_billing_invoices_router)
 api_router.include_router(user_billing_plans_router)
 api_router.include_router(user_coupons_router)
+api_router.include_router(user_redemption_router)
 api_router.include_router(user_invite_router)
 api_router.include_router(user_files_router)
 api_router.include_router(user_servers_router)

@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, computed, onErrorCaptured } from 'vue'
+import { onMounted, onBeforeUnmount, computed, onErrorCaptured, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 import ConfirmProvider from '@/components/ui/ConfirmProvider.vue'
 import RenewFlowProvider from '@/components/billing/RenewFlowProvider.vue'
+import RedeemCodeModal from '@/components/billing/RedeemCodeModal.vue'
 import SupportWidget from '@/components/support/SupportWidget.vue'
 import SupportNotificationProvider from '@/components/support/SupportNotificationProvider.vue'
 import { provideToast } from '@/composables/useToast'
 import { useTheme } from '@/composables/useTheme'
 import { providePageHeader } from '@/composables/usePageHeader'
+import { useRedeemFlow } from '@/composables/useRedeemFlow'
 import { useAppStore } from '@/stores/app'
 import { ApiError, apiErrorMessage } from '@/composables/apiClient'
 
@@ -34,12 +36,30 @@ providePageHeader()
 
 const app = useAppStore()
 const route = useRoute()
+const router = useRouter()
+const { open: redeemOpen, openRedeem, notifyRedeemed } = useRedeemFlow()
 
 const isBlankLayout = computed(() => route.meta.layout === 'blank')
+
+watch(
+  () => [route.query.action, app.sessionUser] as const,
+  ([action, sessionUser]) => {
+    if (action === 'redeem' && sessionUser && !route.meta.public) {
+      openRedeem()
+      void router.replace({ query: { ...route.query, action: undefined } })
+    }
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   app.loadVersion()
 })
+
+function onGlobalRedeemed() {
+  notifyRedeemed()
+  void app.fetchSessionUser({ force: true }).catch(() => {})
+}
 
 function onOverlayClick() {
   app.closeMobileSidebar()
@@ -71,6 +91,11 @@ function onOverlayClick() {
 
   <ToastContainer />
   <RenewFlowProvider />
+  <RedeemCodeModal
+    v-if="app.sessionUser && !route.meta.public"
+    v-model="redeemOpen"
+    @redeemed="onGlobalRedeemed"
+  />
   <SupportWidget v-if="app.sessionUser && !app.isAdmin && !route.meta.public && route.name !== 'user-support'" :key="app.sessionUser.username" />
   </SupportNotificationProvider>
   </ConfirmProvider>

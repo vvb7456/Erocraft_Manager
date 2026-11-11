@@ -117,5 +117,14 @@
   "tunnel.no_allocation": {"zh-CN": "服务器没有可用端口", "en": "The server has no available allocation"},
   "tunnel.not_enabled": {"zh-CN": "尚未启用隧道", "en": "The tunnel is not enabled"},
   "tunnel.invalid_subdomain": {"zh-CN": "子域名格式不正确", "en": "Invalid subdomain"},
-  "tunnel.subdomain_taken": {"zh-CN": "子域名已被使用", "en": "The subdomain is already in use"}
+  "tunnel.subdomain_taken": {"zh-CN": "子域名已被使用", "en": "The subdomain is already in use"},
+  "redemption.not_found": {"zh-CN": "兑换码不存在，请核对后重试", "en": "Redemption code not found. Please check and try again"},
+  "redemption.expired": {"zh-CN": "该兑换码已过期", "en": "This redemption code has expired"},
+  "redemption.voided": {"zh-CN": "该兑换码已作废", "en": "This redemption code has been voided"},
+  "redemption.already_redeemed": {"zh-CN": "该兑换码已被兑换", "en": "This redemption code has already been redeemed"},
+  "redemption.in_progress": {"zh-CN": "该兑换码正在处理中，请稍后刷新查看", "en": "This redemption code is currently being processed"},
+  "redemption.plan_unavailable": {"zh-CN": "该兑换码关联的套餐已失效，请联系客服", "en": "The plan associated with this redemption code is unavailable. Please contact support"},
+  "redemption.server_incompatible": {"zh-CN": "所选服务器与该兑换码套餐不匹配", "en": "The selected server is not compatible with this redemption code's plan"},
+  "redemption.spec_not_found": {"zh-CN": "未找到对应的套餐或周期规格", "en": "Plan or billing period option not found"},
+  "redemption.api_disabled": {"zh-CN": "自动发卡接口未启用", "en": "The auto-issuance API is disabled"}
 }

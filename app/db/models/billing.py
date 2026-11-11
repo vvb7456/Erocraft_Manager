@@ -503,3 +503,100 @@ class Coupon(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_naive_now, onupdate=utc_naive_now
     )
+
+
+REDEMPTION_SOURCE_VALUES = ("manual", "api")
+REDEMPTION_STATUS_VALUES = ("unused", "redeeming", "redeemed", "void")
+REDEMPTION_CHANNEL_VALUES = ("taobao", "xianyu", "other")
+
+
+class RedemptionBatch(Base):
+    __tablename__ = "manager_redemption_batches"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
+    spec_key: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    plan_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("manager_billing_plans.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    days: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_fen: Mapped[int] = mapped_column(Integer, nullable=False)
+    channel: Mapped[str] = mapped_column(String(32), nullable=False, default="taobao")
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_naive_now
+    )
+
+
+class RedemptionExport(Base):
+    __tablename__ = "manager_redemption_exports"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    batch_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("manager_redemption_batches.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_naive_now
+    )
+
+
+class RedemptionCode(Base):
+    __tablename__ = "manager_redemption_codes"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(40), nullable=False, unique=True)
+    batch_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("manager_redemption_batches.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    plan_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("manager_billing_plans.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    days: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_fen: Mapped[int] = mapped_column(Integer, nullable=False)
+    channel: Mapped[str] = mapped_column(String(32), nullable=False, default="taobao")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    external_request_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    external_order_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="unused", index=True
+    )
+    export_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("manager_redemption_exports.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    redeemed_by: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    redeemed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    order_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("manager_billing_orders.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
+    target_server_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    voided_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    void_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_naive_now
+    )

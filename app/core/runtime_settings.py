@@ -415,6 +415,29 @@ BILLING_SPECS: dict[str, SettingSpec] = _register({
         ),
         _normalize_kinds_list,
     ),
+    "REDEMPTION_API_ENABLED": SettingSpec(
+        "REDEMPTION_API_ENABLED", "billing",
+        lambda: _env_bool("REDEMPTION_API_ENABLED", False),
+        _normalize_bool,
+    ),
+    "REDEMPTION_API_TOKEN": SettingSpec(
+        "REDEMPTION_API_TOKEN", "billing",
+        lambda: _env_str("REDEMPTION_API_TOKEN", ""),
+        _normalize_str,
+        sensitive=True,
+    ),
+    "REDEMPTION_API_DEFAULT_CHANNEL": SettingSpec(
+        "REDEMPTION_API_DEFAULT_CHANNEL", "billing",
+        lambda: _enum_normalizer(("taobao", "xianyu", "other"), "taobao")(
+            _env_str("REDEMPTION_API_DEFAULT_CHANNEL", "taobao")
+        ),
+        _enum_normalizer(("taobao", "xianyu", "other"), "taobao"),
+    ),
+    "REDEMPTION_API_VALID_DAYS": SettingSpec(
+        "REDEMPTION_API_VALID_DAYS", "billing",
+        lambda: _env_int("REDEMPTION_API_VALID_DAYS", 0),
+        _int_clamper(0, 3650, 0),
+    ),
 })
 
 

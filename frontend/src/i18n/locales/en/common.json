@@ -175,6 +175,17 @@
       "delivery_failed": "Notification delivery failed",
       "not_configured": "Configure the notification channel first"
     },
+    "redemption": {
+      "already_redeemed": "This redemption code has already been redeemed",
+      "api_disabled": "The auto-issuance API is disabled",
+      "expired": "This redemption code has expired",
+      "in_progress": "This redemption code is currently being processed",
+      "not_found": "Redemption code not found. Please check and try again",
+      "plan_unavailable": "The plan associated with this redemption code is unavailable. Please contact support",
+      "server_incompatible": "The selected server is not compatible with this redemption code's plan",
+      "spec_not_found": "Plan or billing period option not found",
+      "voided": "This redemption code has been voided"
+    },
     "register": {
       "agreement_required": "Please read and accept all required agreements before continuing",
       "create_failed": "Failed to create the account. Please register again or contact an administrator",

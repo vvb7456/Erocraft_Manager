@@ -255,7 +255,35 @@ const router = createRouter({
     {
       path: '/admin/billing',
       name: 'admin-billing',
-      component: () => import('@/pages/admin/AdminBillingPage.vue'),
+      redirect: (to) => {
+        const raw = Array.isArray(to.query.tab) ? to.query.tab[0] : to.query.tab
+        if (raw === 'plans') return { name: 'admin-plans' }
+        if (raw === 'redemption-api') return { name: 'settings', query: { tab: 'redemption' } }
+        if (raw && ['coupon-templates', 'coupons', 'redemption-batches'].includes(raw)) {
+          return { name: 'admin-vouchers', query: to.query }
+        }
+        const rest = { ...to.query }
+        delete rest.tab
+        return { name: 'admin-orders', query: rest }
+      },
+      meta: { admin: true },
+    },
+    {
+      path: '/admin/billing/orders',
+      name: 'admin-orders',
+      component: () => import('@/pages/admin/AdminOrdersPage.vue'),
+      meta: { admin: true },
+    },
+    {
+      path: '/admin/billing/plans',
+      name: 'admin-plans',
+      component: () => import('@/pages/admin/AdminPlansPage.vue'),
+      meta: { admin: true },
+    },
+    {
+      path: '/admin/billing/vouchers',
+      name: 'admin-vouchers',
+      component: () => import('@/pages/admin/AdminVouchersPage.vue'),
       meta: { admin: true },
     },
     {

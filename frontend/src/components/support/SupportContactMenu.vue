@@ -56,7 +56,7 @@ watch(open, (visible, _, onCleanup) => {
       <nav v-if="open" :id="id" ref="menu" class="contact-dropdown" :style="floatingStyles" :aria-label="t('support.customerActions', { name: username })" @keydown="move" @keydown.esc.stop.prevent="close(true)">
         <RouterLink :to="{ name: 'users', query: { q: username } }" @click="close()"><MsIcon name="person" size="sm" />{{ t('support.viewUser') }}</RouterLink>
         <RouterLink :to="{ name: 'servers', query: { q: username } }" @click="close()"><MsIcon name="dns" size="sm" />{{ t('support.viewServers') }}</RouterLink>
-        <RouterLink :to="{ name: 'admin-billing', query: { tab: 'orders', q: username } }" @click="close()"><MsIcon name="receipt_long" size="sm" />{{ t('support.viewOrders') }}</RouterLink>
+        <RouterLink :to="{ name: 'admin-orders', query: { q: username } }" @click="close()"><MsIcon name="receipt_long" size="sm" />{{ t('support.viewOrders') }}</RouterLink>
       </nav>
     </Teleport>
   </div>
