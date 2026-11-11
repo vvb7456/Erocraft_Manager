@@ -13,8 +13,8 @@
     "variables": {
       "brand_name": "Brand name", "site_name": "Site domain", "notification_id": "Notification number", "severity_label": "Alert severity",
       "username": "Username", "message_count": "Unread message count", "messages": "Latest unread messages (up to five)",
-      "node_name": "Host name", "node_id": "Host ID", "alert_type_label": "Alert type", "alert_message": "Monitoring record when the alert was triggered", "fired_at": "Triggered at (UTC)", "resolved_at": "Resolved at (UTC)",
-      "certificate_id": "Certificate ID", "certificate_name": "Certificate name", "expires_at": "Certificate expiry (UTC)", "error": "Certificate read or deployment error",
+      "node_name": "Host name", "node_id": "Host ID", "alert_type_label": "Alert type", "alert_message": "Monitoring record when the alert was triggered", "fired_at": "Triggered at", "resolved_at": "Resolved at",
+      "certificate_id": "Certificate ID", "certificate_name": "Certificate name", "expires_at": "Certificate expiry", "error": "Certificate read or deployment error",
       "incident_id": "Incident ID", "incident_type_label": "Order incident type", "order_id": "Order ID", "server_id": "Server ID",
       "order_no": "Order number", "plan_name": "Plan name", "total_yuan": "Order amount", "currency_code": "Currency", "apply_retry_count": "Provisioning retry count", "apply_error": "Provisioning error",
       "actor": "Operator", "operation": "Operation type", "status_label": "Failed or partially failed", "target": "Deployment target or related object", "job_id": "Task name", "error_type": "Error type"

@@ -13,8 +13,8 @@
     "variables": {
       "brand_name": "品牌名称", "site_name": "站点域名", "notification_id": "通知编号", "severity_label": "告警等级",
       "username": "用户名", "message_count": "未读消息数量", "messages": "最新未读消息摘要（最多五条）",
-      "node_name": "主机名称", "node_id": "主机 ID", "alert_type_label": "告警类型", "alert_message": "触发告警时的监测记录", "fired_at": "触发时间（UTC）", "resolved_at": "恢复时间（UTC）",
-      "certificate_id": "证书 ID", "certificate_name": "证书名称", "expires_at": "证书到期时间（UTC）", "error": "证书读取或部署的错误记录",
+      "node_name": "主机名称", "node_id": "主机 ID", "alert_type_label": "告警类型", "alert_message": "触发告警时的监测记录", "fired_at": "触发时间", "resolved_at": "恢复时间",
+      "certificate_id": "证书 ID", "certificate_name": "证书名称", "expires_at": "证书到期时间", "error": "证书读取或部署的错误记录",
       "incident_id": "异常记录 ID", "incident_type_label": "订单异常类型", "order_id": "订单 ID", "server_id": "服务器 ID",
       "order_no": "订单号", "plan_name": "套餐名称", "total_yuan": "订单金额", "currency_code": "币种", "apply_retry_count": "开通重试次数", "apply_error": "开通失败说明",
       "actor": "操作人", "operation": "操作类型", "status_label": "失败或部分失败", "target": "部署目标或关联对象", "job_id": "任务名称", "error_type": "异常类型"

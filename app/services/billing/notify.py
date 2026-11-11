@@ -22,6 +22,7 @@ from sqlalchemy import select
 
 from app.core.runtime_settings import SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
+from app.core.time import format_in_timezone, get_runtime_timezone
 from app.db.models.billing import BillingInvoice, BillingOrder, BillingRefund
 from app.db.models.pterodactyl import PteroUser
 from app.db.session import get_session_factory
@@ -47,10 +48,6 @@ _USER_KIND_GREETING = {
 }
 
 
-def _fmt_dt(dt: datetime | None) -> str:
-    return dt.strftime("%Y-%m-%d %H:%M:%S UTC") if dt is not None else ""
-
-
 def _yuan(fen: int) -> str:
     return f"{fen / 100:.2f}"
 
@@ -72,6 +69,7 @@ async def _build_order_variables(
     brand_name = await get_settings_store().get(
         db, "BRAND_NAME", SETTINGS_SPECS["BRAND_NAME"].default_value()
     )
+    tz_name = await get_runtime_timezone(db)
 
     variables: dict[str, str] = {
         "brand_name": str(brand_name),
@@ -82,8 +80,8 @@ async def _build_order_variables(
         "total_fen": str(order.total_fen),
         "total_yuan": _yuan(order.total_fen),
         "currency_code": snap["currency_code"],
-        "paid_at": _fmt_dt(paid_at),
-        "applied_at": _fmt_dt(order.applied_at),
+        "paid_at": format_in_timezone(paid_at, tz_name) or "",
+        "applied_at": format_in_timezone(order.applied_at, tz_name) or "",
         "server_uuid": server_uuid,
         "apply_error": str(order.last_apply_error or ""),
         "apply_retry_count": str(order.apply_retry_count),
@@ -95,7 +93,7 @@ async def _build_order_variables(
                 "refund_amount_fen": str(refund.amount_fen),
                 "refund_amount_yuan": _yuan(refund.amount_fen),
                 "refund_reason": str(refund.reason or ""),
-                "refunded_at": _fmt_dt(refund.updated_at),
+                "refunded_at": format_in_timezone(refund.updated_at, tz_name) or "",
             }
         )
     return variables

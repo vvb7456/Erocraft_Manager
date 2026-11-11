@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.time import utc_naive_now, to_iso_z
+from app.core.time import format_in_timezone, get_runtime_timezone, local_today, utc_naive_now
 from app.core.contracts import OperationResult
 from app.services.billing.notify import order_apply_alert_context
 from app.services.notifications.queue import configuration, enqueue_safely
@@ -28,6 +28,9 @@ async def monitoring_alert(db: AsyncSession, *, alert: Any, host_name: str, kind
     from app.services.email import alert_type_label, severity_label
 
     now = utc_naive_now()
+    tz_name = await get_runtime_timezone(db)
+    fired_at = format_in_timezone(alert.created_at, tz_name)
+    resolved_at = format_in_timezone(alert.resolved_at, tz_name)
     window = int((now - alert.created_at).total_seconds()) // max(60, cooldown_min * 60)
     restored = kind == "resolved"
     await enqueue_safely(
@@ -38,24 +41,26 @@ async def monitoring_alert(db: AsyncSession, *, alert: Any, host_name: str, kind
         path=f"/admin/hosts/{alert.host_id}/overview" if alert.host_id else "/admin/dashboard",
         context={"alert_id": alert.id, "kind": kind, "template": "alert_resolved" if restored else "alert_fired",
                  "wecom_template": "alert_resolved" if restored else "alert_fired",
-                 "wecom_variables": {"alert_message": alert.message or "—", "fired_at": to_iso_z(alert.created_at), "resolved_at": to_iso_z(alert.resolved_at) or "—"},
+                 "wecom_variables": {"alert_message": alert.message or "—", "fired_at": fired_at or "—", "resolved_at": resolved_at or "—"},
                  "variables": {"node_name": host_name or str(alert.host_id or ""), "node_id": str(alert.host_id or ""),
                      "alert_type": alert.alert_type, "alert_type_label": alert_type_label(alert.alert_type),
                      "severity": alert.severity, "severity_label": severity_label(alert.severity),
-                     "message": alert.message or "", "fired_at": str(alert.created_at), "resolved_at": str(alert.resolved_at or "")}},
+                     "message": alert.message or "", "fired_at": fired_at or "", "resolved_at": resolved_at or ""}},
     )
 
 
 async def certificate_alert(db: AsyncSession, *, cert: Any, alert_type: str, severity: str, message: str, target: str = "") -> None:
     from app.services.email import alert_type_label
 
+    tz_name = await get_runtime_timezone(db)
+    expires_at = format_in_timezone(cert.source_not_after, tz_name) or "—"
     await enqueue_safely(
-        db, event_key=f"certificate:{cert.id}:{alert_type}:{target}:{utc_naive_now().date()}",
+        db, event_key=f"certificate:{cert.id}:{alert_type}:{target}:{local_today(tz_name)}",
         category="certificate", severity=severity, title=f"证书告警 · {cert.name}",
         body=f"{alert_type_label(alert_type)}\n{message}", path="/admin/certificates",
         context={"certificate_id": cert.id, "problem_key": f"certificate:{cert.id}:{alert_type}:{target}",
             "wecom_template": "certificate", "wecom_variables": {"certificate_id": cert.id, "certificate_name": cert.name,
-                "alert_type_label": alert_type_label(alert_type), "expires_at": to_iso_z(cert.source_not_after) or "—",
+                "alert_type_label": alert_type_label(alert_type), "expires_at": expires_at,
                 "target": target or "—", "error": cert.source_last_error or "—"}},
     )
 

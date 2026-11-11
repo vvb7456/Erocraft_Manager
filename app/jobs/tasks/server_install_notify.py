@@ -44,7 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.runtime_settings import SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
-from app.core.time import to_iso_z
+from app.core.time import format_in_timezone, get_runtime_timezone
 from app.db.session import get_session_factory
 from app.services.audit import log_manager_activity
 from app.core.contracts import OperationResult
@@ -192,6 +192,7 @@ async def run_install_notify_scan() -> None:
         brand_name = await get_settings_store().get(
             db, "BRAND_NAME", SETTINGS_SPECS["BRAND_NAME"].default_value(),
         )
+        tz_name = await get_runtime_timezone(db)
         site_url = await get_site_url(db)
         cfg = await get_smtp_config(db)
         template = await load_template(db, "server_installed")
@@ -228,7 +229,7 @@ async def run_install_notify_scan() -> None:
                     continue
 
                 installed_at = row["installed_at"]
-                installed_str = to_iso_z(installed_at) if installed_at is not None else ""
+                installed_str = format_in_timezone(installed_at, tz_name) or ""
 
                 subject, body = render_template_body(
                     template,

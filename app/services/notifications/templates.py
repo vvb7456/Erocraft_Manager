@@ -2,14 +2,16 @@
 
 import html
 import re
+from datetime import datetime
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.runtime_settings import SETTINGS_SPECS
+from app.core.runtime_settings import AUTOMATION_SPECS, SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
+from app.core.time import format_in_timezone
 from app.db.models.notifications import NotificationDelivery
 from app.services.notifications.wecom import format_content
 
@@ -105,14 +107,18 @@ async def delivery_content(db: AsyncSession, row: NotificationDelivery, *, brand
     return content
 
 
+_SAMPLE_FIRED_AT = datetime(2026, 10, 15, 9, 0, 0)
+_SAMPLE_RESOLVED_AT = datetime(2026, 10, 15, 9, 10, 0)
+_SAMPLE_EXPIRES_AT = datetime(2026, 10, 22, 9, 0, 0)
+
 SAMPLES: dict[TemplateKey, dict[str, str]] = {
     "support": {"username": "example", "message_count": "2", "messages": "请问如何续费？\n这是订单截图 [截图]"},
     "alert_fired": {"node_name": "示例主机", "node_id": "1", "alert_type_label": "CPU 使用率过高",
-        "alert_message": "CPU 使用率持续超过 90%。", "fired_at": "2026-10-15T09:00:00Z"},
+        "alert_message": "CPU 使用率持续超过 90%。", "fired_at": "2026-10-15 17:00:00 (UTC+08:00)"},
     "alert_resolved": {"node_name": "示例主机", "node_id": "1", "alert_type_label": "CPU 使用率过高",
-        "alert_message": "CPU 使用率持续超过 90%。", "fired_at": "2026-10-15T09:00:00Z", "resolved_at": "2026-10-15T09:10:00Z"},
+        "alert_message": "CPU 使用率持续超过 90%。", "fired_at": "2026-10-15 17:00:00 (UTC+08:00)", "resolved_at": "2026-10-15 17:10:00 (UTC+08:00)"},
     "certificate": {"certificate_id": "1", "certificate_name": "示例证书", "alert_type_label": "证书即将到期",
-        "expires_at": "2026-10-22T09:00:00Z", "target": "—", "error": "—"},
+        "expires_at": "2026-10-22 17:00:00 (UTC+08:00)", "target": "—", "error": "—"},
     "billing_incident": {"incident_id": "12", "incident_type_label": "订单需要人工审核", "order_id": "100", "server_id": "3"},
     "billing_apply": {"order_no": "EXAMPLE100", "username": "example", "plan_name": "SillyTavern 月付套餐",
         "total_yuan": "10.00", "currency_code": "CNY", "apply_retry_count": "2", "apply_error": "节点暂时不可用"},
@@ -122,8 +128,20 @@ SAMPLES: dict[TemplateKey, dict[str, str]] = {
 
 
 async def preview(db: AsyncSession, payload: TemplateInput) -> str:
-    settings = await get_settings_store().get_many(db, {key: SETTINGS_SPECS[key].default_value() for key in ("BRAND_NAME", "SITE_URL")})
+    settings = await get_settings_store().get_many(db, {
+        "BRAND_NAME": SETTINGS_SPECS["BRAND_NAME"].default_value(),
+        "SITE_URL": SETTINGS_SPECS["SITE_URL"].default_value(),
+        "TIMEZONE": AUTOMATION_SPECS["TIMEZONE"].default_value(),
+    })
+    tz_name = str(settings["TIMEZONE"])
+    sample = dict(SAMPLES[payload.type])
+    if payload.type in {"alert_fired", "alert_resolved"}:
+        sample["fired_at"] = format_in_timezone(_SAMPLE_FIRED_AT, tz_name) or ""
+    if payload.type == "alert_resolved":
+        sample["resolved_at"] = format_in_timezone(_SAMPLE_RESOLVED_AT, tz_name) or ""
+    if payload.type == "certificate":
+        sample["expires_at"] = format_in_timezone(_SAMPLE_EXPIRES_AT, tz_name) or ""
     site = str(settings["SITE_URL"] or "https://example.com").rstrip("/")
-    content = render(payload, {**SAMPLES[payload.type], "brand_name": settings["BRAND_NAME"],
+    content = render(payload, {**sample, "brand_name": settings["BRAND_NAME"],
         "site_name": urlsplit(site).netloc, "notification_id": 123, "severity_label": "警告"}, url=site + "/#/admin/notifications")
     return html.unescape(re.sub(r'<a href="[^"]*">查看详情</a>', "查看详情", content))

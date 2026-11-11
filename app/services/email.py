@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.runtime_settings import SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
+from app.core.time import format_in_timezone, get_runtime_timezone
 from app.db.models.manager import ManagerEmailTemplate
 from app.services.audit import log_manager_activity
 from app.core.contracts import ErrorInfo, OperationResult
@@ -163,6 +164,15 @@ _TEMPLATE_FILES = {
     "referral_invitee_rewarded": _PROJECT_ROOT / "templates" / "referral_invitee_rewarded_template.json",
 }
 
+_PREVIEW_SAMPLE_DATETIMES: dict[str, datetime] = {
+    "fired_at": datetime(2026, 4, 21, 14, 32, 11),
+    "resolved_at": datetime(2026, 4, 21, 14, 48, 55),
+    "paid_at": datetime(2026, 4, 30, 12, 34, 56),
+    "applied_at": datetime(2026, 4, 30, 12, 35, 8),
+    "refunded_at": datetime(2026, 5, 1, 9, 0, 0),
+    "installed_at": datetime(2026, 5, 4, 8, 58, 42),
+}
+
 _PREVIEW_DUMMY_VALUES: dict[str, str] = {
     "username": "preview_user",
     "email": "preview@example.com",
@@ -182,8 +192,8 @@ _PREVIEW_DUMMY_VALUES: dict[str, str] = {
     "severity": "warning",
     "severity_label": "警告",
     "message": "CPU 92.3% > 90% sustained",
-    "fired_at": "2026-04-21 14:32:11 UTC",
-    "resolved_at": "2026-04-21 14:48:55 UTC",
+    "fired_at": "2026-04-21 22:32:11 (UTC+08:00)",
+    "resolved_at": "2026-04-21 22:48:55 (UTC+08:00)",
     # Billing preview values (BILLING_DESIGN.md §14)
     "order_no": "O20260430000123",
     "plan_name": "SillyTavern 高级型",
@@ -192,17 +202,17 @@ _PREVIEW_DUMMY_VALUES: dict[str, str] = {
     "total_fen": "5970",
     "total_yuan": "59.70",
     "currency_code": "CNY",
-    "paid_at": "2026-04-30 12:34:56 UTC",
-    "applied_at": "2026-04-30 12:35:08 UTC",
+    "paid_at": "2026-04-30 20:34:56 (UTC+08:00)",
+    "applied_at": "2026-04-30 20:35:08 (UTC+08:00)",
     "server_uuid": "e6777f85-44e9-45f9-ace9-2c2099753e9c",
     "refund_amount_fen": "5970",
     "refund_amount_yuan": "59.70",
     "refund_reason": "用户申请退款",
     "refund_no": "R20260430000045",
-    "refunded_at": "2026-05-01 09:00:00 UTC",
+    "refunded_at": "2026-05-01 17:00:00 (UTC+08:00)",
     "apply_error": "node has no available allocation",
     "apply_retry_count": "3",
-    "installed_at": "2026-05-04 08:58:42 UTC",
+    "installed_at": "2026-05-04 16:58:42 (UTC+08:00)",
     # Referral coupon preview values
     "invitee_username": "new_friend",
     "coupon_code": "WELCOME-AB12CD34",
@@ -408,6 +418,7 @@ async def build_template_preview(
     internal_key = EMAIL_TEMPLATE_API_TO_INTERNAL[template_type]
     store = get_settings_store()
     brand_name = str(await store.get(db, "BRAND_NAME", SETTINGS_SPECS["BRAND_NAME"].default_value()))
+    tz_name = await get_runtime_timezone(db)
     # Preview must work even if SITE_URL is not yet configured. Fall back to
     # a clearly-fake placeholder so admins can still see the layout while
     # filling out branding settings.
@@ -419,6 +430,7 @@ async def build_template_preview(
     variables = {
         "brand_name": brand_name,
         **_PREVIEW_DUMMY_VALUES,
+        **{k: format_in_timezone(v, tz_name) or "" for k, v in _PREVIEW_SAMPLE_DATETIMES.items()},
         "reset_url": f"{site_url}/#/reset-password?token=preview-token&email=preview@example.com",
         "confirm_url": f"{site_url}/#/confirm-email?token=preview-token&uid=10001",
         "verify_url": f"{site_url}/#/verify-email?token=preview-token",

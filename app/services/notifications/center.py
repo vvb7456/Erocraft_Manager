@@ -7,7 +7,7 @@ from sqlalchemy import select, case
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.time import utc_naive_now, to_iso_z
+from app.core.time import format_in_timezone, get_runtime_timezone, to_iso_z, utc_naive_now
 from app.db.models.manager import ManagerCertificate, ManagerCertDeployment, ManagerHost
 from app.db.models.notifications import NotificationIssue
 from app.services.email import alert_type_label
@@ -26,20 +26,22 @@ async def record_issue(db: AsyncSession, *, key: str, category: str, severity: s
 
 async def certificate_problems(db: AsyncSession) -> list[dict[str, Any]]:
     now = utc_naive_now()
+    tz_name = await get_runtime_timezone(db)
     result = []
     certs = (await db.scalars(select(ManagerCertificate).where(ManagerCertificate.enabled.is_(True)))).all()
     for cert in certs:
         kind, message, severity = "", "", "warning"
+        expires_at = format_in_timezone(cert.source_not_after, tz_name)
         if cert.source_last_error or cert.source_not_after is None:
             kind, message = "cert_source_unknown", cert.source_last_error or "证书源有效期未知"
         elif cert.source_not_after <= now + timedelta(days=cert.alert_threshold_days):
-            kind, message = "cert_source_expiring", f"证书到期时间：{to_iso_z(cert.source_not_after)}"
+            kind, message = "cert_source_expiring", f"证书到期时间：{expires_at}"
             severity = "critical" if cert.source_not_after <= now else "warning"
         if kind:
             result.append({"key": f"certificate:{cert.id}:{kind}:", "category": "certificate", "severity": severity,
                 "title": f"{cert.name} · {alert_type_label(kind)}", "body": message, "path": "/admin/certificates",
                 "created_at": cert.updated_at, "variables": {"certificate_id": cert.id, "certificate_name": cert.name,
-                    "alert_type_label": alert_type_label(kind), "expires_at": to_iso_z(cert.source_not_after) or "—",
+                    "alert_type_label": alert_type_label(kind), "expires_at": expires_at or "—",
                     "target": "—", "error": cert.source_last_error or "—"}})
     by_id = {c.id: c for c in certs}
     rows = (await db.execute(select(ManagerCertDeployment, ManagerHost.name).join(ManagerHost, ManagerHost.id == ManagerCertDeployment.host_id)
@@ -53,7 +55,7 @@ async def certificate_problems(db: AsyncSession) -> list[dict[str, Any]]:
             "title": f"{host} · {alert_type_label(kind)}", "body": dep.last_check_error or dep.status,
             "path": "/admin/certificates", "created_at": dep.unhealthy_since,
             "variables": {"certificate_id": cert.id, "certificate_name": cert.name, "alert_type_label": alert_type_label(kind),
-                "expires_at": to_iso_z(cert.source_not_after) or "—", "target": host, "error": dep.last_check_error or "—"}})
+                "expires_at": format_in_timezone(cert.source_not_after, tz_name) or "—", "target": host, "error": dep.last_check_error or "—"}})
     return result
 
 

@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def local_today(timezone_name: str) -> date:
@@ -12,6 +16,33 @@ def local_today(timezone_name: str) -> date:
     except Exception:
         timezone = ZoneInfo("UTC")
     return datetime.now(timezone).date()
+
+
+async def get_runtime_timezone(db: AsyncSession) -> str:
+    from app.core.runtime_settings import AUTOMATION_SPECS
+    from app.core.settings_store import get_settings_store
+
+    tz_name = await get_settings_store().get(
+        db, "TIMEZONE", AUTOMATION_SPECS["TIMEZONE"].default_value()
+    )
+    return str(tz_name)
+
+
+def format_in_timezone(dt: datetime | None, timezone_name: str) -> str | None:
+    if dt is None:
+        return None
+    try:
+        tz = ZoneInfo(timezone_name)
+    except Exception:
+        tz = ZoneInfo("UTC")
+    aware = dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
+    local_dt = aware.astimezone(tz)
+    offset = local_dt.utcoffset()
+    total_seconds = int(offset.total_seconds()) if offset is not None else 0
+    sign = "+" if total_seconds >= 0 else "-"
+    hours, rem = divmod(abs(total_seconds), 3600)
+    minutes = rem // 60
+    return f"{local_dt.strftime('%Y-%m-%d %H:%M:%S')} (UTC{sign}{hours:02d}:{minutes:02d})"
 
 
 def utc_naive_now() -> datetime:
