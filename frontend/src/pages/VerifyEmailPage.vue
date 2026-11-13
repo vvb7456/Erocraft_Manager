@@ -3,6 +3,7 @@ import { apiErrorMessage, fetchApi } from '@/composables/apiClient'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useAppStore } from '@/stores/app'
 import AuthForm from '@/components/auth/AuthForm.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import Spinner from '@/components/ui/Spinner.vue'
@@ -12,6 +13,7 @@ defineOptions({ name: 'VerifyEmailPage' })
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n({ useScope: 'global' })
+const app = useAppStore()
 
 const loading = ref(true)
 const error = ref('')
@@ -52,10 +54,12 @@ async function verify() {
     try { data = await res.json() } catch { data = null }
     if (res.ok) {
       success.value = t('verifyEmail.success')
-      const target = data?.auto_login
-        ? (data?.is_admin ? { name: 'dashboard' } : { name: 'user-home' })
-        : { name: 'login' }
-      queueRedirect(target)
+      if (data?.auto_login) {
+        app.clearSessionUser()
+        queueRedirect({ name: 'home' })
+      } else {
+        queueRedirect({ name: 'login' })
+      }
       return
     }
   } catch (failure) {

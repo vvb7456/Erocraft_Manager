@@ -5,7 +5,7 @@ import type { ToastAPI } from '@/composables/useToast'
 import i18n from '@/i18n/vue-i18n'
 import router from '@/router'
 import { ApiError, apiErrorMessage, fetchApi } from '@/composables/apiClient'
-import { useAppStore } from './app'
+import { handleSessionExpired } from '@/composables/useAuthModal'
 
 export type PowerAction = 'start' | 'stop' | 'restart' | 'kill'
 
@@ -49,14 +49,6 @@ interface PendingPower {
 export const usePowerPendingStore = defineStore('powerPending', () => {
   const pending = reactive<Map<number, PendingPower>>(new Map())
   const { t } = i18n.global
-
-  let _redirecting = false
-  function redirectToLogin() {
-    if (_redirecting) return
-    _redirecting = true
-    useAppStore().clearSessionUser()
-    router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } }).finally(() => { _redirecting = false })
-  }
 
   const TIMEOUT_MS: Record<PowerAction, number> = {
     start:   60_000,
@@ -227,7 +219,7 @@ export const usePowerPendingStore = defineStore('powerPending', () => {
     } catch (failure) {
       clearPending(serverId)
       if (failure instanceof ApiError && failure.code === 'auth.session_required') {
-        redirectToLogin()
+        handleSessionExpired(router)
         return null
       }
       const code = failure instanceof ApiError ? failure.code : 'system.internal_error'

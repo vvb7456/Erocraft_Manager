@@ -2,6 +2,7 @@
 import { onMounted, onBeforeUnmount, computed, onErrorCaptured, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
+import AuthModal from '@/components/auth/AuthModal.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 import ConfirmProvider from '@/components/ui/ConfirmProvider.vue'
 import RenewFlowProvider from '@/components/billing/RenewFlowProvider.vue'
@@ -11,6 +12,7 @@ import SupportNotificationProvider from '@/components/support/SupportNotificatio
 import { provideToast } from '@/composables/useToast'
 import { useTheme } from '@/composables/useTheme'
 import { providePageHeader } from '@/composables/usePageHeader'
+import { useAuthModal } from '@/composables/useAuthModal'
 import { useRedeemFlow } from '@/composables/useRedeemFlow'
 import { useAppStore } from '@/stores/app'
 import { ApiError, apiErrorMessage } from '@/composables/apiClient'
@@ -37,6 +39,7 @@ providePageHeader()
 const app = useAppStore()
 const route = useRoute()
 const router = useRouter()
+const { openAuth } = useAuthModal()
 const { open: redeemOpen, openRedeem, notifyRedeemed } = useRedeemFlow()
 
 const isBlankLayout = computed(() => route.meta.layout === 'blank')
@@ -44,8 +47,12 @@ const isBlankLayout = computed(() => route.meta.layout === 'blank')
 watch(
   () => [route.query.action, app.sessionUser] as const,
   ([action, sessionUser]) => {
-    if (action === 'redeem' && sessionUser && !route.meta.public) {
+    if (action !== 'redeem' || route.meta.public) return
+    if (sessionUser) {
       openRedeem()
+      void router.replace({ query: { ...route.query, action: undefined } })
+    } else if (route.name === 'user-plans') {
+      openAuth('login', { onSuccess: () => openRedeem() })
       void router.replace({ query: { ...route.query, action: undefined } })
     }
   },
@@ -90,6 +97,7 @@ function onOverlayClick() {
   </template>
 
   <ToastContainer />
+  <AuthModal />
   <RenewFlowProvider />
   <RedeemCodeModal
     v-if="app.sessionUser && !route.meta.public"

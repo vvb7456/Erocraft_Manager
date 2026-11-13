@@ -1,7 +1,24 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { switchLanguage } from '@/i18n/vue-i18n'
 import { backendToFrontendLocale } from '@/i18n/locale-map'
+import {
+  resolvePostAuthRoute,
+  resolveSafeRedirect,
+  resolveSafeRedirectTarget,
+  useAuthModal,
+  type AuthMode,
+} from '@/composables/useAuthModal'
 import { useAppStore } from '@/stores/app'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    public?: boolean
+    admin?: boolean
+    layout?: 'blank' | 'user'
+    allowGuest?: boolean
+    authEntry?: AuthMode
+  }
+}
 
 /** Sync the i18n locale with the user's saved server-side preference. */
 function applyServerLanguage(value: unknown) {
@@ -14,14 +31,14 @@ const router = createRouter({
     {
       path: '/login',
       name: 'login',
-      component: () => import('@/pages/LoginPage.vue'),
-      meta: { public: true, layout: 'blank' },
+      component: () => import('@/pages/LoadingPage.vue'),
+      meta: { authEntry: 'login', layout: 'blank' },
     },
     {
       path: '/forgot-password',
       name: 'forgot-password',
-      component: () => import('@/pages/ForgotPasswordPage.vue'),
-      meta: { public: true, layout: 'blank' },
+      component: () => import('@/pages/LoadingPage.vue'),
+      meta: { authEntry: 'forgot-password', layout: 'blank' },
     },
     {
       path: '/reset-password',
@@ -38,8 +55,8 @@ const router = createRouter({
     {
       path: '/register',
       name: 'register',
-      component: () => import('@/pages/RegisterPage.vue'),
-      meta: { public: true, layout: 'blank' },
+      component: () => import('@/pages/LoadingPage.vue'),
+      meta: { authEntry: 'register', layout: 'blank' },
     },
     {
       path: '/verify-email',
@@ -84,7 +101,7 @@ const router = createRouter({
       path: '/plans',
       name: 'user-plans',
       component: () => import('@/pages/user/UserPlansPage.vue'),
-      meta: { layout: 'user' },
+      meta: { layout: 'user', allowGuest: true },
     },
     {
       path: '/orders',
@@ -310,7 +327,7 @@ const router = createRouter({
 })
 
 /** Check auth status before each navigation */
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
   if (to.name === 'settings' && to.query.tab === 'account') return { name: 'admin-account' }
   if (to.name === 'settings' && ['smtp', 'notifications'].includes(String(to.query.tab))) {
     return { name: 'settings', query: { tab: 'channels', channel: to.query.tab === 'smtp' ? 'email' : 'wecom' } }
@@ -318,33 +335,57 @@ router.beforeEach(async (to) => {
   if (to.name === 'notifications' && ['channels', 'recipients'].includes(String(to.query.tab))) {
     return { name: 'settings', query: { tab: to.query.tab, channel: to.query.channel } }
   }
-  const app = useAppStore()
   if (to.meta.public) {
-    if (to.name === 'login' || to.name === 'forgot-password') {
-      try {
-        const data = await app.fetchSessionUser()
-        if (data) {
-          applyServerLanguage(data?.language)
-          app.setIsAdmin(!!data.is_admin)
-          if (data.is_admin) return { name: 'dashboard' }
-          return { name: 'user-home' }
-        }
-      } catch {
-        return true
-      }
-    }
     return true
   }
-  const data = await app.fetchSessionUser()
+
+  const app = useAppStore()
+  const { openAuth } = useAuthModal()
+
+  let data: Awaited<ReturnType<typeof app.fetchSessionUser>> = null
+  try {
+    data = await app.fetchSessionUser()
+  } catch (err) {
+    if (!to.meta.allowGuest && !to.meta.authEntry && to.name !== 'home') {
+      throw err
+    }
+  }
+
+  const authEntry = to.meta.authEntry
+  if (authEntry) {
+    if (data) {
+      applyServerLanguage(data.language)
+      app.setIsAdmin(!!data.is_admin)
+      const safeTarget = resolveSafeRedirectTarget(router, to.query.redirect)
+      if (safeTarget) return safeTarget
+      return { ...resolvePostAuthRoute(data), replace: true }
+    }
+    app.setIsAdmin(false)
+    const redirect = resolveSafeRedirect(router, to.query.redirect)
+    const invite = typeof to.query.invite === 'string' ? to.query.invite : undefined
+    openAuth(authEntry, { redirect, invite })
+    if (from.name === 'user-plans') return false
+    return { name: 'user-plans', replace: true }
+  }
+
   if (!data) {
     app.setIsAdmin(false)
-    return { name: 'login', query: { redirect: to.fullPath } }
+    if (to.name === 'home') {
+      return { name: 'user-plans', query: to.query, replace: true }
+    }
+    if (to.meta.allowGuest) {
+      return true
+    }
+    openAuth('login', { redirect: to.fullPath })
+    if (from.name === 'user-plans') return false
+    return { name: 'user-plans', replace: true }
   }
+
   applyServerLanguage(data.language)
   app.setIsAdmin(!!data.is_admin)
   if (to.name === 'user-support' && data.is_admin) return { name: 'admin-support' }
   if (to.name === 'home') {
-    return { name: data.is_admin ? 'dashboard' : 'user-home' }
+    return { ...resolvePostAuthRoute(data), query: to.query, replace: true }
   }
   if (to.meta.admin && !data.is_admin) {
     return { name: 'user-home' }

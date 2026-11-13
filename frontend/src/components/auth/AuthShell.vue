@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
@@ -14,14 +12,6 @@ defineProps<{
 }>()
 
 const app = useAppStore()
-const { t } = useI18n({ useScope: 'global' })
-const currentYear = new Date().getFullYear()
-const footerText = computed(() => {
-  const parts = [`${app.brandName} © 2015 - ${currentYear}`]
-  if (app.icpRecord) parts.push(app.icpRecord)
-  parts.push(t('common.footer.allRightsReserved'))
-  return parts.join(' | ')
-})
 </script>
 
 <template>
@@ -52,7 +42,7 @@ const footerText = computed(() => {
       </div>
     </div>
     <div class="auth-footer">
-      {{ footerText }}
+      {{ app.footerText }}
     </div>
   </div>
 </template>

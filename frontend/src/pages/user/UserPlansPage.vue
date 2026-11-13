@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useAppStore } from '@/stores/app'
+import { useAuthModal } from '@/composables/useAuthModal'
 import { useConfirm } from '@/composables/useConfirm'
 import { useRedeemFlow } from '@/composables/useRedeemFlow'
 import PageHeader from '@/components/layout/PageHeader.vue'
@@ -61,6 +62,7 @@ const { t } = useI18n({ useScope: 'global' })
 const { get, handleError } = useApiFetch()
 const router = useRouter()
 const app = useAppStore()
+const { openAuth } = useAuthModal()
 const { confirm } = useConfirm()
 const { openRedeem, redeemedTick } = useRedeemFlow()
 
@@ -115,12 +117,35 @@ async function loadPlans() {
   }
 }
 
+let serverCountPromise: Promise<void> | null = null
+
 async function loadServerCount() {
-  const data = await get<unknown[]>('/api/user/servers?scope=owner', { silent: true })
-  currentServerCount.value = Array.isArray(data) ? data.length : 0
+  if (!app.sessionUser) {
+    currentServerCount.value = 0
+    return
+  }
+  if (serverCountPromise) return serverCountPromise
+  serverCountPromise = get<unknown[]>('/api/user/servers?scope=owner', { silent: true })
+    .then((data) => {
+      currentServerCount.value = Array.isArray(data) ? data.length : 0
+    })
+    .catch(handleError)
+    .finally(() => {
+      serverCountPromise = null
+    })
+  return serverCountPromise
 }
 
 async function handleBuy(plan: Plan, period: PeriodOption) {
+  if (!app.sessionUser) {
+    openAuth('login', {
+      onSuccess: () => {
+        void loadServerCount().then(() => handleBuy(plan, period))
+      },
+    })
+    return
+  }
+  if (plan.plan_type === 'trial' && app.hasOwnedServer) return
   if (currentServerCount.value > 0) {
     const result = await confirm({
       title: t('billing.plans.newPurchaseConfirm.title'),
@@ -140,20 +165,30 @@ async function handleBuy(plan: Plan, period: PeriodOption) {
 }
 
 watch(redeemedTick, () => {
-  void loadServerCount().catch(handleError)
+  void loadServerCount()
 })
+
+watch(
+  () => app.sessionUser,
+  () => {
+    void loadServerCount()
+  },
+)
 
 onMounted(() => {
   loadPlans()
-  void loadServerCount().catch(handleError)
+  void loadServerCount()
 })
 </script>
 
 <template>
   <PageHeader icon="storefront" :title="t('billing.plans.pageTitle')">
     <template #controls>
-      <BaseButton size="sm" variant="primary" @click="openRedeem()">
+      <BaseButton v-if="app.sessionUser" size="sm" variant="primary" @click="openRedeem()">
         <MsIcon name="redeem" size="xs" />{{ t('billing.redeem.openBtn') }}
+      </BaseButton>
+      <BaseButton v-else size="sm" variant="primary" @click="openAuth('login')">
+        <MsIcon name="login" size="xs" />{{ t('login.submit') }}
       </BaseButton>
     </template>
   </PageHeader>
@@ -168,60 +203,66 @@ onMounted(() => {
   </AlertBanner>
 
   <div class="plans-page">
-    <LoadingCenter v-if="initialLoading" />
+    <div class="plans-page__body">
+      <LoadingCenter v-if="initialLoading" />
 
-    <AlertBanner v-else-if="loadFailed" tone="danger">
-      <div class="plans-page__error">
-        <span>{{ t('billing.plans.loadFailed') }}</span>
-        <BaseButton size="sm" variant="primary" @click="loadPlans">
-          {{ t('billing.plans.retry') }}
-        </BaseButton>
-      </div>
-    </AlertBanner>
-
-    <EmptyState
-      v-else-if="plans.length === 0"
-      icon="inventory_2"
-      :title="t('billing.plans.emptyTitle')"
-      :message="t('billing.plans.emptyHint')"
-    >
-      <BaseButton variant="default" @click="router.push({ name: 'user-servers' })">
-        <MsIcon name="dns" />
-        {{ t('nav.myServers') }}
-      </BaseButton>
-      <BaseButton variant="primary" @click="supportOpen = true">
-        <MsIcon name="support_agent" />
-        {{ t('nav.contactSupport') }}
-      </BaseButton>
-    </EmptyState>
-
-    <template v-else>
-      <section
-        v-for="(group, idx) in groups"
-        :key="group.label ?? '__uncategorised__'"
-        class="plans-page__group"
-      >
-        <SectionHeader align="center" with-lines :flush="idx === 0">
-          {{ group.label ?? t('billing.plans.uncategorised') }}
-        </SectionHeader>
-        <div class="plans-grid">
-          <PlanCard
-            v-for="plan in group.plans"
-            :key="plan.id"
-            :plan="plan"
-            @buy="handleBuy"
-          />
+      <AlertBanner v-else-if="loadFailed" tone="danger">
+        <div class="plans-page__error">
+          <span>{{ t('billing.plans.loadFailed') }}</span>
+          <BaseButton size="sm" variant="primary" @click="loadPlans">
+            {{ t('billing.plans.retry') }}
+          </BaseButton>
         </div>
-      </section>
-      <div class="plans-page__support">
-        <span class="support-hint">
-          {{ t('billing.plans.supportHint') }}
-          <a href="#" class="support-link" @click.prevent="supportOpen = true">
-            {{ t('billing.plans.supportLink') }}
-          </a>
-        </span>
-      </div>
-    </template>
+      </AlertBanner>
+
+      <EmptyState
+        v-else-if="plans.length === 0"
+        icon="inventory_2"
+        :title="t('billing.plans.emptyTitle')"
+        :message="t('billing.plans.emptyHint')"
+      >
+        <BaseButton variant="default" @click="router.push({ name: 'user-servers' })">
+          <MsIcon name="dns" />
+          {{ t('nav.myServers') }}
+        </BaseButton>
+        <BaseButton variant="primary" @click="supportOpen = true">
+          <MsIcon name="support_agent" />
+          {{ t('nav.contactSupport') }}
+        </BaseButton>
+      </EmptyState>
+
+      <template v-else>
+        <section
+          v-for="(group, idx) in groups"
+          :key="group.label ?? '__uncategorised__'"
+          class="plans-page__group"
+        >
+          <SectionHeader align="center" with-lines :flush="idx === 0">
+            {{ group.label ?? t('billing.plans.uncategorised') }}
+          </SectionHeader>
+          <div class="plans-grid">
+            <PlanCard
+              v-for="plan in group.plans"
+              :key="plan.id"
+              :plan="plan"
+              @buy="handleBuy"
+            />
+          </div>
+        </section>
+        <div class="plans-page__support">
+          <span class="support-hint">
+            {{ t('billing.plans.supportHint') }}
+            <a href="#" class="support-link" @click.prevent="supportOpen = true">
+              {{ t('billing.plans.supportLink') }}
+            </a>
+          </span>
+        </div>
+      </template>
+    </div>
+
+    <footer v-if="!app.sessionUser" class="plans-page__footer">
+      {{ app.footerText }}
+    </footer>
 
     <CreateOrderModal
       v-model="cashierOpen"
@@ -247,11 +288,17 @@ onMounted(() => {
 }
 
 .plans-page {
-  padding: var(--sp-5) var(--sp-6);
+  padding: var(--sp-5) var(--sp-6) var(--sp-4);
   max-width: 1320px;
   margin: 0 auto;
-  min-height: calc(100vh - 64px);
-  min-height: calc(100dvh - 64px);
+  min-height: calc(100vh - var(--app-header-h, 66px));
+  min-height: calc(100dvh - var(--app-header-h, 66px));
+  display: flex;
+  flex-direction: column;
+}
+
+.plans-page__body {
+  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -273,6 +320,15 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   margin-top: var(--sp-5);
+}
+
+.plans-page__footer {
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--t3);
+  font-size: .74rem;
+  line-height: 1.6;
+  padding-top: var(--sp-4);
 }
 
 .support-hint {

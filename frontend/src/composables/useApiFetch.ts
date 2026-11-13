@@ -1,17 +1,14 @@
 import { ref } from 'vue'
 import router from '@/router'
-import { useAppStore } from '@/stores/app'
 import { ApiError, apiErrorMessage, fetchApi, readApiJson } from './apiClient'
+import { handleSessionExpired } from './useAuthModal'
 import { useToast } from './useToast'
-
-let redirecting = false
 
 type RequestOptions = RequestInit & { silent?: boolean }
 
 export function useApiFetch() {
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const app = useAppStore()
   const { toast } = useToast()
   let pending = 0
 
@@ -28,12 +25,7 @@ export function useApiFetch() {
         error.value = apiErrorMessage(failure)
         if (failure.status === 401 && failure.code === 'auth.session_required') {
           failure.silent = true
-          app.clearSessionUser()
-          if (!redirecting && router.currentRoute.value.name !== 'login') {
-            redirecting = true
-            void router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
-              .finally(() => { redirecting = false })
-          }
+          handleSessionExpired(router)
         }
       }
       throw failure

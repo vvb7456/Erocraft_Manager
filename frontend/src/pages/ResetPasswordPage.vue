@@ -66,7 +66,7 @@ function queueRedirect() {
 }
 
 async function handleSubmit() {
-  // Reentrancy guard — see RegisterPage.vue handleSubmit for rationale.
+  // Guard against double-dispatch when Enter triggers both native submit and key handlers.
   if (loading.value) return
   error.value = ''
 

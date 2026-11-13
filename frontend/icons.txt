@@ -57,7 +57,7 @@ vpn_key
 add_circle
 key
 
-# LoginPage.vue
+# AuthModal.vue
 login
 
 # Monitoring — NodeCard, DashboardPage

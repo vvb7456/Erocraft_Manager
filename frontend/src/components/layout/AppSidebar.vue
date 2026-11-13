@@ -4,10 +4,12 @@ import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useSupportStore } from '@/stores/support'
+import { useAuthModal } from '@/composables/useAuthModal'
 import { confirmPendingChanges } from '@/composables/useDirtyForm'
 import { useToast } from '@/composables/useToast'
 import MsIcon from '../ui/MsIcon.vue'
 import BaseButton from '../ui/BaseButton.vue'
+import LanguageToggle from '../ui/LanguageToggle.vue'
 import ThemeToggle from '../ui/ThemeToggle.vue'
 import ToggleSwitch from '../ui/ToggleSwitch.vue'
 import SupportModal from '@/components/billing/SupportModal.vue'
@@ -18,6 +20,7 @@ const router = useRouter()
 const route = useRoute()
 const app = useAppStore()
 const support = useSupportStore()
+const { openAuth } = useAuthModal()
 const { toast } = useToast()
 const isUserLayout = computed(() => route.meta.layout === 'user')
 interface NavItem { page: string; icon: string; labelKey: string }
@@ -77,8 +80,8 @@ async function doLogout() {
     if (!await confirmPendingChanges()) return
     const response = await fetch('/api/logout', { method: 'POST' })
     if (!response.ok) throw new Error('logout')
-    app.clearSessionUser()
-    await router.push({ name: 'login' })
+    app.markSessionExpired()
+    await router.push({ name: 'user-plans' })
   } catch { toast(t('nav.logoutFailed'), 'error') }
   finally { loggingOut.value = false }
 }
@@ -92,7 +95,7 @@ function openTutorial() {
 
 <template>
   <aside class="sidebar" :class="{ collapsed: app.sidebarCollapsed, 'mobile-open': app.mobileSidebarOpen }" :aria-label="t('nav.navigation')" @keydown.esc="app.closeMobileSidebar()">
-    <button class="sidebar-logo" :title="t('nav.home')" @click="go(isUserLayout ? 'user-home' : 'dashboard')">
+    <button class="sidebar-logo" :title="t('nav.home')" @click="go(!app.sessionUser ? 'home' : (isUserLayout ? 'user-home' : 'dashboard'))">
       <img v-if="app.sidebarBannerUrl" class="logo-banner" :src="app.sidebarBannerUrl" :alt="app.displayName" />
       <template v-else><span class="logo-mark">{{ app.displayName[0] }}</span><span class="logo-text">{{ app.displayName }}</span></template>
     </button>
@@ -116,12 +119,21 @@ function openTutorial() {
       </div>
     </nav>
     <div class="sidebar-footer">
-      <button class="account-entry" :title="t('account.title')" @click="go(isUserLayout ? 'account' : 'admin-account')">
-        <span class="avatar">{{ app.sessionUser?.username[0]?.toUpperCase() }}</span>
-        <span class="account-identity"><strong>{{ app.sessionUser?.username }}</strong><small>{{ t('account.title') }}</small></span>
-      </button>
-      <ThemeToggle />
-      <BaseButton variant="ghost" size="sm" square :loading="loggingOut" :title="t('common.btn.logout')" :aria-label="t('common.btn.logout')" @click="doLogout"><MsIcon name="logout" size="sm" /></BaseButton>
+      <template v-if="app.sessionUser">
+        <button class="account-entry" :title="t('account.title')" @click="go(isUserLayout ? 'account' : 'admin-account')">
+          <span class="avatar">{{ app.sessionUser.username[0]?.toUpperCase() }}</span>
+          <span class="account-identity"><strong>{{ app.sessionUser.username }}</strong><small>{{ t('account.title') }}</small></span>
+        </button>
+        <ThemeToggle />
+        <BaseButton variant="ghost" size="sm" square :loading="loggingOut" :title="t('common.btn.logout')" :aria-label="t('common.btn.logout')" @click="doLogout"><MsIcon name="logout" size="sm" /></BaseButton>
+      </template>
+      <template v-else>
+        <BaseButton variant="primary" size="sm" class="guest-login-btn" :title="t('login.submit')" :aria-label="t('login.submit')" @click="openAuth('login')">
+          <MsIcon name="login" size="sm" /><span class="guest-login-label">{{ t('login.submit') }}</span>
+        </BaseButton>
+        <LanguageToggle variant="ghost" />
+        <ThemeToggle />
+      </template>
     </div>
     <SupportModal v-model="supportOpen" />
   </aside>
@@ -148,6 +160,7 @@ function openTutorial() {
 .unread-count { border-radius: var(--r-pill); padding: 1px 5px; background: var(--ac); color: var(--bg); font-size: var(--text-xs); }
 .sidebar-footer { flex-shrink: 0; display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--bd); padding: 14px 12px; }
 .account-entry { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; background: none; border: 0; border-radius: var(--r-sm); padding: 0; text-align: left; color: var(--t1); cursor: pointer; }
+.guest-login-btn { flex: 1; min-width: 0; justify-content: center; }
 .avatar { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--bd); border-radius: 50%; background: var(--bg4); color: var(--t2); font-size: var(--text-xs); flex-shrink: 0; }
 .account-identity { min-width: 0; }
 .account-identity strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
@@ -155,13 +168,14 @@ function openTutorial() {
 .sidebar button:focus-visible { outline: 2px solid var(--ac); outline-offset: -2px; }
 @media (min-width: 769px) {
   .sidebar.collapsed { width: 56px; }
-  .collapsed .logo-text, .collapsed .nav-label, .collapsed .role-switch, .collapsed .account-identity { display: none; }
+  .collapsed .logo-text, .collapsed .nav-label, .collapsed .role-switch, .collapsed .account-identity, .collapsed .guest-login-label { display: none; }
   .collapsed .sidebar-logo { padding: 22px 10px 20px; justify-content: center; }
   .collapsed .nav-item { padding: 8px 0; justify-content: center; position: relative; }
   .collapsed .nav-group-title { height: 1px; padding: 0; margin: 12px 16px; background: var(--bd); overflow: hidden; font-size: 0; }
   .collapsed .unread-count { position: absolute; top: 0; right: 0; width: 6px; height: 6px; padding: 0; font-size: 0; }
   .collapsed .sidebar-footer { flex-direction: column; padding: 12px 4px; }
   .collapsed .account-entry { flex: 0; }
+  .collapsed .guest-login-btn { flex: 0; width: 32px; padding: 0; }
 }
 @media (max-width: 768px) {
   .sidebar { transform: translateX(-100%); transition: transform .2s; }

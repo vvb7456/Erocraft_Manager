@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useClipboard } from '@/composables/useClipboard'
-import { useApiFetch } from '@/composables/useApiFetch'
+import { useAuthModal } from '@/composables/useAuthModal'
 import { useAppStore } from '@/stores/app'
 import { useSupportStore } from '@/stores/support'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -15,30 +15,32 @@ const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [open: boolean] }>()
 const { t } = useI18n()
 const { copy } = useClipboard()
-const { get } = useApiFetch()
+const { openAuth } = useAuthModal()
 const router = useRouter()
 const app = useAppStore()
 const support = useSupportStore()
-const branding = ref<Record<string, string>>({})
 const open = computed({ get: () => props.modelValue, set: value => emit('update:modelValue', value) })
 const rows = computed(() => [
-  { icon: 'mail', label: t('billing.support.email'), value: branding.value.support_email },
-  { icon: 'forum', label: t('billing.support.qqGroup'), value: branding.value.support_qq_group },
-  { icon: 'account_circle', label: t('billing.support.qq'), value: branding.value.support_qq },
-  { icon: 'chat', label: t('billing.support.wechat'), value: branding.value.support_wechat },
-].filter(row => row.value?.trim()))
-watch(open, async value => {
-  if (value) {
-    const data = await get<Record<string, string>>('/api/public/branding', { silent: true })
-    if (data) branding.value = data
-  }
+  { icon: 'mail', label: t('billing.support.email'), value: app.branding.supportEmail },
+  { icon: 'forum', label: t('billing.support.qqGroup'), value: app.branding.supportQqGroup },
+  { icon: 'account_circle', label: t('billing.support.qq'), value: app.branding.supportQq },
+  { icon: 'chat', label: t('billing.support.wechat'), value: app.branding.supportWechat },
+].filter(row => row.value.trim()))
+watch(open, value => {
+  if (value) void app.loadBranding()
 }, { immediate: true })
 async function openChat() {
   open.value = false
   await nextTick()
   if (app.isAdmin) await router.push({ name: 'admin-support' })
-  else if (!app.sessionUser) await router.push({ name: 'login', query: { redirect: '/support' } })
-  else support.open = true
+  else if (!app.sessionUser) {
+    openAuth('login', {
+      onSuccess: () => {
+        if (app.isAdmin) void router.push({ name: 'admin-support' })
+        else support.open = true
+      },
+    })
+  } else support.open = true
 }
 </script>
 
@@ -54,7 +56,7 @@ async function openChat() {
       </li>
       <li v-for="row in rows" :key="row.icon"><div class="contact-row"><MsIcon :name="row.icon" size="sm" /><div class="contact-info"><span class="contact-label">{{ row.label }}</span><span class="contact-value">{{ row.value }}</span></div><BaseButton size="sm" variant="ghost" square :aria-label="t('support.copyContact', { name: row.label })" @click="copy(row.value!)"><MsIcon name="content_copy" size="sm" /></BaseButton></div></li>
     </ul>
-    <MessageText v-if="branding.support_footer_note?.trim()" class="footer-note" :text="branding.support_footer_note" @navigate="open = false" />
+    <MessageText v-if="app.branding.supportFooterNote.trim()" class="footer-note" :text="app.branding.supportFooterNote" @navigate="open = false" />
   </BaseModal>
 </template>
 

@@ -95,7 +95,6 @@ def _serialize(plan: BillingPlan) -> PublicPlanOut:
 
 @router.get("", response_model=list[PublicPlanOut])
 async def list_public_plans_endpoint(
-    _: PteroUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[PublicPlanOut]:
     plans = await list_plans(db, include_inactive=False)
