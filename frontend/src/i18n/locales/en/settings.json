@@ -179,7 +179,9 @@
       "title": "NewAPI Connection",
       "desc": "Connect to the NewAPI service that manages user keys and model quotas.",
       "baseUrl": "Base URL",
-      "adminToken": "Admin Token"
+      "adminToken": "Admin Token",
+      "adminPassword": "Admin Password",
+      "adminPasswordHint": "Used to obtain a one-time security proof when deleting NewAPI sub-users. Use a dedicated admin account without 2FA or Passkey enabled."
     },
     "injection": {
       "title": "SillyTavern Endpoint",

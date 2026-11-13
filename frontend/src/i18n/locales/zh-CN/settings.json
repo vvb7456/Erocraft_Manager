@@ -179,7 +179,9 @@
       "title": "NewAPI 连接",
       "desc": "连接用于管理用户密钥与模型额度的 NewAPI 服务。",
       "baseUrl": "Base URL",
-      "adminToken": "Admin Token"
+      "adminToken": "Admin Token",
+      "adminPassword": "Admin 密码",
+      "adminPasswordHint": "删除 NewAPI 子账号时用于换取一次性安全验证证明。请使用未开启两步验证或通行密钥的专用管理员账号。"
     },
     "injection": {
       "title": "SillyTavern 接口",

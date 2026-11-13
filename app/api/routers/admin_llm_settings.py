@@ -79,6 +79,10 @@ async def llm_settings_post(
         if items:
             await store.set_values(db, items, category=category)
 
+    from app.services.llm_provision.newapi_client import invalidate_settings_cache
+
+    invalidate_settings_cache()
+
     await log_manager_activity(
         db,
         actor=current_user.username,
@@ -120,7 +124,6 @@ async def llm_models_list(
                 f"{base_url}/api/channel/models_enabled",
                 headers={
                     "Authorization": f"Bearer {admin_token}",
-                    "New-Api-User": "1",
                 },
             )
         if resp.status_code >= 400:

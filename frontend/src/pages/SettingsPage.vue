@@ -707,6 +707,13 @@ function onTabChange(next: string) {
               <FormField :label="t('settings.llm.connection.adminToken')" layout="horizontal">
                 <SecretInput :modelValue="getLlmSecret('NEWAPI_ADMIN_TOKEN')" @update:modelValue="setLlmSecret('NEWAPI_ADMIN_TOKEN', $event)" />
               </FormField>
+              <FormField layout="horizontal">
+                <template #label>
+                  {{ t('settings.llm.connection.adminPassword') }}
+                  <HelpTip :text="t('settings.llm.connection.adminPasswordHint')" />
+                </template>
+                <SecretInput :modelValue="getLlmSecret('NEWAPI_ADMIN_PASSWORD')" @update:modelValue="setLlmSecret('NEWAPI_ADMIN_PASSWORD', $event)" />
+              </FormField>
             </BaseCard>
 
             <BaseCard variant="bg2" density="compact">

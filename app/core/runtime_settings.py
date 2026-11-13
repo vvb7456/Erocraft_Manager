@@ -457,10 +457,17 @@ LLM_SPECS: dict[str, SettingSpec] = _register({
         lambda: _env_str("NEWAPI_BASE_URL", ""),
         _normalize_str,
     ),
-    # NewAPI root admin AccessToken (Authorization: Bearer <token>). Sensitive.
+    # NewAPI admin Personal Access Token (Authorization: Bearer nap_...). Sensitive.
     "NEWAPI_ADMIN_TOKEN": SettingSpec(
         "NEWAPI_ADMIN_TOKEN", "llm",
         lambda: _env_str("NEWAPI_ADMIN_TOKEN", ""),
+        _normalize_str,
+        sensitive=True,
+    ),
+    # NewAPI admin password used to obtain X-Security-Proof on hard-delete. Sensitive.
+    "NEWAPI_ADMIN_PASSWORD": SettingSpec(
+        "NEWAPI_ADMIN_PASSWORD", "llm",
+        lambda: _env_str("NEWAPI_ADMIN_PASSWORD", ""),
         _normalize_str,
         sensitive=True,
     ),

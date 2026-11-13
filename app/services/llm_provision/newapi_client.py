@@ -44,6 +44,14 @@ _RETRYABLE_TRANSPORT_ERRORS = (
 
 _SETTINGS_TTL = 30.0  # seconds — LLM settings cache lifetime
 
+# Minimal PAT scopes granted to each per-server NewAPI sub-user (sorted).
+_SERVER_USER_PAT_SCOPES: tuple[str, ...] = (
+    "api_key:read",
+    "api_key:reveal",
+    "api_key:write",
+    "wallet:write",
+)
+
 # ── Module-level state ──
 
 _client: httpx.AsyncClient | None = None
@@ -97,14 +105,20 @@ async def _read_llm_settings(db: Any) -> dict[str, Any]:
     return _settings_cache
 
 
+def invalidate_settings_cache() -> None:
+    """Clear the cached LLM runtime settings so updates take effect immediately."""
+    global _settings_cache, _settings_cache_ts
+    _settings_cache = None
+    _settings_cache_ts = 0.0
+
+
 async def close_client() -> None:
     """Close the module-level client (called on app shutdown)."""
-    global _client, _settings_cache, _settings_cache_ts
+    global _client
     if _client is not None and not _client.is_closed:
         await _client.aclose()
     _client = None
-    _settings_cache = None
-    _settings_cache_ts = 0.0
+    invalidate_settings_cache()
 
 
 def _check_configured(settings: dict[str, Any]) -> None:
@@ -118,18 +132,22 @@ def _base_url(settings: dict[str, Any]) -> str:
     return str(settings["NEWAPI_BASE_URL"]).rstrip("/")
 
 
-def _admin_headers(settings: dict[str, Any]) -> dict[str, str]:
-    return {
+def _admin_headers(
+    settings: dict[str, Any], *, security_proof: str | None = None
+) -> dict[str, str]:
+    headers = {
         "Authorization": f"Bearer {settings['NEWAPI_ADMIN_TOKEN']}",
-        "New-Api-User": "1",
         "Content-Type": "application/json",
     }
+    if security_proof:
+        headers["X-Security-Proof"] = security_proof
+    return headers
 
 
 def _user_headers(access_token: str, user_id: int) -> dict[str, str]:
+    _ = user_id  # kept in signature for caller compatibility; v1.0 ignores New-Api-User
     return {
         "Authorization": f"Bearer {access_token}",
-        "New-Api-User": str(user_id),
         "Content-Type": "application/json",
     }
 
@@ -246,24 +264,63 @@ async def search_user_id(db: Any, username: str) -> int | None:
     return matches[0]
 
 
+async def _obtain_security_proof(
+    base: str,
+    *,
+    bearer_token: str,
+    password: str,
+    scope: str,
+    context: dict[str, Any],
+    client: httpx.AsyncClient | None = None,
+) -> str:
+    """Exchange password for a single-use 60s NewAPI v1.0 X-Security-Proof."""
+    data = await _request(
+        "POST",
+        f"{base}/api/verify",
+        headers={
+            "Authorization": f"Bearer {bearer_token}",
+            "Content-Type": "application/json",
+        },
+        json_body={
+            "method": "password",
+            "scope": scope,
+            "context": context,
+            "password": password,
+        },
+        client=client,
+    )
+    payload = data.get("data")
+    proof = payload.get("proof_token") if isinstance(payload, dict) else None
+    if not proof:
+        raise NewApiError(f"NewAPI verify ({scope}) missing proof_token")
+    return str(proof)
+
+
 async def delete_user(db: Any, user_id: int) -> dict[str, Any]:
     """Hard-delete a NewAPI user (cascades to tokens + subscriptions).
 
-    Uses ``DELETE /api/user/:id`` which calls ``HardDeleteUserById``
-    (GORM ``Unscoped().Delete``). This permanently removes the user row
-    and frees the username for future re-provisioning.
-
-    Note: NewAPI's ``POST /api/user/manage {action:"delete"}`` does a
-    GORM soft-delete (sets ``deleted_at``), which leaves the username
-    unique constraint in place and blocks re-creation. We must use the
-    hard-delete endpoint instead.
+    Uses ``DELETE /api/user/:id`` (GORM ``Unscoped().Delete``) so the
+    username is freed for re-provisioning; ``POST /api/user/manage`` only
+    soft-deletes. NewAPI v1.0 requires a per-target ``admin.user.delete``
+    security proof on this endpoint.
     """
     settings = await _read_llm_settings(db)
     _check_configured(settings)
+    admin_password = str(settings.get("NEWAPI_ADMIN_PASSWORD", ""))
+    if not admin_password:
+        raise NewApiNotConfigured("NEWAPI_ADMIN_PASSWORD not set")
+    base = _base_url(settings)
+    proof = await _obtain_security_proof(
+        base,
+        bearer_token=str(settings["NEWAPI_ADMIN_TOKEN"]),
+        password=admin_password,
+        scope="admin.user.delete",
+        context={"user_id": int(user_id)},
+    )
     return await _request(
         "DELETE",
-        f"{_base_url(settings)}/api/user/{user_id}",
-        headers=_admin_headers(settings),
+        f"{base}/api/user/{user_id}",
+        headers=_admin_headers(settings, security_proof=proof),
     )
 
 
@@ -279,52 +336,89 @@ async def get_user(db: Any, user_id: int) -> dict[str, Any]:
 
 
 async def login_and_gen_access_token(
-    db: Any, *, username: str, password: str
+    db: Any, *, username: str, password: str, token_name: str = "manager"
 ) -> str:
-    """Login as a user and generate their access token.
+    """Login as a user and mint a non-expiring scoped PAT (``nap_...``).
 
-    NewAPI login uses session cookies; we then call ``GET /api/user/token``
-    to get the access token (char 32). Uses a short-lived client to isolate
-    session cookies from the shared long-lived ``_client``.
+    NewAPI v1.0 restricts ``POST /api/user/access_tokens`` to browser login
+    sessions and requires an ``access_token.generate`` security proof bound
+    to the exact sorted scope list and ``expires_at``. Uses an isolated
+    short-lived client so refresh cookies never enter the shared ``_client``,
+    and revokes the temporary session via ``DELETE /api/user/sessions/:sid``
+    (which avoids ``SessionCookieOriginGuard`` enforced on ``/auth/logout``).
     """
     settings = await _read_llm_settings(db)
     _check_configured(settings)
     base = _base_url(settings)
+    scopes = list(_SERVER_USER_PAT_SCOPES)
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0),
         trust_env=False,
     ) as client:
+        session_jwt = ""
+        session_id = ""
         try:
             login_data = await _request(
                 "POST",
                 f"{base}/api/user/login",
-                headers={},
+                headers={"Content-Type": "application/json"},
                 json_body={"username": username, "password": password},
                 client=client,
             )
-            if "success" not in login_data:
-                raise NewApiError("response missing success flag")
-            login_user_id = login_data.get("data", {}).get("id")
-            if not login_user_id:
-                raise NewApiError("response missing user id")
+            bundle = login_data.get("data")
+            if not isinstance(bundle, dict) or not bundle.get("access_token"):
+                raise NewApiError("response missing session access_token")
+            session_jwt = str(bundle["access_token"])
+            session_obj = bundle.get("session")
+            if isinstance(session_obj, dict) and session_obj.get("sid"):
+                session_id = str(session_obj["sid"])
         except NewApiError as exc:
             raise NewApiError(f"NewAPI login failed: {exc}") from exc
 
         try:
-            token_data = await _request(
-                "GET",
-                f"{base}/api/user/token",
-                headers={"New-Api-User": str(login_user_id)},
+            proof = await _obtain_security_proof(
+                base,
+                bearer_token=session_jwt,
+                password=password,
+                scope="access_token.generate",
+                context={"scopes": scopes, "expires_at": 0},
                 client=client,
             )
-            if "success" not in token_data:
-                raise NewApiError("response missing success flag")
-            access_token = token_data.get("data")
+            token_data = await _request(
+                "POST",
+                f"{base}/api/user/access_tokens",
+                headers={
+                    "Authorization": f"Bearer {session_jwt}",
+                    "X-Security-Proof": proof,
+                    "Content-Type": "application/json",
+                },
+                json_body={
+                    "name": token_name,
+                    "scopes": scopes,
+                    "expires_at": 0,
+                },
+                client=client,
+            )
+            token_payload = token_data.get("data")
+            access_token = (
+                token_payload.get("token")
+                if isinstance(token_payload, dict)
+                else None
+            )
             if not access_token:
-                raise NewApiError("response missing access token")
+                raise NewApiError("response missing personal access token")
+            return str(access_token)
         except NewApiError as exc:
             raise NewApiError(f"NewAPI gen token failed: {exc}") from exc
-        return str(access_token)
+        finally:
+            if session_jwt and session_id:
+                try:
+                    await client.delete(
+                        f"{base}/api/user/sessions/{session_id}",
+                        headers={"Authorization": f"Bearer {session_jwt}"},
+                    )
+                except Exception:
+                    pass
 
 
 async def set_billing_preference(
