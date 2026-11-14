@@ -6,11 +6,9 @@ import asyncio
 from app.core.api_errors import ApiError
 from app.core.error_codes import ErrorCode
 import logging
-import re
 import secrets
 from datetime import UTC, datetime, timedelta
 
-import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import delete, select, update
@@ -41,13 +39,13 @@ from app.services.email import (
     render_template_body,
     send_email,
 )
+from app.services.user.validation import normalize_email, normalize_username
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["public"])
 
 TOKEN_EXPIRY_MINUTES = 30
 REGISTER_TOKEN_EXPIRY_MINUTES = 30
-USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{3,32}$")
 FORGOT_PASSWORD_GENERIC_MESSAGE = "如果该邮箱已注册，您将收到密码重置链接。"
 
 
@@ -129,7 +127,7 @@ async def forgot_password(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    email = payload.email.strip().lower()
+    email = normalize_email(payload.email)
     if not email:
         return MessageResponse(message=FORGOT_PASSWORD_GENERIC_MESSAGE)
 
@@ -226,7 +224,7 @@ async def reset_password(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    email = payload.email.strip().lower()
+    email = normalize_email(payload.email)
     user = await user_repository.get_by_email(db, email)
     if not user:
         raise ApiError(422, "account.invalid_reset_link")
@@ -302,7 +300,7 @@ async def reset_password(
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    username: str = Field(min_length=3, max_length=32)
+    username: str = Field(max_length=255)
     password: str = Field(min_length=8, max_length=72)
     first_name: str = Field(default="", max_length=255)
     last_name: str = Field(default="", max_length=255)
@@ -350,11 +348,8 @@ async def register(
     # *before* hashing / sending so the user gets a fast, accurate error.
     site_url = await _site_url_or_503(db, detail_key="register.site_url_not_configured")
 
-    email = str(payload.email).strip().lower()
-    username = payload.username.strip()
-
-    if not USERNAME_RE.match(username):
-        raise ApiError(422, "register.invalid_username")
+    email = normalize_email(payload.email)
+    username = normalize_username(payload.username)
 
     # ── Agreement consent validation ──
     # Validate the user's claimed agreement versions against the current
@@ -381,16 +376,22 @@ async def register(
     if await user_repository.get_by_username(db, username):
         raise ApiError(409, "register.username_taken")
 
-    # Conflict checks against unfinished pending registrations
+    now = datetime.now(UTC).replace(tzinfo=None)
+    token_alive_after = now - timedelta(minutes=REGISTER_TOKEN_EXPIRY_MINUTES)
+
+    # Expired rows can never be verified, and same-email rows surface as
+    # verification_pending below rather than masquerading as username_taken.
     pending_user = await db.execute(
-        select(ManagerPendingRegistration)
+        select(ManagerPendingRegistration.id)
         .where(
             ManagerPendingRegistration.username == username,
+            ManagerPendingRegistration.email != email,
             ManagerPendingRegistration.used_at.is_(None),
+            ManagerPendingRegistration.created_at > token_alive_after,
         )
         .limit(1)
     )
-    if pending_user.scalar_one_or_none():
+    if pending_user.scalar_one_or_none() is not None:
         raise ApiError(409, "register.username_taken")
 
     # ── Serialize concurrent POST /register for the same email ──
@@ -401,8 +402,6 @@ async def register(
     # or rolls back. Without this, both branches read "no pending",
     # both insert, and both send a verification email — producing the
     # duplicate-second register_request entries seen in audit logs.
-    now = datetime.now(UTC).replace(tzinfo=None)
-    token_alive_after = now - timedelta(minutes=REGISTER_TOKEN_EXPIRY_MINUTES)
     pending_rows = (
         await db.execute(
             select(ManagerPendingRegistration)
@@ -432,13 +431,7 @@ async def register(
             "register.verification_pending",
         )
 
-    # Bake a $2y$ bcrypt hash up-front so we don't have to keep the plaintext.
-    # Run off the event loop because bcrypt(rounds=10) takes ~70ms.
-    def _hash_password(pw: str) -> str:
-        h = bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt(rounds=10)).decode("utf-8")
-        return ("$2y$" + h[4:]) if h.startswith("$2b$") else h
-
-    raw_hash = await asyncio.to_thread(_hash_password, payload.password)
+    raw_hash = await asyncio.to_thread(PteroUser.hash_password_sync, payload.password)
 
     raw_token = secrets.token_hex(32)
     token_hash = await hash_token_async(raw_token)

@@ -260,7 +260,8 @@ watch(() => props.modelValue, async (open) => {
 
   // Pre-select user if specified
   if (props.preSelectUsername) {
-    const user = userList.value.find(u => u.username === props.preSelectUsername)
+    const target = props.preSelectUsername.trim().toLowerCase()
+    const user = userList.value.find(u => u.username.toLowerCase() === target)
     if (user) createForm.value.user_id = user.id
   }
   for (const result of results) if (result.status === 'rejected') handleError(result.reason)

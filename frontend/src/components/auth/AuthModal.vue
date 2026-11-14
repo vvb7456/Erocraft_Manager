@@ -6,6 +6,7 @@ import { switchLanguage } from '@/i18n/vue-i18n'
 import { backendToFrontendLocale } from '@/i18n/locale-map'
 import { useAppStore } from '@/stores/app'
 import { apiErrorMessage, fetchApi } from '@/composables/apiClient'
+import { isValidUsername } from '@/utils/username'
 import {
   resolvePostAuthRoute,
   resolveSafeRedirect,
@@ -79,15 +80,14 @@ const modalIcon = computed(() => {
 })
 
 const usernameError = computed(() => {
-  if (!regUsername.value) return ''
-  if (!/^[A-Za-z0-9_.\-]{3,32}$/.test(regUsername.value)) {
-    return t('register.error.username_format')
-  }
-  return ''
+  const v = regUsername.value.trim()
+  if (!v) return ''
+  return isValidUsername(v) ? '' : t('register.error.username_format')
 })
 const emailError = computed(() => {
-  if (!regEmail.value) return ''
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(regEmail.value)) {
+  const v = regEmail.value.trim()
+  if (!v) return ''
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) {
     return t('register.error.email_format')
   }
   return ''
@@ -106,8 +106,8 @@ const confirmPasswordError = computed(() => {
 const canSubmitRegister = computed(() =>
   !registrationDisabled.value
   && !regSuccess.value
-  && !!regUsername.value
-  && !!regEmail.value
+  && !!regUsername.value.trim()
+  && !!regEmail.value.trim()
   && !!regPassword.value
   && !!regConfirmPassword.value
   && !usernameError.value
@@ -213,7 +213,8 @@ async function handleLogin() {
   // Guard against double-dispatch when Enter triggers both native submit and key handlers.
   if (loading.value) return
   loginError.value = ''
-  if (!loginUsername.value || !loginPassword.value) {
+  const username = loginUsername.value.trim()
+  if (!username || !loginPassword.value) {
     loginError.value = t('login.error.empty')
     return
   }
@@ -224,7 +225,7 @@ async function handleLogin() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        username: loginUsername.value,
+        username,
         password: loginPassword.value,
       }),
     })
@@ -260,7 +261,9 @@ async function handleLogin() {
 async function handleRegister() {
   if (loading.value) return
   regError.value = ''
-  if (!regUsername.value || !regEmail.value || !regPassword.value || !regConfirmPassword.value) {
+  const username = regUsername.value.trim()
+  const email = regEmail.value.trim()
+  if (!username || !email || !regPassword.value || !regConfirmPassword.value) {
     regError.value = t('register.error.empty')
     return
   }
@@ -275,8 +278,8 @@ async function handleRegister() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: regEmail.value.trim(),
-        username: regUsername.value.trim(),
+        email,
+        username,
         password: regPassword.value,
         ...(inviteCode.value.trim() ? { invite_code: inviteCode.value.trim().toUpperCase() } : {}),
         accepted_agreements: acceptedAgreements.value,

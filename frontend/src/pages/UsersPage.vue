@@ -6,6 +6,7 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useFormatDate } from '@/composables/useFormatDate'
+import { isValidUsername } from '@/utils/username'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import ListToolbar from '@/components/ui/ListToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -244,6 +245,18 @@ function toggleSort(col: string) {
 }
 
 // ── Create ──
+const createUsernameError = computed(() => {
+  const v = createUsername.value.trim()
+  if (!v) return ''
+  return isValidUsername(v) ? '' : t('register.error.username_format')
+})
+
+const editUsernameError = computed(() => {
+  const v = editForm.value.username.trim()
+  if (!v) return ''
+  return isValidUsername(v) ? '' : t('register.error.username_format')
+})
+
 function openCreate() {
   createEmail.value = ''
   createUsername.value = ''
@@ -253,18 +266,28 @@ function openCreate() {
 
 function onEmailInput(email: string) {
   createEmail.value = email
-  // Auto-fill username from email prefix
   const at = email.indexOf('@')
   if (at > 0 && !createUsername.value) {
-    createUsername.value = email.substring(0, at)
+    const prefix = email.substring(0, at).trim()
+    if (prefix) createUsername.value = prefix
   }
 }
 
 async function doCreate(andCreateServer = false) {
+  const email = createEmail.value.trim()
+  const username = createUsername.value.trim()
+  if (!email || !username) {
+    toast(t('register.error.empty'), 'error')
+    return
+  }
+  if (createUsernameError.value) {
+    toast(createUsernameError.value, 'error')
+    return
+  }
   createLoading.value = true
   const res = await post<{ message: string; emailSent?: boolean; user?: { id: number; username: string } }>('/api/admin/users', {
-    email: createEmail.value,
-    username: createUsername.value,
+    email,
+    username,
     sendWelcome: createSendWelcome.value,
   }).finally(() => { createLoading.value = false })
   if (res) {
@@ -299,10 +322,20 @@ function openEdit(u: UserItem) {
 
 async function doEdit() {
   if (!editUser.value) return
+  const username = editForm.value.username.trim()
+  const email = editForm.value.email.trim()
+  if (!username || !email) {
+    toast(t('register.error.empty'), 'error')
+    return
+  }
+  if (editUsernameError.value) {
+    toast(editUsernameError.value, 'error')
+    return
+  }
   editLoading.value = true
   const res = await put<{ message: string }>(`/api/admin/users/${editUser.value.id}`, {
-    username: editForm.value.username,
-    email: editForm.value.email,
+    username,
+    email,
     firstName: editForm.value.firstName,
     lastName: editForm.value.lastName,
     password: editForm.value.password || undefined,
@@ -538,8 +571,8 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
     <FormField :label="t('users.create.email')" density="compact">
       <BaseInput :modelValue="createEmail" type="email" @update:modelValue="onEmailInput" />
     </FormField>
-    <FormField :label="t('users.create.username')" density="compact">
-      <BaseInput v-model="createUsername" />
+    <FormField :label="t('users.create.username')" :error="createUsernameError || undefined" density="compact">
+      <BaseInput v-model="createUsername" :placeholder="t('register.username_placeholder')" />
     </FormField>
     <div class="checkbox-label">
       {{ t('users.create.send_welcome') }}
@@ -557,8 +590,8 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
   <!-- Edit User Modal -->
   <BaseModal v-model="editModalOpen" :title="t('users.edit.title')" icon="edit" size="md">
     <div class="form-row">
-      <FormField :label="t('users.edit.username')" density="compact">
-        <BaseInput v-model="editForm.username" />
+      <FormField :label="t('users.edit.username')" :error="editUsernameError || undefined" density="compact">
+        <BaseInput v-model="editForm.username" :placeholder="t('register.username_placeholder')" />
       </FormField>
       <FormField :label="t('users.edit.email')" density="compact">
         <BaseInput v-model="editForm.email" type="email" />

@@ -30,14 +30,14 @@ class UsersListResponse(BaseModel):
 
 class CreateUserRequest(BaseModel):
     email: EmailStr
-    username: str = Field(min_length=1)
+    username: str = Field(max_length=255)
     firstName: str = ""
     lastName: str = ""
     sendWelcome: bool = True
 
 
 class UpdateUserRequest(BaseModel):
-    username: str = Field(min_length=1)
+    username: str = Field(max_length=255)
     email: EmailStr
     firstName: str = ""
     lastName: str = ""

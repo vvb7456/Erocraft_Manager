@@ -1,7 +1,7 @@
 {
   "subtitle": "创建您的账户",
   "username": "用户名",
-  "username_placeholder": "3-32 位字母/数字/下划线",
+  "username_placeholder": "3-32 位字母、数字、_ . -",
   "email": "邮箱",
   "email_placeholder": "name{'@'}example.com",
   "password": "密码",

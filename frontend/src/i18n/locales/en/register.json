@@ -1,7 +1,7 @@
 {
   "subtitle": "Create your account",
   "username": "Username",
-  "username_placeholder": "3-32 letters/digits/underscores",
+  "username_placeholder": "3-32 letters, digits, _ . -",
   "email": "Email",
   "email_placeholder": "name{'@'}example.com",
   "password": "Password",

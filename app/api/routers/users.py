@@ -5,7 +5,6 @@ from app.core.operation import batch_operation
 
 import asyncio
 import logging
-import re
 import secrets
 from datetime import UTC, datetime
 
@@ -47,23 +46,14 @@ from app.services.email import (
 )
 from app.services import server_lifecycle
 from app.services.server_lifecycle import LifecycleError
+from app.services.user.validation import normalize_email, normalize_username
 
 router = APIRouter(prefix="/admin", tags=["users"])
 logger = logging.getLogger(__name__)
 
-_USERNAME_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
-
 
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
-
-
-def _validate_username(username: str) -> None:
-    if not _USERNAME_RE.match(username):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="用户名只能包含小写字母、数字和连字符，且必须以字母或数字开头和结尾",
-        )
 
 
 async def _brand_name(db: AsyncSession) -> str:
@@ -171,11 +161,8 @@ async def create_user(
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CreateUserResponse:
-    email = payload.email.strip()
-    username = payload.username.strip()
-    if not email or not username:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱和用户名不能为空")
-    _validate_username(username)
+    email = normalize_email(payload.email)
+    username = normalize_username(payload.username)
 
     if await user_repository.get_by_email(db, email):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"邮箱 {email} 已存在")
@@ -286,11 +273,8 @@ async def update_user(
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
 
-    username = payload.username.strip()
-    email = payload.email.strip()
-    if not email or not username:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱和用户名不能为空")
-    _validate_username(username)
+    username = normalize_username(payload.username)
+    email = normalize_email(payload.email)
 
     existing_email = await user_repository.get_by_email(db, email)
     if existing_email and existing_email.id != user_id:
