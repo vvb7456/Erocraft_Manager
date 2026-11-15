@@ -188,7 +188,7 @@ onMounted(() => {
         <MsIcon name="redeem" size="xs" />{{ t('billing.redeem.openBtn') }}
       </BaseButton>
       <BaseButton v-else size="sm" variant="primary" @click="openAuth('login')">
-        <MsIcon name="login" size="xs" />{{ t('login.submit') }}
+        <MsIcon name="login" size="xs" />{{ app.branding.allowRegistration ? t('login.entry') : t('login.submit') }}
       </BaseButton>
     </template>
   </PageHeader>

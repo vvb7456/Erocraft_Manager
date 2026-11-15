@@ -62,8 +62,13 @@ watch([() => props.slug, locale], async ([slug, language], _, onCleanup) => {
 
 <style scoped>
 .agreement-page :deep(.auth-main) {
-  padding-top: 64px;
   align-items: flex-start;
+}
+
+@media (min-width: 769px) {
+  .agreement-page :deep(.auth-main) {
+    padding-top: 64px;
+  }
 }
 
 .agreement-page :deep(.auth-card) {

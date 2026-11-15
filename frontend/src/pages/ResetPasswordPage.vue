@@ -3,7 +3,8 @@ import { apiErrorMessage, fetchApi } from '@/composables/apiClient'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import AuthForm from '@/components/auth/AuthForm.vue'
+import AuthShell from '@/components/auth/AuthShell.vue'
+import AuthStatusView from '@/components/auth/AuthStatusView.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import FormField from '@/components/form/FormField.vue'
@@ -61,8 +62,16 @@ watch([newPassword, confirmPassword], () => {
 function queueRedirect() {
   if (redirectTimer) clearTimeout(redirectTimer)
   redirectTimer = setTimeout(() => {
-    router.replace({ name: 'login' })
+    void router.replace({ name: 'login' })
   }, 3000)
+}
+
+function goLogin() {
+  if (redirectTimer) {
+    clearTimeout(redirectTimer)
+    redirectTimer = null
+  }
+  void router.replace({ name: 'login' })
 }
 
 async function handleSubmit() {
@@ -116,16 +125,50 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AuthForm icon="key" :subtitle="t('resetPassword.subtitle')" footer-align="center" @submit="handleSubmit">
-    <AlertBanner v-if="linkError || error" tone="danger" icon="error" dense>
-      {{ error || linkError }}
-    </AlertBanner>
+  <AuthShell
+    icon="key"
+    :subtitle="!linkError && !success ? t('resetPassword.subtitle') : undefined"
+  >
+    <AuthStatusView
+      v-if="linkError"
+      tone="danger"
+      icon="error_outline"
+      :title="t('resetPassword.invalid_title')"
+      :description="linkError"
+    >
+      <template #actions>
+        <BaseButton variant="default" size="lg" @click="goLogin">
+          {{ t('resetPassword.back') }}
+        </BaseButton>
+      </template>
+    </AuthStatusView>
 
-    <AlertBanner v-if="success" tone="success" icon="check_circle" dense>
-      {{ success }}
-    </AlertBanner>
+    <AuthStatusView
+      v-else-if="success"
+      tone="success"
+      icon="check_circle"
+      :title="t('resetPassword.success_title')"
+      :email="email"
+      :description="success"
+      :hint="t('resetPassword.redirecting')"
+    >
+      <template #actions>
+        <BaseButton variant="primary" size="lg" @click="goLogin">
+          {{ t('resetPassword.back') }}
+        </BaseButton>
+      </template>
+    </AuthStatusView>
 
-    <template v-if="!linkError && !success">
+    <form v-else class="reset-form" @submit.prevent="handleSubmit">
+      <div v-if="email" class="reset-account">
+        <MsIcon name="mail" size="xs" color="var(--t2)" />
+        <span>{{ email }}</span>
+      </div>
+
+      <AlertBanner v-if="error" tone="danger" icon="error" dense>
+        {{ error }}
+      </AlertBanner>
+
       <FormField
         :label="t('resetPassword.newPassword')"
         :error="passwordLengthError || undefined"
@@ -149,17 +192,13 @@ onBeforeUnmount(() => {
           autocomplete="new-password"
         />
       </FormField>
-    </template>
 
-    <p v-if="success" class="reset-hint">{{ t('resetPassword.redirecting') }}</p>
-
-    <template v-if="!linkError && !success" #submit>
       <BaseButton
         type="submit"
         variant="primary"
         size="lg"
         :disabled="!canSubmit"
-        style="width: 100%; justify-content: center"
+        class="reset-submit-btn"
       >
         <Spinner v-if="loading" size="sm" />
         <template v-else>
@@ -167,32 +206,68 @@ onBeforeUnmount(() => {
           {{ t('resetPassword.submit') }}
         </template>
       </BaseButton>
-    </template>
 
-    <template #footer>
-      <RouterLink class="reset-link" :to="{ name: 'login' }">
-        {{ t('resetPassword.back') }}
-      </RouterLink>
-    </template>
-  </AuthForm>
+      <div class="reset-footer">
+        <RouterLink class="reset-link" :to="{ name: 'login' }">
+          {{ t('resetPassword.back') }}
+        </RouterLink>
+      </div>
+    </form>
+  </AuthShell>
 </template>
 
 <style scoped>
+.reset-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.reset-form :deep(.form-field) {
+  margin-bottom: 0;
+}
+
+.reset-account {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-top: calc(var(--sp-2) * -1);
+  padding: 5px 12px;
+  background: var(--bg-in);
+  border: 1px solid var(--bd);
+  border-radius: var(--r-sm);
+  color: var(--t1);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.reset-account span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reset-submit-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.reset-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: calc(var(--sp-1) * -1);
+}
+
 .reset-link {
   color: var(--t2);
-  font-size: .82rem;
+  font-size: var(--text-sm);
   text-decoration: none;
   transition: color .15s ease;
 }
 
 .reset-link:hover {
   color: var(--t1);
-}
-
-.reset-hint {
-  color: var(--t3);
-  font-size: .78rem;
-  text-align: center;
-  margin-top: calc(var(--sp-2) * -1);
 }
 </style>

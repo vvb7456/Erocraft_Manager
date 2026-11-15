@@ -1,5 +1,6 @@
 {
   "subtitle": "创建您的账户",
+  "disabled_title": "暂未开放注册",
   "username": "用户名",
   "username_placeholder": "3-32 位字母、数字、_ . -",
   "email": "邮箱",
@@ -11,7 +12,8 @@
   "submit": "注册",
   "back_prefix": "已有账户？",
   "back_link": "返回登录",
-  "success": "验证邮件已发送，请前往邮箱点击链接完成注册。",
+  "success_title": "验证邮件已发送",
+  "success": "请前往该邮箱点击验证链接完成注册（30 分钟内有效）。如未收到，请检查垃圾邮件箱。",
   "redirecting": "页面将在几秒后自动跳转到登录页。",
   "error": {
     "empty": "请填写所有字段",

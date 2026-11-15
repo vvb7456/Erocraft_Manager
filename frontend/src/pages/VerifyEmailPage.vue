@@ -4,9 +4,9 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
-import AuthForm from '@/components/auth/AuthForm.vue'
-import AlertBanner from '@/components/ui/AlertBanner.vue'
-import Spinner from '@/components/ui/Spinner.vue'
+import AuthShell from '@/components/auth/AuthShell.vue'
+import AuthStatusView from '@/components/auth/AuthStatusView.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 
 defineOptions({ name: 'VerifyEmailPage' })
 
@@ -18,6 +18,7 @@ const app = useAppStore()
 const loading = ref(true)
 const error = ref('')
 const success = ref('')
+const autoLogin = ref(false)
 
 let redirectTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -28,8 +29,16 @@ const token = computed(() =>
 function queueRedirect(target: { name: string } = { name: 'login' }) {
   if (redirectTimer) clearTimeout(redirectTimer)
   redirectTimer = setTimeout(() => {
-    router.replace(target)
-  }, 1500)
+    void router.replace(target)
+  }, 2500)
+}
+
+function goNext() {
+  if (redirectTimer) {
+    clearTimeout(redirectTimer)
+    redirectTimer = null
+  }
+  void router.replace(autoLogin.value ? { name: 'home' } : { name: 'login' })
 }
 
 async function verify() {
@@ -55,6 +64,7 @@ async function verify() {
     if (res.ok) {
       success.value = t('verifyEmail.success')
       if (data?.auto_login) {
+        autoLogin.value = true
         app.clearSessionUser()
         queueRedirect({ name: 'home' })
       } else {
@@ -62,6 +72,7 @@ async function verify() {
       }
       return
     }
+    error.value = t('verifyEmail.error.failed')
   } catch (failure) {
     error.value = apiErrorMessage(failure)
   } finally {
@@ -76,46 +87,41 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AuthForm icon="mark_email_read" :subtitle="t('verifyEmail.subtitle')" footer-align="center">
-    <AlertBanner v-if="loading" tone="info" icon="hourglass_empty" dense>
-      <Spinner size="sm" />
-      &nbsp;{{ t('verifyEmail.verifying') }}
-    </AlertBanner>
+  <AuthShell icon="mark_email_read">
+    <AuthStatusView
+      v-if="loading"
+      tone="loading"
+      :title="t('verifyEmail.subtitle')"
+      :description="t('verifyEmail.verifying')"
+    />
 
-    <AlertBanner v-if="error && !loading" tone="danger" icon="error" dense>
-      {{ error }}
-    </AlertBanner>
+    <AuthStatusView
+      v-else-if="success"
+      tone="success"
+      icon="mark_email_read"
+      :title="t('verifyEmail.success_title')"
+      :description="success"
+      :hint="autoLogin ? t('verifyEmail.redirecting_home') : t('verifyEmail.redirecting')"
+    >
+      <template #actions>
+        <BaseButton variant="primary" size="lg" @click="goNext">
+          {{ autoLogin ? t('verifyEmail.enter') : t('verifyEmail.back') }}
+        </BaseButton>
+      </template>
+    </AuthStatusView>
 
-    <AlertBanner v-if="success && !loading" tone="success" icon="check_circle" dense>
-      {{ success }}
-    </AlertBanner>
-
-    <p v-if="success && !loading" class="verify-hint">{{ t('verifyEmail.redirecting') }}</p>
-
-    <template #footer>
-      <RouterLink class="verify-link" :to="{ name: 'login' }">
-        {{ t('verifyEmail.back') }}
-      </RouterLink>
-    </template>
-  </AuthForm>
+    <AuthStatusView
+      v-else
+      tone="danger"
+      icon="error_outline"
+      :title="t('verifyEmail.error_title')"
+      :description="error"
+    >
+      <template #actions>
+        <BaseButton variant="default" size="lg" @click="goNext">
+          {{ t('verifyEmail.back') }}
+        </BaseButton>
+      </template>
+    </AuthStatusView>
+  </AuthShell>
 </template>
-
-<style scoped>
-.verify-link {
-  color: var(--t2);
-  font-size: .82rem;
-  text-decoration: none;
-  transition: color .15s ease;
-}
-
-.verify-link:hover {
-  color: var(--t1);
-}
-
-.verify-hint {
-  color: var(--t3);
-  font-size: .78rem;
-  text-align: center;
-  margin-top: calc(var(--sp-2) * -1);
-}
-</style>

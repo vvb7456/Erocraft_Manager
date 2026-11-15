@@ -1,6 +1,8 @@
 {
   "subtitle": "确认邮箱变更",
   "loading": "正在确认邮箱...",
+  "success_title": "邮箱变更已确认",
+  "error_title": "邮箱确认失败",
   "success": "邮箱已成功更改。",
   "redirecting": "即将返回账户设置页...",
   "account": "前往账户设置",

@@ -4,10 +4,9 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AuthShell from '@/components/auth/AuthShell.vue'
-import AlertBanner from '@/components/ui/AlertBanner.vue'
+import AuthStatusView from '@/components/auth/AuthStatusView.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
-import Spinner from '@/components/ui/Spinner.vue'
 
 defineOptions({ name: 'ConfirmEmailPage' })
 
@@ -15,7 +14,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n({ useScope: 'global' })
 
-const loading = ref(false)
+const loading = ref(true)
 const error = ref('')
 const success = ref('')
 
@@ -33,16 +32,34 @@ const linkError = computed(() =>
   !token.value || uid.value === null ? t('confirmEmail.error.invalidLink') : '',
 )
 
+function clearRedirect() {
+  if (redirectTimer) {
+    clearTimeout(redirectTimer)
+    redirectTimer = null
+  }
+}
+
 function queueRedirect() {
-  if (redirectTimer) clearTimeout(redirectTimer)
+  clearRedirect()
   redirectTimer = setTimeout(() => {
-    router.replace({ name: 'account' })
+    void router.replace({ name: 'account' })
   }, 3000)
+}
+
+function goAccount() {
+  clearRedirect()
+  void router.replace({ name: 'account' })
+}
+
+function goLogin() {
+  clearRedirect()
+  void router.replace({ name: 'login' })
 }
 
 async function confirmEmail() {
   if (linkError.value) {
     error.value = linkError.value
+    loading.value = false
     return
   }
 
@@ -69,97 +86,47 @@ async function confirmEmail() {
   }
 }
 
-onMounted(() => {
-  confirmEmail()
-})
-
-onBeforeUnmount(() => {
-  if (redirectTimer) clearTimeout(redirectTimer)
-})
+onMounted(confirmEmail)
+onBeforeUnmount(clearRedirect)
 </script>
 
 <template>
-  <AuthShell icon="mail" :subtitle="t('confirmEmail.subtitle')">
-    <div class="confirm-email">
-      <div v-if="loading" class="confirm-email__status">
-        <Spinner size="sm" />
-        <span>{{ t('confirmEmail.loading') }}</span>
-      </div>
+  <AuthShell icon="mail">
+    <AuthStatusView
+      v-if="loading"
+      tone="loading"
+      :title="t('confirmEmail.subtitle')"
+      :description="t('confirmEmail.loading')"
+    />
 
-      <AlertBanner v-if="error || linkError" tone="danger" icon="error" dense>
-        {{ error || linkError }}
-      </AlertBanner>
-
-      <AlertBanner v-if="success" tone="success" icon="check_circle" dense>
-        {{ success }}
-      </AlertBanner>
-
-      <p v-if="success" class="confirm-email__hint">
-        {{ t('confirmEmail.redirecting') }}
-      </p>
-
-      <div v-if="success" class="confirm-email__actions">
-        <BaseButton
-          variant="primary"
-          size="lg"
-          style="width: 100%; justify-content: center"
-          @click="router.replace({ name: 'account' })"
-        >
+    <AuthStatusView
+      v-else-if="success"
+      tone="success"
+      icon="mark_email_read"
+      :title="t('confirmEmail.success_title')"
+      :description="success"
+      :hint="t('confirmEmail.redirecting')"
+    >
+      <template #actions>
+        <BaseButton variant="primary" size="lg" @click="goAccount">
           <MsIcon name="person" size="sm" />
           {{ t('confirmEmail.account') }}
         </BaseButton>
-      </div>
+      </template>
+    </AuthStatusView>
 
-      <div class="confirm-email__footer">
-        <RouterLink class="confirm-email__link" :to="{ name: 'login' }">
+    <AuthStatusView
+      v-else
+      tone="danger"
+      icon="error_outline"
+      :title="t('confirmEmail.error_title')"
+      :description="error || linkError"
+    >
+      <template #actions>
+        <BaseButton variant="default" size="lg" @click="goLogin">
           {{ t('confirmEmail.back') }}
-        </RouterLink>
-      </div>
-    </div>
+        </BaseButton>
+      </template>
+    </AuthStatusView>
   </AuthShell>
 </template>
-
-<style scoped>
-.confirm-email {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-
-.confirm-email__status {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--t2);
-  font-size: .84rem;
-}
-
-.confirm-email__hint {
-  color: var(--t3);
-  font-size: .78rem;
-  text-align: center;
-  margin: calc(var(--sp-2) * -1) 0 0;
-}
-
-.confirm-email__actions {
-  display: flex;
-}
-
-.confirm-email__footer {
-  display: flex;
-  justify-content: center;
-  margin-top: calc(var(--sp-1) * -1);
-}
-
-.confirm-email__link {
-  color: var(--t2);
-  font-size: .82rem;
-  text-decoration: none;
-  transition: color .15s ease;
-}
-
-.confirm-email__link:hover {
-  color: var(--t1);
-}
-</style>

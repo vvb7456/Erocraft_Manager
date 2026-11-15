@@ -57,8 +57,10 @@ vpn_key
 add_circle
 key
 
-# AuthModal.vue
+# AuthModal.vue / AuthStatusView.vue
 login
+mark_email_read
+block
 
 # Monitoring — NodeCard, DashboardPage
 memory

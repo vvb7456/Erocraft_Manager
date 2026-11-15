@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { switchLanguage } from '@/i18n/vue-i18n'
@@ -13,7 +13,9 @@ import {
   useAuthModal,
   type AuthMode,
 } from '@/composables/useAuthModal'
-import BaseModal from '@/components/ui/BaseModal.vue'
+import { lockBodyScroll, unlockBodyScroll } from '@/components/ui/BaseModal.vue'
+import AuthBrandHeader from '@/components/auth/AuthBrandHeader.vue'
+import AuthStatusView from '@/components/auth/AuthStatusView.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
@@ -39,6 +41,13 @@ const modalOpen = computed({
   },
 })
 
+const dialogRef = ref<HTMLElement | null>(null)
+const bodyRef = ref<HTMLElement | null>(null)
+const inviteFieldRef = ref<HTMLElement | null>(null)
+const hasBodyLock = ref(false)
+const mouseDownOnOverlay = ref(false)
+const bodyScrolled = ref(false)
+
 const loading = ref(false)
 const allowRegistration = computed(() => app.branding.allowRegistration)
 const registrationDisabled = computed(() => app.brandingLoaded && !app.branding.allowRegistration)
@@ -54,6 +63,7 @@ const regUsername = ref('')
 const regEmail = ref('')
 const regPassword = ref('')
 const regConfirmPassword = ref('')
+const inviteExpanded = ref(false)
 const inviteState = ref<'idle' | 'checking' | 'valid' | 'invalid'>('idle')
 let inviteTimer: ReturnType<typeof setTimeout> | null = null
 let inviteAbort: AbortController | null = null
@@ -66,17 +76,38 @@ const allAgreementsAccepted = ref(false)
 const forgotEmail = ref('')
 const forgotError = ref('')
 const forgotSuccess = ref('')
+const sentTargetEmail = ref('')
 
-const modalTitle = computed(() => {
-  if (mode.value === 'register') return t('register.subtitle')
-  if (mode.value === 'forgot-password') return t('forgotPassword.subtitle')
-  return t('login.submit')
-})
+const isStatusOnly = computed(
+  () => (mode.value === 'register' && (!!regSuccess.value || registrationDisabled.value))
+    || (mode.value === 'forgot-password' && !!forgotSuccess.value),
+)
 
-const modalIcon = computed(() => {
+const showTopBack = computed(
+  () => !isStatusOnly.value && (mode.value === 'register' || mode.value === 'forgot-password'),
+)
+
+const topBackLabel = computed(() =>
+  mode.value === 'register' ? t('register.back_link') : t('forgotPassword.back'),
+)
+
+const brandIcon = computed(() => {
   if (mode.value === 'register') return 'person_add'
   if (mode.value === 'forgot-password') return 'mail'
-  return 'login'
+  return 'dns'
+})
+
+const headerSubtitle = computed(() => {
+  if (isStatusOnly.value) return ''
+  if (mode.value === 'register') return t('register.subtitle')
+  if (mode.value === 'forgot-password') return t('forgotPassword.subtitle')
+  return ''
+})
+
+const dialogAriaLabel = computed(() => {
+  if (mode.value === 'register') return t('register.submit')
+  if (mode.value === 'forgot-password') return t('forgotPassword.subtitle')
+  return t('login.submit')
 })
 
 const usernameError = computed(() => {
@@ -124,6 +155,7 @@ function clearMessages() {
   regSuccess.value = ''
   forgotError.value = ''
   forgotSuccess.value = ''
+  sentTargetEmail.value = ''
 }
 
 function clearInviteCheck() {
@@ -155,19 +187,72 @@ function scheduleInviteCheck(raw: string) {
   }, 350)
 }
 
+function expandInvite() {
+  inviteExpanded.value = true
+  nextTick(() => {
+    inviteFieldRef.value?.querySelector<HTMLInputElement>('input')?.focus()
+  })
+}
+
+function closeModal() {
+  if (loading.value) return
+  modalOpen.value = false
+}
+
+function onOverlayMousedown(e: MouseEvent) {
+  mouseDownOnOverlay.value = e.target === e.currentTarget
+}
+
+function onOverlayClick(e: MouseEvent) {
+  if (e.target === e.currentTarget && mouseDownOnOverlay.value && !loading.value) {
+    closeModal()
+  }
+  mouseDownOnOverlay.value = false
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && !loading.value) {
+    e.stopPropagation()
+    closeModal()
+  }
+}
+
+function onBodyScroll() {
+  bodyScrolled.value = (bodyRef.value?.scrollTop ?? 0) > 2
+}
+
 watch(open, (isOpen) => {
   if (isOpen) {
+    if (!hasBodyLock.value) {
+      lockBodyScroll()
+      hasBodyLock.value = true
+    }
+    bodyScrolled.value = false
     clearMessages()
     void app.loadBranding()
+    if (inviteCode.value.trim()) {
+      inviteExpanded.value = true
+    }
     if (mode.value === 'register' && inviteCode.value) {
       scheduleInviteCheck(inviteCode.value)
     }
+    nextTick(() => {
+      dialogRef.value?.focus()
+    })
   } else {
+    if (hasBodyLock.value) {
+      unlockBodyScroll()
+      hasBodyLock.value = false
+    }
+    bodyScrolled.value = false
     loginPassword.value = ''
     regPassword.value = ''
     regConfirmPassword.value = ''
     acceptedAgreements.value = []
     allAgreementsAccepted.value = false
+    if (!inviteCode.value.trim()) {
+      inviteExpanded.value = false
+    }
     clearInviteCheck()
   }
 }, { immediate: true })
@@ -184,11 +269,13 @@ watch(
 watch(mode, (nextMode) => {
   clearMessages()
   if (open.value && nextMode === 'register') {
+    if (inviteCode.value.trim()) inviteExpanded.value = true
     scheduleInviteCheck(inviteCode.value)
   }
 })
 
 watch(inviteCode, (value) => {
+  if (value.trim()) inviteExpanded.value = true
   if (!open.value || mode.value !== 'register') return
   scheduleInviteCheck(value)
 })
@@ -202,15 +289,31 @@ watch(forgotEmail, () => {
   forgotSuccess.value = ''
 })
 
-onBeforeUnmount(clearInviteCheck)
+onBeforeUnmount(() => {
+  if (hasBodyLock.value) {
+    unlockBodyScroll()
+    hasBodyLock.value = false
+  }
+  clearInviteCheck()
+})
 
 function goMode(target: AuthMode) {
-  if (loading.value) return
+  if (loading.value || mode.value === target) return
+  if (mode.value === 'login') {
+    const typed = loginUsername.value.trim()
+    if (typed.includes('@')) {
+      if (target === 'register' && !regEmail.value.trim()) regEmail.value = typed
+      if (target === 'forgot-password' && !forgotEmail.value.trim()) forgotEmail.value = typed
+    }
+  }
   switchMode(target)
+  bodyScrolled.value = false
+  nextTick(() => {
+    bodyRef.value?.scrollTo({ top: 0 })
+  })
 }
 
 async function handleLogin() {
-  // Guard against double-dispatch when Enter triggers both native submit and key handlers.
   if (loading.value) return
   loginError.value = ''
   const username = loginUsername.value.trim()
@@ -285,9 +388,12 @@ async function handleRegister() {
         accepted_agreements: acceptedAgreements.value,
       }),
     })
+    sentTargetEmail.value = email
     regSuccess.value = t('register.success')
     regPassword.value = ''
     regConfirmPassword.value = ''
+    bodyScrolled.value = false
+    nextTick(() => { bodyRef.value?.scrollTo({ top: 0 }) })
   } catch (failure) {
     regError.value = apiErrorMessage(failure)
   } finally {
@@ -307,13 +413,15 @@ async function handleForgotPassword() {
 
   loading.value = true
   try {
+    const email = forgotEmail.value.trim()
     await fetchApi('/api/forgot-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: forgotEmail.value.trim(),
+        email,
       }),
     })
+    sentTargetEmail.value = email
     forgotSuccess.value = t('forgotPassword.success')
   } catch (failure) {
     forgotError.value = apiErrorMessage(failure)
@@ -330,210 +438,431 @@ function handleSubmit() {
 </script>
 
 <template>
-  <BaseModal
-    v-model="modalOpen"
-    :title="modalTitle"
-    :icon="modalIcon"
-    width="420px"
-    :persistent="loading"
-  >
-    <form class="auth-modal-form" @submit.prevent="handleSubmit">
-      <!-- ── Login ── -->
-      <template v-if="mode === 'login'">
-        <AlertBanner v-if="loginError" tone="danger" icon="error" dense>
-          {{ loginError }}
-        </AlertBanner>
-
-        <FormField :label="t('login.username')">
-          <BaseInput
-            v-model="loginUsername"
-            :placeholder="t('login.username_placeholder')"
-            autocomplete="username"
-          />
-        </FormField>
-
-        <FormField :label="t('login.password')">
-          <template #label-right>
-            <button type="button" class="auth-link" @click="goMode('forgot-password')">
-              {{ t('login.forgot') }}
+  <Teleport to="body">
+    <Transition name="auth-dialog">
+      <div
+        v-if="modalOpen"
+        class="auth-overlay"
+        tabindex="-1"
+        @mousedown="onOverlayMousedown"
+        @click="onOverlayClick"
+        @keydown="onKeydown"
+      >
+        <div
+          ref="dialogRef"
+          class="auth-dialog"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="dialogAriaLabel"
+          tabindex="-1"
+        >
+          <div class="auth-dialog__bar" :class="{ 'auth-dialog__bar--scrolled': bodyScrolled }">
+            <button
+              v-if="showTopBack"
+              type="button"
+              class="auth-nav-back"
+              :disabled="loading"
+              @click="goMode('login')"
+            >
+              <MsIcon name="arrow_back" size="sm" />
+              <span>{{ topBackLabel }}</span>
             </button>
-          </template>
-          <SecretInput
-            v-model="loginPassword"
-            :placeholder="t('login.password_placeholder')"
-            :is-password="true"
-            autocomplete="current-password"
-          />
-        </FormField>
+            <button
+              type="button"
+              class="auth-close-btn"
+              :disabled="loading"
+              :aria-label="t('common.btn.close')"
+              @click="closeModal"
+            >
+              <MsIcon name="close" />
+            </button>
+          </div>
 
-        <BaseButton
-          type="submit"
-          variant="primary"
-          size="lg"
-          :disabled="loading"
-          class="auth-submit-btn"
-        >
-          <Spinner v-if="loading" size="sm" />
-          <template v-else>
-            <MsIcon name="login" size="sm" />
-            {{ t('login.submit') }}
-          </template>
-        </BaseButton>
+          <div ref="bodyRef" class="auth-dialog__body" @scroll.passive="onBodyScroll">
+            <div class="auth-dialog__inner">
+              <AuthBrandHeader
+                :icon="brandIcon"
+                :subtitle="headerSubtitle || undefined"
+                heading-tag="h2"
+              />
 
-        <div v-if="allowRegistration" class="auth-switch auth-switch--center">
-          <span class="auth-hint">{{ t('login.register_prefix') }}</span>
-          <button type="button" class="auth-link" @click="goMode('register')">
-            {{ t('login.register_link') }}
-          </button>
+              <!-- ── Status Views (Mail Sent / Registration Closed) ── -->
+              <AuthStatusView
+                v-if="mode === 'register' && registrationDisabled"
+                tone="warning"
+                icon="block"
+                :title="t('register.disabled_title')"
+                :description="t('common.apiErrors.register.disabled')"
+              >
+                <template #actions>
+                  <BaseButton variant="default" size="lg" @click="goMode('login')">
+                    {{ t('register.back_link') }}
+                  </BaseButton>
+                </template>
+              </AuthStatusView>
+
+              <AuthStatusView
+                v-else-if="mode === 'register' && regSuccess"
+                tone="success"
+                icon="mark_email_read"
+                :title="t('register.success_title')"
+                :email="sentTargetEmail"
+                :description="regSuccess"
+              >
+                <template #actions>
+                  <BaseButton variant="default" size="lg" @click="goMode('login')">
+                    {{ t('register.back_link') }}
+                  </BaseButton>
+                </template>
+              </AuthStatusView>
+
+              <AuthStatusView
+                v-else-if="mode === 'forgot-password' && forgotSuccess"
+                tone="success"
+                icon="mark_email_read"
+                :title="t('forgotPassword.success_title')"
+                :email="sentTargetEmail"
+                :description="forgotSuccess"
+              >
+                <template #actions>
+                  <BaseButton variant="default" size="lg" @click="goMode('login')">
+                    {{ t('forgotPassword.back') }}
+                  </BaseButton>
+                </template>
+              </AuthStatusView>
+
+              <!-- ── Interactive Forms ── -->
+              <form v-else class="auth-modal-form" @submit.prevent="handleSubmit">
+                <!-- ── Login ── -->
+                <template v-if="mode === 'login'">
+                  <AlertBanner v-if="loginError" tone="danger" icon="error" dense>
+                    {{ loginError }}
+                  </AlertBanner>
+
+                  <FormField :label="t('login.username')">
+                    <BaseInput
+                      v-model="loginUsername"
+                      :placeholder="t('login.username_placeholder')"
+                      autocomplete="username"
+                    />
+                  </FormField>
+
+                  <FormField :label="t('login.password')">
+                    <template #label-right>
+                      <button type="button" class="auth-link" @click="goMode('forgot-password')">
+                        {{ t('login.forgot') }}
+                      </button>
+                    </template>
+                    <SecretInput
+                      v-model="loginPassword"
+                      :placeholder="t('login.password_placeholder')"
+                      :is-password="true"
+                      autocomplete="current-password"
+                    />
+                  </FormField>
+
+                  <BaseButton
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    :disabled="loading"
+                    class="auth-submit-btn"
+                  >
+                    <Spinner v-if="loading" size="sm" />
+                    <template v-else>
+                      <MsIcon name="login" size="sm" />
+                      {{ t('login.submit') }}
+                    </template>
+                  </BaseButton>
+
+                  <template v-if="allowRegistration">
+                    <div class="auth-divider">
+                      <span>{{ t('login.register_prefix') }}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      class="auth-register-cta"
+                      :disabled="loading"
+                      @click="goMode('register')"
+                    >
+                      <MsIcon name="person_add" size="sm" color="none" />
+                      <span>{{ t('login.register_link') }}</span>
+                    </button>
+                  </template>
+                </template>
+
+                <!-- ── Register ── -->
+                <template v-else-if="mode === 'register'">
+                  <AlertBanner v-if="regError" tone="danger" icon="error" dense>
+                    {{ regError }}
+                  </AlertBanner>
+
+                  <FormField :label="t('register.username')" :error="usernameError || undefined">
+                    <BaseInput
+                      v-model="regUsername"
+                      :placeholder="t('register.username_placeholder')"
+                      autocomplete="username"
+                    />
+                  </FormField>
+
+                  <FormField :label="t('register.email')" :error="emailError || undefined">
+                    <BaseInput
+                      v-model="regEmail"
+                      type="email"
+                      :placeholder="t('register.email_placeholder')"
+                      autocomplete="email"
+                    />
+                  </FormField>
+
+                  <FormField :label="t('register.password')" :error="passwordError || undefined">
+                    <SecretInput
+                      v-model="regPassword"
+                      :placeholder="t('register.password_placeholder')"
+                      :is-password="true"
+                      autocomplete="new-password"
+                    />
+                  </FormField>
+
+                  <FormField :label="t('register.confirmPassword')" :error="confirmPasswordError || undefined">
+                    <SecretInput
+                      v-model="regConfirmPassword"
+                      :placeholder="t('register.confirmPassword_placeholder')"
+                      :is-password="true"
+                      autocomplete="new-password"
+                    />
+                  </FormField>
+
+                  <div v-if="!inviteExpanded" class="invite-disclosure">
+                    <button
+                      type="button"
+                      class="invite-toggle"
+                      @click="expandInvite"
+                    >
+                      <span>{{ t('billing.register.inviteCodeLabel') }}</span>
+                      <MsIcon name="expand_more" size="xs" color="none" />
+                    </button>
+                  </div>
+
+                  <div v-else ref="inviteFieldRef">
+                    <FormField :label="t('billing.register.inviteCodeLabel')">
+                      <template #label-right>
+                        <span v-if="inviteState !== 'idle'" class="invite-hint" :class="`invite-${inviteState}`">
+                          <Spinner v-if="inviteState === 'checking'" size="sm" />
+                          <MsIcon v-else-if="inviteState === 'valid'" name="check_circle" size="sm" />
+                          <MsIcon v-else name="error" size="sm" />
+                          <span v-if="inviteState === 'valid'">{{ t('billing.register.inviteValid') }}</span>
+                          <span v-else-if="inviteState === 'invalid'">{{ t('billing.register.inviteInvalid') }}</span>
+                        </span>
+                        <button
+                          v-else
+                          type="button"
+                          class="invite-collapse-btn"
+                          :aria-label="t('common.btn.close')"
+                          @click="inviteExpanded = false"
+                        >
+                          <MsIcon name="expand_less" size="xs" color="none" />
+                        </button>
+                      </template>
+                      <BaseInput
+                        v-model="inviteCode"
+                        :placeholder="t('billing.register.inviteCodePlaceholder')"
+                        autocomplete="off"
+                        @input="inviteCode = inviteCode.toUpperCase()"
+                      />
+                    </FormField>
+                  </div>
+
+                  <AgreementCheckboxGroup
+                    v-model="acceptedAgreements"
+                    context="register"
+                    :default-checked="agreementsDefaultChecked"
+                    @update:all-accepted="allAgreementsAccepted = $event"
+                  />
+
+                  <BaseButton
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    :disabled="!canSubmitRegister"
+                    class="auth-submit-btn"
+                  >
+                    <Spinner v-if="loading" size="sm" />
+                    <template v-else>
+                      <MsIcon name="person_add" size="sm" />
+                      {{ t('register.submit') }}
+                    </template>
+                  </BaseButton>
+
+                  <div class="auth-divider">
+                    <span>{{ t('register.back_prefix') }}</span>
+                  </div>
+
+                  <BaseButton
+                    type="button"
+                    variant="default"
+                    size="lg"
+                    :disabled="loading"
+                    class="auth-submit-btn"
+                    @click="goMode('login')"
+                  >
+                    {{ t('register.back_link') }}
+                  </BaseButton>
+                </template>
+
+                <!-- ── Forgot password ── -->
+                <template v-else>
+                  <AlertBanner v-if="forgotError" tone="danger" icon="error" dense>
+                    {{ forgotError }}
+                  </AlertBanner>
+
+                  <FormField :label="t('forgotPassword.email')">
+                    <BaseInput
+                      v-model="forgotEmail"
+                      type="email"
+                      :placeholder="t('forgotPassword.email_placeholder')"
+                      autocomplete="email"
+                    />
+                  </FormField>
+
+                  <BaseButton
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    :disabled="loading"
+                    class="auth-submit-btn"
+                  >
+                    <Spinner v-if="loading" size="sm" />
+                    <template v-else>
+                      <MsIcon name="mail" size="sm" />
+                      {{ t('forgotPassword.submit') }}
+                    </template>
+                  </BaseButton>
+                </template>
+              </form>
+            </div>
+          </div>
         </div>
-      </template>
-
-      <!-- ── Register ── -->
-      <template v-else-if="mode === 'register'">
-        <AlertBanner v-if="registrationDisabled" tone="warning" icon="block" dense>
-          {{ t('common.apiErrors.register.disabled') }}
-        </AlertBanner>
-
-        <AlertBanner v-if="regError" tone="danger" icon="error" dense>
-          {{ regError }}
-        </AlertBanner>
-
-        <AlertBanner v-if="regSuccess" tone="success" icon="check_circle" dense>
-          {{ regSuccess }}
-        </AlertBanner>
-
-        <template v-if="!registrationDisabled && !regSuccess">
-          <FormField :label="t('register.username')" :error="usernameError || undefined">
-            <BaseInput
-              v-model="regUsername"
-              :placeholder="t('register.username_placeholder')"
-              autocomplete="username"
-            />
-          </FormField>
-
-          <FormField :label="t('register.email')" :error="emailError || undefined">
-            <BaseInput
-              v-model="regEmail"
-              type="email"
-              :placeholder="t('register.email_placeholder')"
-              autocomplete="email"
-            />
-          </FormField>
-
-          <FormField :label="t('register.password')" :error="passwordError || undefined">
-            <SecretInput
-              v-model="regPassword"
-              :placeholder="t('register.password_placeholder')"
-              :is-password="true"
-              autocomplete="new-password"
-            />
-          </FormField>
-
-          <FormField :label="t('register.confirmPassword')" :error="confirmPasswordError || undefined">
-            <SecretInput
-              v-model="regConfirmPassword"
-              :placeholder="t('register.confirmPassword_placeholder')"
-              :is-password="true"
-              autocomplete="new-password"
-            />
-          </FormField>
-
-          <FormField :label="t('billing.register.inviteCodeLabel')">
-            <template #label-right>
-              <span v-if="inviteState !== 'idle'" class="invite-hint" :class="`invite-${inviteState}`">
-                <Spinner v-if="inviteState === 'checking'" size="sm" />
-                <MsIcon v-else-if="inviteState === 'valid'" name="check_circle" size="sm" />
-                <MsIcon v-else name="error" size="sm" />
-                <span v-if="inviteState === 'valid'">{{ t('billing.register.inviteValid') }}</span>
-                <span v-else-if="inviteState === 'invalid'">{{ t('billing.register.inviteInvalid') }}</span>
-              </span>
-            </template>
-            <BaseInput
-              v-model="inviteCode"
-              :placeholder="t('billing.register.inviteCodePlaceholder')"
-              autocomplete="off"
-              @input="inviteCode = inviteCode.toUpperCase()"
-            />
-          </FormField>
-
-          <AgreementCheckboxGroup
-            v-model="acceptedAgreements"
-            context="register"
-            :default-checked="agreementsDefaultChecked"
-            @update:all-accepted="allAgreementsAccepted = $event"
-          />
-
-          <BaseButton
-            type="submit"
-            variant="primary"
-            size="lg"
-            :disabled="!canSubmitRegister"
-            class="auth-submit-btn"
-          >
-            <Spinner v-if="loading" size="sm" />
-            <template v-else>
-              <MsIcon name="person_add" size="sm" />
-              {{ t('register.submit') }}
-            </template>
-          </BaseButton>
-        </template>
-
-        <div class="auth-switch auth-switch--center">
-          <span class="auth-hint">{{ t('register.back_prefix') }}</span>
-          <button type="button" class="auth-link" @click="goMode('login')">
-            {{ t('register.back_link') }}
-          </button>
-        </div>
-      </template>
-
-      <!-- ── Forgot password ── -->
-      <template v-else>
-        <AlertBanner v-if="forgotError" tone="danger" icon="error" dense>
-          {{ forgotError }}
-        </AlertBanner>
-
-        <AlertBanner v-if="forgotSuccess" tone="success" icon="check_circle" dense>
-          {{ forgotSuccess }}
-        </AlertBanner>
-
-        <FormField :label="t('forgotPassword.email')">
-          <BaseInput
-            v-model="forgotEmail"
-            type="email"
-            :placeholder="t('forgotPassword.email_placeholder')"
-            autocomplete="email"
-          />
-        </FormField>
-
-        <BaseButton
-          type="submit"
-          variant="primary"
-          size="lg"
-          :disabled="loading"
-          class="auth-submit-btn"
-        >
-          <Spinner v-if="loading" size="sm" />
-          <template v-else>
-            <MsIcon name="mail" size="sm" />
-            {{ t('forgotPassword.submit') }}
-          </template>
-        </BaseButton>
-
-        <div class="auth-switch auth-switch--center">
-          <button type="button" class="auth-link auth-link--muted" @click="goMode('login')">
-            {{ t('forgotPassword.back') }}
-          </button>
-        </div>
-      </template>
-    </form>
-  </BaseModal>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
+/* z-index 950 sits above AppSidebar (50) & PageHeader (40),
+   and below BaseModal (1000, used by AgreementViewer) & ToastContainer (10000). */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  background: var(--overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+}
+
+:global([data-theme="light"]) .auth-overlay {
+  background: var(--overlay-light);
+}
+
+.auth-dialog {
+  width: 100%;
+  max-width: 420px;
+  max-height: min(90dvh, 780px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+  border: 1px solid var(--bd);
+  border-radius: var(--r);
+  box-shadow: var(--sh);
+  outline: none;
+  overflow: hidden;
+}
+
+.auth-dialog__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 10px 14px 6px;
+  border-bottom: 1px solid transparent;
+  flex-shrink: 0;
+  transition: border-color .15s ease;
+}
+
+.auth-dialog__bar--scrolled {
+  border-bottom-color: var(--bd);
+}
+
+.auth-nav-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--t2);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+
+.auth-nav-back:hover:not(:disabled) {
+  color: var(--t1);
+  background: color-mix(in srgb, var(--t1) 6%, transparent);
+}
+
+.auth-nav-back:disabled,
+.auth-close-btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.auth-close-btn {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--t2);
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+
+.auth-close-btn:hover:not(:disabled) {
+  color: var(--t1);
+  background: color-mix(in srgb, var(--t1) 6%, transparent);
+}
+
+.auth-dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--sp-2) var(--sp-6) var(--sp-6);
+}
+
+.auth-dialog__inner {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* ── Form & Mode Guidance ── */
 .auth-modal-form {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
+}
+
+.auth-modal-form :deep(.form-field) {
+  margin-bottom: 0;
 }
 
 .auth-submit-btn {
@@ -541,20 +870,63 @@ function handleSubmit() {
   justify-content: center;
 }
 
-.auth-switch {
+.auth-divider {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-top: calc(var(--sp-1) * -1);
-}
-
-.auth-switch--center {
-  justify-content: center;
-}
-
-.auth-hint {
+  gap: var(--sp-3);
+  margin: 2px 0 calc(var(--sp-1) * -1);
   color: var(--t3);
-  font-size: .82rem;
+  font-size: var(--text-xs);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--bd);
+}
+
+.auth-register-cta {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: var(--btn-py-lg, 10px) var(--btn-px-lg, 20px);
+  border-radius: var(--rs);
+  border: 1px solid color-mix(in srgb, var(--ac) 42%, var(--bd));
+  background: color-mix(in srgb, var(--ac) 8%, var(--bg3));
+  color: var(--ac);
+  font-family: inherit;
+  font-size: var(--btn-font-lg, var(--text-md));
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, opacity .15s ease;
+}
+
+.auth-register-cta:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ac) 16%, var(--bg3));
+  border-color: var(--ac);
+}
+
+.auth-register-cta:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+.auth-register-cta:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+
+.auth-nav-back:focus-visible,
+.auth-close-btn:focus-visible,
+.invite-toggle:focus-visible,
+.invite-collapse-btn:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: -2px;
 }
 
 .auth-link {
@@ -571,14 +943,46 @@ function handleSubmit() {
   text-decoration: underline;
 }
 
-.auth-link--muted {
+/* ── Collapsible Invite Code ── */
+.invite-disclosure {
+  display: flex;
+  align-items: center;
+}
+
+.invite-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: none;
   color: var(--t2);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
   transition: color .15s ease;
 }
 
-.auth-link--muted:hover {
+.invite-toggle:hover {
+  color: var(--ac);
+}
+
+.invite-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: none;
+  color: var(--t3);
+  cursor: pointer;
+  transition: color .15s ease;
+}
+
+.invite-collapse-btn:hover {
   color: var(--t1);
-  text-decoration: none;
 }
 
 .invite-hint {
@@ -595,5 +999,64 @@ function handleSubmit() {
 
 .invite-hint.invite-invalid {
   color: var(--red);
+}
+
+/* ── Transitions (matches BaseModal desktop fade/scale, full-screen fade on mobile) ── */
+.auth-dialog-enter-active,
+.auth-dialog-leave-active {
+  transition: opacity .18s ease;
+}
+
+.auth-dialog-enter-active .auth-dialog,
+.auth-dialog-leave-active .auth-dialog {
+  transition: transform .18s ease, opacity .18s ease;
+}
+
+.auth-dialog-enter-from,
+.auth-dialog-leave-to {
+  opacity: 0;
+}
+
+.auth-dialog-enter-from .auth-dialog,
+.auth-dialog-leave-to .auth-dialog {
+  opacity: 0;
+  transform: scale(.96);
+}
+
+/* ── Mobile: Full-screen Immersive Auth View (unified with AuthShell) ── */
+@media (max-width: 768px) {
+  .auth-overlay,
+  :global([data-theme="light"]) .auth-overlay {
+    padding: 0;
+    background: var(--bg2);
+    align-items: stretch;
+  }
+
+  .auth-dialog {
+    max-width: none;
+    max-height: none;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: var(--bg2);
+  }
+
+  .auth-dialog__bar {
+    min-height: calc(52px + env(safe-area-inset-top, 0px));
+    padding: calc(10px + env(safe-area-inset-top, 0px)) var(--sp-4) var(--sp-2);
+  }
+
+  .auth-dialog__body {
+    padding: var(--sp-2) var(--sp-5) calc(var(--sp-6) + env(safe-area-inset-bottom, 0px));
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .auth-dialog-enter-from .auth-dialog,
+  .auth-dialog-leave-to .auth-dialog {
+    transform: translateY(8px);
+  }
 }
 </style>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useAppStore } from '@/stores/app'
-import MsIcon from '@/components/ui/MsIcon.vue'
+import AuthBrandHeader from '@/components/auth/AuthBrandHeader.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import LanguageToggle from '@/components/ui/LanguageToggle.vue'
 
@@ -24,20 +24,7 @@ const app = useAppStore()
     </div>
     <div class="auth-main">
       <div class="auth-card">
-        <div class="auth-header">
-          <img
-            v-if="app.authBannerUrl"
-            class="auth-banner"
-            :src="app.authBannerUrl"
-            :alt="app.displayName"
-          />
-          <MsIcon v-else :name="icon" size="lg" color="var(--ac)" />
-          <h1 class="auth-title" :class="{ 'auth-title--fallback': !app.hasSystemName }">
-            {{ app.displayName }}
-          </h1>
-          <p v-if="subtitle" class="auth-subtitle">{{ subtitle }}</p>
-        </div>
-
+        <AuthBrandHeader :icon="icon" :subtitle="subtitle" />
         <slot />
       </div>
     </div>
@@ -88,57 +75,11 @@ const app = useAppStore()
 
 .auth-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   background: var(--bg2);
   border: 1px solid var(--bd);
   border-radius: var(--r);
   padding: var(--sp-8) var(--sp-6);
-}
-
-.auth-header {
-  text-align: center;
-  margin-bottom: var(--sp-6);
-}
-
-.auth-banner {
-  display: block;
-  max-width: 100%;
-  max-height: 54px;
-  margin: 0 auto;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 8px rgba(20, 184, 166, 0.15));
-}
-
-.auth-title {
-  display: inline-block;
-  max-width: 100%;
-  font-family: var(--font-sans);
-  font-size: 1.56rem;
-  font-weight: 700;
-  line-height: 1.2;
-  background-image: linear-gradient(92deg, var(--brand-title-frost-from) 0%, var(--brand-title-frost-mid) 44%, var(--brand-title-frost-to) 100%);
-  background-size: 118% 100%;
-  background-position: left center;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin: var(--sp-3) 0 0;
-  letter-spacing: -0.028em;
-  color: transparent;
-  filter: drop-shadow(0 0 12px var(--brand-glow));
-}
-
-.auth-title--fallback {
-  font-size: 1.22rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.auth-subtitle {
-  color: var(--t2);
-  font-size: .88rem;
-  line-height: 1.55;
-  margin: var(--sp-3) 0 0;
 }
 
 .auth-footer {
@@ -151,7 +92,34 @@ const app = useAppStore()
 
 @media (max-width: 768px) {
   .auth-page {
-    padding: 12px;
+    background: var(--bg2);
+    padding: 0;
+  }
+
+  .auth-toolbar {
+    position: sticky;
+    min-height: calc(52px + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) var(--sp-4) 0;
+    background: var(--bg2);
+    pointer-events: auto;
+  }
+
+  .auth-main {
+    align-items: flex-start;
+    padding: var(--sp-2) var(--sp-5) var(--sp-6);
+  }
+
+  .auth-card {
+    max-width: 400px;
+    margin: 0 auto;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+  }
+
+  .auth-footer {
+    padding: var(--sp-3) var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
   }
 }
 </style>

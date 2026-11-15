@@ -22,6 +22,9 @@ const app = useAppStore()
 const support = useSupportStore()
 const { openAuth } = useAuthModal()
 const { toast } = useToast()
+const guestAuthLabel = computed(() =>
+  app.branding.allowRegistration ? t('login.entry') : t('login.submit'),
+)
 const isUserLayout = computed(() => route.meta.layout === 'user')
 interface NavItem { page: string; icon: string; labelKey: string }
 interface NavGroup { label: string; items: NavItem[] }
@@ -128,8 +131,8 @@ function openTutorial() {
         <BaseButton variant="ghost" size="sm" square :loading="loggingOut" :title="t('common.btn.logout')" :aria-label="t('common.btn.logout')" @click="doLogout"><MsIcon name="logout" size="sm" /></BaseButton>
       </template>
       <template v-else>
-        <BaseButton variant="primary" size="sm" class="guest-login-btn" :title="t('login.submit')" :aria-label="t('login.submit')" @click="openAuth('login')">
-          <MsIcon name="login" size="sm" /><span class="guest-login-label">{{ t('login.submit') }}</span>
+        <BaseButton variant="primary" size="sm" class="guest-login-btn" :title="guestAuthLabel" :aria-label="guestAuthLabel" @click="openAuth('login')">
+          <MsIcon name="login" size="sm" /><span class="guest-login-label">{{ guestAuthLabel }}</span>
         </BaseButton>
         <LanguageToggle variant="ghost" />
         <ThemeToggle />
@@ -160,7 +163,9 @@ function openTutorial() {
 .unread-count { border-radius: var(--r-pill); padding: 1px 5px; background: var(--ac); color: var(--bg); font-size: var(--text-xs); }
 .sidebar-footer { flex-shrink: 0; display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--bd); padding: 14px 12px; }
 .account-entry { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; background: none; border: 0; border-radius: var(--r-sm); padding: 0; text-align: left; color: var(--t1); cursor: pointer; }
-.guest-login-btn { flex: 1; min-width: 0; justify-content: center; }
+.guest-login-btn { flex: 1; min-width: 0; justify-content: center; --btn-px-sm: 8px; }
+.guest-login-btn :deep(.base-btn__content) { min-width: 0; }
+.guest-login-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .avatar { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--bd); border-radius: 50%; background: var(--bg4); color: var(--t2); font-size: var(--text-xs); flex-shrink: 0; }
 .account-identity { min-width: 0; }
 .account-identity strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }

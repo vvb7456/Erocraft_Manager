@@ -1,6 +1,8 @@
 {
   "subtitle": "Confirm Email Change",
   "loading": "Confirming email...",
+  "success_title": "Email Updated",
+  "error_title": "Confirmation Failed",
   "success": "Your email has been changed.",
   "redirecting": "Redirecting to account settings...",
   "account": "Go to Account Settings",
