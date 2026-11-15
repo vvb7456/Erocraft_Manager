@@ -47,16 +47,20 @@ const mobile = ref(media.matches)
 const fullscreen = computed(() => mobile.value && !!selected.value)
 function updateMedia() { mobile.value = media.matches }
 const chatHeading = ref<HTMLElement | null>(null)
+const chat = ref<InstanceType<typeof SupportChat> | null>(null)
 const searchInput = ref<InstanceType<typeof FilterInput> | null>(null)
 const filterKey = computed(() => JSON.stringify([search.value.trim(), filter.value]))
 let pendingRefresh = false
+let stale = false
 let alive = true
 let linkedRequest = 0
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 async function select(item: Conversation) {
   linkedRequest++
+  const same = selected.value === item.id
   selected.value = item.id
   selectedContact.value = item
+  if (same) void chat.value?.refresh()
   if (mobile.value) {
     await nextTick()
     if (alive && selected.value === item.id) chatHeading.value?.focus({ preventScroll: true })
@@ -79,6 +83,7 @@ function time(value: string) {
 async function load(more = false) {
   if (!alive) return
   if (loading.value) { pendingRefresh = true; return }
+  if (!more) stale = false
   loading.value = true
   const currentFilter = filterKey.value
   const isAdmin = admin.value
@@ -118,6 +123,7 @@ watch(admin, () => {
   conversations.value = []
   hasMore.value = false
   failed.value = false
+  stale = false
   clearFilters()
   void load()
 })
@@ -128,14 +134,25 @@ watch(() => [admin.value, route.query?.conversation], async () => {
   const result = await get<{ items: Conversation[] }>(`/api/support/conversations?conversation_id=${id}`)
   if (alive && request === linkedRequest && admin.value && result?.items[0]) await select(result.items[0])
 }, { immediate: true })
-useSupportEvents(() => { if (admin.value && document.visibilityState === 'visible') void load() })
+function resume() {
+  if (document.visibilityState !== 'visible') return
+  if (admin.value && (stale || failed.value)) void load()
+  else if (!admin.value && (stale || failed.value) && !selected.value) void load()
+}
+useSupportEvents(() => {
+  if (!admin.value && (!failed.value || selected.value)) return
+  if (document.visibilityState === 'visible') void load()
+  else stale = true
+})
 onMounted(() => {
   media.addEventListener('change', updateMedia)
+  document.addEventListener('visibilitychange', resume)
   void load()
 })
 onBeforeUnmount(() => {
   alive = false
   media.removeEventListener('change', updateMedia)
+  document.removeEventListener('visibilitychange', resume)
   if (searchTimer) clearTimeout(searchTimer)
 })
 </script>
@@ -178,7 +195,7 @@ onBeforeUnmount(() => {
         <div class="heading-text"><SupportContactMenu v-if="admin && selectedContact" :key="selectedContact.id" :username="selectedContact.username" /><h3 v-else>{{ t('support.title') }}</h3><span v-if="admin && selectedContact" class="contact-id">{{ t('support.userId', { id: selectedContact.user_id }) }}</span></div>
         <SupportConnectionBadge />
       </header>
-      <SupportChat v-if="selected" :key="`${admin}:${selected}`" :conversation-id="selected" :admin="admin" :customer-name="selectedContact?.username" :mobile="mobile" layout="workspace" />
+      <SupportChat v-if="selected" ref="chat" :key="`${admin}:${selected}`" :conversation-id="selected" :admin="admin" :customer-name="selectedContact?.username" :mobile="mobile" layout="workspace" />
       <LoadingCenter v-else-if="!admin && loading" />
       <div v-else class="chat-empty">
         <SupportConnectionBadge v-if="admin" class="empty-status" />

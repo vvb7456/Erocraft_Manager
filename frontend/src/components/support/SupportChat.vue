@@ -44,8 +44,12 @@ const input = ref<InstanceType<typeof BaseTextarea> | null>(null)
 let generation = 0
 let busy = false
 let rerun = false
+let stale = false
+let loaded = false
+let pendingScroll = false
 let alive = true
 let reading = false
+let readAgain = false
 let receiveCursor = 0
 let observer: ResizeObserver | null = null
 let viewportHeight = 0
@@ -78,23 +82,35 @@ function atBottom() {
   return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 64
 }
 async function markRead() {
-  if (!alive || !props.active || reading || document.visibilityState !== 'visible' || !document.hasFocus() || !atBottom()) return
+  if (!alive || !props.active || document.visibilityState !== 'visible' || !document.hasFocus() || !atBottom()) return
   const id = Math.min(messages.value[messages.value.length - 1]?.id || 0, receiveCursor)
   if (id <= ownRead.value) return
+  if (reading) { readAgain = true; return }
   const version = generation
   reading = true
   try {
     if (await post(`/api/support/conversations/${props.conversationId}/read`, { message_id: id }) && version === generation) ownRead.value = id
-  } catch (failure) { handleError(failure) } finally { reading = false }
+  } catch (failure) {
+    try { handleError(failure) } catch { /* Transient network errors will retry on next scroll or focus. */ }
+  } finally {
+    reading = false
+    if (readAgain) { readAgain = false; void markRead() }
+  }
 }
 function onScroll() {
   if (viewport.value && viewport.value.clientHeight !== viewportHeight) return
   following.value = atBottom()
   if (following.value) { newMessages.value = 0; void markRead() }
+  else pendingScroll = false
 }
 async function scrollDown() {
   await nextTick()
-  if (!alive || !props.active || document.visibilityState !== 'visible') return
+  if (!alive) return
+  if (!props.active || document.visibilityState !== 'visible') {
+    pendingScroll = true
+    return
+  }
+  pendingScroll = false
   following.value = true
   newMessages.value = 0
   if (viewport.value) viewport.value.scrollTop = viewport.value.scrollHeight
@@ -109,8 +125,13 @@ function merge(items: Message[]) {
   messages.value = [...all.values()].sort((a, b) => a.id - b.id)
 }
 async function refresh() {
-  if (!alive || !props.active || document.visibilityState !== 'visible') return
+  if (!alive) return
+  if (!props.active || document.visibilityState !== 'visible') {
+    stale = true
+    return
+  }
   if (busy) { rerun = true; return }
+  stale = false
   busy = true
   const version = generation
   loading.value = !messages.value.length
@@ -122,6 +143,7 @@ async function refresh() {
       if (version !== generation) return
       if (!data) { failed.value = true; return }
       failed.value = false
+      loaded = true
       if (after && !following.value) newMessages.value += data.items.filter(m => !mine(m) && !messages.value.some(old => old.id === m.id)).length
       merge(data.items)
       receiveCursor = data.items[data.items.length - 1]?.id || receiveCursor
@@ -220,10 +242,25 @@ async function send() {
   }
 }
 function showImage(url: string) { selectedImage.value = url; imageOpen.value = true }
+function resume() {
+  if (!alive || !props.active || document.visibilityState !== 'visible') return
+  if (!loaded || stale || failed.value) void refresh()
+  else if (pendingScroll && following.value) void scrollDown()
+  else void markRead()
+}
+function onFocus() {
+  if (!alive || !props.active || document.visibilityState !== 'visible') return
+  if (pendingScroll && following.value) void scrollDown()
+  else void markRead()
+}
+defineExpose({ refresh })
 useSupportEvents(() => void refresh())
 watch(() => props.conversationId, () => {
   draft.value = support.draftFor(props.conversationId)
   generation++
+  stale = false
+  loaded = false
+  pendingScroll = false
   receiveCursor = 0
   messages.value = []
   ownRead.value = otherRead.value = 0
@@ -233,7 +270,13 @@ watch(() => props.conversationId, () => {
   newMessages.value = 0
   void refresh()
 }, { immediate: true })
-watch(() => props.active, value => { if (value) { void refresh(); nextTick(resizeInput) } })
+watch(() => props.active, value => {
+  if (!value) return
+  if (!loaded || stale || failed.value) void refresh()
+  else if (following.value) void scrollDown()
+  else void markRead()
+  nextTick(resizeInput)
+})
 watch(content, () => nextTick(resizeInput), { immediate: true })
 watch(() => draft.value.file, file => {
   if (imagePreview.value) URL.revokeObjectURL(imagePreview.value)
@@ -245,12 +288,16 @@ onMounted(() => {
     if (following.value && props.active) void scrollDown()
   })
   if (viewport.value) observer.observe(viewport.value)
+  document.addEventListener('visibilitychange', resume)
+  window.addEventListener('focus', onFocus)
   resizeInput()
 })
 onBeforeUnmount(() => {
   alive = false
   generation++
   observer?.disconnect()
+  document.removeEventListener('visibilitychange', resume)
+  window.removeEventListener('focus', onFocus)
   if (imagePreview.value) URL.revokeObjectURL(imagePreview.value)
 })
 </script>

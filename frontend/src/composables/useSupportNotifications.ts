@@ -19,6 +19,22 @@ export function useSupportNotifications() {
   let again = false
   let retry: ReturnType<typeof setTimeout> | undefined
   let retryDelay = 2000
+  let lastSessionCheck = 0
+  let checkingSession = false
+
+  async function checkSession() {
+    const now = Date.now()
+    if (checkingSession || now - lastSessionCheck < 30_000) return
+    checkingSession = true
+    lastSessionCheck = now
+    try {
+      await app.fetchSessionUser({ force: true })
+    } catch {
+      // Transient 5xx or network errors during backend restarts should not surface as unhandled rejections.
+    } finally {
+      checkingSession = false
+    }
+  }
 
   async function refresh() {
     if (!alive || !enabled.value) return
@@ -32,7 +48,7 @@ export function useSupportNotifications() {
       retryDelay = 2000
       support.unread = data.unread
       const incoming = data.latest_incoming_id || 0
-      if (latestId !== null && incoming > latestId && support.soundEnabled) sound.play()
+      if (latestId !== null && incoming > latestId && support.soundEnabled) sound.play(identity.value, incoming)
       latestId = Math.max(latestId ?? 0, incoming)
     } catch {
       if (alive && version === generation) {
@@ -49,14 +65,18 @@ export function useSupportNotifications() {
     generation++
     clearTimeout(retry)
     retryDelay = 2000
+    lastSessionCheck = 0
     latestId = null
     support.unread = 0
     sound.reset()
     void refresh()
   }, { flush: 'sync' })
   watch(() => support.soundEnabled, enabled => { if (!enabled) sound.reset() })
-  useSupportConnection(identity, () => { void app.fetchSessionUser({ force: true }) })
-  useSupportEvents(() => void refresh(), enabled)
+  useSupportConnection(identity, () => { void checkSession() })
+  useSupportEvents(() => {
+    lastSessionCheck = 0
+    void refresh()
+  }, enabled)
   onMounted(() => { void refresh() })
   onBeforeUnmount(() => { alive = false; generation++; clearTimeout(retry); sound.dispose() })
 }

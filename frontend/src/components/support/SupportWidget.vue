@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSupportStore } from '@/stores/support'
 import { useApiFetch } from '@/composables/useApiFetch'
+import { useSupportEvents } from '@/composables/useSupportEvents'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
@@ -14,7 +15,7 @@ import SupportConnectionBadge from './SupportConnectionBadge.vue'
 const { t } = useI18n()
 const support = useSupportStore()
 const route = useRoute()
-const { post, handleError } = useApiFetch()
+const { post } = useApiFetch()
 const cid = ref<number | null>(null)
 const loading = ref(false)
 const panel = ref<InstanceType<typeof SupportChatFrame> | null>(null)
@@ -29,7 +30,11 @@ async function load() {
   try {
     const data = await post<{ id: number }>('/api/support/conversation')
     if (data && alive) cid.value = data.id
-  } finally { loading.value = false }
+  } catch { /* Inline retry UI handles failures; avoid unhandled rejections during reconnects. */ }
+  finally { loading.value = false }
+}
+function resume() {
+  if (support.open && !cid.value && document.visibilityState === 'visible') void load()
 }
 function updateMedia() { mobile.value = media.matches }
 function navigate() { if (mobile.value) support.open = false }
@@ -45,7 +50,7 @@ function trapFocus(event: KeyboardEvent) {
 watch(() => support.open, async (open, wasOpen) => {
   if (open) {
     if (!wasOpen) previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    void load().catch(handleError)
+    void load()
     await nextTick()
     if (alive && support.open && !wasOpen) panel.value?.focus({ preventScroll: true })
   } else if (wasOpen) {
@@ -56,12 +61,15 @@ watch(() => support.open, async (open, wasOpen) => {
   }
 }, { immediate: true })
 watch(() => route.fullPath, navigate)
+useSupportEvents(resume)
 onMounted(() => {
   media.addEventListener('change', updateMedia)
+  document.addEventListener('visibilitychange', resume)
 })
 onBeforeUnmount(() => {
   alive = false
   media.removeEventListener('change', updateMedia)
+  document.removeEventListener('visibilitychange', resume)
 })
 </script>
 
