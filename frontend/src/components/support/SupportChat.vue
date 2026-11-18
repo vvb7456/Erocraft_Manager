@@ -7,7 +7,7 @@ import { useSupportEvents } from '@/composables/useSupportEvents'
 import { useSupportStore } from '@/stores/support'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseTextarea from '@/components/form/BaseTextarea.vue'
-import BaseModal from '@/components/ui/BaseModal.vue'
+import ImageLightbox from '@/components/ui/ImageLightbox.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import MessageText from './MessageText.vue'
@@ -342,10 +342,7 @@ onBeforeUnmount(() => {
       </div>
       <p v-if="sendFailed" class="send-error" role="alert">{{ t('support.sendFailed') }}</p>
     </form>
-    <BaseModal v-model="imageOpen" :title="t('support.image')" size="lg">
-      <span v-if="failedImages.has(selectedImage)" class="image-unavailable" role="img" :aria-label="t('support.image')"><MsIcon name="image_not_supported" size="lg" /></span>
-      <img v-else class="image-lightbox" :src="selectedImage" :alt="t('support.image')" @error="failedImages.add(selectedImage)" />
-    </BaseModal>
+    <ImageLightbox v-model="imageOpen" :src="selectedImage" :alt="t('support.image')" :failed="failedImages.has(selectedImage)" @error="failedImages.add(selectedImage)" />
   </section>
 </template>
 
@@ -396,7 +393,6 @@ onBeforeUnmount(() => {
 .attachment img { height: 44px; width: 52px; object-fit: cover; border-radius: 6px; }
 .attachment span { flex: 1; min-width: 0; font-size: var(--text-xs); color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .send-error { margin: 8px 4px 0; font-size: var(--text-xs); color: var(--red); }
-.image-lightbox { display: block; max-width: 100%; max-height: 72dvh; margin: auto; object-fit: contain; border-radius: 8px; }
 .message-image:focus-visible, .new-messages:focus-visible { outline: 2px solid var(--ac); outline-offset: 3px; }
 @media (pointer: coarse) { .message-input { font-size: 16px; } }
 .chat--workspace .messages { padding-inline: max(var(--sp-6), calc((100% - 880px) / 2)); }

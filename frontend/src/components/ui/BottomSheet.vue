@@ -1,22 +1,43 @@
 <script setup lang="ts">
-import { watch, ref, onUnmounted } from 'vue'
+import { watch, ref, nextTick, onUnmounted } from 'vue'
 import { lockBodyScroll, unlockBodyScroll } from './BaseModal.vue'
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
   title?: string
-}>(), { title: '' })
+  persistent?: boolean
+}>(), {
+  title: '',
+  persistent: false,
+})
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
+const overlayRef = ref<HTMLElement>()
 const inner = ref<HTMLElement>()
+const mouseDownOnOverlay = ref(false)
 
-function close() { emit('update:modelValue', false) }
+function close() {
+  if (props.persistent) return
+  emit('update:modelValue', false)
+}
 
-function onOverlay(e: MouseEvent) {
-  if (e.target === e.currentTarget) close()
+function onOverlayMousedown(e: MouseEvent) {
+  mouseDownOnOverlay.value = e.target === e.currentTarget
+}
+
+function onOverlayClick(e: MouseEvent) {
+  if (e.target === e.currentTarget && mouseDownOnOverlay.value && !props.persistent) close()
+  mouseDownOnOverlay.value = false
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && !props.persistent) {
+    e.stopPropagation()
+    close()
+  }
 }
 
 /* Lock body scroll via the shared BaseModal counter so that closing a
@@ -24,19 +45,32 @@ function onOverlay(e: MouseEvent) {
    prematurely re-enable page scrolling. (Audit FM4.) */
 let isLocked = false
 watch(() => props.modelValue, (open) => {
-  if (open && !isLocked) { lockBodyScroll(); isLocked = true }
-  else if (!open && isLocked) { unlockBodyScroll(); isLocked = false }
-})
+  if (open) {
+    if (!isLocked) { lockBodyScroll(); isLocked = true }
+    nextTick(() => overlayRef.value?.focus({ preventScroll: true }))
+  } else if (isLocked) {
+    unlockBodyScroll()
+    isLocked = false
+  }
+}, { immediate: true })
 onUnmounted(() => { if (isLocked) { unlockBodyScroll(); isLocked = false } })
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="bs">
-      <div v-if="modelValue" class="bs-overlay" @click="onOverlay">
-        <div ref="inner" class="bs-panel" role="dialog" aria-modal="true">
-          <div class="bs-header">
-            <div class="bs-handle" @click="close"><span /></div>
+      <div
+        v-if="modelValue"
+        ref="overlayRef"
+        class="bs-overlay"
+        tabindex="-1"
+        @mousedown="onOverlayMousedown"
+        @click="onOverlayClick"
+        @keydown="onKeydown"
+      >
+        <div ref="inner" class="bs-panel" :class="{ 'bs-panel--persistent': persistent }" role="dialog" aria-modal="true">
+          <div v-if="!persistent || title" class="bs-header">
+            <div v-if="!persistent" class="bs-handle" @click="close"><span /></div>
             <div v-if="title" class="bs-title">{{ title }}</div>
           </div>
           <div class="bs-body">
@@ -57,6 +91,7 @@ onUnmounted(() => { if (isLocked) { unlockBodyScroll(); isLocked = false } })
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  outline: none;
 }
 
 .bs-panel {
@@ -69,6 +104,10 @@ onUnmounted(() => { if (isLocked) { unlockBodyScroll(); isLocked = false } })
   display: flex;
   flex-direction: column;
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+.bs-panel--persistent {
+  padding-top: var(--sp-4);
 }
 
 /* Header is a non-scrolling flex item; only .bs-body scrolls. Avoids

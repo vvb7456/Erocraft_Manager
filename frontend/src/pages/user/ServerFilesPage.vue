@@ -450,37 +450,37 @@ async function onCreateFile() {
     />
 
     <!-- New File modal -->
-    <BaseModal v-model="ops.newFileOpen.value" :title="t('userServers.file.newFile')">
+    <BaseModal v-model="ops.newFileOpen.value" :title="t('userServers.file.newFile')" :persistent="ops.operating.value">
       <BaseInput v-model="ops.newFileName.value" :placeholder="t('userServers.file.fileName')" @keydown.enter="onCreateFile" />
       <p v-if="ops.newFileError.value" class="field-error">{{ ops.newFileError.value }}</p>
       <template #footer>
-        <BaseButton @click="ops.newFileOpen.value = false">{{ t('common.btn.cancel') }}</BaseButton>
-        <BaseButton variant="primary" :disabled="!!ops.newFileError.value || !ops.newFileName.value.trim()" @click="onCreateFile">{{ t('common.btn.confirm') }}</BaseButton>
+        <BaseButton :disabled="ops.operating.value" @click="ops.newFileOpen.value = false">{{ t('common.btn.cancel') }}</BaseButton>
+        <BaseButton variant="primary" :loading="ops.operating.value" :disabled="!!ops.newFileError.value || !ops.newFileName.value.trim()" @click="onCreateFile">{{ t('common.btn.confirm') }}</BaseButton>
       </template>
     </BaseModal>
 
     <!-- New Folder modal -->
-    <BaseModal v-model="ops.newFolderOpen.value" :title="t('userServers.file.newFolder')">
+    <BaseModal v-model="ops.newFolderOpen.value" :title="t('userServers.file.newFolder')" :persistent="ops.operating.value">
       <BaseInput v-model="ops.newFolderName.value" :placeholder="t('userServers.file.folderName')" @keydown.enter="ops.createFolder(refreshTree)" />
       <p v-if="ops.newFolderError.value" class="field-error">{{ ops.newFolderError.value }}</p>
       <template #footer>
-        <BaseButton @click="ops.newFolderOpen.value = false">{{ t('common.btn.cancel') }}</BaseButton>
-        <BaseButton variant="primary" :disabled="!!ops.newFolderError.value || !ops.newFolderName.value.trim()" @click="ops.createFolder(refreshTree)">{{ t('common.btn.confirm') }}</BaseButton>
+        <BaseButton :disabled="ops.operating.value" @click="ops.newFolderOpen.value = false">{{ t('common.btn.cancel') }}</BaseButton>
+        <BaseButton variant="primary" :loading="ops.operating.value" :disabled="!!ops.newFolderError.value || !ops.newFolderName.value.trim()" @click="ops.createFolder(refreshTree)">{{ t('common.btn.confirm') }}</BaseButton>
       </template>
     </BaseModal>
 
     <!-- Rename modal -->
-    <BaseModal v-model="ops.renameOpen.value" :title="t('userServers.file.rename')">
+    <BaseModal v-model="ops.renameOpen.value" :title="t('userServers.file.rename')" :persistent="ops.operating.value">
       <BaseInput v-model="ops.renameTo.value" :placeholder="t('userServers.file.newName')" @keydown.enter="ops.doRename(refreshTree)" />
       <p v-if="ops.renameError.value" class="field-error">{{ ops.renameError.value }}</p>
       <template #footer>
-        <BaseButton @click="ops.renameOpen.value = false">{{ t('common.btn.cancel') }}</BaseButton>
-        <BaseButton variant="primary" :disabled="!!ops.renameError.value || !ops.renameTo.value.trim()" @click="ops.doRename(refreshTree)">{{ t('common.btn.confirm') }}</BaseButton>
+        <BaseButton :disabled="ops.operating.value" @click="ops.renameOpen.value = false">{{ t('common.btn.cancel') }}</BaseButton>
+        <BaseButton variant="primary" :loading="ops.operating.value" :disabled="!!ops.renameError.value || !ops.renameTo.value.trim()" @click="ops.doRename(refreshTree)">{{ t('common.btn.confirm') }}</BaseButton>
       </template>
     </BaseModal>
 
     <!-- Move modal -->
-    <BaseModal v-model="ops.moveOpen.value" :title="t('userServers.file.move')">
+    <BaseModal v-model="ops.moveOpen.value" :title="t('userServers.file.move')" :persistent="ops.operating.value">
       <p class="move-info">{{ ops.moveFrom.value }}</p>
       <p class="move-dest-label">{{ t('userServers.file.moveTo') }}</p>
       <div class="move-select-wrapper">
@@ -498,8 +498,8 @@ async function onCreateFile() {
         </div>
       </div>
       <template #footer>
-        <BaseButton @click="ops.moveOpen.value = false">{{ t('common.btn.cancel') }}</BaseButton>
-        <BaseButton variant="primary" @click="confirmMove">{{ t('common.btn.confirm') }}</BaseButton>
+        <BaseButton :disabled="ops.operating.value" @click="ops.moveOpen.value = false">{{ t('common.btn.cancel') }}</BaseButton>
+        <BaseButton variant="primary" :loading="ops.operating.value" @click="confirmMove">{{ t('common.btn.confirm') }}</BaseButton>
       </template>
     </BaseModal>
   </div>

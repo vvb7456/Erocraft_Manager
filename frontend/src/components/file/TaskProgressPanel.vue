@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useBottomObstruction } from '@/composables/useBottomObstruction'
 import MsIcon from '@/components/ui/MsIcon.vue'
 
 defineOptions({ name: 'TaskProgressPanel' })
+
+const panelRef = ref<HTMLElement | null>(null)
+useBottomObstruction(panelRef)
 
 const props = defineProps<{
   tasks: { name: string; progress: number; status: 'pending' | 'uploading' | 'done' | 'error'; startTime?: number; type?: 'upload' | 'compress' | 'decompress' }[]
@@ -52,7 +56,7 @@ function elapsed(startTime: number | undefined): string {
 
 <template>
   <Transition name="slide-up">
-    <div v-if="tasks.length" class="upload-panel">
+    <div v-if="tasks.length" ref="panelRef" class="upload-panel">
       <div class="upload-panel-header" :class="{ 'upload-panel-header--done': allDone && !hasError, 'upload-panel-header--error': allDone && hasError }">
         <span>
           <MsIcon v-if="allDone && !hasError" name="check_circle" size="xs" class="header-icon--done" />

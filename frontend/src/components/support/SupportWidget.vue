@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.support-widget { --chat-open-width: min(408px, calc(100vw - 48px)); --chat-open-height: min(640px, calc(100dvh - 48px - env(safe-area-inset-bottom))); position: fixed; right: max(24px, env(safe-area-inset-right)); bottom: calc(24px + env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 28px; box-shadow: 0 6px 24px #0003; z-index: 900; transition: width .36s cubic-bezier(.22, 1, .36, 1), height .36s cubic-bezier(.22, 1, .36, 1), border-radius .3s ease, right .36s cubic-bezier(.22, 1, .36, 1), bottom .36s cubic-bezier(.22, 1, .36, 1), box-shadow .3s ease; }
+.support-widget { --widget-bottom: max(calc(24px + env(safe-area-inset-bottom)), calc(var(--bottom-obstruction-h, 0px) + 16px)); --chat-open-width: min(408px, calc(100vw - 48px)); --chat-open-height: max(280px, min(640px, calc(100dvh - var(--widget-bottom) - 24px))); position: fixed; right: max(24px, env(safe-area-inset-right)); bottom: var(--widget-bottom); width: 56px; height: 56px; border-radius: 28px; box-shadow: 0 6px 24px #0003; z-index: 900; transition: width .36s cubic-bezier(.22, 1, .36, 1), height .36s cubic-bezier(.22, 1, .36, 1), border-radius .3s ease, right .36s cubic-bezier(.22, 1, .36, 1), bottom .36s cubic-bezier(.22, 1, .36, 1), box-shadow .3s ease; }
 .support-widget.is-open:not(.is-mobile) { width: var(--chat-open-width); height: var(--chat-open-height); border-radius: 24px; box-shadow: 0 24px 80px #0004, 0 4px 16px #0001; }
 .chat-surface { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; background: var(--ac-solid); transition: background .22s ease; }
 .is-open .chat-surface { background: var(--bg2); }
@@ -114,7 +114,7 @@ onBeforeUnmount(() => {
 .widget-loading, .widget-error { flex: 1; display: flex; align-items: center; justify-content: center; }
 .widget-error { flex-direction: column; gap: 20px; color: var(--t3); }
 .chat-launcher:focus-visible { outline: 2px solid var(--ac); outline-offset: 4px; }
-.is-mobile { right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); width: 52px; height: 52px; border-radius: 26px; }
+.is-mobile { --widget-bottom: max(calc(16px + env(safe-area-inset-bottom)), calc(var(--bottom-obstruction-h, 0px) + 12px)); right: 16px; width: 52px; height: 52px; border-radius: 26px; }
 .chat-header--mobile { padding: max(8px, env(safe-area-inset-top)) 12px 8px; }
 .chat-header--mobile .header-action { width: 40px; height: 40px; }
 @media (prefers-reduced-motion: reduce) { .support-widget, .chat-surface, .chat-launcher { transition: none; } }

@@ -191,7 +191,7 @@ function goServers() {
     :title="t('billing.redeem.modalTitle')"
     icon="redeem"
     size="md"
-    :persistent="submitting"
+    :persistent="submitting || loadingPreview"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="redeem-body">
@@ -348,7 +348,7 @@ function goServers() {
           <BaseButton variant="primary" @click="goServers">{{ t('billing.redeem.goServers') }}</BaseButton>
         </template>
         <template v-else-if="!preview">
-          <BaseButton @click="close">{{ t('common.btn.cancel') }}</BaseButton>
+          <BaseButton :disabled="loadingPreview" @click="close">{{ t('common.btn.cancel') }}</BaseButton>
           <BaseButton variant="primary" :loading="loadingPreview" :disabled="!canPreview" @click="doPreview">
             {{ t('billing.redeem.previewBtn') }}
           </BaseButton>

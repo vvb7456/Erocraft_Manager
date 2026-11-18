@@ -142,6 +142,7 @@ async function save() {
 }
 
 async function close() {
+  if (saving.value) return
   // Guard against accidental dismissal of unsaved edits. (Audit FM5.)
   const current = editorView ? editorView.state.doc.toString() : content.value
   if (open.value && current !== originalContent) {
@@ -179,7 +180,7 @@ defineExpose({ openFile })
                 <MsIcon name="save" size="xs" />
                 {{ t('userServers.file.save') }}
               </BaseButton>
-              <button class="editor-close-btn" @click="close">
+              <button class="editor-close-btn" :disabled="saving" @click="close">
                 <MsIcon name="close" size="sm" />
               </button>
             </div>
@@ -265,9 +266,13 @@ defineExpose({ openFile })
   align-items: center;
 }
 
-.editor-close-btn:hover {
+.editor-close-btn:hover:not(:disabled) {
   color: var(--t1);
   background: var(--bg4);
+}
+.editor-close-btn:disabled {
+  opacity: .35;
+  cursor: not-allowed;
 }
 
 .editor-body {

@@ -66,7 +66,7 @@ function doAlt() {
 
 <template>
   <!-- Mobile: BottomSheet -->
-  <BottomSheet v-if="isMobile" :model-value="modelValue" @update:model-value="close" :title="title">
+  <BottomSheet v-if="isMobile" :model-value="modelValue" @update:model-value="close" :title="title" :persistent="variant === 'danger'">
     <div class="confirm-sheet">
       <p class="confirm-message">{{ message }}</p>
       <label v-if="showDontAsk" class="confirm-dont-ask">
@@ -82,7 +82,7 @@ function doAlt() {
   </BottomSheet>
 
   <!-- Desktop: Modal -->
-  <BaseModal v-else :model-value="modelValue" @update:model-value="close" :title="title" size="sm" :close-on-overlay="false" :footer-align="showDontAsk ? 'between' : 'end'" :z-index="1100">
+  <BaseModal v-else :model-value="modelValue" @update:model-value="close" :title="title" size="sm" :close-on-overlay="false" :close-on-esc="variant !== 'danger'" :show-close="variant !== 'danger'" :footer-align="showDontAsk ? 'between' : 'end'" :z-index="1100">
     <p class="confirm-message">{{ message }}</p>
     <template #footer>
       <label v-if="showDontAsk" class="confirm-dont-ask">

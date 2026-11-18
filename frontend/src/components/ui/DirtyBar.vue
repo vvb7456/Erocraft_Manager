@@ -18,12 +18,16 @@
  *   dirty, saving, errors, errorsLabel, hint, saveText, discardText,
  *   layout ('row'|'stack'), confirmBeforeUnload.
  */
-import { computed, onBeforeUnmount, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useBottomObstruction } from '@/composables/useBottomObstruction'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 
 defineOptions({ name: 'DirtyBar' })
+
+const barRef = ref<HTMLElement | null>(null)
+useBottomObstruction(barRef)
 
 const props = withDefaults(defineProps<{
   dirty: boolean
@@ -74,7 +78,7 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <Transition name="db-slide-up">
-      <div v-if="dirty" class="db" :class="[layout === 'stack' ? 'db--stack' : 'db--row', hasErrors && 'db--invalid']">
+      <div v-if="dirty" ref="barRef" class="db" :class="[layout === 'stack' ? 'db--stack' : 'db--row', hasErrors && 'db--invalid']">
         <div class="db__hint" :class="hasErrors && 'db__hint--error'">
           <slot name="hint" :has-errors="hasErrors" :errors="errors">
             <template v-if="hasErrors">
@@ -109,7 +113,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .db {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 800;
   padding: var(--sp-3) var(--sp-5);
   background: var(--bg3);
   border-top: 1px solid var(--bd);

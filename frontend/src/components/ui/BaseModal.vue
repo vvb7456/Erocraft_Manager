@@ -191,7 +191,7 @@ const footerClass = computed(() => {
                 </div>
               </div>
             </slot>
-            <button v-if="showClose" class="modal-close" @click="close" :aria-label="t('common.btn.close')">
+            <button v-if="showClose" class="modal-close" :disabled="!canClose" @click="close" :aria-label="t('common.btn.close')">
               <MsIcon name="close" />
             </button>
           </div>
@@ -312,7 +312,8 @@ const footerClass = computed(() => {
   justify-content: center;
   flex-shrink: 0;
 }
-.modal-close:hover { color: var(--t1); background: var(--bg3); }
+.modal-close:hover:not(:disabled) { color: var(--t1); background: var(--bg3); }
+.modal-close:disabled { opacity: .35; cursor: not-allowed; }
 
 .modal-body {
   padding: 12px 16px;

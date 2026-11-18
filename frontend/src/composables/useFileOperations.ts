@@ -257,7 +257,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
   }
 
   async function createFolder(onRefreshTree?: () => void) {
-    if (!serverId.value) return
+    if (!serverId.value || operating.value) return
     const name = newFolderName.value.trim()
     const err = validateFileName(name)
     if (err) { toast(t(`userServers.file.validation.${err}`), 'error'); return }
@@ -282,7 +282,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
   }
 
   async function doRename(onRefreshTree?: () => void) {
-    if (!serverId.value) return
+    if (!serverId.value || operating.value) return
     const name = renameTo.value.trim()
     const err = validateFileName(name)
     if (err) { toast(t(`userServers.file.validation.${err}`), 'error'); return }
@@ -308,7 +308,7 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
   }
 
   async function doMove() {
-    if (!serverId.value || !moveTo.value.trim()) return
+    if (!serverId.value || !moveTo.value.trim() || operating.value) return
     // Wings joins `to` under `root` (path.Join(root, to)), so a leading "/"
     // on `to` does NOT mean the server root. Send absolute paths with
     // root="/" so the destination is really volume-absolute.
@@ -540,18 +540,23 @@ export function useFileOperations(serverId: Ref<number | undefined>) {
   }
 
   async function doBatchMove() {
-    if (!serverId.value || !moveTo.value.trim() || !selectedFiles.value.size) return
+    if (!serverId.value || !moveTo.value.trim() || !selectedFiles.value.size || operating.value) return
     const srcDir = currentPath.value.replace(/\/$/, '')
     const destDir = sanitizeMovePath(moveTo.value).replace(/\/$/, '')
-    for (const name of selectedFiles.value) {
-      await post(`/api/user/servers/${serverId.value}/files/rename`, {
-        root: '/',
-        from: `${srcDir}/${name}`,
-        to: `${destDir}/${name}`,
-      })
+    operating.value = true
+    try {
+      for (const name of selectedFiles.value) {
+        await post(`/api/user/servers/${serverId.value}/files/rename`, {
+          root: '/',
+          from: `${srcDir}/${name}`,
+          to: `${destDir}/${name}`,
+        })
+      }
+      moveOpen.value = false
+      void loadFiles().catch(handleError)
+    } finally {
+      operating.value = false
     }
-    moveOpen.value = false
-    void loadFiles().catch(handleError)
   }
 
   // ── Drag & Drop ──
