@@ -172,7 +172,7 @@ const tunnelHostname = computed(() =>
 )
 const serverUrl = computed(() => {
   if (tunnelHostname.value) return `https://${tunnelHostname.value}`
-  return server.value?.address ? `http://${server.value.address}` : null
+  return server.value?.address ? `https://${server.value.address}` : null
 })
 
 // ── Console ──

@@ -210,7 +210,7 @@ function expirationDisplay(s: Server): { date: string; tag: string; color: strin
 }
 
 function openUrl(s: Server) {
-  if (s.address) window.open(`http://${s.address}`, '_blank')
+  if (s.address) window.open(`https://${s.address}`, '_blank')
 }
 
 function openLabel(eggName: string): string {
