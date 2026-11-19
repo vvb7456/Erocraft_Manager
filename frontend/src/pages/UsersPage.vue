@@ -581,14 +581,6 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
         <BaseInput v-model="editForm.email" type="email" />
       </FormField>
     </div>
-    <div class="form-row">
-      <FormField :label="t('users.edit.first_name')" density="compact">
-        <BaseInput v-model="editForm.firstName" />
-      </FormField>
-      <FormField :label="t('users.edit.last_name')" density="compact">
-        <BaseInput v-model="editForm.lastName" />
-      </FormField>
-    </div>
     <FormField :label="t('users.edit.password')" density="compact">
       <SecretInput v-model="editForm.password" :placeholder="t('users.edit.password_hint')" />
     </FormField>

@@ -122,6 +122,10 @@ async function copySecret() {
       :readonly="readonly"
       :disabled="disabled"
       :autocomplete="autocomplete"
+      :inputmode="isPassword ? undefined : 'email'"
+      autocapitalize="off"
+      autocorrect="off"
+      spellcheck="false"
       :class="fieldClasses"
       :style="inputStyle"
       @input="onInput"
@@ -166,6 +170,7 @@ async function copySecret() {
 .secret-input__field--masked {
   -webkit-text-security: disc;
   text-security: disc;
+  ime-mode: inactive;
 }
 
 .secret-input__btn {

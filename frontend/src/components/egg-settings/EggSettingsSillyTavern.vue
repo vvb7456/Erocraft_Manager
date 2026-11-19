@@ -353,6 +353,10 @@ defineExpose({ save, discard, validationErrors })
         <BaseInput
           v-if="!isMultiUser"
           v-model="username"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
         />
         <BaseInput
           v-else

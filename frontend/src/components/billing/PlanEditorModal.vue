@@ -339,6 +339,7 @@ watch(() => props.modelValue, async (open) => {
   if (!open) return
   saveError.value = null
   activeTab.value = 'basic'
+  eggDetailsCache.value.clear()
 
   fetchLlmGroups()
 
@@ -397,14 +398,6 @@ async function loadEggDetail(eggId: number) {
   for (const e of data.eggs) {
     eggDetailsCache.value.set(e.id, e)
   }
-  // Pre-fill startup/docker_image when create-mode and empty.
-  if (props.mode === 'create' && !form.value.startup_command) {
-    const d = eggDetailsCache.value.get(eggId)
-    if (d) {
-      form.value.startup_command = d.startup
-      form.value.docker_image = d.docker_image
-    }
-  }
 }
 
 // ── Egg switch confirmation ──
@@ -420,6 +413,9 @@ async function onNestChange(newNestId: string | number | boolean | (string | num
   }
   form.value.nest_id = v
   form.value.egg_id = null
+  form.value.startup_command = ''
+  form.value.docker_image = ''
+  form.value.docker_image_custom = false
   form.value.env_defaults = {}
   eggVariables.value = []
 }
@@ -436,6 +432,14 @@ async function onEggChange(newEggId: string | number | boolean | (string | numbe
   }
   form.value.egg_id = v
   form.value.env_defaults = {}
+  await loadEggDetail(v).catch(handleError)
+  if (form.value.egg_id !== v) return
+  const d = eggDetailsCache.value.get(v)
+  if (d) {
+    form.value.startup_command = d.startup
+    form.value.docker_image = d.docker_image
+    form.value.docker_image_custom = false
+  }
 }
 
 function resetEnvDefaults() {
