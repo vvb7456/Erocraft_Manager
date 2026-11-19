@@ -29,6 +29,7 @@ import zhAgreements from './locales/zh-CN/agreements.json'
 import zhSupport from './locales/zh-CN/support.json'
 import zhWechat from './locales/zh-CN/wechat.json'
 import zhNotifications from './locales/zh-CN/notifications.json'
+import zhNests from './locales/zh-CN/nests.json'
 
 import enCommon from './locales/en/common.json'
 import enNav from './locales/en/nav.json'
@@ -58,6 +59,7 @@ import enAgreements from './locales/en/agreements.json'
 import enSupport from './locales/en/support.json'
 import enWechat from './locales/en/wechat.json'
 import enNotifications from './locales/en/notifications.json'
+import enNests from './locales/en/nests.json'
 
 function detectLanguage(): string {
   const stored = localStorage.getItem('lang')
@@ -95,6 +97,7 @@ const i18n = createI18n({
       support: zhSupport,
       wechat: zhWechat,
       notifications: zhNotifications,
+      nests: zhNests,
     },
     en: {
       common: enCommon, nav: enNav, dashboard: enDashboard,
@@ -120,6 +123,7 @@ const i18n = createI18n({
       support: enSupport,
       wechat: enWechat,
       notifications: enNotifications,
+      nests: enNests,
     },
   },
 })

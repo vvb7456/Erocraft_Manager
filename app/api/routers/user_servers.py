@@ -8,6 +8,7 @@ import json
 import time
 import uuid
 from datetime import date
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import and_, func, or_, select
@@ -24,6 +25,7 @@ from app.db.models.pterodactyl import ActivityLog, ActivityLogSubject, PteroServ
 from app.db.models.billing import BillingPlan
 from app.db.models.manager import ServerLlmKey
 from app.db.repositories.servers import server_repository
+from app.db.sorting import SortSpec, build_order_by
 from app.services.billing._pricing import remaining_billable_days, upgrade_diff_fen
 from app.schemas.user_servers import (
     PowerActionRequest,
@@ -550,6 +552,14 @@ async def report_user_server_activity(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+_ACTIVITY_SORT_COLUMNS: dict[str, Any] = {
+    "timestamp": ActivityLog.timestamp,
+    "event": ActivityLog.event,
+    "actor": SortSpec(PteroUser.username, nulls_last=True),
+    "ip": ActivityLog.ip,
+}
+
+
 @router.get("/servers/{server_id}/activity", response_model=UserActivityLogsResponse)
 async def list_user_server_activity(
     server: PteroServer = Depends(get_owned_server),
@@ -558,6 +568,8 @@ async def list_user_server_activity(
     per_page: int = Query(default=20, ge=1, le=100),
     event: str | None = Query(default=None, min_length=1),
     include_disabled: bool = Query(default=False),
+    sort_by: Literal["timestamp", "event", "actor", "ip"] | None = Query(default=None),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
 ) -> UserActivityLogsResponse:
     filters = [
         ActivityLogSubject.subject_type == "server",
@@ -579,6 +591,14 @@ async def list_user_server_activity(
     )
     total = int(count_result.scalar_one() or 0)
 
+    order_clauses = build_order_by(
+        sort_by,
+        sort_order,
+        _ACTIVITY_SORT_COLUMNS,
+        default=(ActivityLog.timestamp.desc(), ActivityLog.id.desc()),
+        tie_breakers=(ActivityLog.id,),
+    )
+
     result = await db.execute(
         select(ActivityLog, PteroUser)
         .join(ActivityLogSubject, ActivityLogSubject.activity_log_id == ActivityLog.id)
@@ -590,7 +610,7 @@ async def list_user_server_activity(
             ),
         )
         .where(*filters)
-        .order_by(ActivityLog.timestamp.desc(), ActivityLog.id.desc())
+        .order_by(*order_clauses)
         .offset((page - 1) * per_page)
         .limit(per_page)
     )

@@ -1,15 +1,21 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useFormatDate } from '@/composables/useFormatDate'
+import { useConfirm } from '@/composables/useConfirm'
+import { useToast } from '@/composables/useToast'
+import PageHeaderActions from '@/components/layout/PageHeaderActions.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useServerPagination } from '@/composables/useTablePagination'
 import Badge from '@/components/ui/Badge.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import FormField from '@/components/form/FormField.vue'
@@ -21,25 +27,32 @@ import { notificationCategories, type NotificationAlert } from '@/types/notifica
 const { t } = useI18n()
 const { get, post } = useApiFetch()
 const { formatDateTime } = useFormatDate()
+const { confirm } = useConfirm()
+const { toast } = useToast()
 const router = useRouter()
 const route = useRoute()
 const categories = notificationCategories.filter(c => c !== 'support')
 const categoryFilter = ref(categories.some(c => c === route.query.category) ? String(route.query.category) : 'all')
 const stateFilter = ref('all')
 const search = ref('')
-const debouncedSearch = ref('')
-const page = ref(1)
-const perPage = ref(30)
-const total = ref(0)
 const items = ref<NotificationAlert[]>([])
-const loading = ref(true)
 const failed = ref(false)
 const busy = ref(false)
+const ackAllBusy = ref(false)
 const selected = ref<NotificationAlert | null>(null)
 const detailOpen = ref(false)
 const filterOpen = ref(false)
+const { sortBy, sortOrder, toggleSort } = useTableSort({
+  descColumns: ['created_at', 'severity'],
+})
+const sortColumns = computed(() => [
+  { key: 'created_at', label: t('notifications.center.createdAt') },
+  { key: 'category', label: t('notifications.center.type') },
+  { key: 'title', label: t('notifications.center.alert') },
+  { key: 'severity', label: t('notifications.center.severity') },
+  { key: 'state', label: t('notifications.center.status') },
+])
 const counts = ref<Record<string, number>>({ open: 0, acknowledged: 0, muted: 0 })
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
 const categoryOptions = computed(() => [{ value: 'all', label: t('notifications.center.allCategories') }, ...categories.map(value => ({ value, label: t(`notifications.category.${value}`) }))])
 const stateOptions = computed(() => ['all', 'open', 'acknowledged', 'muted'].map(value => ({ value,
   label: t(`notifications.center.state.${value}`) + (value === 'all' ? '' : ` (${counts.value[value] || 0})`),
@@ -48,46 +61,55 @@ const filters = computed(() => [
   { key: 'category', label: t('notifications.center.notificationType'), modelValue: categoryFilter.value, options: categoryOptions.value },
   { key: 'state', label: t('notifications.center.status'), modelValue: stateFilter.value, options: stateOptions.value },
 ])
-let alive = true
-let requestId = 0
+let appliedSearch = ''
 let timer: ReturnType<typeof setInterval> | undefined
-let searchTimer: ReturnType<typeof setTimeout> | undefined
 
-async function load(background = false) {
-  const request = ++requestId
-  if (!background) loading.value = true
-  const params = new URLSearchParams({ category: categoryFilter.value, state: stateFilter.value, q: debouncedSearch.value,
-    offset: String((page.value - 1) * perPage.value), limit: String(perPage.value) })
-  try {
-    const result = await get<{ items: NotificationAlert[]; total: number; counts: Record<string, number> }>(`/api/admin/notifications/alerts?${params}`, { silent: true })
-    if (!alive || request !== requestId) return
+const {
+  page,
+  perPage,
+  total,
+  totalPages,
+  loading,
+  reload,
+  setPerPage,
+} = useServerPagination(
+  async ({ page: reqPage, perPage: reqPerPage, offset, isCurrent }) => {
+    const q = search.value.trim()
+    appliedSearch = q
+    const params = new URLSearchParams({
+      category: categoryFilter.value,
+      state: stateFilter.value,
+      q,
+      offset: String(offset),
+      limit: String(reqPerPage),
+    })
+    if (sortBy.value) {
+      params.set('sort_by', sortBy.value)
+      params.set('sort_order', sortOrder.value)
+    }
+    const result = await get<{ items: NotificationAlert[]; total: number; counts: Record<string, number> }>(
+      `/api/admin/notifications/alerts?${params}`,
+      { silent: true },
+    )
+    if (!isCurrent()) return null
     failed.value = false
-    total.value = result.total
     counts.value = result.counts
-    if (page.value > totalPages.value) { page.value = totalPages.value; return }
+    if (reqPage > Math.max(1, Math.ceil(result.total / reqPerPage))) return { total: result.total }
     items.value = result.items
     if (detailOpen.value && selected.value) {
       selected.value = result.items.find(item => item.key === selected.value?.key) || selected.value
     }
-  } catch {
-    if (alive && request === requestId) failed.value = true
-  } finally { if (alive && request === requestId) loading.value = false }
-}
-
-watch(search, () => {
-  requestId++
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    const next = search.value.trim()
-    if (next === debouncedSearch.value) void load()
-    else debouncedSearch.value = next
-  }, 250)
-})
-watch([categoryFilter, stateFilter, debouncedSearch, perPage], () => {
-  if (page.value !== 1) page.value = 1
-  else void load()
-})
-watch(page, () => { void load() })
+    return { total: result.total }
+  },
+  {
+    initialPerPage: 30,
+    filters: [categoryFilter, stateFilter, sortBy, sortOrder],
+    search,
+    onError: () => {
+      failed.value = true
+    },
+  },
+)
 
 function setFilter(key: string, value: string | number | boolean) {
   if (key === 'category') categoryFilter.value = String(value)
@@ -102,18 +124,62 @@ async function act(action: string) {
   try {
     if (await post('/api/admin/notifications/alerts/action', { key: selected.value.key, action })) {
       detailOpen.value = false
-      await load()
+      await reload()
     }
   } finally { busy.value = false }
 }
+async function acknowledgeAll() {
+  const openCount = counts.value.open || 0
+  if (openCount <= 0 || ackAllBusy.value) return
+  const ok = await confirm({
+    title: t('notifications.center.acknowledgeAllTitle'),
+    message: t('notifications.center.acknowledgeAllConfirm', { count: openCount }),
+    confirmText: t('notifications.center.acknowledgeAll'),
+  })
+  if (!ok) return
+  ackAllBusy.value = true
+  try {
+    const res = await post<{ ok: boolean; acknowledged_count: number }>(
+      '/api/admin/notifications/alerts/acknowledge-all',
+      { category: 'all' },
+    )
+    if (res) {
+      toast(t('notifications.center.acknowledgeAllSuccess', { count: res.acknowledged_count }), 'success')
+      await reload()
+    }
+  } finally { ackAllBusy.value = false }
+}
 onMounted(() => {
-  void load()
-  timer = setInterval(() => { if (document.visibilityState === 'visible' && !loading.value && !busy.value && !detailOpen.value && search.value.trim() === debouncedSearch.value) void load(true) }, 30000)
+  void reload()
+  timer = setInterval(() => {
+    if (
+      document.visibilityState === 'visible' &&
+      !loading.value &&
+      !busy.value &&
+      !ackAllBusy.value &&
+      !detailOpen.value &&
+      search.value.trim() === appliedSearch
+    ) {
+      void reload({ silent: true })
+    }
+  }, 30000)
 })
-onBeforeUnmount(() => { alive = false; requestId++; if (timer) clearInterval(timer); if (searchTimer) clearTimeout(searchTimer) })
+onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 </script>
 
 <template>
+  <PageHeaderActions>
+    <BaseButton
+      size="sm"
+      variant="primary"
+      :disabled="(counts.open || 0) <= 0 || ackAllBusy"
+      :loading="ackAllBusy"
+      @click="acknowledgeAll"
+    >
+      <MsIcon name="done_all" size="xs" /> {{ t('notifications.center.acknowledgeAll') }}
+    </BaseButton>
+  </PageHeaderActions>
+
   <SectionToolbar>
     <template #start>
       <div class="tb-search-row">
@@ -129,13 +195,13 @@ onBeforeUnmount(() => { alive = false; requestId++; if (timer) clearInterval(tim
       </div>
     </template>
   </SectionToolbar>
-  <MobileFilterSheet v-model:open="filterOpen" :sort-columns="[]" sort-by="" sort-order="asc" :filters="filters" @update:filter="setFilter" />
+  <MobileFilterSheet v-model:open="filterOpen" :sort-columns="sortColumns" :sort-by="sortBy" :sort-order="sortOrder" :filters="filters" @sort="toggleSort" @update:filter="setFilter" />
 
-  <EmptyState v-if="failed && !loading" icon="error_outline" :title="t('notifications.center.loadFailed')"><BaseButton size="sm" @click="load()">{{ t('notifications.reload') }}</BaseButton></EmptyState>
+  <EmptyState v-if="failed && !loading" icon="error_outline" :title="t('notifications.center.loadFailed')"><BaseButton size="sm" @click="reload()">{{ t('notifications.reload') }}</BaseButton></EmptyState>
   <div v-else class="alerts-table">
   <DataTable :items="items" :page="page" :total-pages="totalPages" :per-page="perPage" :max-per-page="100" :loading="loading"
     row-key="key" empty-icon="check_circle" :empty-text="t('notifications.center.noAlerts')" :per-page-label="t('notifications.center.perPage')"
-    @update:page="page = $event" @update:per-page="perPage = $event">
+    @update:page="page = $event" @update:per-page="setPerPage">
     <template #colgroup>
       <colgroup>
         <col class="col-time" />
@@ -148,12 +214,12 @@ onBeforeUnmount(() => { alive = false; requestId++; if (timer) clearInterval(tim
       </colgroup>
     </template>
     <template #header>
-      <th>{{ t('notifications.center.createdAt') }}</th>
-      <th>{{ t('notifications.center.type') }}</th>
-      <th>{{ t('notifications.center.alert') }}</th>
+      <SortTh col="created_at" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('notifications.center.createdAt') }}</SortTh>
+      <SortTh col="category" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('notifications.center.type') }}</SortTh>
+      <SortTh col="title" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('notifications.center.alert') }}</SortTh>
       <th>{{ t('notifications.center.description') }}</th>
-      <th>{{ t('notifications.center.severity') }}</th>
-      <th>{{ t('notifications.center.status') }}</th>
+      <SortTh col="severity" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('notifications.center.severity') }}</SortTh>
+      <SortTh col="state" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('notifications.center.status') }}</SortTh>
       <th class="alert-action">{{ t('notifications.center.actions') }}</th>
     </template>
     <template #row="{ item }">
@@ -165,7 +231,13 @@ onBeforeUnmount(() => { alive = false; requestId++; if (timer) clearInterval(tim
       <td class="alert-description"><span class="alert-summary" :title="item.body">{{ item.body || '—' }}</span></td>
       <td><Badge :color="severityColor(item.severity)">{{ t(`notifications.center.alertSeverity.${item.severity}`) }}</Badge></td>
       <td><Badge :color="stateColor(item.state)">{{ t(`notifications.center.state.${item.state}`) }}</Badge></td>
-      <td class="alert-action"><BaseButton size="sm" @click="showDetails(item)">{{ t('notifications.center.handle') }}</BaseButton></td>
+      <td class="alert-action">
+        <div class="action-group">
+          <BaseButton size="sm" @click="showDetails(item)">
+            <MsIcon name="edit" size="xs" /> {{ t('common.btn.edit') }}
+          </BaseButton>
+        </div>
+      </td>
     </template>
     <template #card="{ item }">
       <CardTap @tap="showDetails(item)">
@@ -196,20 +268,21 @@ onBeforeUnmount(() => { alive = false; requestId++; if (timer) clearInterval(tim
 
 <style scoped>
 .alerts-table :deep(.dt-table) { table-layout: fixed; min-width: 1040px; }
-.col-time { width: 16%; }
-.col-category { width: 12%; }
+.col-time { width: 14%; }
+.col-category { width: 11%; }
 .col-content { width: 19%; }
-.col-description { width: 28%; }
-.col-severity { width: 8%; }
-.col-state { width: 9%; }
-.col-action { width: 8%; }
+.col-description { width: 25%; }
+.col-severity { width: 9%; }
+.col-state { width: 10%; }
+.col-action { width: 12%; }
 .alerts-table :deep(.alert-cell), .alerts-table :deep(.alert-category), .alerts-table :deep(.alert-description) { white-space: normal; }
 .alert-category, .alert-description { color: var(--t2); }
 .alert-summary { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: normal; line-height: 1.5; }
 .alert-link { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; border: 0; padding: 0; background: none; color: var(--t1); font: inherit; font-weight: 500; line-height: 1.5; text-align: left; cursor: pointer; overflow-wrap: anywhere; white-space: normal; }
 .alert-link:hover { color: var(--ac); }
-.alerts-table :deep(.alert-time) { color: var(--t2); font-variant-numeric: tabular-nums; }
-.alerts-table :deep(.alert-action) { text-align: right; }
+.alerts-table :deep(.alert-time) { color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.alerts-table :deep(.alert-action) { white-space: normal; }
+.action-group { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .alert-description { font-size: .82rem; }
 .card-heading, .card-meta { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
 .card-title { margin: var(--sp-2) 0; font-size: var(--text-base); color: var(--t1); overflow-wrap: anywhere; }

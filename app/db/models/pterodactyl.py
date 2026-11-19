@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import bcrypt
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -18,6 +18,49 @@ if TYPE_CHECKING:
 
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def parse_json_str_list(raw: str | None, *, strip_empty: bool = False) -> list[str] | None:
+    if raw is None:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, list):
+        if strip_empty:
+            return [str(item) for item in parsed if str(item).strip()]
+        return [str(item) for item in parsed]
+    return None
+
+
+def parse_egg_docker_images(raw: str | None, *, accept_list: bool = False) -> dict[str, str]:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    if isinstance(parsed, dict):
+        return {str(k): str(v) for k, v in parsed.items() if isinstance(v, str)}
+    if accept_list and isinstance(parsed, list):
+        return {str(v): str(v) for v in parsed if v}
+    return {}
+
+
+mount_server = Table(
+    "mount_server",
+    Base.metadata,
+    Column("server_id", Integer, ForeignKey("servers.id", ondelete="CASCADE", onupdate="CASCADE"), primary_key=True),
+    Column("mount_id", Integer, ForeignKey("mounts.id", ondelete="CASCADE", onupdate="CASCADE"), primary_key=True),
+)
+
+mount_node = Table(
+    "mount_node",
+    Base.metadata,
+    Column("node_id", Integer, ForeignKey("nodes.id", ondelete="CASCADE", onupdate="CASCADE"), primary_key=True),
+    Column("mount_id", Integer, ForeignKey("mounts.id", ondelete="CASCADE", onupdate="CASCADE"), primary_key=True),
+)
 
 
 class PteroUser(Base):
@@ -82,6 +125,16 @@ class PteroUser(Base):
         return f"{self.name_first or ''} {self.name_last or ''}".strip()
 
 
+class Location(Base):
+    __tablename__ = "locations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    short: Mapped[str] = mapped_column(String(191), unique=True, nullable=False)
+    long: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class PanelNode(Base):
     __tablename__ = "nodes"
 
@@ -90,7 +143,7 @@ class PanelNode(Base):
     public: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     name: Mapped[str] = mapped_column(String(191), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    location_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    location_id: Mapped[int] = mapped_column(ForeignKey("locations.id"), nullable=False)
     fqdn: Mapped[str] = mapped_column(String(191), nullable=False)
     scheme: Mapped[str] = mapped_column(String(191), nullable=False, default="https")
     behind_proxy: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -108,7 +161,9 @@ class PanelNode(Base):
     created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    location: Mapped[Location] = relationship("Location")
     servers: Mapped[list["PteroServer"]] = relationship("PteroServer", back_populates="node")
+    mounts: Mapped[list["Mount"]] = relationship("Mount", secondary=mount_node)
 
 
 class Nest(Base):
@@ -128,28 +183,86 @@ class Egg(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
-    nest_id: Mapped[int | None] = mapped_column(ForeignKey("nests.id"), nullable=True)
+    nest_id: Mapped[int] = mapped_column(ForeignKey("nests.id", ondelete="CASCADE"), nullable=False)
     author: Mapped[str] = mapped_column(String(191), nullable=False)
     name: Mapped[str] = mapped_column(String(191), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    features: Mapped[str | None] = mapped_column(Text, nullable=True)
     docker_images: Mapped[str | None] = mapped_column(Text, nullable=True)
+    file_denylist: Mapped[str | None] = mapped_column(Text, nullable=True)
+    update_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    config_files: Mapped[str | None] = mapped_column(Text, nullable=True)
+    config_startup: Mapped[str | None] = mapped_column(Text, nullable=True)
+    config_logs: Mapped[str | None] = mapped_column(Text, nullable=True)
+    config_stop: Mapped[str | None] = mapped_column(String(191), nullable=True)
+    config_from: Mapped[int | None] = mapped_column(ForeignKey("eggs.id", ondelete="SET NULL"), nullable=True)
     startup: Mapped[str | None] = mapped_column(Text, nullable=True)
+    script_container: Mapped[str] = mapped_column(String(191), nullable=False, default="alpine:3.4")
+    copy_script_from: Mapped[int | None] = mapped_column(ForeignKey("eggs.id", ondelete="SET NULL"), nullable=True)
+    script_entry: Mapped[str] = mapped_column(String(191), nullable=False, default="ash")
+    script_is_privileged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    script_install: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    force_outgoing_ip: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     @property
     def docker_image(self) -> str:
-        if not self.docker_images:
-            return ""
-        try:
-            images = json.loads(self.docker_images)
-        except json.JSONDecodeError:
-            return ""
-        if isinstance(images, dict):
-            for value in images.values():
-                if isinstance(value, str) and value:
-                    return value
-        return ""
+        return next(
+            (value for value in parse_egg_docker_images(self.docker_images).values() if value),
+            "",
+        )
+
+    def resolve_config_files(self, parent: Egg | None = None) -> str | None:
+        if self.config_files is not None or self.config_from is None:
+            return self.config_files
+        return parent.config_files if parent is not None else None
+
+    def resolve_config_startup(self, parent: Egg | None = None) -> str | None:
+        if self.config_startup is not None or self.config_from is None:
+            return self.config_startup
+        return parent.config_startup if parent is not None else None
+
+    def resolve_config_logs(self, parent: Egg | None = None) -> str | None:
+        if self.config_logs is not None or self.config_from is None:
+            return self.config_logs
+        return parent.config_logs if parent is not None else None
+
+    def resolve_config_stop(self, parent: Egg | None = None) -> str | None:
+        if self.config_stop is not None or self.config_from is None:
+            return self.config_stop
+        return parent.config_stop if parent is not None else None
+
+    def resolve_features(self, parent: Egg | None = None) -> list[str] | None:
+        if self.features is not None or self.config_from is None:
+            return parse_json_str_list(self.features)
+        return parse_json_str_list(parent.features) if parent is not None else None
+
+    def resolve_file_denylist(self, parent: Egg | None = None) -> list[str] | None:
+        # Matches Egg.php:getInheritFileDenylistAttribute — unconditionally takes
+        # parent's file_denylist whenever config_from is set, ignoring child value.
+        if self.config_from is None:
+            return parse_json_str_list(self.file_denylist)
+        return parse_json_str_list(parent.file_denylist) if parent is not None else None
+
+    def resolve_script_install(self, parent: Egg | None = None) -> str | None:
+        if self.script_install is not None or self.copy_script_from is None:
+            return self.script_install
+        return parent.script_install if parent is not None else None
+
+    def resolve_script_entry(self, parent: Egg | None = None) -> str:
+        # Matches Egg.php:getCopyScriptEntryAttribute — unconditionally takes
+        # parent's script_entry whenever copy_script_from is set.
+        if self.copy_script_from is None:
+            return self.script_entry
+        return parent.script_entry if parent is not None else self.script_entry
+
+    def resolve_script_container(self, parent: Egg | None = None) -> str:
+        # Matches Egg.php:getCopyScriptContainerAttribute — unconditionally takes
+        # parent's script_container whenever copy_script_from is set.
+        if self.copy_script_from is None:
+            return self.script_container
+        return parent.script_container if parent is not None else self.script_container
 
 
 class EggVariable(Base):
@@ -253,6 +366,7 @@ class PteroServer(Base):
         lazy="selectin",
     )
     egg: Mapped[Egg] = relationship("Egg", lazy="joined")
+    mounts: Mapped[list["Mount"]] = relationship("Mount", secondary=mount_server)
 
     @property
     def is_suspended(self) -> bool:
@@ -336,12 +450,76 @@ class Backup(Base):
 
     __tablename__ = "backups"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id"), nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), nullable=False)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
-    name: Mapped[str] = mapped_column(String(191), nullable=False)
+    upload_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_successful: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    name: Mapped[str] = mapped_column(String(191), nullable=False)
+    ignored_files: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    disk: Mapped[str] = mapped_column(String(191), nullable=False, default="wings")
+    checksum: Mapped[str | None] = mapped_column(String(191), nullable=True)
+    bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class UserSshKey(Base):
+    __tablename__ = "user_ssh_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(191), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(191), nullable=False)
+    public_key: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Subuser(Base):
+    __tablename__ = "subusers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), nullable=False)
+    permissions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    @property
+    def permission_list(self) -> list[str]:
+        return parse_json_str_list(self.permissions) or []
+
+
+class ServerTransfer(Base):
+    __tablename__ = "server_transfers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), nullable=False)
+    successful: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    old_node: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_node: Mapped[int] = mapped_column(Integer, nullable=False)
+    old_allocation: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_allocation: Mapped[int] = mapped_column(Integer, nullable=False)
+    old_additional_allocations: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_additional_allocations: Mapped[str | None] = mapped_column(Text, nullable=True)
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Mount(Base):
+    __tablename__ = "mounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(191), unique=True, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(191), nullable=False)
+    target: Mapped[str] = mapped_column(String(191), nullable=False)
+    read_only: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    user_mountable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

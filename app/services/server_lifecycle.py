@@ -81,6 +81,7 @@ async def update_user(
     last_name: str,
     password: str | None = None,
     language: str | None = None,
+    root_admin: bool | None = None,
 ) -> None:
     try:
         await panel_db.update_user(
@@ -92,6 +93,7 @@ async def update_user(
             last_name=last_name,
             password=password,
             language=language,
+            root_admin=root_admin,
         )
     except PanelDBError as exc:
         raise LifecycleError(str(exc)) from exc

@@ -18,6 +18,8 @@ from app.api.routers.admin_hosts_allocations import router as admin_hosts_alloca
 from app.api.routers.admin_hosts_wings import router as admin_hosts_wings_router
 from app.api.routers.admin_hosts_tunnel import router as admin_hosts_tunnel_router
 from app.api.routers.admin_llm_settings import router as admin_llm_settings_router
+from app.api.routers.admin_nests_eggs import router as admin_nests_eggs_router
+from app.api.routers.admin_nodes_locations import router as admin_nodes_locations_router
 from app.api.routers.admin_server_detail import router as admin_server_detail_router
 from app.api.routers.admin_server_llm import router as admin_server_llm_router
 from app.api.routers.billing_webhook import router as billing_webhook_router
@@ -46,6 +48,7 @@ from app.api.routers.users import router as users_router
 from app.api.routers.support import router as support_router
 from app.api.routers.notification_center import router as notification_center_router
 from app.api.routers.miniprogram import router as miniprogram_router
+from app.api.routers.wings_remote import router as wings_remote_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -64,6 +67,8 @@ api_router.include_router(admin_hosts_allocations_router)
 api_router.include_router(admin_hosts_wings_router)
 api_router.include_router(admin_hosts_tunnel_router)
 api_router.include_router(admin_llm_settings_router)
+api_router.include_router(admin_nests_eggs_router)
+api_router.include_router(admin_nodes_locations_router)
 api_router.include_router(admin_server_detail_router)
 api_router.include_router(admin_server_llm_router)
 api_router.include_router(billing_webhook_router)
@@ -92,5 +97,6 @@ api_router.include_router(users_router)
 api_router.include_router(support_router)
 api_router.include_router(notification_center_router)
 api_router.include_router(miniprogram_router)
+api_router.include_router(wings_remote_router)
 
 __all__ = ["api_router"]

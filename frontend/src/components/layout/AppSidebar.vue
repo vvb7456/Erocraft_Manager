@@ -56,6 +56,7 @@ const groups = computed<NavGroup[]>(() => isUserLayout.value ? [
   ] },
   { label: t('nav.infrastructure'), items: [
     { page: 'hosts', icon: 'dvr', labelKey: 'hosts.title' },
+    { page: 'nests', icon: 'deployed_code', labelKey: 'nav.nests' },
     { page: 'certificates', icon: 'workspace_premium', labelKey: 'certificates.title' },
   ] },
   { label: t('nav.system'), items: [
@@ -67,6 +68,7 @@ const groups = computed<NavGroup[]>(() => isUserLayout.value ? [
 const currentPage = computed(() => {
   const name = String(route.name || '')
   if (name.startsWith('host-')) return 'hosts'
+  if (name.startsWith('nest-') || name.startsWith('egg-')) return 'nests'
   if (name.startsWith('admin-server-')) return 'servers'
   if (name.startsWith('server-')) return 'user-servers'
   return name

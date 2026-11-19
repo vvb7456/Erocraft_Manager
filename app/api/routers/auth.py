@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from app.core.api_errors import ApiError
 
@@ -39,7 +40,7 @@ async def login(
         raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, "auth.credentials_required")
 
     user = await user_repository.get_by_username_or_email(db, username)
-    if not user or not user.check_password(password):
+    if not user or not await asyncio.to_thread(user.check_password, password):
         # If the user can't be found at all, check whether they're just
         # awaiting email verification. Pending registrations live in
         # ``manager_pending_registrations`` and only become real ``PteroUser``

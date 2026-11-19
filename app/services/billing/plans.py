@@ -23,6 +23,7 @@ admin-only. Saving a plan validates that:
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import select
@@ -194,6 +195,8 @@ async def _validate_env_defaults(
     db: AsyncSession,
     egg_id: int,
     env_defaults: dict[str, Any],
+    *,
+    egg_variables: Sequence[EggVariable] | None = None,
 ) -> dict[str, Any]:
     """Validate ``env_defaults`` against the egg's variable schema.
 
@@ -206,14 +209,17 @@ async def _validate_env_defaults(
 
     Returns the normalized dict (string-cast values, only declared keys).
     """
-    rows = (
-        await db.execute(
-            select(EggVariable.env_variable, EggVariable.rules).where(
-                EggVariable.egg_id == egg_id
+    if egg_variables is None:
+        rows = (
+            await db.execute(
+                select(EggVariable.env_variable, EggVariable.rules).where(
+                    EggVariable.egg_id == egg_id
+                )
             )
-        )
-    ).all()
-    declared = {row.env_variable: row.rules for row in rows}
+        ).all()
+        declared = {row.env_variable: row.rules for row in rows}
+    else:
+        declared = {var.env_variable: var.rules for var in egg_variables}
     provided = dict(env_defaults or {})
 
     unknown = set(provided.keys()) - set(declared.keys())

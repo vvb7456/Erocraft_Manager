@@ -20,10 +20,11 @@
   },
   "role": {
     "admin": "管理员",
-    "user": "普通用户"
+    "user": "普通用户",
+    "root_admin": "系统管理员",
+    "root_admin_hint": "开启后该用户可登录管理后台并管理全部资源与支付网关。"
   },
   "action": {
-    "edit": "编辑",
     "delete": "删除",
     "create": "创建用户"
   },
@@ -45,6 +46,7 @@
     "password": "新密码",
     "password_hint": "留空则不修改密码",
     "language": "默认语言",
+    "self_demote_disabled": "不能取消当前登录管理员自身的管理员权限。",
     "success": "用户已更新"
   },
   "confirm": {

@@ -18,6 +18,9 @@ import PageHeaderActions from '@/components/layout/PageHeaderActions.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useServerPagination } from '@/composables/useTablePagination'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
@@ -26,6 +29,7 @@ import CardKV from '@/components/ui/CardKV.vue'
 import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import CreateAllocationsModal from '@/components/hosts/CreateAllocationsModal.vue'
+import AllocationEditModal from '@/components/hosts/AllocationEditModal.vue'
 
 import type { HostDetail } from '@/types/host'
 
@@ -46,18 +50,16 @@ interface AllocationOut {
   notes: string | null
   server: ServerBrief | null
 }
-interface SummaryDTO { total: number; assigned: number; unassigned: number }
 interface ListResponse {
   items: AllocationOut[]
   page: number
   per_page: number
   total: number
-  summary: SummaryDTO
 }
 
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
-const { get, raw } = useApiFetch()
+const { get, raw, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
 
@@ -65,17 +67,8 @@ const host = inject<Ref<HostDetail | null>>('hostDetail')!
 const hostId = computed(() => host.value?.id ?? null)
 const isWings = computed(() => host.value?.kind === 'wings_node')
 
-// ── List state ──
-// Use a separate listLoading ref so it isn't shared with delete/create
-// HTTP calls (useApiFetch.loading is shared across all requests).
 const items = ref<AllocationOut[]>([])
-const summary = ref<SummaryDTO>({ total: 0, assigned: 0, unassigned: 0 })
-const total = ref(0)
-const page = ref(1)
-const perPage = ref(20)
-const listLoading = ref(false)
 
-// ── Filters ──
 type AssignedFilter = 'all' | 'assigned' | 'unassigned'
 const filterAssigned = ref<AssignedFilter>('all')
 const searchTerm = ref('')
@@ -86,8 +79,17 @@ const filterOptions = computed(() => [
   { value: 'unassigned', label: t('hosts.allocations.filter.unassigned') },
 ])
 
-// ── Mobile filter sheet ──
 const mobileFilterOpen = ref(false)
+const { sortBy, sortOrder, toggleSort } = useTableSort({
+  defaultBy: 'ip',
+  defaultOrder: 'asc',
+})
+const sortColumns = computed(() => [
+  { key: 'ip', label: t('hosts.allocations.columns.ip') },
+  { key: 'alias', label: t('hosts.allocations.columns.alias') },
+  { key: 'port', label: t('hosts.allocations.columns.port') },
+  { key: 'server', label: t('hosts.allocations.columns.server') },
+])
 const filterGroups = computed(() => [
   {
     key: 'assigned',
@@ -99,11 +101,54 @@ const filterGroups = computed(() => [
 function onMobileFilter(groupKey: string, value: string | number | boolean) {
   if (groupKey === 'assigned') {
     filterAssigned.value = String(value) as AssignedFilter
-    page.value = 1
   }
 }
 
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
+const {
+  page,
+  perPage,
+  total,
+  totalPages,
+  loading: listLoading,
+  reload,
+  setPerPage,
+  resetStateWithoutFetch,
+} = useServerPagination(
+  async ({ page: reqPage, perPage: reqPerPage, isCurrent }) => {
+    if (!hostId.value) return null
+    const params = new URLSearchParams()
+    if (filterAssigned.value === 'assigned')   params.set('assigned', 'true')
+    if (filterAssigned.value === 'unassigned') params.set('assigned', 'false')
+    if (searchTerm.value.trim()) params.set('search', searchTerm.value.trim())
+    params.set('page', String(reqPage))
+    params.set('per_page', String(reqPerPage))
+    if (sortBy.value) {
+      params.set('sort_by', sortBy.value)
+      params.set('sort_order', sortOrder.value)
+    }
+    const data = await get<ListResponse>(
+      `/api/admin/hosts/${hostId.value}/allocations?${params.toString()}`,
+    )
+    if (!data || !isCurrent()) return null
+    items.value = data.items
+    const visible = new Set(data.items.filter(i => !i.server).map(i => i.id))
+    const next = new Set<number>()
+    selectedIds.value.forEach(id => { if (visible.has(id)) next.add(id) })
+    selectedIds.value = next
+    return { total: data.total }
+  },
+  {
+    initialPerPage: 20,
+    enabled: () => !!hostId.value && isWings.value,
+    filters: [filterAssigned, sortBy, sortOrder],
+    search: searchTerm,
+    onError: handleError,
+  },
+)
+
+function load(silent = false) {
+  return reload({ silent })
+}
 
 // ── Selection (multi-select via custom checkbox column) ──
 // Only "free" allocations (server === null) can be selected for delete.
@@ -135,54 +180,37 @@ function invertSelection() {
   selectedIds.value = new Set(selectableIds.value.filter(id => !selectedIds.value.has(id)))
 }
 
-// ── Modal ──
+// ── Modals ──
 const createOpen = ref(false)
+const editOpen = ref(false)
+const editingAllocation = ref<AllocationOut | null>(null)
 
-// ── Loaders ──
-async function load(silent = false) {
-  if (!hostId.value) return
-  if (!silent) listLoading.value = true
-  try {
-    const params = new URLSearchParams()
-    if (filterAssigned.value === 'assigned')   params.set('assigned', 'true')
-    if (filterAssigned.value === 'unassigned') params.set('assigned', 'false')
-    if (searchTerm.value.trim()) params.set('search', searchTerm.value.trim())
-    params.set('page', String(page.value))
-    params.set('per_page', String(perPage.value))
-    const data = await get<ListResponse>(
-      `/api/admin/hosts/${hostId.value}/allocations?${params.toString()}`,
-    )
-    if (data) {
-      items.value = data.items
-      summary.value = data.summary
-      total.value = data.total
-      // Drop any selection that no longer references a visible row.
-      const visible = new Set(data.items.filter(i => !i.server).map(i => i.id))
-      const next = new Set<number>()
-      selectedIds.value.forEach(id => { if (visible.has(id)) next.add(id) })
-      selectedIds.value = next
-    }
-  } finally {
-    if (!silent) listLoading.value = false
-  }
+function openEdit(a: AllocationOut) {
+  editingAllocation.value = a
+  editOpen.value = true
 }
 
-// Reset page on filter/search change.
-watch([filterAssigned, searchTerm], () => {
-  page.value = 1
-  return load()
+function onUpdated(updated: AllocationOut) {
+  const idx = items.value.findIndex(item => item.id === updated.id)
+  if (idx >= 0) items.value[idx] = updated
+  else void load(true)
+}
+
+watch(hostId, (id, prev) => {
+  if (id && id !== prev && isWings.value) {
+    resetStateWithoutFetch()
+    void load()
+  }
 })
-watch([page, perPage], () => load())
-watch(hostId, (id) => { if (id) return load() })
 
 onMounted(() => {
-  // Allocations are wings-only; redirect away when host is not a wings node.
-  // Host detail may still be loading; the watcher below handles late arrival.
   if (host.value && !isWings.value) {
     router.replace({ name: 'host-overview', params: { id: String(host.value.id) } })
     return
   }
-  if (hostId.value) return load()
+  if (hostId.value && isWings.value) {
+    void load()
+  }
 })
 
 // React when the host detail finishes loading after this pane mounts.
@@ -296,7 +324,6 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
             v-model="searchTerm"
             :placeholder="t('hosts.allocations.search.placeholder')"
             class="tb-search"
-            @update:modelValue="page = 1"
           />
           <button
             class="tb-filter-btn"
@@ -318,7 +345,6 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
             :prefix="t('hosts.allocations.filter.label') + ': '"
             size="sm"
             fit
-            @update:modelValue="page = 1"
           />
         </div>
       </template>
@@ -329,10 +355,11 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
 
     <MobileFilterSheet
       v-model:open="mobileFilterOpen"
-      :sort-columns="[]"
-      :sort-by="''"
-      :sort-order="'asc'"
+      :sort-columns="sortColumns"
+      :sort-by="sortBy"
+      :sort-order="sortOrder"
       :filters="filterGroups"
+      @sort="toggleSort"
       @update:filter="onMobileFilter"
     />
 
@@ -347,7 +374,7 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
       :empty-icon="emptyIcon"
       :empty-text="emptyText"
       @update:page="page = $event"
-      @update:per-page="perPage = $event; page = 1"
+      @update:per-page="setPerPage"
     >
       <template #header>
         <th class="col-check">
@@ -358,10 +385,10 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
             :aria-label="t('hosts.allocations.columns.select')"
           />
         </th>
-        <th class="col-ip">{{ t('hosts.allocations.columns.ip') }}</th>
-        <th class="col-alias">{{ t('hosts.allocations.columns.alias') }}</th>
-        <th class="col-port">{{ t('hosts.allocations.columns.port') }}</th>
-        <th class="col-server">{{ t('hosts.allocations.columns.server') }}</th>
+        <SortTh class="col-ip" col="ip" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.allocations.columns.ip') }}</SortTh>
+        <SortTh class="col-alias" col="alias" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.allocations.columns.alias') }}</SortTh>
+        <SortTh class="col-port" col="port" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.allocations.columns.port') }}</SortTh>
+        <SortTh class="col-server" col="server" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.allocations.columns.server') }}</SortTh>
         <th class="col-notes">{{ t('hosts.allocations.columns.notes') }}</th>
         <th class="col-actions">{{ t('hosts.allocations.columns.actions') }}</th>
       </template>
@@ -405,15 +432,24 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
           <span class="notes-text">{{ a.notes || '—' }}</span>
         </td>
         <td class="col-actions">
-          <BaseButton
-            size="sm"
-            variant="danger"
-            :disabled="!!a.server"
-            :title="a.server ? t('hosts.allocations.delete.inUse', { port: a.port }) : t('hosts.allocations.actions.delete')"
-            @click.stop="deleteOne(a)"
-          >
-            <MsIcon name="delete" size="xs" />
-          </BaseButton>
+          <div class="action-group">
+            <BaseButton
+              size="sm"
+              variant="default"
+              @click.stop="openEdit(a)"
+            >
+              <MsIcon name="edit" size="xs" /> {{ t('common.btn.edit') }}
+            </BaseButton>
+            <BaseButton
+              size="sm"
+              variant="danger"
+              :disabled="!!a.server"
+              :title="a.server ? t('hosts.allocations.delete.inUse', { port: a.port }) : undefined"
+              @click.stop="deleteOne(a)"
+            >
+              <MsIcon name="delete" size="xs" /> {{ t('hosts.allocations.actions.delete') }}
+            </BaseButton>
+          </div>
         </td>
       </template>
 
@@ -449,6 +485,14 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
           <div class="card-actions">
             <BaseButton
               size="sm"
+              variant="default"
+              @click.stop="openEdit(a)"
+            >
+              <MsIcon name="edit" size="xs" />
+              {{ t('common.btn.edit') }}
+            </BaseButton>
+            <BaseButton
+              size="sm"
               variant="danger"
               :disabled="!!a.server"
               @click.stop="deleteOne(a)"
@@ -468,6 +512,14 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
       :host-id="hostId"
       :default-alias="host?.hostname || ''"
       @created="onCreated"
+    />
+
+    <AllocationEditModal
+      v-if="hostId"
+      v-model="editOpen"
+      :host-id="hostId"
+      :allocation="editingAllocation"
+      @updated="onUpdated"
     />
   </div>
 </template>
@@ -491,18 +543,27 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
 
 
 /* ── Table cells ── */
-.col-check { width: 36px; text-align: center !important; padding-right: 0 !important; }
-.col-ip    { width: 130px; }
-.col-alias { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
-.col-port  { width: 150px; }
-.col-server { min-width: 200px; }
-.col-notes { color: var(--t2); max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
-.col-actions { width: 60px; text-align: right; }
+:deep(.dt-table)    { min-width: 980px; }
+:deep(.col-check)   { width: 40px; text-align: center !important; padding-right: 0 !important; }
+:deep(.col-ip)      { width: 136px; }
+:deep(.col-alias)   { width: 16%; }
+:deep(.col-port)    { width: 148px; }
+:deep(.col-server)  { width: 20%; }
+:deep(.col-notes)   { width: auto; color: var(--t2); }
+:deep(.col-actions) { width: 176px; }
+
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
 
 .port-cell {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
+  flex-wrap: wrap;
 }
 
 .server-link {
@@ -537,12 +598,14 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
+  flex-wrap: wrap;
 }
-.card-name { font-weight: 500; color: var(--t1); }
+.card-name { font-weight: 500; color: var(--t1); min-width: 0; word-break: break-all; }
 .card-row--sub {
   margin-top: var(--sp-1);
   font-size: var(--text-sm);
   color: var(--t2);
+  word-break: break-all;
 }
 .card-detail {
   margin-top: var(--sp-2);
@@ -554,11 +617,7 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
   margin-top: var(--sp-2);
   display: flex;
   justify-content: flex-end;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
 }
-
-/* ── Transitions ── */
-.fade-enter-active,
-.fade-leave-active { transition: opacity .15s ease, transform .15s ease; }
-.fade-enter-from,
-.fade-leave-to { opacity: 0; transform: translateY(-4px); }
 </style>

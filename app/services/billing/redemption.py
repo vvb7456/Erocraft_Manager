@@ -28,6 +28,7 @@ from app.db.models.billing import (
 )
 from app.db.models.manager import ServerMeta
 from app.db.models.pterodactyl import Allocation, PteroServer, PteroUser
+from app.db.sorting import SortSpec, build_order_by
 from app.schemas.redemption import (
     AgisoCardItem,
     AgisoIssueData,
@@ -295,6 +296,17 @@ async def create_batch(
     return outs[0]
 
 
+_BATCH_SORT_COLUMNS: dict[str, Any] = {
+    "id": RedemptionBatch.id,
+    "name": RedemptionBatch.name,
+    "plan_id": SortSpec(RedemptionBatch.plan_id, nulls_last=True),
+    "amount_fen": RedemptionBatch.amount_fen,
+    "quantity": RedemptionBatch.quantity,
+    "expires_at": SortSpec(RedemptionBatch.expires_at, nulls_last=True),
+    "created_at": RedemptionBatch.created_at,
+}
+
+
 async def list_batches(
     db: AsyncSession,
     *,
@@ -303,6 +315,8 @@ async def list_batches(
     q: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    sort_by: str | None = None,
+    sort_order: str = "desc",
 ) -> RedemptionBatchListResponse:
     stmt = select(RedemptionBatch)
     count_stmt = select(func.count(RedemptionBatch.id))
@@ -332,7 +346,14 @@ async def list_batches(
         stmt = stmt.where(f)
         count_stmt = count_stmt.where(f)
 
-    stmt = stmt.order_by(RedemptionBatch.id.desc()).limit(limit).offset(offset)
+    order_clauses = build_order_by(
+        sort_by,
+        sort_order,
+        _BATCH_SORT_COLUMNS,
+        default=(RedemptionBatch.id.desc(),),
+        tie_breakers=(RedemptionBatch.id,),
+    )
+    stmt = stmt.order_by(*order_clauses).limit(limit).offset(offset)
     rows = list((await db.scalars(stmt)).all())
     total = int(await db.scalar(count_stmt) or 0)
     items = await _build_batch_outs(db, rows)
@@ -542,6 +563,8 @@ async def list_codes(
     q: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    sort_by: str | None = None,
+    sort_order: str = "desc",
 ) -> RedemptionCodeListResponse:
     now = utc_naive_now()
     stmt = select(RedemptionCode)
@@ -586,7 +609,32 @@ async def list_codes(
         stmt = stmt.where(f)
         count_stmt = count_stmt.where(f)
 
-    stmt = stmt.order_by(RedemptionCode.id.desc()).limit(limit).offset(offset)
+    effective_status_expr = case(
+        (
+            (RedemptionCode.status == "unused")
+            & RedemptionCode.expires_at.is_not(None)
+            & (RedemptionCode.expires_at <= now),
+            "expired",
+        ),
+        else_=RedemptionCode.status,
+    )
+    code_sort_columns: dict[str, Any] = {
+        "id": RedemptionCode.id,
+        "code": RedemptionCode.code,
+        "status": effective_status_expr,
+        "external_order_id": SortSpec(RedemptionCode.external_order_id, nulls_last=True),
+        "redeemed_at": SortSpec(RedemptionCode.redeemed_at, nulls_last=True),
+        "expires_at": SortSpec(RedemptionCode.expires_at, nulls_last=True),
+        "created_at": RedemptionCode.created_at,
+    }
+    order_clauses = build_order_by(
+        sort_by,
+        sort_order,
+        code_sort_columns,
+        default=(RedemptionCode.id.desc(),),
+        tie_breakers=(RedemptionCode.id,),
+    )
+    stmt = stmt.order_by(*order_clauses).limit(limit).offset(offset)
     rows = list((await db.scalars(stmt)).all())
     total = int(await db.scalar(count_stmt) or 0)
     items = await _serialize_codes(db, rows)

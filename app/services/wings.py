@@ -55,6 +55,9 @@ class WingsService:
 
     def clear_cache(self) -> None:
         self._node_cache.clear()
+        from app.api.deps.wings_remote_auth import clear_remote_auth_cache
+
+        clear_remote_auth_cache()
 
     def _app_key(self) -> bytes:
         raw = get_settings().panel_app_key or ""

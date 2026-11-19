@@ -15,7 +15,8 @@ Supported rules
 required, nullable, sometimes, string, numeric, integer, boolean,
 in:a,b,c, not_in:a,b,c, max:N, min:N, between:M,N, size:N, alpha_num,
 alpha_dash, url, email, starts_with:a,b, ends_with:a,b, regex:/.../,
-not_regex:/.../, digits:N, digits_between:M,N, ip, uuid
+not_regex:/.../, digits:N, min_digits:N, max_digits:N, digits_between:M,N,
+ip, uuid
 
 Unsupported rules are skipped with a warning so we can find them in
 production logs and extend this validator over time.
@@ -50,11 +51,151 @@ _ALPHA_DASH_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 _DIGITS_RE = re.compile(r"^\d+$")
 
 
+_KNOWN_LARAVEL_RULES: frozenset[str] = frozenset(
+    {
+        # Runtime-enforced rules in this module
+        "required",
+        "nullable",
+        "sometimes",
+        "string",
+        "numeric",
+        "integer",
+        "boolean",
+        "in",
+        "not_in",
+        "max",
+        "min",
+        "between",
+        "size",
+        "alpha_num",
+        "alpha_dash",
+        "url",
+        "email",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "not_regex",
+        "digits",
+        "min_digits",
+        "max_digits",
+        "digits_between",
+        "ip",
+        "uuid",
+        # Additional standard Laravel scalar validation rules accepted on egg import/edit
+        "present",
+        "filled",
+        "bail",
+        "array",
+        "alpha",
+        "ascii",
+        "active_url",
+        "doesnt_start_with",
+        "doesnt_end_with",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "ipv4",
+        "ipv6",
+        "mac_address",
+        "ulid",
+        "json",
+        "date",
+        "lowercase",
+        "uppercase",
+        "accepted",
+        "declined",
+        "confirmed",
+        "different",
+        "same",
+        "required_if",
+        "required_unless",
+        "required_with",
+        "required_without",
+        "prohibited",
+        "decimal",
+        "multiple_of",
+    }
+)
+
+
 def _split_rules(rules: str) -> list[str]:
-    """Split a pipe-separated rule string. Pterodactyl stores regex without
-    embedded ``|``; if any do appear, prefer the array form (not used in
-    panel migrations as of 1.12.x)."""
+    """Split a Laravel rule string (supports both ``;;`` and ``|`` separators)."""
+    # Pterodactyl allows `;;` as a separator when a regex rule itself contains `|`.
+    if ";;" in rules:
+        return [r.strip() for r in rules.split(";;") if r.strip()]
     return [r.strip() for r in rules.split("|") if r.strip()]
+
+
+def _parse_non_negative_int(raw: str, rule: str) -> int:
+    text = raw.strip()
+    if not _DIGITS_RE.fullmatch(text):
+        raise ValueError(f"规则 {rule!r} 的参数必须是非负整数")
+    return int(text)
+
+
+def validate_rules_syntax(rules: str) -> str:
+    """Validate Laravel validation rule string syntax (mirrors Panel ValidatesValidationRules).
+
+    Returns the stripped rule string if valid; raises ``ValueError`` if empty,
+    contains unknown rules, malformed numeric arguments, or an uncompilable regex.
+    """
+    cleaned = rules.strip()
+    if not cleaned:
+        raise ValueError("校验规则不能为空")
+
+    parts = _split_rules(cleaned)
+    if not parts:
+        raise ValueError("校验规则不能为空")
+
+    for rule in parts:
+        name, sep, args = rule.partition(":")
+        name_lower = name.strip().lower()
+        if not name_lower or name_lower not in _KNOWN_LARAVEL_RULES:
+            raise ValueError(f"不支持或拼写错误的校验规则: {rule!r}")
+
+        if name_lower in ("regex", "not_regex"):
+            if not sep or not args:
+                raise ValueError(f"规则 {name_lower} 缺少正则表达式参数")
+            pattern = _strip_regex_delimiters(args)
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(f"规则 {rule!r} 正则表达式无效: {exc}") from exc
+        elif name_lower in ("digits", "min_digits", "max_digits"):
+            if not sep or not args.strip():
+                raise ValueError(f"规则 {name_lower} 缺少整数参数")
+            _parse_non_negative_int(args, rule)
+        elif name_lower == "digits_between":
+            nums = [a.strip() for a in args.split(",")] if sep else []
+            if len(nums) != 2:
+                raise ValueError(f"规则 {rule!r} 需要恰好两个整数参数（例如 digits_between:1,10）")
+            lo_int = _parse_non_negative_int(nums[0], rule)
+            hi_int = _parse_non_negative_int(nums[1], rule)
+            if lo_int > hi_int:
+                raise ValueError(f"规则 {rule!r} 下界不能大于上界")
+        elif name_lower in ("max", "min", "size"):
+            if not sep or not args.strip():
+                raise ValueError(f"规则 {name_lower} 缺少数值参数")
+            try:
+                float(args.strip())
+            except ValueError as exc:
+                raise ValueError(f"规则 {rule!r} 的参数必须是数字") from exc
+        elif name_lower == "between":
+            nums = [a.strip() for a in args.split(",")] if sep else []
+            if len(nums) != 2:
+                raise ValueError(f"规则 {rule!r} 需要恰好两个数值参数（例如 between:1,10）")
+            try:
+                lo, hi = float(nums[0]), float(nums[1])
+            except ValueError as exc:
+                raise ValueError(f"规则 {rule!r} 的参数必须是数字") from exc
+            if lo > hi:
+                raise ValueError(f"规则 {rule!r} 下界不能大于上界")
+        elif name_lower in ("in", "not_in", "starts_with", "ends_with"):
+            if not sep or not args:
+                raise ValueError(f"规则 {name_lower} 缺少参数列表")
+
+    return cleaned
 
 
 def _strip_regex_delimiters(pattern: str) -> str:
@@ -93,6 +234,16 @@ def _to_number(value: Any) -> float | None:
             return float(value)
         except ValueError:
             return None
+    return None
+
+
+def _as_digits_str(value: Any) -> str | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return value
     return None
 
 
@@ -239,19 +390,16 @@ def _validate_one(env_variable: str, value: Any, rule: str, *, numeric_context: 
             raise EggValidationError(env_variable, rule, f"必须以 {args_list} 中之一结尾")
         return
     if name == "regex":
-        # Laravel passes everything after `regex:` raw — including any commas
-        raw = rule[len("regex:") :]
         try:
-            pattern = _strip_regex_delimiters(raw)
+            pattern = _strip_regex_delimiters(args)
             if not re.search(pattern, str(value)):
                 raise EggValidationError(env_variable, rule, "格式不匹配")
         except re.error as exc:
             raise EggValidationError(env_variable, rule, f"无效正则: {exc}") from exc
         return
     if name == "not_regex":
-        raw = rule[len("not_regex:") :]
         try:
-            pattern = _strip_regex_delimiters(raw)
+            pattern = _strip_regex_delimiters(args)
             if re.search(pattern, str(value)):
                 raise EggValidationError(env_variable, rule, "格式不能匹配")
         except re.error as exc:
@@ -260,16 +408,38 @@ def _validate_one(env_variable: str, value: Any, rule: str, *, numeric_context: 
     if name == "digits":
         if not args_list:
             return
-        n = int(args_list[0])
-        if not isinstance(value, str) or not _DIGITS_RE.match(value) or len(value) != n:
+        n = int(args_list[0].strip())
+        digits_text = _as_digits_str(value)
+        if digits_text is None or not _DIGITS_RE.match(digits_text) or len(digits_text) != n:
             raise EggValidationError(env_variable, rule, f"必须是 {n} 位数字")
+        return
+    if name == "min_digits":
+        if not args_list:
+            return
+        n = int(args_list[0].strip())
+        digits_text = _as_digits_str(value)
+        if digits_text is None or not _DIGITS_RE.match(digits_text) or len(digits_text) < n:
+            raise EggValidationError(env_variable, rule, f"至少需要 {n} 位数字")
+        return
+    if name == "max_digits":
+        if not args_list:
+            return
+        n = int(args_list[0].strip())
+        digits_text = _as_digits_str(value)
+        if digits_text is None or not _DIGITS_RE.match(digits_text) or len(digits_text) > n:
+            raise EggValidationError(env_variable, rule, f"最多只能有 {n} 位数字")
         return
     if name == "digits_between":
         if len(args_list) < 2:
             return
-        lo = int(args_list[0])
-        hi = int(args_list[1])
-        if not isinstance(value, str) or not _DIGITS_RE.match(value) or not (lo <= len(value) <= hi):
+        lo = int(args_list[0].strip())
+        hi = int(args_list[1].strip())
+        digits_text = _as_digits_str(value)
+        if (
+            digits_text is None
+            or not _DIGITS_RE.match(digits_text)
+            or not (lo <= len(digits_text) <= hi)
+        ):
             raise EggValidationError(env_variable, rule, f"必须是 {lo}~{hi} 位数字")
         return
     if name == "ip":

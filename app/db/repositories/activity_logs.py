@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models import ManagerActivityLog
+from app.db.sorting import build_order_by
+
+
+_SORT_COLUMNS: dict[str, Any] = {
+    "timestamp": ManagerActivityLog.timestamp,
+    "actor": ManagerActivityLog.actor,
+    "category": ManagerActivityLog.category,
+    "status": ManagerActivityLog.status,
+}
 
 
 class ActivityLogRepository:
@@ -21,6 +32,8 @@ class ActivityLogRepository:
         status: str | None = None,
         host_id: int | None = None,
         node_id: int | None = None,
+        sort_by: str | None = None,
+        sort_order: str = "desc",
     ) -> tuple[list[ManagerActivityLog], int]:
         filters: list[ColumnElement[bool]] = []
         if actor:
@@ -52,7 +65,15 @@ class ActivityLogRepository:
             query = query.where(*filters)
             count_query = count_query.where(*filters)
 
-        query = query.order_by(ManagerActivityLog.timestamp.desc()).offset((page - 1) * per_page).limit(per_page)
+        order_clauses = build_order_by(
+            sort_by,
+            sort_order,
+            _SORT_COLUMNS,
+            default=(ManagerActivityLog.timestamp.desc(), ManagerActivityLog.id.desc()),
+            tie_breakers=(ManagerActivityLog.id,),
+        )
+
+        query = query.order_by(*order_clauses).offset((page - 1) * per_page).limit(per_page)
         rows = await db.execute(query)
         total = await db.execute(count_query)
         return list(rows.scalars().all()), int(total.scalar_one() or 0)

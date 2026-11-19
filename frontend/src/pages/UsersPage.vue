@@ -6,6 +6,7 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useFormatDate } from '@/composables/useFormatDate'
+import { useAppStore } from '@/stores/app'
 import { isValidUsername } from '@/utils/username'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import ListToolbar from '@/components/ui/ListToolbar.vue'
@@ -17,18 +18,24 @@ import BaseInput from '@/components/form/BaseInput.vue'
 import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useClientPagination } from '@/composables/useTablePagination'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
 import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import CardTap from '@/components/ui/CardTap.vue'
 import CardKV from '@/components/ui/CardKV.vue'
 import FormField from '@/components/form/FormField.vue'
+import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
+import HelpTip from '@/components/ui/HelpTip.vue'
 
 defineOptions({ name: 'UsersPage' })
 
 const { t } = useI18n({ useScope: 'global' })
 const route = useRoute()
 const router = useRouter()
+const app = useAppStore()
 const { get, post, put, del, loading } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
@@ -60,12 +67,13 @@ const rawUsers = ref<UserItem[]>([])
 
 // ── Client-side state ──
 const filterServer = ref('all')
-const sortBy = ref('id')
-const sortOrder = ref<'asc' | 'desc'>('desc')
 const searchTerm = ref((route.query.q as string) || '')
 const selectedIds = ref<Set<number>>(new Set())
-const page = ref(1)
-const perPage = ref(20)
+const { sortBy, sortOrder, toggleSort, sortItems } = useTableSort({
+  defaultBy: 'id',
+  defaultOrder: 'desc',
+  descColumns: ['id', 'server_count', 'created_at', 'root_admin'],
+})
 
 // Batch operations
 const batchBusy = ref(false)
@@ -75,13 +83,18 @@ const createModalOpen = ref(false)
 const createEmail = ref('')
 const createUsername = ref('')
 const createSendWelcome = ref(true)
+const createRootAdmin = ref(false)
 const createLoading = ref(false)
 
 // Edit modal
 const editModalOpen = ref(false)
 const editUser = ref<UserItem | null>(null)
-const editForm = ref({ username: '', email: '', firstName: '', lastName: '', password: '', language: 'zh' })
+const editForm = ref({ username: '', email: '', firstName: '', lastName: '', password: '', language: 'zh', rootAdmin: false })
 const editLoading = ref(false)
+
+const isEditingSelf = computed(() =>
+  !!editUser.value && !!app.sessionUser && editUser.value.username === app.sessionUser.username,
+)
 
 // ── Options ──
 const serverFilterOptions = computed(() => [
@@ -122,42 +135,21 @@ const filtered = computed(() => {
   return list
 })
 
-const sorted = computed(() => {
-  const list = [...filtered.value]
-  const col = sortBy.value
-  const asc = sortOrder.value === 'asc'
+const sorted = computed(() =>
+  sortItems(filtered.value, {
+    id: (u) => u.id,
+    username: (u) => u.username,
+    email: (u) => u.email,
+    server_count: (u) => u.server_count,
+    created_at: (u) => u.created_at,
+    root_admin: (u) => u.root_admin,
+  }, {
+    tieBreaker: (a, b) => b.id - a.id,
+  }),
+)
 
-  list.sort((a, b) => {
-    let va: string | number
-    let vb: string | number
-
-    if (col === 'username') {
-      va = a.username.toLowerCase()
-      vb = b.username.toLowerCase()
-    } else if (col === 'server_count') {
-      va = a.server_count
-      vb = b.server_count
-    } else if (col === 'created_at') {
-      va = a.created_at || ''
-      vb = b.created_at || ''
-    } else {
-      va = a.id
-      vb = b.id
-    }
-
-    if (va < vb) return asc ? -1 : 1
-    if (va > vb) return asc ? 1 : -1
-    return 0
-  })
-
-  return list
-})
-
-const totalPages = computed(() => Math.max(1, Math.ceil(sorted.value.length / perPage.value)))
-
-const paginated = computed(() => {
-  const start = (page.value - 1) * perPage.value
-  return sorted.value.slice(start, start + perPage.value)
+const { page, perPage, totalPages, paginated, setPerPage } = useClientPagination(sorted, {
+  resetDeps: [searchTerm, filterServer, sortBy, sortOrder],
 })
 
 function pruneSelectionToCurrentPage() {
@@ -233,17 +225,6 @@ async function executeBatchAction(action: 'email' | 'delete') {
   } finally { batchBusy.value = false }
 }
 
-// ── Sort toggle (client-side, no reload) ──
-function toggleSort(col: string) {
-  if (sortBy.value === col) {
-    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
-  } else {
-    sortBy.value = col
-    sortOrder.value = col === 'id' ? 'desc' : 'asc'
-  }
-  page.value = 1
-}
-
 // ── Create ──
 const createUsernameError = computed(() => {
   const v = createUsername.value.trim()
@@ -261,6 +242,7 @@ function openCreate() {
   createEmail.value = ''
   createUsername.value = ''
   createSendWelcome.value = true
+  createRootAdmin.value = false
   createModalOpen.value = true
 }
 
@@ -289,6 +271,7 @@ async function doCreate(andCreateServer = false) {
     email,
     username,
     sendWelcome: createSendWelcome.value,
+    root_admin: createRootAdmin.value,
   }).finally(() => { createLoading.value = false })
   if (res) {
     let msg = res.message
@@ -316,6 +299,7 @@ function openEdit(u: UserItem) {
     lastName: u.last_name || '',
     password: '',
     language: (u.language === 'zh' ? 'zh' : 'en'),
+    rootAdmin: !!u.root_admin,
   }
   editModalOpen.value = true
 }
@@ -340,6 +324,7 @@ async function doEdit() {
     lastName: editForm.value.lastName,
     password: editForm.value.password || undefined,
     language: editForm.value.language,
+    root_admin: isEditingSelf.value ? undefined : editForm.value.rootAdmin,
   }).finally(() => { editLoading.value = false })
   if (res) {
     toast(t('users.edit.success'), 'success')
@@ -377,8 +362,10 @@ const mobileFilterOpen = ref(false)
 const sortColumns = computed(() => [
   { key: 'id', label: t('users.table.id') },
   { key: 'username', label: t('users.table.username') },
+  { key: 'email', label: t('users.table.email') },
   { key: 'server_count', label: t('users.table.server_count') },
   { key: 'created_at', label: t('users.table.created_at') },
+  { key: 'root_admin', label: t('users.table.role') },
 ])
 const filterGroups = computed(() => [
   {
@@ -388,13 +375,9 @@ const filterGroups = computed(() => [
     options: serverFilterOptions.value,
   },
 ])
-function onMobileSort(col: string) {
-  toggleSort(col)
-}
 function onMobileFilter(groupKey: string, value: string | number | boolean) {
   if (groupKey === 'server') {
     filterServer.value = String(value)
-    page.value = 1
   }
 }
 </script>
@@ -450,7 +433,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       :sort-by="sortBy"
       :sort-order="sortOrder"
       :filters="filterGroups"
-      @sort="onMobileSort"
+      @sort="toggleSort"
       @update:filter="onMobileFilter"
     />
 
@@ -466,29 +449,17 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       empty-icon="group"
       :empty-text="t('users.empty')"
       @update:page="page = $event"
-      @update:per-page="perPage = $event; page = 1"
+      @update:per-page="setPerPage"
     >
       <template #header>
         <th class="col-check"><input type="checkbox" v-model="allSelected" :aria-label="t('common.selection.selectAll')" /></th>
-        <th class="col-id sortable" @click="toggleSort('id')">
-          {{ t('users.table.id') }}
-          <MsIcon v-if="sortBy === 'id'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-        </th>
-        <th class="col-username sortable" @click="toggleSort('username')">
-          {{ t('users.table.username') }}
-          <MsIcon v-if="sortBy === 'username'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-        </th>
-        <th class="col-email">{{ t('users.table.email') }}</th>
-        <th class="col-count sortable" @click="toggleSort('server_count')">
-          {{ t('users.table.server_count') }}
-          <MsIcon v-if="sortBy === 'server_count'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-        </th>
-        <th class="col-created sortable" @click="toggleSort('created_at')">
-          {{ t('users.table.created_at') }}
-          <MsIcon v-if="sortBy === 'created_at'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-        </th>
+        <SortTh class="col-id" col="id" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('users.table.id') }}</SortTh>
+        <SortTh class="col-username" col="username" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('users.table.username') }}</SortTh>
+        <SortTh class="col-email" col="email" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('users.table.email') }}</SortTh>
+        <SortTh class="col-count" col="server_count" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('users.table.server_count') }}</SortTh>
+        <SortTh class="col-created" col="created_at" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('users.table.created_at') }}</SortTh>
         <th class="col-inviter">{{ t('users.table.inviter') }}</th>
-        <th class="col-role">{{ t('users.table.role') }}</th>
+        <SortTh class="col-role" col="root_admin" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('users.table.role') }}</SortTh>
         <th class="col-actions">{{ t('users.table.actions') }}</th>
       </template>
       <template #row="{ item: u }">
@@ -515,7 +486,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
         <td class="col-actions">
           <div class="action-group">
             <BaseButton size="sm" @click="openEdit(u)">
-              <MsIcon name="edit" size="xs" /> {{ t('users.action.edit') }}
+              <MsIcon name="edit" size="xs" /> {{ t('common.btn.edit') }}
             </BaseButton>
             <BaseButton size="sm" variant="danger" @click="deleteUser(u)">
               <MsIcon name="delete" size="xs" /> {{ t('users.action.delete') }}
@@ -555,7 +526,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
     </template>
     <template v-if="mobileActionUser">
       <button @click="mobileActionOpen = false; openEdit(mobileActionUser!)">
-        <MsIcon name="edit" size="sm" /> {{ t('users.action.edit') }}
+        <MsIcon name="edit" size="sm" /> {{ t('common.btn.edit') }}
       </button>
       <button v-if="mobileActionUser.server_count > 0" @click="mobileActionOpen = false; router.push({ name: 'servers', query: { q: mobileActionUser!.username } })">
         <MsIcon name="dns" size="sm" /> {{ t('users.table.server_count') }} ({{ mobileActionUser.server_count }})
@@ -567,12 +538,25 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
   </ActionSheet>
 
   <!-- Create User Modal -->
-  <BaseModal v-model="createModalOpen" :title="t('users.create.title')" icon="person_add" size="sm">
+  <BaseModal v-model="createModalOpen" :title="t('users.create.title')" icon="person_add" size="md">
     <FormField :label="t('users.create.email')" density="compact">
       <BaseInput :modelValue="createEmail" type="email" @update:modelValue="onEmailInput" />
     </FormField>
     <FormField :label="t('users.create.username')" :error="createUsernameError || undefined" density="compact">
       <BaseInput v-model="createUsername" :placeholder="t('register.username_placeholder')" />
+    </FormField>
+    <FormField
+      layout="horizontal"
+      keep-horizontal
+      control-fit
+      bordered
+      density="compact"
+    >
+      <template #label>
+        {{ t('users.role.root_admin') }}
+        <HelpTip :text="t('users.role.root_admin_hint')" />
+      </template>
+      <ToggleSwitch v-model="createRootAdmin" size="sm" />
     </FormField>
     <div class="checkbox-label">
       {{ t('users.create.send_welcome') }}
@@ -617,6 +601,19 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
         ]"
       />
     </FormField>
+    <FormField
+      layout="horizontal"
+      keep-horizontal
+      control-fit
+      bordered
+      density="compact"
+    >
+      <template #label>
+        {{ t('users.role.root_admin') }}
+        <HelpTip :text="isEditingSelf ? t('users.edit.self_demote_disabled') : t('users.role.root_admin_hint')" />
+      </template>
+      <ToggleSwitch v-model="editForm.rootAdmin" :disabled="isEditingSelf" size="sm" />
+    </FormField>
     <template #footer>
       <BaseButton @click="editModalOpen = false">{{ t('common.btn.cancel') }}</BaseButton>
       <BaseButton variant="primary" :loading="editLoading" @click="doEdit">{{ t('common.btn.save') }}</BaseButton>
@@ -635,16 +632,17 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 }
 .checkbox-label input { margin: 0; }
 
-.col-check { width: 36px; text-align: center !important; }
-.col-id { width: 56px; }
+:deep(.dt-table) { min-width: 1000px; }
+:deep(.col-check) { width: 40px; text-align: center !important; }
+:deep(.col-id) { width: 64px; }
 
-.col-username { width: 14%; }
-.col-email { width: 18%; }
-.col-count { width: 64px; text-align: center !important; }
-.col-created { width: 10%; }
-.col-inviter { width: 10%; }
-.col-role { width: 80px; }
-.col-actions { width: 160px; }
+:deep(.col-username) { width: 14%; }
+:deep(.col-email) { width: auto; }
+:deep(.col-count) { width: 96px; text-align: center !important; }
+:deep(.col-created) { width: 11%; }
+:deep(.col-inviter) { width: 11%; }
+:deep(.col-role) { width: 92px; }
+:deep(.col-actions) { width: 168px; }
 
 .count-link {
   color: var(--ac);
@@ -661,8 +659,13 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 /* Modal form layout */
 .form-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--sp-3);
+}
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Mobile card styles — page-specific */
@@ -688,12 +691,5 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
   gap: var(--sp-2);
   align-items: center;
   flex-wrap: wrap;
-}
-
-@media (max-width: 768px) {
-  .toolbar-half {
-    flex: 1;
-    min-width: 0;
-  }
 }
 </style>

@@ -7,7 +7,7 @@ import re
 from datetime import timedelta
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +23,7 @@ from app.db.models.monitoring import HostAlert
 from app.db.models.notifications import NotificationDelivery, NotificationIssue
 from app.db.models.pterodactyl import PteroUser
 from app.services.audit import log_manager_activity
-from app.services.notifications.center import current_problems
+from app.services.notifications.center import acknowledge_open_problems, current_problems, sort_problems
 from app.services.notifications.policy import NotificationPolicy, load_policy
 from app.services.notifications import wecom
 from app.services.notifications import templates
@@ -156,12 +156,15 @@ async def test_channel(request: Request, body: TestInput, _: PteroUser = Depends
 async def get_alerts(category: Literal["all", "monitoring", "certificate", "billing", "system"] = "all",
     state: Literal["all", "open", "acknowledged", "muted"] = "all", q: str = Query("", max_length=200),
     offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=100),
+    sort_by: Literal["created_at", "category", "title", "severity", "state"] | None = Query(default=None),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
     _: PteroUser = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> dict:
     items = await current_problems(db)
     counts = {key: sum(item["state"] == key for item in items) for key in ("open", "acknowledged", "muted")}
     filtered = [item for item in items if (category == "all" or item["category"] == category)
         and (state == "all" or item["state"] == state)
         and (not q or q.casefold() in f"{item['title']} {item['body']}".casefold())]
+    filtered = sort_problems(filtered, sort_by=sort_by, sort_order=sort_order)
     return {"items": filtered[offset:offset + limit], "total": len(filtered), "counts": counts, "has_more": offset + limit < len(filtered)}
 
 
@@ -213,3 +216,35 @@ async def alert_action(body: AlertAction, admin: PteroUser = Depends(require_adm
         operation=OperationResult(action=f"notification.alert.{body.action}", phase="execution", outcome="success", target={"issue_key": body.key}),
         detail_key="notification.alert.action", detail_params={"key": body.key, "action": body.action})
     return {"ok": True}
+
+
+class AcknowledgeAllAlertsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    category: Literal["all", "monitoring", "certificate", "billing", "system"] = "all"
+
+
+@router.post("/alerts/acknowledge-all")
+async def acknowledge_all_alerts(
+    body: AcknowledgeAllAlertsInput | None = Body(default=None),
+    admin: PteroUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    category = body.category if body is not None else "all"
+    acknowledged_count = await acknowledge_open_problems(db, category=category)
+    if acknowledged_count > 0:
+        await db.commit()
+        await log_manager_activity(
+            db,
+            actor=admin.username,
+            category="monitoring",
+            operation=OperationResult(
+                action="notification.alert.acknowledge_all",
+                phase="execution",
+                outcome="success",
+                target={"category": category},
+                succeeded=acknowledged_count,
+            ),
+            detail_key="notification.alert.acknowledge_all",
+            detail_params={"category": category, "count": acknowledged_count},
+        )
+    return {"ok": True, "acknowledged_count": acknowledged_count}

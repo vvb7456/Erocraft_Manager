@@ -50,9 +50,18 @@ export function useActivityLog() {
       if (te(key)) params[field] = t(key)
     }
     if (typeof params.duration_seconds === 'number') params.duration_human = duration(params.duration_seconds)
+    if (typeof params.old_root_admin === 'boolean') params.old_root_admin = t(params.old_root_admin ? 'users.role.admin' : 'users.role.user')
+    if (typeof params.new_root_admin === 'boolean') params.new_root_admin = t(params.new_root_admin ? 'users.role.admin' : 'users.role.user')
     if (typeof params.result === 'string' && te(`logs.applyResult.${params.result}`)) params.result = t(`logs.applyResult.${params.result}`)
     if (typeof params.outcome === 'string' && te(`logs.refundResult.${params.outcome}`)) params.outcome = t(`logs.refundResult.${params.outcome}`)
     if (typeof params.action === 'string' && te(`logs.alertAction.${params.action}`)) params.action = t(`logs.alertAction.${params.action}`)
+    if (log.detailKey === 'notification.alert.acknowledge_all' && typeof params.category === 'string') {
+      if (params.category === 'all') {
+        params.category = t('notifications.center.allCategories')
+      } else if (te(`notifications.category.${params.category}`)) {
+        params.category = t(`notifications.category.${params.category}`)
+      }
+    }
     const messages = tm('logs.detail') as Record<string, string>
     let text = messages[log.detailKey] ? rt(messages[log.detailKey], params) : t('logs.detail.unknown', { key: log.detailKey })
     if (operation?.error) {

@@ -83,6 +83,48 @@ async def _create_password_reset_token(db: AsyncSession, user_id: int) -> str:
     return raw_token
 
 
+async def _assert_other_admin_exists(
+    db: AsyncSession,
+    excluded_user_ids: set[int],
+    *,
+    error_detail: str,
+) -> None:
+    """Read-only pre-check before starting multi-transaction deletion."""
+    stmt = (
+        select(PteroUser.id)
+        .where(PteroUser.root_admin.is_(True))
+        .where(PteroUser.id.notin_(excluded_user_ids))
+        .limit(1)
+    )
+    if (await db.execute(stmt)).scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=error_detail,
+        )
+
+
+async def _assert_other_admin_exists_locked(
+    db: AsyncSession,
+    excluded_user_ids: set[int],
+    *,
+    error_detail: str,
+) -> None:
+    """Lock all remaining root_admin rows FOR UPDATE and reject if none remain."""
+    stmt = (
+        select(PteroUser.id)
+        .where(PteroUser.root_admin.is_(True))
+        .where(PteroUser.id.notin_(excluded_user_ids))
+        .with_for_update()
+    )
+    remaining = (await db.execute(stmt)).scalars().all()
+    if not remaining:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=error_detail,
+        )
+
+
 async def _delete_user_remote(db: AsyncSession, user_id: int) -> int:
     server_rows = await db.execute(
         select(PteroServer.id)
@@ -96,6 +138,23 @@ async def _delete_user_remote(db: AsyncSession, user_id: int) -> int:
     for server_id in server_ids:
         await server_lifecycle.delete_server(db, server_id)
         deleted += 1
+
+    # Re-verify under FOR UPDATE lock immediately before removing a root_admin user
+    target_row = (
+        await db.execute(
+            select(PteroUser)
+            .where(PteroUser.id == user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if target_row is not None and bool(target_row.root_admin):
+        await _assert_other_admin_exists_locked(
+            db,
+            {user_id},
+            error_detail="系统至少需要保留一名管理员，无法删除最后一名管理员",
+        )
+
     try:
         await server_lifecycle.delete_user(db, user_id)
     except LifecycleError as exc:
@@ -174,6 +233,7 @@ async def create_user(
     temporary_password = generate_temporary_password()
     await db.commit()
 
+    target_root_admin = bool(payload.root_admin) if payload.root_admin is not None else False
     try:
         created = await server_lifecycle.create_user(
             db,
@@ -182,6 +242,7 @@ async def create_user(
             first_name=first_name,
             last_name=last_name,
             password=temporary_password,
+            root_admin=target_root_admin,
         )
         await db.commit()
     except LifecycleError as exc:
@@ -253,7 +314,7 @@ async def create_user(
         category="user",
         detail_key="create_user",
         operation=OperationResult(action="user.create", phase="execution", outcome="success", target={"username": username}),
-        detail_params={"username": username, "email": email},
+        detail_params={"username": username, "email": email, "root_admin": target_root_admin},
     )
     return CreateUserResponse(
         message=f"用户 '{username}' 创建成功",
@@ -283,17 +344,51 @@ async def update_user(
     if existing_username and existing_username.id != user_id:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"用户名 {username} 已存在")
 
+    if payload.root_admin is False and user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不能取消当前登录管理员自身的管理员权限",
+        )
+
+    admin_username = current_user.username
     await db.commit()
+
+    # Lock the target row (and remaining admins if demoting) inside the write transaction
+    locked_user = (
+        await db.execute(
+            select(PteroUser)
+            .where(PteroUser.id == user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if locked_user is None:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+
+    old_root_admin = bool(locked_user.root_admin)
+    new_root_admin = (
+        bool(payload.root_admin) if payload.root_admin is not None else old_root_admin
+    )
+
+    if old_root_admin and not new_root_admin:
+        await _assert_other_admin_exists_locked(
+            db,
+            {user_id},
+            error_detail="系统至少需要保留一名管理员，无法取消最后一名管理员权限",
+        )
+
     try:
         await server_lifecycle.update_user(
             db,
             user_id,
             email=email,
             username=username,
-            first_name=payload.firstName.strip() or user.name_first or username,
-            last_name=payload.lastName.strip() or user.name_last or "User",
+            first_name=payload.firstName.strip() or locked_user.name_first or username,
+            last_name=payload.lastName.strip() or locked_user.name_last or "User",
             password=payload.password.strip() if payload.password else None,
             language=(payload.language.strip() if payload.language else None) or None,
+            root_admin=payload.root_admin,
         )
         await db.commit()
     except LifecycleError as exc:
@@ -311,12 +406,36 @@ async def update_user(
 
     await log_manager_activity(
         db,
-        actor=current_user.username,
+        actor=admin_username,
         category="user",
         detail_key="edit_user",
         operation=OperationResult(action="user.update", phase="execution", outcome="success", target={"user_id": user_id}),
-        detail_params={"user_id": user_id},
+        detail_params={
+            "user_id": user_id,
+            "username": username,
+            "old_root_admin": old_root_admin,
+            "new_root_admin": new_root_admin,
+        },
     )
+    if old_root_admin != new_root_admin:
+        await log_manager_activity(
+            db,
+            actor=admin_username,
+            category="user",
+            detail_key="user.role.update",
+            operation=OperationResult(
+                action="user.role.update",
+                phase="execution",
+                outcome="success",
+                target={"user_id": user_id, "username": username},
+            ),
+            detail_params={
+                "user_id": user_id,
+                "username": username,
+                "old_root_admin": old_root_admin,
+                "new_root_admin": new_root_admin,
+            },
+        )
     return UserMessageResponse(message="用户已更新")
 
 
@@ -326,10 +445,24 @@ async def delete_user(
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> UserMessageResponse:
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不能删除当前登录的管理员账号",
+        )
+
     user = await user_repository.get_by_id(db, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
 
+    if bool(user.root_admin):
+        await _assert_other_admin_exists(
+            db,
+            {user_id},
+            error_detail="系统至少需要保留一名管理员，无法删除最后一名管理员",
+        )
+
+    admin_username = current_user.username
     try:
         deleted_server_count = await _delete_user_remote(db, user_id)
     except LifecycleError as exc:
@@ -337,7 +470,7 @@ async def delete_user(
 
     await log_manager_activity(
         db,
-        actor=current_user.username,
+        actor=admin_username,
         category="user",
         detail_key="delete_user",
         operation=OperationResult(action="user.delete", phase="execution", outcome="success", target={"user_id": user_id}, facts={"deleted_servers": deleted_server_count}),
@@ -409,18 +542,32 @@ async def batch_users(
             detail_params={"success": success, "failed": errors},
         )
     else:
+        target_ids = set(payload.userIds)
+        if current_user.id in target_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="批量删除列表中包含当前登录的管理员账号，禁止自删",
+            )
+
+        admin_username = current_user.username
+        await _assert_other_admin_exists(
+            db,
+            target_ids,
+            error_detail="系统至少需要保留一名管理员，批量删除将移除全部管理员",
+        )
+
         for user_id in payload.userIds:
             try:
                 await _delete_user_remote(db, user_id)
                 success += 1
-            except LifecycleError:
+            except (LifecycleError, HTTPException):
                 await db.rollback()
                 errors += 1
 
         operation = batch_operation(f"user.batch.{payload.action}", {"requested_user_ids": payload.userIds}, success, errors)
         await log_manager_activity(
             db,
-            actor=current_user.username,
+            actor=admin_username,
             category="user",
             detail_key="batch_delete_users",
             operation=operation,

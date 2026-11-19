@@ -25,6 +25,9 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import PageHeaderActions from '@/components/layout/PageHeaderActions.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useClientPagination } from '@/composables/useTablePagination'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -67,6 +70,14 @@ const statusOptions = computed(() => [
 
 // ── Mobile filter sheet ──
 const mobileFilterOpen = ref(false)
+const sortColumns = computed(() => [
+  { key: 'is_active', label: t('billing.admin.plans.col.status') },
+  { key: 'code', label: t('billing.admin.plans.col.code') },
+  { key: 'display_name', label: t('billing.admin.plans.col.name') },
+  { key: 'price_fen', label: t('billing.admin.plans.col.price') },
+  { key: 'node_id', label: t('billing.admin.plans.col.node') },
+  { key: 'egg_id', label: t('billing.admin.plans.col.egg') },
+])
 const filterGroups = computed(() => [
   {
     key: 'status',
@@ -78,7 +89,6 @@ const filterGroups = computed(() => [
 function onMobileFilter(groupKey: string, value: string | number | boolean) {
   if (groupKey === 'status') {
     statusFilter.value = String(value) as 'all' | 'active' | 'inactive'
-    page.value = 1
   }
 }
 
@@ -86,8 +96,9 @@ const editorOpen = ref(false)
 const editorMode = ref<EditorMode>('create')
 const editorPlan = ref<AdminPlan | null>(null)
 
-const page = ref(1)
-const perPage = ref(20)
+const { sortBy, sortOrder, toggleSort, sortItems } = useTableSort({
+  descColumns: ['is_active', 'price_fen'],
+})
 
 const mobileActionPlan = ref<AdminPlan | null>(null)
 const mobileActionOpen = ref(false)
@@ -105,10 +116,21 @@ const filteredPlans = computed(() => {
   })
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredPlans.value.length / perPage.value)))
-const paginated = computed(() => {
-  const start = (page.value - 1) * perPage.value
-  return filteredPlans.value.slice(start, start + perPage.value)
+const sortedPlans = computed(() =>
+  sortItems(filteredPlans.value, {
+    is_active: (p) => p.is_active,
+    code: (p) => p.code,
+    display_name: (p) => p.display_name,
+    price_fen: (p) => p.price_fen,
+    node_id: (p) => nodeName(p.node_id),
+    egg_id: (p) => eggName(p.egg_id),
+  }, {
+    tieBreaker: (a, b) => (a.display_order - b.display_order) || (a.id - b.id),
+  }),
+)
+
+const { page, perPage, totalPages, paginated, setPerPage } = useClientPagination(sortedPlans, {
+  resetDeps: [searchTerm, statusFilter, sortBy, sortOrder],
 })
 
 function fenToYuan(fen: number): string { return (fen / 100).toFixed(2) }
@@ -252,7 +274,6 @@ function openMobileAction(plan: AdminPlan) {
             v-model="searchTerm"
             :placeholder="t('billing.admin.plans.searchPlaceholder')"
             class="tb-search"
-            @update:modelValue="page = 1"
           />
           <button
             class="tb-filter-btn"
@@ -274,7 +295,6 @@ function openMobileAction(plan: AdminPlan) {
             :prefix="t('billing.admin.plans.statusFilterLabel') + ': '"
             size="sm"
             fit
-            @update:modelValue="page = 1"
           />
         </div>
       </template>
@@ -282,10 +302,11 @@ function openMobileAction(plan: AdminPlan) {
 
     <MobileFilterSheet
       v-model:open="mobileFilterOpen"
-      :sort-columns="[]"
-      :sort-by="''"
-      :sort-order="'asc'"
+      :sort-columns="sortColumns"
+      :sort-by="sortBy"
+      :sort-order="sortOrder"
       :filters="filterGroups"
+      @sort="toggleSort"
       @update:filter="onMobileFilter"
     />
 
@@ -302,37 +323,35 @@ function openMobileAction(plan: AdminPlan) {
         : t('billing.admin.plans.empty')"
       row-key="id"
       @update:page="page = $event"
-      @update:per-page="perPage = $event; page = 1"
+      @update:per-page="setPerPage"
     >
       <template #header>
-        <th class="col-id">#</th>
-        <th class="col-status">{{ t('billing.admin.plans.col.status') }}</th>
-        <th class="col-code">{{ t('billing.admin.plans.col.code') }}</th>
-        <th class="col-name">{{ t('billing.admin.plans.col.name') }}</th>
-        <th class="col-price">{{ t('billing.admin.plans.col.price') }}</th>
-        <th class="col-node">{{ t('billing.admin.plans.col.node') }}</th>
-        <th class="col-egg">{{ t('billing.admin.plans.col.egg') }}</th>
+        <SortTh class="col-name" col="display_name" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.plans.col.name') }}</SortTh>
+        <SortTh class="col-code" col="code" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.plans.col.code') }}</SortTh>
+        <SortTh class="col-price" col="price_fen" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.plans.col.price') }}</SortTh>
+        <SortTh class="col-node" col="node_id" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.plans.col.node') }}</SortTh>
+        <SortTh class="col-egg" col="egg_id" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.plans.col.egg') }}</SortTh>
+        <SortTh class="col-status" col="is_active" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.plans.col.status') }}</SortTh>
         <th class="col-actions">{{ t('billing.admin.plans.col.actions') }}</th>
       </template>
       <template #row="{ item: p }">
-        <td class="col-id">{{ p.id }}</td>
+        <td class="col-name">
+          <div class="name-main">{{ p.display_name }}</div>
+          <div v-if="p.category_label" class="name-sub">{{ p.category_label }}</div>
+        </td>
+        <td class="col-code"><code>{{ p.code }}</code></td>
+        <td class="col-price mono">¥{{ fenToYuan(p.price_fen) }} / {{ p.days }}{{ t('billing.admin.plans.dayUnit') }}</td>
+        <td class="col-node"><Badge color="var(--blue)">{{ nodeName(p.node_id) }}</Badge></td>
+        <td class="col-egg"><Badge color="var(--ac)">{{ eggName(p.egg_id) }}</Badge></td>
         <td class="col-status">
           <Badge :color="p.is_active ? 'var(--green)' : 'var(--red)'">
             {{ p.is_active ? t('billing.admin.plans.statusActive') : t('billing.admin.plans.statusInactive') }}
           </Badge>
         </td>
-        <td class="col-code"><code>{{ p.code }}</code></td>
-        <td class="col-name">
-          <div class="name-main">{{ p.display_name }}</div>
-          <div v-if="p.category_label" class="name-sub">{{ p.category_label }}</div>
-        </td>
-        <td class="col-price mono">¥{{ fenToYuan(p.price_fen) }} / {{ p.days }}{{ t('billing.admin.plans.dayUnit') }}</td>
-        <td class="col-node"><Badge color="var(--blue)">{{ nodeName(p.node_id) }}</Badge></td>
-        <td class="col-egg"><Badge color="var(--ac)">{{ eggName(p.egg_id) }}</Badge></td>
         <td class="col-actions">
           <div class="action-group">
             <BaseButton size="sm" @click="openEdit(p)">
-              <MsIcon name="edit" size="xs" /> {{ t('billing.admin.plans.edit') }}
+              <MsIcon name="edit" size="xs" /> {{ t('common.btn.edit') }}
             </BaseButton>
             <BaseButton size="sm" @click="openDuplicate(p)">
               <MsIcon name="content_copy" size="xs" /> {{ t('billing.admin.plans.duplicate') }}
@@ -380,7 +399,7 @@ function openMobileAction(plan: AdminPlan) {
       </template>
       <template v-if="mobileActionPlan">
         <button @click="mobileActionOpen = false; openEdit(mobileActionPlan!)">
-          <MsIcon name="edit" size="sm" /> {{ t('billing.admin.plans.edit') }}
+          <MsIcon name="edit" size="sm" /> {{ t('common.btn.edit') }}
         </button>
         <button @click="mobileActionOpen = false; openDuplicate(mobileActionPlan!)">
           <MsIcon name="content_copy" size="sm" /> {{ t('billing.admin.plans.duplicate') }}
@@ -410,14 +429,14 @@ function openMobileAction(plan: AdminPlan) {
 
 <style scoped>
 /* Column widths use percentages (total 100%). */
-:deep(.col-id)      { width: 4%;  color: var(--t3); }
-:deep(.col-code)    { width: 11%; }
-:deep(.col-name)    { width: 20%; }
-:deep(.col-status)  { width: 8%;  white-space: nowrap; }
+:deep(.dt-table)    { min-width: 1040px; }
+:deep(.col-name)    { width: 18%; }
+:deep(.col-code)    { width: 12%; }
 :deep(.col-price)   { width: 13%; white-space: nowrap; }
 :deep(.col-node)    { width: 9%; }
-:deep(.col-egg)     { width: 9%; }
-:deep(.col-actions) { width: 26%; }
+:deep(.col-egg)     { width: 10%; }
+:deep(.col-status)  { width: 8%;  white-space: nowrap; }
+:deep(.col-actions) { width: 30%; }
 
 .mono {
   font-family: var(--font-mono);
@@ -435,12 +454,16 @@ code {
 .name-main {
   color: var(--t1);
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .name-sub {
   color: var(--t3);
   font-size: var(--text-xs);
   margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .action-group {
@@ -464,12 +487,5 @@ code {
   font-weight: 400;
   color: var(--t3);
   margin-left: var(--sp-1);
-}
-
-@media (max-width: 768px) {
-  .toolbar-half {
-    flex: 1;
-    min-width: 0;
-  }
 }
 </style>

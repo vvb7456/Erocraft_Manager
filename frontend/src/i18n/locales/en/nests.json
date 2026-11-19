@@ -1,0 +1,229 @@
+{
+  "title": "Nests & Eggs",
+  "tabs": {
+    "eggs": "Eggs",
+    "nests": "Nests"
+  },
+  "eggs": {
+    "searchPlaceholder": "Search egg name, nest, or Docker image…",
+    "totalCount": "{n} egg(s)",
+    "filterNest": "Nest",
+    "allNests": "All"
+  },
+  "searchPlaceholder": "Search nest name, description, or author…",
+  "totalNests": "{n} nest(s)",
+  "perPage": "rows/page",
+  "empty": "No nests yet. Click “New Nest” in the top right to create one.",
+  "columns": {
+    "name": "Nest Name",
+    "description": "Description",
+    "eggs": "Eggs",
+    "servers": "Servers",
+    "author": "Author",
+    "actions": "Actions"
+  },
+  "actions": {
+    "createNest": "New Nest",
+    "createEgg": "New Egg",
+    "importEgg": "Import JSON",
+    "overwriteImport": "Overwrite from JSON",
+    "export": "Export",
+    "exportJson": "Export JSON",
+    "deleteEgg": "Delete Egg",
+    "viewEggs": "View Eggs"
+  },
+  "nest": {
+    "createTitle": "New Nest",
+    "editTitle": "Edit Nest",
+    "created": "Nest created",
+    "updated": "Nest updated",
+    "deleteTitle": "Delete Nest",
+    "deleteMsg": "Delete nest “{name}”? Deletion is blocked if it still has eggs, servers, or linked billing plans.",
+    "deleted": "Nest “{name}” deleted",
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "e.g. Minecraft, SillyTavern",
+      "description": "Description",
+      "descPlaceholder": "Optional description"
+    }
+  },
+  "import": {
+    "overwriteTitle": "Overwrite Egg from JSON",
+    "overwriteConfirm": "Overwrite this egg from “{file}”? Its ID, UUID, nest, author, and inheritance links will be preserved, and variables will be updated in-place by env_variable name to protect existing server values.",
+    "targetNest": "Target Nest",
+    "selectNest": "Select nest",
+    "submitOverwrite": "Overwrite",
+    "importedOk": "Imported egg “{name}”",
+    "overwrittenOk": "Updated egg “{name}” from JSON"
+  },
+  "egg": {
+    "empty": "No eggs yet. Click “New Egg” in the top right to create one or import JSON.",
+    "createTitle": "New Egg",
+    "createBtn": "Create Egg",
+    "createTabs": {
+      "basic": "Basic",
+      "process": "Process"
+    },
+    "created": "Egg “{name}” created",
+    "saved": "Egg settings saved",
+    "savedWithPlanWarnings": "Saved, but {n} billing plan(s) may be affected — check the warning banner above",
+    "exported": "Egg JSON download started",
+    "deleteTitle": "Delete Egg",
+    "deleteMsg": "Delete egg “{name}”? Deletion is blocked if referenced by servers, child eggs, billing plans, or agreements.",
+    "deleted": "Egg “{name}” deleted",
+    "notFoundTitle": "Failed to load egg",
+    "notFoundDesc": "This egg may not exist, may have been deleted, or the request failed.",
+    "backToList": "Back to Eggs",
+    "danger": {
+      "title": "Danger zone",
+      "desc": "Remove egg templates that are no longer needed.",
+      "deleteHint": "Deletion is blocked if servers, child eggs, billing plans, or agreements reference this egg."
+    },
+    "specialRegistryNotice": "“{name}” matches the built-in special egg registry (custom panel, tunnel, and LLM rules). Rename or edit core variables with care.",
+    "specialRenameDanger": "Warning: You are renaming special egg “{name}”! Saving will disable custom panel UI (e.g. SillyTavern panel), tunnel, and LLM rules for matching servers!",
+    "configFromNone": "None (standalone)",
+    "jsonObjectRequired": "Must be a valid JSON object (starting with {'{'})",
+    "addImage": "Add Image",
+    "imageLabelCol": "Display Name",
+    "imageValueCol": "Docker Image",
+    "imageLabelPlaceholder": "e.g. Java 21",
+    "imageValuePlaceholder": "e.g. ghcr.io/pterodactyl/yolks:java_21",
+    "dependentConfigNotice": "The following child eggs inherit process configuration from this egg, so this egg cannot inherit from another:",
+    "configFromActiveNotice": "Configuration inheritance is active: empty stop command or JSON fields inherit from the parent egg. File denylist always inherits from the parent.",
+    "effectiveConfigTitle": "Resolved Effective Configuration (read-only)",
+    "tabs": {
+      "settings": "Settings & Config",
+      "variables": "Variables",
+      "scripts": "Install Script"
+    },
+    "columns": {
+      "name": "Egg Name",
+      "dockerImage": "Docker Image",
+      "variables": "Variables",
+      "servers": "Servers",
+      "plans": "Plans"
+    },
+    "sections": {
+      "basic": "Basic Info",
+      "basicDesc": "Configure egg identity, startup command, features, and file denylist.",
+      "images": "Docker Images",
+      "imagesDesc": "At least one image is required; display label is shown to users and image string max length is 191.",
+      "process": "Process Management & Inheritance",
+      "processDesc": "Define stop command, startup detection, config file parsing, and log configuration.",
+      "transfer": "Import & Export",
+      "transferDesc": "Export as a standard PTDL_v2 JSON file or overwrite this egg from an external JSON export."
+    },
+    "fields": {
+      "name": "Egg Name",
+      "namePlaceholder": "e.g. Paper",
+      "description": "Description",
+      "startup": "Startup Command",
+      "startupPlaceholder": "java -Xms128M -Xmx{'{{'}SERVER_MEMORY{'}}'}M -jar {'{{'}SERVER_JARFILE{'}}'}",
+      "dockerImages": "Docker Images",
+      "forceOutgoingIp": "Force Outgoing IP",
+      "updateUrl": "Update URL",
+      "features": "Features",
+      "fileDenylist": "File Denylist",
+      "configFrom": "Copy Configuration From",
+      "configStop": "Stop Command",
+      "configStartup": "Startup Configuration (JSON)",
+      "configFiles": "Configuration Files (JSON)",
+      "configLogs": "Log Configuration (JSON)"
+    },
+    "tips": {
+      "startup": "Supports {'{{VARIABLE}}'} placeholders substituted on server startup.",
+      "forceOutgoingIp": "Forces all container outbound traffic to use the server's primary allocation IP.",
+      "onePerLine": "One entry per line. Leave blank for none.",
+      "fileDenylistInherited": "When config_from is set, runtime always inherits the parent egg's file denylist.",
+      "configFrom": "Only 1-hop inheritance within the same nest is allowed.",
+      "configFromLocked": "Other eggs inherit configuration from this egg; cannot set a parent."
+    }
+  },
+  "variables": {
+    "addBtn": "Add Variable",
+    "searchPlaceholder": "Search variable name, env key, or description…",
+    "totalCount": "{n} variable(s)",
+    "empty": "No environment variables defined for this egg yet.",
+    "columns": {
+      "name": "Name",
+      "envVariable": "Environment Variable",
+      "defaultValue": "Default Value",
+      "rules": "Validation Rules",
+      "permissions": "Permissions",
+      "actions": "Actions"
+    },
+    "createTitle": "Add Egg Variable",
+    "editTitle": "Edit Egg Variable",
+    "created": "Variable created",
+    "updated": "Variable updated",
+    "deleteTitle": "Delete Variable",
+    "deleteMsg": "Delete variable “{name}” ({env})? Saved values for this variable on existing servers will also be removed.",
+    "deleted": "Variable {env} deleted",
+    "fields": {
+      "name": "Display Name",
+      "envVariable": "Environment Variable",
+      "description": "Description",
+      "defaultValue": "Default Value",
+      "rules": "Validation Rules",
+      "userViewable": "User Viewable",
+      "userEditable": "User Editable"
+    },
+    "badges": {
+      "viewable": "Viewable",
+      "hidden": "Hidden",
+      "editable": "Editable",
+      "readOnly": "Read-only"
+    },
+    "tips": {
+      "reserved": "Letters, digits, underscores only. Reserved names disallowed: {list}",
+      "rules": "Laravel validation syntax, e.g. required{'|'}string{'|'}max:191 or nullable{'|'}integer{'|'}between:1,65535"
+    },
+    "errors": {
+      "envFormat": "Only letters, digits, and underscores allowed (1–191 chars)",
+      "envReserved": "“{name}” is a reserved system variable name",
+      "envDuplicate": "Variable “{name}” already exists in this egg"
+    }
+  },
+  "scripts": {
+    "title": "Install Script",
+    "subtitle": "Executed inside a temporary container when installing or reinstalling a server.",
+    "saved": "Install script saved",
+    "copyFromNone": "None (use this egg's script)",
+    "dependentNotice": "The following child eggs copy their install script from this egg, so this egg cannot copy from another:",
+    "copyFromActiveNotice": "Script inheritance is active: server installation will run the parent egg's install script, container image, and entrypoint.",
+    "effectiveTitle": "Resolved Effective Script (read-only)",
+    "fields": {
+      "copyScriptFrom": "Copy Script From",
+      "container": "Script Container",
+      "entry": "Script Entrypoint",
+      "privileged": "Run Privileged",
+      "installScript": "Install Script",
+      "installPlaceholder": "#!/bin/ash\n# Write the server initialization install script here…"
+    },
+    "tips": {
+      "copyFrom": "Only 1-hop script inheritance within the same nest is allowed.",
+      "copyFromLocked": "Other eggs depend on this script; cannot inherit from another egg.",
+      "privileged": "Most official install scripts require privileged mode to adjust permissions."
+    },
+    "errors": {
+      "containerRequired": "Script container is required",
+      "entryRequired": "Script entrypoint is required"
+    }
+  },
+  "affectedPlans": {
+    "title": "{n} linked billing plan(s) have configuration drift — review recommended",
+    "desc": "The following plans have default environment variables or Docker images that no longer match this egg and may fail during provisioning:",
+    "goPlans": "Open Plans",
+    "active": "Active",
+    "inactive": "Inactive"
+  },
+  "validation": {
+    "nameRequired": "Name is required",
+    "startupRequired": "Startup command is required",
+    "dockerImagesInvalid": "Provide at least one Docker image with both display name and image address",
+    "dockerImageIncomplete": "Complete both display name and image address for every filled row, or remove the incomplete row",
+    "dockerImageTooLong": "Docker image address must be 191 characters or fewer",
+    "dockerImageDuplicateLabel": "Duplicate Docker image display name “{label}”; each display name must be unique",
+    "configStopRequired": "Stop command is required when not inheriting configuration"
+  }
+}

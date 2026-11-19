@@ -30,6 +30,8 @@ async def activity_logs(
     status: Literal["success", "failed"] | None = None,
     host_id: int | None = Query(default=None),
     node_id: int | None = Query(default=None),
+    sort_by: Literal["timestamp", "actor", "category", "status"] | None = Query(default=None),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
 ) -> ActivityLogsResponse:
     logs, total = await activity_log_repository.list_manager_logs(
         db,
@@ -40,6 +42,8 @@ async def activity_logs(
         status=status,
         host_id=host_id,
         node_id=node_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     actors = await activity_log_repository.distinct_actors(db)
     categories = await activity_log_repository.distinct_categories(db)

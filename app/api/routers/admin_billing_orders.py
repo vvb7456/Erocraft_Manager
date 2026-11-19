@@ -16,6 +16,7 @@ Action endpoints (§11.2 capability matrix):
 """
 
 from __future__ import annotations
+from typing import Any, Literal
 from fastapi import Response
 from app.core.api_errors import ApiError
 from app.core.contracts import ErrorInfo, OperationResult
@@ -36,6 +37,7 @@ from app.db.models.billing import (
     BillingRefund,
 )
 from app.db.models.pterodactyl import PteroServer, PteroUser
+from app.db.sorting import build_order_by
 from app.schemas.billing_admin_orders import (
     ActionAck,
     AdminInvoiceOut,
@@ -195,6 +197,17 @@ def _serialize_refund(refund: BillingRefund) -> RefundOut:
 # --------------------------------------------------------------------------- #
 
 
+_ORDER_SORT_COLUMNS: dict[str, Any] = {
+    "created_at": BillingOrder.created_at,
+    "order_no": BillingOrder.order_no,
+    "channel": BillingOrder.channel,
+    "kind": cast(BillingOrder.kind, String),
+    "total_fen": BillingOrder.total_fen,
+    "status": cast(BillingOrder.status, String),
+    "user_id": BillingOrder.user_id,
+}
+
+
 @router.get("", response_model=OrderListResponse)
 async def list_orders_endpoint(
     status_filter: str | None = Query(None, alias="status", max_length=32),
@@ -208,6 +221,16 @@ async def list_orders_endpoint(
     ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    sort_by: Literal[
+        "created_at",
+        "order_no",
+        "channel",
+        "kind",
+        "total_fen",
+        "status",
+        "user_id",
+    ] | None = Query(default=None),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> OrderListResponse:
@@ -293,7 +316,14 @@ async def list_orders_endpoint(
                     )
                 )
             )
-    stmt = stmt.order_by(BillingOrder.id.desc()).limit(limit).offset(offset)
+    order_clauses = build_order_by(
+        sort_by,
+        sort_order,
+        _ORDER_SORT_COLUMNS,
+        default=(BillingOrder.id.desc(),),
+        tie_breakers=(BillingOrder.id,),
+    )
+    stmt = stmt.order_by(*order_clauses).limit(limit).offset(offset)
     rows = (await db.execute(stmt)).scalars().all()
     total = int(await db.scalar(count_stmt) or 0)
 

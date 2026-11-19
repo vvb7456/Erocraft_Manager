@@ -34,6 +34,7 @@ class CreateUserRequest(BaseModel):
     firstName: str = ""
     lastName: str = ""
     sendWelcome: bool = True
+    root_admin: bool | None = None
 
 
 class UpdateUserRequest(BaseModel):
@@ -46,6 +47,7 @@ class UpdateUserRequest(BaseModel):
     # public-registration / reset-password screens. (Audit M8.)
     password: str | None = Field(default=None, min_length=8, max_length=72)
     language: str | None = None
+    root_admin: bool | None = None
 
 
 class BatchUsersRequest(BaseModel):

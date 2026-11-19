@@ -15,6 +15,9 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useClientPagination } from '@/composables/useTablePagination'
 import NumberInput from '@/components/form/NumberInput.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
 import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
@@ -68,12 +71,13 @@ const rawServers = ref<ServerItem[]>([])
 
 // ── Client-side state ──
 const filterStatus = ref((route.query.status as string) || 'all')
-const sortBy = ref('expiration_date')
-const sortOrder = ref<'asc' | 'desc'>('asc')
 const searchTerm = ref((route.query.q as string) || '')
 const selectedIds = ref<Set<number>>(new Set())
-const page = ref(1)
-const perPage = ref(20)
+const { sortBy, sortOrder, toggleSort, sortItems } = useTableSort({
+  defaultBy: 'expiration_date',
+  defaultOrder: 'asc',
+  descColumns: ['id'],
+})
 
 // Renew modal state
 const renewTargetServer = ref<ServerItem | null>(null)
@@ -177,47 +181,22 @@ const serverStats = computed(() => {
   }
 })
 
-const sorted = computed(() => {
-  const list = [...filtered.value]
-  const col = sortBy.value
-  const asc = sortOrder.value === 'asc'
+const sorted = computed(() =>
+  sortItems(filtered.value, {
+    id: (s) => s.pteroId,
+    panel_status: (s) => s.isSuspended,
+    server_name: (s) => s.name,
+    planName: (s) => s.planName,
+    eggName: (s) => s.eggName,
+    owner_username: (s) => s.ownerUsername,
+    expiration_date: (s) => s.expirationDate,
+  }, {
+    tieBreaker: (a, b) => a.pteroId - b.pteroId,
+  }),
+)
 
-  list.sort((a, b) => {
-    let va: string | number | null
-    let vb: string | number | null
-
-    if (col === 'server_name') {
-      va = a.name.toLowerCase()
-      vb = b.name.toLowerCase()
-    } else if (col === 'expiration_date') {
-      va = a.expirationDate
-      vb = b.expirationDate
-      // nulls (permanent) go last in asc, first in desc
-      if (va === null && vb === null) return 0
-      if (va === null) return asc ? 1 : -1
-      if (vb === null) return asc ? -1 : 1
-    } else if (col === 'owner_username') {
-      va = (a.ownerUsername || '').toLowerCase()
-      vb = (b.ownerUsername || '').toLowerCase()
-    } else {
-      va = a.pteroId
-      vb = b.pteroId
-    }
-
-    if (va! < vb!) return asc ? -1 : 1
-    if (va! > vb!) return asc ? 1 : -1
-    return 0
-  })
-
-  return list
-})
-
-const totalPages = computed(() => Math.max(1, Math.ceil(sorted.value.length / perPage.value)))
-
-// Reset page when filters change
-const paginated = computed(() => {
-  const start = (page.value - 1) * perPage.value
-  return sorted.value.slice(start, start + perPage.value)
+const { page, perPage, totalPages, paginated, setPerPage } = useClientPagination(sorted, {
+  resetDeps: [searchTerm, filterStatus, sortBy, sortOrder],
 })
 
 function pruneSelectionToCurrentPage() {
@@ -449,17 +428,6 @@ async function onPlanModalConfirmed(planId: number | null) {
 const createModalOpen = ref(false)
 const newForUser = ref((route.query.new_for_user as string) || '')
 
-// ── Sort toggle (client-side, no reload) ──
-function toggleSort(col: string) {
-  if (sortBy.value === col) {
-    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
-  } else {
-    sortBy.value = col
-    sortOrder.value = 'asc'
-  }
-  page.value = 1
-}
-
 // ── Mobile renew sheet ──
 const mobileRenewServer = ref<ServerItem | null>(null)
 const mobileRenewOpen = ref(false)
@@ -480,7 +448,10 @@ function openMobileRenew(s: ServerItem) {
 const mobileFilterOpen = ref(false)
 const sortColumns = computed(() => [
   { key: 'id', label: t('servers.table.id') },
+  { key: 'panel_status', label: t('servers.table.panel_status') },
   { key: 'server_name', label: t('servers.table.name') },
+  { key: 'planName', label: t('servers.table.plan') },
+  { key: 'eggName', label: t('servers.table.egg') },
   { key: 'owner_username', label: t('servers.table.owner') },
   { key: 'expiration_date', label: t('servers.table.expiration') },
 ])
@@ -492,13 +463,9 @@ const filterGroups = computed(() => [
     options: statusOptions.value,
   },
 ])
-function onMobileSort(col: string) {
-  toggleSort(col)
-}
 function onMobileFilter(groupKey: string, value: string | number | boolean) {
   if (groupKey === 'status') {
     filterStatus.value = String(value)
-    page.value = 1
   }
 }
 </script>
@@ -550,7 +517,6 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
             v-model="searchTerm"
             :placeholder="t('servers.search_placeholder')"
             class="tb-search"
-            @update:modelValue="page = 1"
           />
           <button
             class="tb-filter-btn"
@@ -564,7 +530,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       </template>
       <template #end>
         <div class="tb-select-group tb-desktop-only">
-          <BaseSelect v-model="filterStatus" :options="statusOptions" :prefix="t('servers.filter.label') + ': '" size="sm" fit @update:modelValue="page = 1" />
+          <BaseSelect v-model="filterStatus" :options="statusOptions" :prefix="t('servers.filter.label') + ': '" size="sm" fit />
         </div>
       </template>
       <template #selection-actions>
@@ -584,7 +550,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       :sort-by="sortBy"
       :sort-order="sortOrder"
       :filters="filterGroups"
-      @sort="onMobileSort"
+      @sort="toggleSort"
       @update:filter="onMobileFilter"
     />
 
@@ -601,31 +567,19 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       :empty-text="t('servers.empty')"
       row-key="pteroId"
       @update:page="page = $event"
-      @update:per-page="perPage = $event; page = 1"
+      @update:per-page="setPerPage"
     >
       <template #header>
         <th class="col-check">
           <input type="checkbox" v-model="allSelected" :aria-label="t('common.selection.selectAll')" />
         </th>
-        <th class="col-id sortable" @click="toggleSort('id')">
-          {{ t('servers.table.id') }}
-          <MsIcon v-if="sortBy === 'id'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-        </th>
-        <th class="col-status">{{ t('servers.table.panel_status') }}</th>
-        <th class="col-name sortable" @click="toggleSort('server_name')">
-          {{ t('servers.table.name') }}
-          <MsIcon v-if="sortBy === 'server_name'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-        </th>
-        <th class="col-plan">{{ t('servers.table.plan') }}</th>
-        <th class="col-egg">{{ t('servers.table.egg') }}</th>
-        <th class="col-owner sortable" @click="toggleSort('owner_username')">
-          {{ t('servers.table.owner') }}
-          <MsIcon v-if="sortBy === 'owner_username'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-        </th>
-        <th class="col-expiry sortable" @click="toggleSort('expiration_date')">
-          {{ t('servers.table.expiration') }}
-          <MsIcon v-if="sortBy === 'expiration_date'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-        </th>
+        <SortTh class="col-id" col="id" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('servers.table.id') }}</SortTh>
+        <SortTh class="col-name" col="server_name" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('servers.table.name') }}</SortTh>
+        <SortTh class="col-plan" col="planName" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('servers.table.plan') }}</SortTh>
+        <SortTh class="col-egg" col="eggName" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('servers.table.egg') }}</SortTh>
+        <SortTh class="col-owner" col="owner_username" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('servers.table.owner') }}</SortTh>
+        <SortTh class="col-expiry" col="expiration_date" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('servers.table.expiration') }}</SortTh>
+        <SortTh class="col-status" col="panel_status" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('servers.table.panel_status') }}</SortTh>
         <th class="col-actions">{{ t('servers.table.actions') }}</th>
       </template>
       <template #row="{ item: s }">
@@ -633,11 +587,6 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
           <input type="checkbox" :checked="selectedIds.has(s.pteroId)" :aria-label="t('common.selection.select', { name: s.name })" @change="toggleSelect(s.pteroId)" />
         </td>
         <td class="col-id">{{ s.pteroId }}</td>
-        <td class="col-status">
-          <Badge :color="s.isSuspended ? 'var(--red)' : 'var(--green)'">
-            {{ panelStatusText(s) }}
-          </Badge>
-        </td>
         <td class="col-name">
           <a href="#" class="server-link" @click.prevent="router.push(`/admin/servers/${s.pteroId}`)">
             {{ s.name }}
@@ -657,6 +606,11 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
         </td>
         <td class="col-expiry">
           <span :style="{ color: statusColor(s) }">{{ expirationText(s) }}</span>
+        </td>
+        <td class="col-status">
+          <Badge :color="s.isSuspended ? 'var(--red)' : 'var(--green)'">
+            {{ panelStatusText(s) }}
+          </Badge>
         </td>
         <td class="col-actions">
           <div class="action-group">
@@ -716,7 +670,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       </template>
       <template v-if="mobileActionServer">
         <button @click="mobileActionOpen = false; router.push(`/admin/servers/${mobileActionServer!.pteroId}`)">
-          <MsIcon name="open_in_new" size="sm" /> {{ t('servers.action.open_detail') }}
+          <MsIcon name="edit" size="sm" /> {{ t('common.btn.edit') }}
         </button>
         <button @click="mobileActionOpen = false; openMobileRenew(mobileActionServer!)">
           <MsIcon name="update" size="sm" /> {{ t('servers.action.renew') }}
@@ -785,19 +739,16 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 </template>
 
 <style scoped>
-.row-selected {
-  background: color-mix(in srgb, var(--ac) 8%, transparent) !important;
-}
-
-.col-check { width: 36px; text-align: center !important; }
-.col-id { width: 48px; color: var(--t3); font-size: .82rem; }
-
-.col-name { width: 18%; }
-.col-plan { width: 12%; color: var(--t2); font-size: .85rem; }
-.col-egg { width: 12%; color: var(--t2); font-size: .85rem; }
-.col-owner { width: 10%; }
-.col-expiry { width: 11%; }
-.col-status { width: 6%; }
+:deep(.dt-table) { min-width: 1140px; }
+:deep(.col-check) { width: 40px; text-align: center !important; }
+:deep(.col-id) { width: 64px; color: var(--t3); font-size: .82rem; }
+:deep(.col-name) { width: 14%; }
+:deep(.col-plan) { width: 11%; color: var(--t2); font-size: .85rem; }
+:deep(.col-egg) { width: 9%; color: var(--t2); font-size: .85rem; }
+:deep(.col-owner) { width: 8%; }
+:deep(.col-expiry) { width: 14%; }
+:deep(.col-status) { width: 7%; }
+:deep(.col-actions) { width: auto; }
 
 .plan-cell { color: var(--t1); }
 .plan-cell--none { color: var(--t3); }
@@ -872,12 +823,5 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
   gap: var(--sp-2);
   align-items: center;
   flex-wrap: wrap;
-}
-
-@media (max-width: 768px) {
-  .toolbar-half {
-    flex: 1;
-    min-width: 0;
-  }
 }
 </style>

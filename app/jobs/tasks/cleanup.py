@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utc_naive_now
 from app.db.models.manager import (
@@ -16,6 +17,7 @@ from app.db.models.manager import (
 from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
 from app.db.models.miniprogram import MiniProgramSession
 from app.db.models.notifications import NotificationDelivery, NotificationIssue
+from app.db.models.pterodactyl import ActivityLog, ActivityLogSubject
 from app.db.session import get_session_factory
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,51 @@ CLEANUP_JOB_ID = "manager_token_cleanup"
 # Tokens are valid for a short window (typically 30min). Keep 24h of history
 # for audit then drop. Old rows accumulate as "used" or "expired" otherwise.
 TOKEN_RETENTION = timedelta(hours=24)
+
+# Matches Pterodactyl Panel's PruneCommand default retention for activity_logs.
+ACTIVITY_LOG_RETENTION_DAYS = 90
+ACTIVITY_LOG_PRUNE_BATCH_SIZE = 1000
+
+
+async def prune_panel_activity_logs(
+    db: AsyncSession,
+    *,
+    retention_days: int = ACTIVITY_LOG_RETENTION_DAYS,
+    batch_size: int = ACTIVITY_LOG_PRUNE_BATCH_SIZE,
+) -> tuple[int, int]:
+    """Delete panel ``activity_logs`` (and linked subjects) older than ``retention_days`` in batches."""
+    cutoff = utc_naive_now() - timedelta(days=retention_days)
+    deleted_logs = 0
+    deleted_subjects = 0
+    while True:
+        ids = list(
+            (
+                await db.execute(
+                    select(ActivityLog.id)
+                    .where(ActivityLog.timestamp < cutoff)
+                    .order_by(ActivityLog.id.asc())
+                    .limit(batch_size)
+                )
+            ).scalars().all()
+        )
+        if not ids:
+            break
+        res_sub = await db.execute(
+            delete(ActivityLogSubject)
+            .where(ActivityLogSubject.activity_log_id.in_(ids))
+            .execution_options(synchronize_session=False)
+        )
+        res_log = await db.execute(
+            delete(ActivityLog)
+            .where(ActivityLog.id.in_(ids))
+            .execution_options(synchronize_session=False)
+        )
+        await db.commit()
+        deleted_subjects += int(res_sub.rowcount or 0)
+        deleted_logs += int(res_log.rowcount or 0)
+        if len(ids) < batch_size:
+            break
+    return deleted_logs, deleted_subjects
 
 
 
@@ -97,3 +144,16 @@ async def run_token_cleanup() -> None:
         except Exception:
             await db.rollback()
             logger.exception("monitoring cleanup failed")
+
+        try:
+            pruned_logs, pruned_subjects = await prune_panel_activity_logs(db)
+            if pruned_logs or pruned_subjects:
+                logger.info(
+                    "panel activity cleanup: deleted %s activity_logs, %s subjects (>%dd)",
+                    pruned_logs,
+                    pruned_subjects,
+                    ACTIVITY_LOG_RETENTION_DAYS,
+                )
+        except Exception:
+            await db.rollback()
+            logger.exception("panel activity cleanup failed")

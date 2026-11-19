@@ -35,6 +35,7 @@ import HelpTip from '@/components/ui/HelpTip.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
+import NodeConfigModal from '@/components/hosts/NodeConfigModal.vue'
 
 defineOptions({ name: 'HostWingsSection' })
 
@@ -110,6 +111,7 @@ const loading = ref(true)
 const submitting = ref(false)
 const restarting = ref(false)
 const syncing = ref(false)
+const configModalOpen = ref(false)
 const initial = ref<FormState>({ ...EMPTY_FORM })
 const form = ref<FormState>({ ...EMPTY_FORM })
 const wingsService = ref<WingsServiceState | null>(null)
@@ -372,7 +374,7 @@ const schemeOptions = [
           <BaseSelect :modelValue="form.scheme || 'http'" :options="schemeOptions" @update:modelValue="(v: any) => form.scheme = v" />
         </FormField>
 
-        <FormField layout="horizontal" bordered>
+        <FormField layout="horizontal" keep-horizontal control-fit bordered>
           <template #label>
             {{ t('hosts.setting.wings.fields.behindProxy') }}
             <HelpTip :text="t('hosts.setting.wings.tips.behindProxy')" />
@@ -380,7 +382,7 @@ const schemeOptions = [
           <ToggleSwitch v-model="form.behind_proxy" size="sm" />
         </FormField>
 
-        <FormField layout="horizontal" bordered>
+        <FormField layout="horizontal" keep-horizontal control-fit bordered>
           <template #label>
             {{ t('hosts.setting.wings.fields.maintenance') }}
             <HelpTip :text="t('hosts.setting.wings.tips.maintenance')" />
@@ -440,8 +442,11 @@ const schemeOptions = [
           <BaseInput v-model="form.daemon_base" />
         </FormField>
 
-        <!-- Standalone restart action: never pushes config; only restarts wings. -->
         <div class="actions">
+          <BaseButton size="sm" variant="default" @click="configModalOpen = true">
+            <MsIcon name="code" size="xs" />
+            {{ t('hosts.setting.wings.viewConfig') }}
+          </BaseButton>
           <span class="spacer" />
           <BaseButton size="sm" variant="default" :loading="restarting" @click="restartWings">
             <MsIcon name="restart_alt" size="xs" />
@@ -450,6 +455,12 @@ const schemeOptions = [
         </div>
       </div>
     </template>
+
+    <NodeConfigModal
+      v-model="configModalOpen"
+      :host-id="props.hostId"
+      :node-name="form.name || undefined"
+    />
   </div>
 </template>
 
@@ -468,6 +479,7 @@ const schemeOptions = [
   align-items: center;
   gap: var(--sp-2);
   margin-top: var(--sp-3);
+  flex-wrap: wrap;
 }
 .spacer { flex: 1; }
 
@@ -477,6 +489,7 @@ const schemeOptions = [
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  flex-wrap: wrap;
   padding: var(--sp-2) var(--sp-3);
   background: var(--bg3);
   border: 1px solid var(--bd);

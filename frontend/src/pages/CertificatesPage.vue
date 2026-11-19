@@ -15,6 +15,10 @@ import MsIcon from '@/components/ui/MsIcon.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useClientPagination } from '@/composables/useTablePagination'
 import CardTap from '@/components/ui/CardTap.vue'
 import CardKV from '@/components/ui/CardKV.vue'
 import type { AcmeCertificate, AcmeStatus, CertificateDeployment, ManagedCertificate } from '@/types/certificate'
@@ -36,9 +40,25 @@ const loading = ref(true)
 const addOpen = ref(false)
 const renewingId = ref<number | null>(null)
 const registeringKey = ref<string | null>(null)
-const page = ref(1)
-const perPage = ref(20)
 const syncingId = ref<number | null>(null)
+const mobileFilterOpen = ref(false)
+const { sortBy, sortOrder, toggleSort, sortItems } = useTableSort()
+
+const SYNC_RANK: Record<string, number> = {
+  synced: 0,
+  outdated: 1,
+  unknown: 2,
+  unreachable: 3,
+  deploy_failed: 4,
+}
+
+const sortColumns = computed(() => [
+  { key: 'host', label: t('certificates.nodes.host') },
+  { key: 'agent', label: t('certificates.nodes.agent') },
+  { key: 'sync', label: t('certificates.nodes.sync') },
+  { key: 'days_left', label: t('certificates.nodes.days') },
+  { key: 'next_renew', label: t('certificates.nodes.nextRenew') },
+])
 
 interface DeploymentRow {
   id: number
@@ -130,10 +150,25 @@ const deploymentRows = computed<DeploymentRow[]>(() =>
   ),
 )
 
-const totalPages = computed(() => Math.max(1, Math.ceil(deploymentRows.value.length / perPage.value)))
-const paginatedRows = computed(() => {
-  const start = (page.value - 1) * perPage.value
-  return deploymentRows.value.slice(start, start + perPage.value)
+function agentStatusRank(host: HostDetail | null): number {
+  if (host?.enabled === false) return 2
+  return hostAgentStatus(host) === 'running' ? 0 : 1
+}
+
+const sortedDeploymentRows = computed(() =>
+  sortItems(deploymentRows.value, {
+    host: (row) => row.dep.host_name || row.host?.name || String(row.dep.host_id),
+    agent: (row) => agentStatusRank(row.host),
+    sync: (row) => SYNC_RANK[row.dep.status] ?? 99,
+    days_left: (row) => daysLeft(row.cert.source_not_after),
+    next_renew: (row) => parseDate(acmeByCertId.value.get(row.cert.id)?.next_renew_time_iso ?? null)?.getTime() ?? null,
+  }, {
+    tieBreaker: (a, b) => a.id - b.id,
+  }),
+)
+
+const { page, perPage, totalPages, paginated: paginatedRows, setPerPage } = useClientPagination(sortedDeploymentRows, {
+  resetDeps: [sortBy, sortOrder],
 })
 
 const expiringCount = computed(() =>
@@ -356,7 +391,25 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
     <section class="deployment-section" aria-label="deployment statuses">
       <div class="section-title-row deploy-section-title">
         <h2>{{ t('certificates.nodes.title') }}</h2>
+        <button
+          type="button"
+          class="tb-filter-btn"
+          :title="t('common.filterSort.title')"
+          :aria-label="t('common.filterSort.title')"
+          @click="mobileFilterOpen = true"
+        >
+          <MsIcon name="tune" size="sm" />
+        </button>
       </div>
+
+      <MobileFilterSheet
+        v-model:open="mobileFilterOpen"
+        :sort-columns="sortColumns"
+        :sort-by="sortBy"
+        :sort-order="sortOrder"
+        :filters="[]"
+        @sort="toggleSort"
+      />
 
       <DataTable
         :items="paginatedRows"
@@ -368,16 +421,16 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
         empty-icon="lan"
         :empty-text="t('certificates.nodes.empty')"
         @update:page="page = $event"
-        @update:per-page="perPage = $event; page = 1"
+        @update:per-page="setPerPage"
       >
         <template #header>
-          <th class="col-host">{{ t('certificates.nodes.host') }}</th>
-          <th class="col-agent">{{ t('certificates.nodes.agent') }}</th>
-          <th class="col-sync">{{ t('certificates.nodes.sync') }}</th>
+          <SortTh class="col-host" col="host" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('certificates.nodes.host') }}</SortTh>
           <th class="col-domains">{{ t('certificates.nodes.domains') }}</th>
-          <th class="col-days">{{ t('certificates.nodes.days') }}</th>
-          <th class="col-next">{{ t('certificates.nodes.nextRenew') }}</th>
+          <SortTh class="col-days" col="days_left" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('certificates.nodes.days') }}</SortTh>
+          <SortTh class="col-next" col="next_renew" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('certificates.nodes.nextRenew') }}</SortTh>
           <th class="col-path">{{ t('certificates.nodes.path') }}</th>
+          <SortTh class="col-agent" col="agent" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('certificates.nodes.agent') }}</SortTh>
+          <SortTh class="col-sync" col="sync" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('certificates.nodes.sync') }}</SortTh>
           <th class="col-actions">{{ t('certificates.nodes.actions') }}</th>
         </template>
 
@@ -387,17 +440,6 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
               <span>{{ row.dep.host_name || row.host?.name || row.dep.host_id }}</span>
               <small>{{ row.dep.host_kind || row.host?.kind || '-' }}</small>
             </div>
-          </td>
-          <td class="col-agent">
-            <span class="status-cell">
-              <StatusDot :status="hostAgentStatus(row.host)" size="sm" />
-              {{ row.host?.enabled === false ? t('certificates.agent.disabled') : hostAgentStatus(row.host) === 'running' ? t('certificates.agent.online') : t('certificates.agent.offline') }}
-            </span>
-          </td>
-          <td class="col-sync">
-            <Badge size="sm" :color="deploymentStatus(row.dep) === 'ok' ? 'var(--green)' : deploymentStatus(row.dep) === 'error' ? 'var(--red)' : 'var(--amber)'">
-              {{ t(`certificates.deployment.${row.dep.status}`) }}
-            </Badge>
           </td>
           <td class="col-domains">
             <div class="domain-lines">
@@ -411,6 +453,17 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
             :title="row.dep.target_path_error || deploymentPath(row.dep)"
           >
             {{ deploymentPath(row.dep) }}
+          </td>
+          <td class="col-agent">
+            <span class="status-cell">
+              <StatusDot :status="hostAgentStatus(row.host)" size="sm" />
+              {{ row.host?.enabled === false ? t('certificates.agent.disabled') : hostAgentStatus(row.host) === 'running' ? t('certificates.agent.online') : t('certificates.agent.offline') }}
+            </span>
+          </td>
+          <td class="col-sync">
+            <Badge size="sm" :color="deploymentStatus(row.dep) === 'ok' ? 'var(--green)' : deploymentStatus(row.dep) === 'error' ? 'var(--red)' : 'var(--amber)'">
+              {{ t(`certificates.deployment.${row.dep.status}`) }}
+            </Badge>
           </td>
           <td class="col-actions">
             <BaseButton
@@ -533,6 +586,11 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
 .deploy-section-title {
   grid-column: 1 / -1;
   margin-bottom: 0;
+  align-items: center;
+}
+
+.tb-filter-btn {
+  display: none;
 }
 
 .cert-card__top {
@@ -636,10 +694,6 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
   line-height: 1.5;
 }
 
-.node-section {
-  min-width: 0;
-}
-
 .section-title-row {
   display: flex;
   align-items: baseline;
@@ -654,14 +708,15 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
   color: var(--t1);
 }
 
-.col-host { width: 16%; }
-.col-agent { width: 10%; }
-.col-sync { width: 10%; }
-.col-domains { width: 18%; }
-.col-days { width: 10%; }
-.col-next { width: 14%; }
-.col-path { width: 16%; }
-.col-actions { width: 12%; text-align: right; }
+:deep(.dt-table) { min-width: 1040px; }
+:deep(.col-host) { width: 14%; }
+:deep(.col-domains) { width: 17%; }
+:deep(.col-days) { width: 10%; }
+:deep(.col-next) { width: 14%; }
+:deep(.col-path) { width: 15%; }
+:deep(.col-agent) { width: 9%; }
+:deep(.col-sync) { width: 10%; }
+:deep(.col-actions) { width: 11%; }
 
 .host-cell {
   display: flex;
@@ -790,6 +845,25 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
 }
 
 @media (max-width: 768px) {
+  .tb-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--bd);
+    border-radius: var(--r-sm);
+    background: var(--bg2);
+    color: var(--t2);
+    cursor: pointer;
+  }
+
+  .tb-filter-btn:hover {
+    border-color: var(--ac);
+    color: var(--ac);
+  }
+
   .stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

@@ -15,13 +15,12 @@ import logging
 import re
 import uuid as _uuid
 from dataclasses import dataclass
-from datetime import datetime
 
-from sqlalchemy import and_, delete as sql_delete, func, literal, or_, select, update
+from sqlalchemy import delete as sql_delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.time import utc_naive_now
+from app.core.time import utc_naive_now_sec
 from app.db.models import PteroServer, PteroUser
 from app.db.models.pterodactyl import (
     Allocation,
@@ -49,11 +48,6 @@ class PanelDBValidationError(PanelDBError):
 # ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------
-
-
-def _now() -> datetime:
-    # Pterodactyl stores naive UTC datetimes
-    return utc_naive_now().replace(microsecond=0)
 
 
 def _new_uuid() -> str:
@@ -100,8 +94,8 @@ async def create_user(
         root_admin=root_admin,
         use_totp=False,
         gravatar=True,
-        created_at=_now(),
-        updated_at=_now(),
+        created_at=utc_naive_now_sec(),
+        updated_at=utc_naive_now_sec(),
     )
     user.password = await asyncio.to_thread(PteroUser.hash_password_sync, password)
     db.add(user)
@@ -139,8 +133,8 @@ async def create_user_with_hashed_password(
         root_admin=root_admin,
         use_totp=False,
         gravatar=True,
-        created_at=_now(),
-        updated_at=_now(),
+        created_at=utc_naive_now_sec(),
+        updated_at=utc_naive_now_sec(),
     )
     user.password = password_hash
     db.add(user)
@@ -161,6 +155,7 @@ async def update_user(
     last_name: str,
     password: str | None = None,
     language: str | None = None,
+    root_admin: bool | None = None,
 ) -> None:
     """Update an existing user. Caller is responsible for db.commit()."""
     user = await db.get(PteroUser, user_id)
@@ -174,7 +169,9 @@ async def update_user(
         user.password = await asyncio.to_thread(PteroUser.hash_password_sync, password)
     if language is not None:
         user.language = language
-    user.updated_at = _now()
+    if root_admin is not None:
+        user.root_admin = bool(root_admin)
+    user.updated_at = utc_naive_now_sec()
     try:
         await db.flush()
     except IntegrityError as exc:
@@ -364,8 +361,8 @@ async def create_server(
         allocation_limit=allocation_limit,
         database_limit=int(database_limit),
         backup_limit=int(backup_limit),
-        created_at=_now(),
-        updated_at=_now(),
+        created_at=utc_naive_now_sec(),
+        updated_at=utc_naive_now_sec(),
         installed_at=None,
     )
     db.add(server)
@@ -378,10 +375,10 @@ async def create_server(
 
     # Bind primary + additional allocations to the new server
     alloc.server_id = server_id
-    alloc.updated_at = _now()
+    alloc.updated_at = utc_naive_now_sec()
     for extra in additional_allocs:
         extra.server_id = server_id
-        extra.updated_at = _now()
+        extra.updated_at = utc_naive_now_sec()
 
     # Insert all server_variables (one per egg_variable). Missing → default.
     for ev in egg_vars:
@@ -391,8 +388,8 @@ async def create_server(
                 server_id=server_id,
                 variable_id=int(ev.id),
                 variable_value=str(value),
-                created_at=_now(),
-                updated_at=_now(),
+                created_at=utc_naive_now_sec(),
+                updated_at=utc_naive_now_sec(),
             )
         )
 
@@ -420,7 +417,7 @@ async def set_server_status(
     result = await db.execute(
         update(PteroServer)
         .where(PteroServer.id == server_id)
-        .values(status=status_value, updated_at=_now())
+        .values(status=status_value, updated_at=utc_naive_now_sec())
     )
     if result.rowcount == 0:
         raise PanelDBError(f"服务器 {server_id} 不存在")
@@ -431,7 +428,7 @@ async def mark_for_reinstall(db: AsyncSession, server_id: int) -> None:
     result = await db.execute(
         update(PteroServer)
         .where(PteroServer.id == server_id)
-        .values(status="installing", installed_at=None, updated_at=_now())
+        .values(status="installing", installed_at=None, updated_at=utc_naive_now_sec())
     )
     if result.rowcount == 0:
         raise PanelDBError(f"服务器 {server_id} 不存在")
@@ -454,7 +451,7 @@ async def update_server_limits(
     oom_disabled: bool | None = None,
 ) -> None:
     """Update build limits. Pair with ``WingsService.sync_server`` afterward."""
-    fields: dict[str, object] = {"updated_at": _now()}
+    fields: dict[str, object] = {"updated_at": utc_naive_now_sec()}
     if memory is not None:
         fields["memory"] = int(memory)
     if swap is not None:
@@ -514,7 +511,7 @@ async def sync_server_expiration_description(
         line = f"到期时间：{expiration_iso}"
         new_desc = f"{line}\n{cleaned}".strip() if cleaned else line
     server.description = new_desc
-    server.updated_at = _now()
+    server.updated_at = utc_naive_now_sec()
 
 
 async def delete_server_row(db: AsyncSession, server_id: int) -> None:
@@ -540,14 +537,11 @@ async def delete_server_row(db: AsyncSession, server_id: int) -> None:
 
     Idempotent. Caller is responsible for db.commit().
     """
-    from sqlalchemy import delete as sql_delete
-    from sqlalchemy import update as sql_update
-
     # Mirror panel: clear friendly notes on every allocation before unbinding
     await db.execute(
-        sql_update(Allocation)
+        update(Allocation)
         .where(Allocation.server_id == server_id)
-        .values(notes=None, updated_at=_now())
+        .values(notes=None, updated_at=utc_naive_now_sec())
     )
     await db.execute(sql_delete(PteroServer).where(PteroServer.id == server_id))
     await db.flush()

@@ -8,13 +8,16 @@ import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useServerPagination } from '@/composables/useTablePagination'
 import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 
 defineOptions({ name: 'ServerActivityPage' })
 
 const { t, te } = useI18n({ useScope: 'global' })
-const { get, loading } = useApiFetch()
+const { get, handleError } = useApiFetch()
 const { formatDateTime: _formatDateTime } = useFormatDate()
 
 // ── Types ──
@@ -51,11 +54,13 @@ const server = inject<Ref<{ id: number; eggName: string } | null>>('server')!
 
 // ── State ──
 const logs = ref<ActivityLogItem[]>([])
-const page = ref(1)
-const perPage = ref(20)
-const total = ref(0)
 const eventFilter = ref('')
 const searchTerm = ref('')
+const { sortBy, sortOrder, toggleSort } = useTableSort({
+  defaultBy: 'timestamp',
+  defaultOrder: 'desc',
+  descColumns: ['timestamp'],
+})
 
 // ── Filter options ──
 const filterOptions = computed(() => [
@@ -69,6 +74,12 @@ const filterOptions = computed(() => [
 
 // ── Mobile filter sheet ──
 const mobileFilterOpen = ref(false)
+const sortColumns = computed(() => [
+  { key: 'timestamp', label: t('activity.col.time') },
+  { key: 'event', label: t('activity.col.event') },
+  { key: 'actor', label: t('activity.col.user') },
+  { key: 'ip', label: 'IP' },
+])
 const filterGroups = computed(() => [
   {
     key: 'event',
@@ -82,26 +93,56 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 }
 
 // ── Fetch ──
-async function loadLogs() {
-  if (!server.value) return
-  const params = new URLSearchParams()
-  params.set('page', String(page.value))
-  params.set('per_page', String(perPage.value))
-  if (eventFilter.value) params.set('event', eventFilter.value)
+const {
+  page,
+  perPage,
+  total,
+  totalPages,
+  loading,
+  reload: loadLogs,
+  setPerPage,
+  resetStateWithoutFetch,
+} = useServerPagination(
+  async ({ page: reqPage, perPage: reqPerPage, isCurrent }) => {
+    const serverId = server.value?.id
+    if (!serverId) return null
+    const params = new URLSearchParams()
+    params.set('page', String(reqPage))
+    params.set('per_page', String(reqPerPage))
+    if (eventFilter.value) params.set('event', eventFilter.value)
+    if (sortBy.value) {
+      params.set('sort_by', sortBy.value)
+      params.set('sort_order', sortOrder.value)
+    }
 
-  const data = await get<ActivityLogsResponse>(
-    `/api/user/servers/${server.value.id}/activity?${params}`,
-  )
-  if (data) {
+    const data = await get<ActivityLogsResponse>(
+      `/api/user/servers/${serverId}/activity?${params}`,
+    )
+    if (!data || !isCurrent()) return null
     logs.value = data.logs
-    total.value = data.total
-  }
-}
+    return { total: data.total }
+  },
+  {
+    initialPerPage: 20,
+    enabled: () => !!server.value?.id,
+    filters: [eventFilter, sortBy, sortOrder],
+    onError: handleError,
+  },
+)
 
-watch([() => server.value?.id], () => { page.value = 1; return loadLogs() }, { immediate: true })
-watch(eventFilter, () => { page.value = 1; return loadLogs() })
-
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
+watch(
+  () => server.value?.id,
+  (id) => {
+    resetStateWithoutFetch()
+    if (!id) {
+      logs.value = []
+      total.value = 0
+      return
+    }
+    void loadLogs()
+  },
+  { immediate: true },
+)
 
 const filteredLogs = computed(() => {
   const q = searchTerm.value.toLowerCase().trim()
@@ -236,10 +277,11 @@ function getPropsText(log: ActivityLogItem): string {
 
     <MobileFilterSheet
       v-model:open="mobileFilterOpen"
-      :sort-columns="[]"
-      :sort-by="''"
-      :sort-order="'asc'"
+      :sort-columns="sortColumns"
+      :sort-by="sortBy"
+      :sort-order="sortOrder"
       :filters="filterGroups"
+      @sort="toggleSort"
       @update:filter="onMobileFilter"
     />
 
@@ -253,14 +295,14 @@ function getPropsText(log: ActivityLogItem): string {
       :loading="loading"
       empty-icon="history"
       :empty-text="eventFilter ? t('activity.emptyFiltered') : t('activity.empty')"
-      @update:page="v => { page = v; loadLogs() }"
-      @update:per-page="v => { perPage = v; page = 1; loadLogs() }"
+      @update:page="page = $event"
+      @update:per-page="setPerPage"
     >
       <template #header>
-        <th class="col-time">{{ t('activity.col.time') }}</th>
-        <th class="col-event">{{ t('activity.col.event') }}</th>
-        <th class="col-user">{{ t('activity.col.user') }}</th>
-        <th class="col-ip">IP</th>
+        <SortTh class="col-time" col="timestamp" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('activity.col.time') }}</SortTh>
+        <SortTh class="col-event" col="event" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('activity.col.event') }}</SortTh>
+        <SortTh class="col-user" col="actor" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('activity.col.user') }}</SortTh>
+        <SortTh class="col-ip" col="ip" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">IP</SortTh>
         <th class="col-detail">{{ t('activity.col.detail') }}</th>
       </template>
 
@@ -325,8 +367,12 @@ function getPropsText(log: ActivityLogItem): string {
 }
 
 /* ── Table columns ── */
-.col-time {
-  width: 13%;
+:deep(.dt-table) {
+  min-width: 820px;
+}
+
+:deep(.col-time) {
+  width: 15%;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
@@ -334,30 +380,35 @@ function getPropsText(log: ActivityLogItem): string {
   color: var(--t3);
 }
 
-.col-event {
-  width: 14%;
+:deep(.col-event) {
+  width: 15%;
   white-space: nowrap;
 }
 
-.col-user {
-  width: 10%;
+:deep(.col-user) {
+  width: 11%;
   white-space: nowrap;
   color: var(--t2);
 }
 
-.col-ip {
-  width: 12%;
+:deep(.col-ip) {
+  width: 13%;
   white-space: nowrap;
 }
 
-.col-detail {
-  width: 51%;
+:deep(.col-detail) {
+  width: 46%;
+}
+
+:deep(.dt-table td.col-detail) {
+  white-space: normal;
 }
 
 .detail-text {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--t2);
+  white-space: normal;
   word-break: break-all;
   display: -webkit-box;
   -webkit-line-clamp: 2;

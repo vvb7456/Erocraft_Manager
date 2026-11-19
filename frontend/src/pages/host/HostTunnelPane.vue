@@ -34,6 +34,10 @@ import AlertBanner from '@/components/ui/AlertBanner.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useClientPagination } from '@/composables/useTablePagination'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import type { HostDetail } from '@/types/host'
 
@@ -307,7 +311,7 @@ async function submitUninstall() {
     if (r) {
       detail.value = null
       serverRows.value = []
-      serverTotalPages.value = 1
+      serverPage.value = 1
       uninstallOpen.value = false
       if (r.agent_ok === false) {
         toast(t('hosts.tunnel.uninstallPartial', { err: r.agent_error ? errorInfoMessage(r.agent_error) : '?' }), 'warning')
@@ -325,9 +329,36 @@ async function submitUninstall() {
 // ---------------------------------------------------------------
 const serverRows = ref<ServerTunnelRow[]>([])
 const serverLoading = ref(false)
-const serverPage = ref(1)
-const serverPerPage = ref(20)
-const serverTotalPages = ref(1)
+const mobileFilterOpen = ref(false)
+const { sortBy, sortOrder, toggleSort, sortItems } = useTableSort()
+
+const sortColumns = computed(() => [
+  { key: 'server_name', label: t('hosts.tunnel.cols.serverId') },
+  { key: 'hostname', label: t('hosts.tunnel.cols.hostname') },
+  { key: 'upstream', label: t('hosts.tunnel.cols.upstream') },
+  { key: 'status', label: t('hosts.tunnel.cols.status') },
+])
+
+const sortedServerRows = computed(() =>
+  sortItems(serverRows.value, {
+    server_name: (r) => r.server_name || `#${r.server_id}`,
+    hostname: (r) => r.hostname,
+    upstream: (r) => r.upstream,
+    status: (r) => r.status,
+  }, {
+    tieBreaker: (a, b) => a.id - b.id,
+  }),
+)
+
+const {
+  page: serverPage,
+  perPage: serverPerPage,
+  totalPages: serverTotalPages,
+  paginated: paginatedServerRows,
+  setPerPage: setServerPerPage,
+} = useClientPagination(sortedServerRows, {
+  resetDeps: [sortBy, sortOrder],
+})
 
 async function loadServers() {
   if (!host.value) return
@@ -338,7 +369,6 @@ async function loadServers() {
       { silent: true },
     )
     serverRows.value = r?.items ?? []
-    serverTotalPages.value = Math.max(1, Math.ceil(serverRows.value.length / serverPerPage.value))
   } finally {
     serverLoading.value = false
   }
@@ -467,34 +497,55 @@ function statusBadgeColor(s: string): string {
           <span>{{ t('hosts.tunnel.serversTitle') }}</span>
         </div>
         <span class="meta-text">{{ t('hosts.tunnel.serversHint') }}</span>
+        <button
+          type="button"
+          class="tb-filter-btn"
+          :title="t('common.filterSort.title')"
+          :aria-label="t('common.filterSort.title')"
+          @click="mobileFilterOpen = true"
+        >
+          <MsIcon name="tune" size="sm" />
+        </button>
       </div>
 
+      <MobileFilterSheet
+        v-model:open="mobileFilterOpen"
+        :sort-columns="sortColumns"
+        :sort-by="sortBy"
+        :sort-order="sortOrder"
+        :filters="[]"
+        @sort="toggleSort"
+      />
+
       <DataTable
-        :items="serverRows"
+        :items="paginatedServerRows"
         :page="serverPage"
         :totalPages="serverTotalPages"
         :perPage="serverPerPage"
+        :per-page-label="t('hosts.list.perPage')"
         :loading="serverLoading"
         :emptyText="isInstalled ? t('hosts.tunnel.serversEmptyReady') : t('hosts.tunnel.serversEmptyNoTunnel')"
         emptyIcon="link"
         rowKey="id"
+        @update:page="serverPage = $event"
+        @update:per-page="setServerPerPage"
       >
         <template #header>
-          <th>{{ t('hosts.tunnel.cols.serverId') }}</th>
-          <th>{{ t('hosts.tunnel.cols.hostname') }}</th>
-          <th>{{ t('hosts.tunnel.cols.upstream') }}</th>
-          <th>{{ t('hosts.tunnel.cols.status') }}</th>
+          <SortTh class="col-server" col="server_name" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.tunnel.cols.serverId') }}</SortTh>
+          <SortTh class="col-hostname" col="hostname" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.tunnel.cols.hostname') }}</SortTh>
+          <SortTh class="col-upstream" col="upstream" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.tunnel.cols.upstream') }}</SortTh>
+          <SortTh class="col-status" col="status" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.tunnel.cols.status') }}</SortTh>
         </template>
         <template #row="{ item }">
-          <td>
+          <td class="col-server">
             <RouterLink :to="{ name: 'admin-server-overview', params: { id: item.server_id } }" class="server-link">
               {{ item.server_name || `#${item.server_id}` }}
             </RouterLink>
             <div class="meta-text"><code>{{ item.server_uuid_short || item.server_id }}</code></div>
           </td>
-          <td><code>{{ item.hostname }}</code></td>
-          <td><code>{{ item.upstream }}</code></td>
-          <td><Badge size="sm" :color="statusBadgeColor(item.status)">{{ item.status }}</Badge></td>
+          <td class="col-hostname"><code>{{ item.hostname }}</code></td>
+          <td class="col-upstream"><code>{{ item.upstream }}</code></td>
+          <td class="col-status"><Badge size="sm" :color="statusBadgeColor(item.status)">{{ item.status }}</Badge></td>
         </template>
         <template #card="{ item }">
           <div>
@@ -613,11 +664,6 @@ function statusBadgeColor(s: string): string {
   align-items: center;
 }
 
-.empty-actions {
-  display: flex;
-  justify-content: center;
-}
-
 .state-block {
   display: flex;
   flex-direction: column;
@@ -646,6 +692,11 @@ function statusBadgeColor(s: string): string {
   gap: var(--sp-2);
   flex-wrap: wrap;
   margin-bottom: var(--sp-3);
+}
+
+.tb-filter-btn {
+  display: none;
+  margin-left: auto;
 }
 
 .section-head__title {
@@ -705,6 +756,12 @@ td code {
   font-family: var(--font-mono);
 }
 
+:deep(.dt-table)     { min-width: 720px; }
+:deep(.col-server)   { width: 28%; }
+:deep(.col-hostname) { width: 32%; }
+:deep(.col-upstream) { width: 26%; }
+:deep(.col-status)   { width: 14%; }
+
 .actions {
   display: flex;
   align-items: center;
@@ -725,6 +782,27 @@ td code {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+}
+
+@media (max-width: 768px) {
+  .tb-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--bd);
+    border-radius: var(--r-sm);
+    background: var(--bg2);
+    color: var(--t2);
+    cursor: pointer;
+  }
+
+  .tb-filter-btn:hover {
+    border-color: var(--ac);
+    color: var(--ac);
+  }
 }
 
 @media (max-width: 640px) {

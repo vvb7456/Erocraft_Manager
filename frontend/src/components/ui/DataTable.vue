@@ -1,46 +1,24 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MsIcon from './MsIcon.vue'
 import Spinner from './Spinner.vue'
 import EmptyState from './EmptyState.vue'
 
-export interface DataTableColumn {
-  key: string
-  label: string
-  sortable?: boolean
-  class?: string
-}
-
 const props = withDefaults(defineProps<{
-  /** Rows to display on the current page */
   items: any[]
-  /** Current page (1-indexed) */
   page: number
-  /** Total page count */
   totalPages: number
-  /** Items per page */
   perPage: number
   maxPerPage?: number
-  /** Label for the per-page input (e.g. "条/页") */
   perPageLabel?: string
-  /** Current sort column key */
-  sortBy?: string
-  /** Current sort direction */
-  sortOrder?: 'asc' | 'desc'
-  /** Show loading spinner */
   loading?: boolean
-  /** Empty icon */
   emptyIcon?: string
-  /** Empty message */
   emptyText?: string
-  /** Row key field */
   rowKey?: string
 }>(), {
   perPageLabel: '',
   maxPerPage: 500,
-  sortBy: '',
-  sortOrder: 'asc',
   loading: false,
   emptyIcon: 'table_rows',
   rowKey: 'id',
@@ -51,7 +29,6 @@ const { t } = useI18n({ useScope: 'global' })
 const emit = defineEmits<{
   'update:page': [value: number]
   'update:perPage': [value: number]
-  sort: [column: string]
 }>()
 
 function onPerPageChange(e: Event) {
@@ -62,15 +39,39 @@ function onPerPageChange(e: Event) {
   emit('update:page', 1)
 }
 
-const sortIcon = computed(() =>
-  props.sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward',
+const showRefreshOverlay = ref(false)
+let refreshOverlayTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  () => props.loading && props.items.length > 0,
+  (refreshing) => {
+    if (refreshOverlayTimer !== null) {
+      clearTimeout(refreshOverlayTimer)
+      refreshOverlayTimer = null
+    }
+    if (refreshing) {
+      refreshOverlayTimer = setTimeout(() => {
+        showRefreshOverlay.value = true
+        refreshOverlayTimer = null
+      }, 80)
+    } else {
+      showRefreshOverlay.value = false
+    }
+  },
+  { immediate: true },
 )
 
 const isMobile = ref(false)
 const mql = typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)') : null
 function onMediaChange(e: MediaQueryListEvent | MediaQueryList) { isMobile.value = e.matches }
 onMounted(() => { if (mql) { onMediaChange(mql); mql.addEventListener('change', onMediaChange) } })
-onUnmounted(() => { mql?.removeEventListener('change', onMediaChange) })
+onUnmounted(() => {
+  mql?.removeEventListener('change', onMediaChange)
+  if (refreshOverlayTimer !== null) {
+    clearTimeout(refreshOverlayTimer)
+    refreshOverlayTimer = null
+  }
+})
 
 // Jump-to-page popover
 const jumpOpen = ref(false)
@@ -93,8 +94,8 @@ function submitJump() {
 </script>
 
 <template>
-  <!-- Loading -->
-  <div v-if="loading" class="dt-center-loading">
+  <!-- Initial / empty-table loading -->
+  <div v-if="loading && items.length === 0" class="dt-center-loading">
     <Spinner size="lg" />
   </div>
 
@@ -108,7 +109,11 @@ function submitJump() {
   <!-- Table (desktop) or Cards (mobile) -->
   <template v-else>
     <!-- Mobile card view -->
-    <div v-if="isMobile && $slots.card" class="dt-card-list">
+    <div
+      v-if="isMobile && $slots.card"
+      class="dt-card-list"
+      :aria-busy="loading ? 'true' : undefined"
+    >
       <div
         v-for="(item, index) in items"
         :key="rowKey ? item[rowKey] : index"
@@ -116,26 +121,38 @@ function submitJump() {
       >
         <slot name="card" :item="item" :index="index" />
       </div>
+      <div v-if="showRefreshOverlay" class="dt-refresh-overlay" role="status" aria-live="polite">
+        <Spinner size="md" />
+      </div>
     </div>
 
     <!-- Desktop table view -->
-    <div v-else class="dt-table-wrap">
-      <table class="dt-table">
-        <slot name="colgroup" />
-        <thead>
-          <tr>
-            <slot name="header" :sort-by="sortBy" :sort-order="sortOrder" :sort-icon="sortIcon" />
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(item, index) in items"
-            :key="rowKey ? item[rowKey] : index"
-          >
-            <slot name="row" :item="item" :index="index" />
-          </tr>
-        </tbody>
-      </table>
+    <div
+      v-else
+      class="dt-table-stage"
+      :aria-busy="loading ? 'true' : undefined"
+    >
+      <div class="dt-table-wrap">
+        <table class="dt-table">
+          <slot name="colgroup" />
+          <thead>
+            <tr>
+              <slot name="header" />
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(item, index) in items"
+              :key="rowKey ? item[rowKey] : index"
+            >
+              <slot name="row" :item="item" :index="index" />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="showRefreshOverlay" class="dt-refresh-overlay" role="status" aria-live="polite">
+        <Spinner size="md" />
+      </div>
     </div>
 
     <!-- Pagination footer -->
@@ -201,7 +218,12 @@ function submitJump() {
   padding: var(--sp-8);
 }
 
+.dt-table-stage {
+  position: relative;
+}
+
 .dt-table-wrap {
+  position: relative;
   overflow-x: auto;
   /* Contain horizontal overscroll so iOS rubber-band doesn't propagate to
      the page (relevant only on iPad / wide-mobile where the desktop table
@@ -211,8 +233,19 @@ function submitJump() {
 
 .dt-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: .85rem;
+}
+
+.dt-refresh-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
 }
 
 .dt-table :deep(th),
@@ -221,6 +254,13 @@ function submitJump() {
   text-align: left;
   border-bottom: 1px solid var(--bd);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dt-table :deep(td.col-actions),
+.dt-table :deep(td[class*="-actions"]) {
+  white-space: normal;
 }
 
 .dt-table :deep(th) {
@@ -240,7 +280,8 @@ function submitJump() {
   user-select: none;
 }
 
-.dt-table :deep(th.sortable:hover) {
+.dt-table :deep(th.sortable:hover),
+.dt-table :deep(th.sortable.sort-active) {
   color: var(--t1);
 }
 
@@ -367,6 +408,7 @@ function submitJump() {
 
 /* Card list (mobile) */
 .dt-card-list {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);

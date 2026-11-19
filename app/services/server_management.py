@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy import and_, delete as sql_delete, or_, select
@@ -12,8 +10,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.time import utc_naive_now
+from app.core.time import utc_naive_now_sec
 from app.db.models import Allocation, Egg, EggVariable, ManagerHost, Nest, PteroServer, PteroUser, ServerVariable
+from app.db.models.pterodactyl import parse_egg_docker_images
 from app.db.models.billing import BillingPlan
 from app.schemas.admin_server_detail import (
     AdminServerDetailResponse,
@@ -56,10 +55,6 @@ class ServerNotFoundError(ServerManagementValidationError):
     """
 
 
-def _now() -> datetime:
-    return utc_naive_now().replace(microsecond=0)
-
-
 async def _get_server(db: AsyncSession, server_id: int) -> PteroServer:
     result = await db.execute(
         select(PteroServer)
@@ -73,25 +68,11 @@ async def _get_server(db: AsyncSession, server_id: int) -> PteroServer:
 
 
 def _parse_docker_images(raw: str | None) -> list[DockerImageOption]:
-    if not raw:
-        return []
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        return []
-    if isinstance(payload, dict):
-        return [
-            DockerImageOption(label=str(label), value=str(value))
-            for label, value in payload.items()
-            if value
-        ]
-    if isinstance(payload, list):
-        return [
-            DockerImageOption(label=str(value), value=str(value))
-            for value in payload
-            if value
-        ]
-    return []
+    return [
+        DockerImageOption(label=label, value=value)
+        for label, value in parse_egg_docker_images(raw, accept_list=True).items()
+        if value
+    ]
 
 
 async def get_server_detail(db: AsyncSession, server_id: int) -> AdminServerDetailResponse:
@@ -285,7 +266,7 @@ async def update_details(
         server.description = description or ""
     if "external_id" in provided or "externalId" in provided:
         server.external_id = (external_id or "").strip() or None
-    server.updated_at = _now()
+    server.updated_at = utc_naive_now_sec()
     try:
         await db.commit()
     except IntegrityError as exc:
@@ -311,7 +292,7 @@ async def update_owner(
     node_id = int(server.node_id)
     server_uuid = server.uuid
     server.owner_id = owner_id
-    server.updated_at = _now()
+    server.updated_at = utc_naive_now_sec()
     try:
         await db.commit()
     except IntegrityError as exc:
@@ -401,13 +382,13 @@ async def _restore_allocations(
     server = await db.get(PteroServer, server_id)
     if server is not None:
         server.allocation_id = snapshot["allocation_id"]
-        server.updated_at = _now()
+        server.updated_at = utc_naive_now_sec()
     for allocation_id, state in snapshot["states"].items():
         allocation = await db.get(Allocation, allocation_id)
         if allocation is not None:
             allocation.server_id = state["server_id"]
             allocation.notes = state["notes"]
-            allocation.updated_at = _now()
+            allocation.updated_at = utc_naive_now_sec()
     await db.flush()
 
 
@@ -444,7 +425,7 @@ async def _restore_server_config(
     if server is not None:
         for field, value in snapshot["server"].items():
             setattr(server, field, value)
-        server.updated_at = _now()
+        server.updated_at = utc_naive_now_sec()
     await db.execute(sql_delete(ServerVariable).where(ServerVariable.server_id == server_id))
     for row in snapshot["variables"]:
         db.add(
@@ -505,8 +486,8 @@ async def add_allocations(
                 f"分配 {allocation_id} 已被服务器 {allocation.server_id} 占用"
             )
         allocation.server_id = server_id
-        allocation.updated_at = _now()
-    server.updated_at = _now()
+        allocation.updated_at = utc_naive_now_sec()
+    server.updated_at = utc_naive_now_sec()
     await db.flush()
     await _commit_then_sync_server(db, server, snapshot=snapshot)
 
@@ -522,8 +503,8 @@ async def remove_allocation(db: AsyncSession, server_id: int, allocation_id: int
     snapshot = await _allocation_snapshot(db, server, [allocation_id])
     allocation.server_id = None
     allocation.notes = None
-    allocation.updated_at = _now()
-    server.updated_at = _now()
+    allocation.updated_at = utc_naive_now_sec()
+    server.updated_at = utc_naive_now_sec()
     await db.flush()
     await _commit_then_sync_server(db, server, snapshot=snapshot)
 
@@ -544,9 +525,9 @@ async def set_primary_allocation(
 
     snapshot = await _allocation_snapshot(db, server, [allocation_id])
     allocation.server_id = server_id
-    allocation.updated_at = _now()
+    allocation.updated_at = utc_naive_now_sec()
     server.allocation_id = allocation_id
-    server.updated_at = _now()
+    server.updated_at = utc_naive_now_sec()
     await db.flush()
     await _commit_then_sync_server(db, server, snapshot=snapshot)
 
@@ -574,7 +555,7 @@ async def update_startup(
         server.startup = value
     if "skip_scripts" in provided or "skipScripts" in provided:
         server.skip_scripts = bool(skip_scripts)
-    server.updated_at = _now()
+    server.updated_at = utc_naive_now_sec()
     await db.flush()
     await _commit_then_sync_server(db, server, snapshot=snapshot, restore_kind="server_config")
 
@@ -623,7 +604,7 @@ async def switch_egg(
         server.startup = value
     if "skip_scripts" in provided or "skipScripts" in provided:
         server.skip_scripts = bool(skip_scripts)
-    server.updated_at = _now()
+    server.updated_at = utc_naive_now_sec()
 
     await db.execute(sql_delete(ServerVariable).where(ServerVariable.server_id == server_id))
     for variable in egg_variables:
@@ -632,8 +613,8 @@ async def switch_egg(
                 server_id=server_id,
                 variable_id=int(variable.id),
                 variable_value=values[int(variable.id)],
-                created_at=_now(),
-                updated_at=_now(),
+                created_at=utc_naive_now_sec(),
+                updated_at=utc_naive_now_sec(),
             )
         )
     await db.flush()
@@ -679,14 +660,14 @@ async def update_variables(
                     server_id=server_id,
                     variable_id=int(egg_variable.id),
                     variable_value=value,
-                    created_at=_now(),
-                    updated_at=_now(),
+                    created_at=utc_naive_now_sec(),
+                    updated_at=utc_naive_now_sec(),
                 )
             )
         else:
             server_variable.variable_value = value
-            server_variable.updated_at = _now()
+            server_variable.updated_at = utc_naive_now_sec()
 
-    server.updated_at = _now()
+    server.updated_at = utc_naive_now_sec()
     await db.flush()
     await _commit_then_sync_server(db, server, snapshot=snapshot, restore_kind="server_config")

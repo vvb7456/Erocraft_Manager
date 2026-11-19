@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { baseCompile } from '@intlify/message-compiler'
 
 const root = path.resolve(new URL('..', import.meta.url).pathname)
 const srcDir = path.join(root, 'src')
@@ -138,6 +139,42 @@ function flattenLeaves(value, prefix = '') {
   return [prefix]
 }
 
+function flattenEntries(value, prefix = '') {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return Object.entries(value).flatMap(([key, child]) =>
+      flattenEntries(child, prefix ? `${prefix}.${key}` : key),
+    )
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((child, idx) => flattenEntries(child, `${prefix}[${idx}]`))
+  }
+  return [[prefix, value]]
+}
+
+function checkMessageCompilation(locale, file, ns, data, compileErrors) {
+  for (const [key, value] of flattenEntries(data)) {
+    if (typeof value !== 'string') continue
+    const errors = []
+    let result = null
+    try {
+      result = baseCompile(value, {
+        onError(err) {
+          errors.push(err.message)
+        },
+      })
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err))
+    }
+    if (errors.length > 0) {
+      compileErrors.push(`${locale}/${file} (${ns}.${key}): ${errors.join('; ')}`)
+    } else if (result?.ast?.body?.type === 1) {
+      compileErrors.push(
+        `${locale}/${file} (${ns}.${key}): unescaped '|' parsed as plural separator (escape as {'|'})`,
+      )
+    }
+  }
+}
+
 function walkFiles(dir, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name)
@@ -245,6 +282,7 @@ function main() {
   const localeKeys = new Map()
   const duplicateErrors = []
   const alignmentErrors = []
+  const compileErrors = []
 
   for (const locale of localeNames) {
     const localeDir = path.join(localesDir, locale)
@@ -263,6 +301,7 @@ function main() {
       const fullPath = path.join(localeDir, file)
       const { data, duplicates } = readJsonWithDuplicateCheck(fullPath)
       for (const key of duplicates) duplicateErrors.push(`${locale}/${file}: ${key}`)
+      checkMessageCompilation(locale, file, ns, data, compileErrors)
       const keys = flattenLeaves(data).map((key) => `${ns}.${key}`).sort()
       localeKeys.set(`${locale}/${ns}`, keys)
     }
@@ -323,6 +362,10 @@ function main() {
     console.error('\nLocale alignment errors:')
     alignmentErrors.forEach((line) => console.error(`  - ${line}`))
   }
+  if (compileErrors.length) {
+    console.error('\nMessage compilation errors:')
+    compileErrors.forEach((line) => console.error(`  - ${line}`))
+  }
   if (missingRefs.length) {
     console.error('\nMissing i18n keys referenced by source:')
     missingRefs.forEach((line) => console.error(`  - ${line}`))
@@ -332,7 +375,7 @@ function main() {
     unusedKeys.forEach((key) => console.error(`  - ${key}`))
   }
 
-  if (duplicateErrors.length || alignmentErrors.length || missingRefs.length) {
+  if (duplicateErrors.length || alignmentErrors.length || compileErrors.length || missingRefs.length) {
     process.exitCode = 1
   } else {
     console.log('i18n references OK')

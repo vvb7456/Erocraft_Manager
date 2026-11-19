@@ -1,5 +1,10 @@
 {
   "title": "主机管理",
+  "tabs": {
+    "hosts": "主机列表",
+    "nodes": "Wings 节点",
+    "locations": "地域"
+  },
   "summary": {
     "total": "共 {n} 台"
   },
@@ -45,7 +50,6 @@
   },
   "actions": {
     "delete": "删除",
-    "open": "查看详情",
     "deleted": "主机 {name} 已删除"
   },
   "confirm": {
@@ -74,7 +78,9 @@
     "cancel": "取消",
     "creating": "创建中…",
     "created": "主机已创建",
-    "createFailed": "创建失败"
+    "createFailed": "创建失败",
+    "refreshNodes": "刷新节点列表",
+    "noUnboundNodesHint": "当前没有未绑定的 Wings 节点，请先在「Wings 节点」标签页新建节点。"
   },
   "tokenReveal": {
     "title": "一次性 Token",
@@ -215,6 +221,7 @@
       "serviceUptime": "已运行 {dur}",
       "restartRequired": "以下字段需 Wings 重启后生效：{fields}",
       "restart": "重启 Wings",
+      "viewConfig": "查看初始 config.yml",
       "restartConfirmTitle": "重启 Wings？",
       "restartConfirmMsg": "重启过程中该主机上的所有服务器将短暂离线。",
       "restartOk": "Wings 已重启（{ms} ms）",
@@ -336,6 +343,15 @@
       "create": "新建端口",
       "delete": "删除"
     },
+    "edit": {
+      "title": "编辑端口分配",
+      "aliasHint": "留空将清除别名，显示原始 IP。",
+      "aliasPlaceholder": "例如：node1.example.com",
+      "aliasTooLong": "别名长度不能超过 191 字符",
+      "notesPlaceholder": "可选备注（最多 191 字符）",
+      "notesTooLong": "备注长度不能超过 191 字符",
+      "toastOk": "端口信息已更新"
+    },
     "create": {
       "title": "新建端口",
       "ip": "IP 地址",
@@ -452,5 +468,87 @@
     },
     "serversEmptyNoTunnel": "隧道未安装，该列表将在部署完成后可用。",
     "serversEmptyReady": "还没有服务器启用隧道访问。在服务器详情页为其分配子域名后会出现在这里。"
+  },
+  "locations": {
+    "createTitle": "新增地域",
+    "editTitle": "编辑地域",
+    "addBtn": "新增地域",
+    "searchPlaceholder": "搜索地域简码或描述",
+    "totalCount": "共 {n} 个地域",
+    "empty": "暂无地域，请先创建一个地域以便新建 Wings 节点。",
+    "created": "地域已创建",
+    "updated": "地域已更新",
+    "deleteTitle": "删除地域",
+    "deleteMsg": "确定要删除地域「{short}」吗？",
+    "deleted": "地域「{short}」已删除",
+    "deleteBlocked": "该地域下仍有节点，无法删除",
+    "fields": {
+      "short": "简码（Short）",
+      "shortPlaceholder": "例如：cn-hz / sg-1",
+      "long": "描述（Long）",
+      "longPlaceholder": "例如：中国杭州 / 新加坡机房"
+    },
+    "columns": {
+      "short": "简码",
+      "long": "描述",
+      "nodes": "节点数",
+      "servers": "服务器数",
+      "actions": "操作"
+    },
+    "validation": {
+      "shortRequired": "地域简码不能为空",
+      "shortTooLong": "地域简码长度不能超过 60 字符",
+      "longTooLong": "地域描述长度不能超过 191 字符"
+    }
+  },
+  "nodes": {
+    "createBtn": "新建 Wings 节点",
+    "searchPlaceholder": "搜索节点名称 / FQDN / 地域 / 主机",
+    "totalCount": "共 {n} 个节点",
+    "empty": "暂无 Wings 节点，点击右上角「新建 Wings 节点」创建。",
+    "unbound": "未绑定",
+    "columns": {
+      "name": "节点名称",
+      "location": "地域",
+      "address": "Daemon 地址",
+      "host": "绑定主机",
+      "usage": "服务器 / 套餐"
+    },
+    "viewConfig": "config.yml",
+    "bindHost": "绑定主机",
+    "serversCount": "{n} 台服务器",
+    "plansCount": "{n} 个套餐",
+    "deleteTitle": "删除 Wings 节点",
+    "deleteMsg": "确定要删除 Panel 节点「{name}」吗？若存在关联服务器、套餐或未完成订单将禁止删除。",
+    "deleted": "节点「{name}」已删除",
+    "fields": {
+      "location": "所属地域",
+      "public": "公开可调度"
+    },
+    "tips": {
+      "public": "关闭后自动调度不会选择此节点。"
+    },
+    "create": {
+      "title": "新建 Wings 节点",
+      "tabBasic": "基础与网络",
+      "tabResources": "资源与路径",
+      "noLocations": "当前尚无地域，请先创建一个地域。",
+      "namePlaceholder": "例如：HK-Node-01",
+      "descPlaceholder": "可选说明",
+      "selectLocation": "选择所属地域",
+      "httpsBareIpError": "启用 HTTPS 且未处于反代后时，FQDN 不能为裸 IP 地址",
+      "submit": "创建节点",
+      "created": "节点「{name}」已创建，请复制初始 config.yml 部署到目标机器"
+    },
+    "config": {
+      "title": "Wings 初始配置（config.yml）",
+      "hint": "将以下内容保存至目标节点的 {path} 后启动 Wings 服务。",
+      "remote": "面板回调地址（remote）：",
+      "copyYaml": "复制 config.yml",
+      "copyCmd": "复制一键写入命令",
+      "download": "下载 .yml",
+      "copied": "config.yml 已复制到剪贴板",
+      "cmdCopied": "一键写入命令已复制到剪贴板"
+    }
   }
 }

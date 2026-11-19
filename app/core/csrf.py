@@ -38,6 +38,8 @@ EXEMPT_PREFIXES: tuple[str, ...] = (
     "/api/cert/source-changed",
     # Native clients send a servicewechat.com Referer; these routes never use cookies.
     "/api/miniprogram/",
+    # Wings daemon server-to-server callbacks authenticate via Bearer node token.
+    "/api/remote/",
 )
 
 

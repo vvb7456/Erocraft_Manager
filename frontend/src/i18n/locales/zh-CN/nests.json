@@ -1,0 +1,229 @@
+{
+  "title": "预设管理",
+  "tabs": {
+    "eggs": "预设模板",
+    "nests": "预设组"
+  },
+  "eggs": {
+    "searchPlaceholder": "搜索预设名称、预设组或 Docker 镜像…",
+    "totalCount": "共 {n} 个预设",
+    "filterNest": "预设组",
+    "allNests": "全部"
+  },
+  "searchPlaceholder": "搜索预设组名称、描述或作者…",
+  "totalNests": "共 {n} 个预设组",
+  "perPage": "条/页",
+  "empty": "暂无预设组，点击右上角「新建预设组」创建。",
+  "columns": {
+    "name": "预设组名称",
+    "description": "描述",
+    "eggs": "预设数",
+    "servers": "服务器数",
+    "author": "作者",
+    "actions": "操作"
+  },
+  "actions": {
+    "createNest": "新建预设组",
+    "createEgg": "新建预设",
+    "importEgg": "导入 JSON",
+    "overwriteImport": "覆盖导入 JSON",
+    "export": "导出",
+    "exportJson": "导出 JSON",
+    "deleteEgg": "删除预设",
+    "viewEggs": "查看组内预设"
+  },
+  "nest": {
+    "createTitle": "新建预设组",
+    "editTitle": "编辑预设组",
+    "created": "预设组已创建",
+    "updated": "预设组已更新",
+    "deleteTitle": "删除预设组",
+    "deleteMsg": "确定要删除预设组「{name}」吗？若下属仍有预设、服务器或关联套餐将无法删除。",
+    "deleted": "预设组「{name}」已删除",
+    "fields": {
+      "name": "名称",
+      "namePlaceholder": "例如：Minecraft、SillyTavern",
+      "description": "描述",
+      "descPlaceholder": "可选说明"
+    }
+  },
+  "import": {
+    "overwriteTitle": "覆盖导入更新预设",
+    "overwriteConfirm": "确定从「{file}」覆盖更新当前预设吗？此操作会保留当前预设的 ID、UUID、所属预设组、作者与继承关系，并按环境变量名原地更新/增删变量以保护存量服务器数据。",
+    "targetNest": "目标预设组",
+    "selectNest": "选择预设组",
+    "submitOverwrite": "覆盖更新",
+    "importedOk": "已导入预设「{name}」",
+    "overwrittenOk": "已覆盖更新预设「{name}」"
+  },
+  "egg": {
+    "empty": "暂无预设，点击右上角「新建预设」手动创建或导入 JSON。",
+    "createTitle": "新建预设（Egg）",
+    "createBtn": "创建预设",
+    "createTabs": {
+      "basic": "基本配置",
+      "process": "进程配置"
+    },
+    "created": "预设「{name}」已创建",
+    "saved": "预设配置已保存",
+    "savedWithPlanWarnings": "已保存，但有 {n} 个计费套餐可能受影响，请检查上方提示",
+    "exported": "已开始下载预设 JSON",
+    "deleteTitle": "删除预设",
+    "deleteMsg": "确定要删除预设「{name}」吗？若存在关联服务器、子预设、套餐或协议将禁止删除。",
+    "deleted": "预设「{name}」已删除",
+    "notFoundTitle": "无法加载预设",
+    "notFoundDesc": "该预设可能不存在、已被删除或请求暂时失败。",
+    "backToList": "返回预设列表",
+    "danger": {
+      "title": "危险区域",
+      "desc": "移除不再使用的预设模板。",
+      "deleteHint": "若存在关联服务器、子预设、套餐或用户协议，将禁止删除。"
+    },
+    "specialRegistryNotice": "「{name}」命中系统专属预设注册表（包含定制面板、隧道、LLM 额度等规则），请谨慎修改名称与核心变量。",
+    "specialRenameDanger": "警告：您正在修改专属预设「{name}」的名称！保存后将导致对应服务器的专属面板（如 SillyTavern 面板）、隧道与 LLM 规则全部失效！",
+    "configFromNone": "无（独立配置）",
+    "jsonObjectRequired": "必须是合法的 JSON 对象（以 {'{'} 开头）",
+    "addImage": "添加镜像",
+    "imageLabelCol": "显示名称",
+    "imageValueCol": "Docker 镜像地址",
+    "imageLabelPlaceholder": "例如：Java 21",
+    "imageValuePlaceholder": "例如：ghcr.io/pterodactyl/yolks:java_21",
+    "dependentConfigNotice": "以下子预设正继承本预设的进程配置，因此本预设不可再继承其他预设：",
+    "configFromActiveNotice": "当前已启用配置继承：留空的停止命令或 JSON 配置项将自动继承父预设；文件黑名单在继承模式下始终使用父预设配置。",
+    "effectiveConfigTitle": "继承解析后的实际生效配置（只读）",
+    "tabs": {
+      "settings": "基础与配置",
+      "variables": "预设变量",
+      "scripts": "安装脚本"
+    },
+    "columns": {
+      "name": "预设名称",
+      "dockerImage": "Docker 镜像",
+      "variables": "变量数",
+      "servers": "服务器数",
+      "plans": "套餐数"
+    },
+    "sections": {
+      "basic": "基本信息",
+      "basicDesc": "配置预设名称、启动命令、特性标记与文件黑名单。",
+      "images": "Docker 镜像列表",
+      "imagesDesc": "至少配置一个镜像；名称用于用户界面展示，地址长度不超过 191 字符。",
+      "process": "进程管理与配置继承",
+      "processDesc": "定义停止命令、启动检测、配置文件修改与日志规则。",
+      "transfer": "导入与导出",
+      "transferDesc": "导出标准 PTDL_v2 JSON 文件，或从外部 JSON 覆盖更新当前预设配置。"
+    },
+    "fields": {
+      "name": "预设名称",
+      "namePlaceholder": "例如：Paper",
+      "description": "描述",
+      "startup": "启动命令",
+      "startupPlaceholder": "java -Xms128M -Xmx{'{{'}SERVER_MEMORY{'}}'}M -jar {'{{'}SERVER_JARFILE{'}}'}",
+      "dockerImages": "Docker 镜像",
+      "forceOutgoingIp": "强制出站 IP（Force Outgoing IP）",
+      "updateUrl": "更新地址（Update URL）",
+      "features": "特性列表（Features）",
+      "fileDenylist": "文件黑名单（File Denylist）",
+      "configFrom": "继承配置自（Config From）",
+      "configStop": "停止命令（Config Stop）",
+      "configStartup": "启动完成判定（Config Startup JSON）",
+      "configFiles": "配置文件解析（Config Files JSON）",
+      "configLogs": "日志配置（Config Logs JSON）"
+    },
+    "tips": {
+      "startup": "支持 {'{{VARIABLE}}'} 模板语法，创建服务器时将自动注入变量值。",
+      "forceOutgoingIp": "启用后容器所有出站流量都将强制绑定主分配 IP。",
+      "onePerLine": "每行填写一项，留空表示无。",
+      "fileDenylistInherited": "已设置 config_from 时，运行期始终继承父预设的文件黑名单。",
+      "configFrom": "仅支持同预设组内 1 跳继承（不可指向已继承他人的预设）。",
+      "configFromLocked": "当前已有子预设依赖本预设配置，无法再设置父预设。"
+    }
+  },
+  "variables": {
+    "addBtn": "新增变量",
+    "searchPlaceholder": "搜索变量名称、环境变量名或说明…",
+    "totalCount": "共 {n} 个变量",
+    "empty": "该预设暂未定义环境变量。",
+    "columns": {
+      "name": "名称",
+      "envVariable": "环境变量",
+      "defaultValue": "默认值",
+      "rules": "校验规则",
+      "permissions": "权限",
+      "actions": "操作"
+    },
+    "createTitle": "新增预设变量",
+    "editTitle": "编辑预设变量",
+    "created": "变量已新增",
+    "updated": "变量已更新",
+    "deleteTitle": "删除预设变量",
+    "deleteMsg": "确定删除变量「{name}」（{env}）吗？存量服务器上该变量的记录也会随之级联删除。",
+    "deleted": "变量 {env} 已删除",
+    "fields": {
+      "name": "显示名称",
+      "envVariable": "环境变量名",
+      "description": "说明",
+      "defaultValue": "默认值",
+      "rules": "校验规则",
+      "userViewable": "用户可见",
+      "userEditable": "用户可编辑"
+    },
+    "badges": {
+      "viewable": "用户可见",
+      "hidden": "用户不可见",
+      "editable": "用户可改",
+      "readOnly": "只读"
+    },
+    "tips": {
+      "reserved": "仅支持字母/数字/下划线；禁止使用保留名：{list}",
+      "rules": "Laravel 规则语法，如 required{'|'}string{'|'}max:191 或 nullable{'|'}integer{'|'}between:1,65535"
+    },
+    "errors": {
+      "envFormat": "环境变量名仅支持字母、数字和下划线（1~191 字符）",
+      "envReserved": "「{name}」为系统保留变量名，禁止使用",
+      "envDuplicate": "当前预设已存在同名环境变量「{name}」"
+    }
+  },
+  "scripts": {
+    "title": "安装脚本",
+    "subtitle": "服务器创建或重装时在临时容器内执行的初始化脚本。",
+    "saved": "安装脚本已保存",
+    "copyFromNone": "无（使用本预设脚本）",
+    "dependentNotice": "以下子预设正复用本预设的安装脚本，因此本预设不可再复用其他预设脚本：",
+    "copyFromActiveNotice": "当前已设置脚本复用：服务器安装时将实际执行父预设的安装脚本、容器镜像与入口点。",
+    "effectiveTitle": "继承解析后的实际生效脚本（只读）",
+    "fields": {
+      "copyScriptFrom": "复用脚本自（Copy Script From）",
+      "container": "安装容器镜像",
+      "entry": "入口点（Entrypoint）",
+      "privileged": "特权模式运行",
+      "installScript": "安装脚本文本",
+      "installPlaceholder": "#!/bin/ash\n# 在此编写服务器初始化安装脚本…"
+    },
+    "tips": {
+      "copyFrom": "仅支持同预设组内 1 跳复用。",
+      "copyFromLocked": "已有子预设依赖本预设脚本，无法再指向父预设。",
+      "privileged": "大多数官方安装脚本需要开启特权模式以调整文件权限。"
+    },
+    "errors": {
+      "containerRequired": "安装容器镜像不能为空",
+      "entryRequired": "入口点不能为空"
+    }
+  },
+  "affectedPlans": {
+    "title": "检测到 {n} 个关联计费套餐存在配置漂移，请及时同步检查",
+    "desc": "以下套餐的默认环境变量或 Docker 镜像与最新预设配置不匹配，可能导致用户下单或开服报错：",
+    "goPlans": "前往套餐设置",
+    "active": "在售",
+    "inactive": "已下架"
+  },
+  "validation": {
+    "nameRequired": "名称不能为空",
+    "startupRequired": "启动命令不能为空",
+    "dockerImagesInvalid": "请至少配置一个完整的 Docker 镜像（名称与地址均不能为空）",
+    "dockerImageIncomplete": "存在未填写完整的镜像行，请补全显示名称和镜像地址，或删除该行",
+    "dockerImageTooLong": "Docker 镜像地址长度不能超过 191 字符",
+    "dockerImageDuplicateLabel": "Docker 镜像显示名称「{label}」重复，请使用唯一名称",
+    "configStopRequired": "未继承配置时，停止命令不能为空"
+  }
+}

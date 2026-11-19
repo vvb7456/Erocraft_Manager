@@ -74,11 +74,6 @@ defineOptions({ name: 'SectionToolbar' })
   :slotted(.toolbar-end-row) {
     width: 100%;
   }
-
-  :slotted(.toolbar-half) {
-    flex: 1;
-    min-width: 0;
-  }
 }
 
 /* ── Mobile responsive convention classes (since 2026-05) ──

@@ -3,7 +3,7 @@
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import select, case
+from sqlalchemy import case, select, update
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -90,3 +90,152 @@ async def current_problems(db: AsyncSession) -> list[dict[str, Any]]:
         item["acknowledged_at"], item["muted_until"] = to_iso_z(ack), to_iso_z(muted)
         item["created_at"] = to_iso_z(item["created_at"])
     return sorted(items, key=lambda x: (x["severity"] != "critical", x["created_at"] or ""))
+
+
+_SEVERITY_WEIGHT: dict[str, int] = {
+    "info": 1,
+    "warning": 2,
+    "critical": 3,
+}
+
+
+def sort_problems(
+    items: list[dict[str, Any]],
+    *,
+    sort_by: str | None = None,
+    sort_order: str = "desc",
+) -> list[dict[str, Any]]:
+    """Sort alert problem dicts by a whitelisted key with stable tie-breaking.
+
+    When ``sort_by`` is None, preserves the caller's existing default order
+    (from :func:`current_problems`). Nullable ``created_at`` values always sort
+    last regardless of direction.
+    """
+    if not sort_by:
+        return items
+
+    reverse = sort_order == "desc"
+    if sort_by == "created_at":
+        with_ts = [x for x in items if x.get("created_at")]
+        without_ts = [x for x in items if not x.get("created_at")]
+        with_ts.sort(key=lambda x: (x["created_at"], x["key"]), reverse=reverse)
+        without_ts.sort(key=lambda x: x["key"], reverse=reverse)
+        return with_ts + without_ts
+
+    if sort_by == "severity":
+        return sorted(
+            items,
+            key=lambda x: (
+                _SEVERITY_WEIGHT.get(str(x.get("severity") or ""), 0),
+                x.get("created_at") or "",
+                x["key"],
+            ),
+            reverse=reverse,
+        )
+
+    if sort_by in ("category", "title", "state"):
+        return sorted(
+            items,
+            key=lambda x: (
+                str(x.get(sort_by) or "").casefold(),
+                x.get("created_at") or "",
+                x["key"],
+            ),
+            reverse=reverse,
+        )
+
+    return items
+
+
+async def acknowledge_open_problems(db: AsyncSession, *, category: str = "all") -> int:
+    from app.db.models.monitoring import HostAlert
+
+    items = await current_problems(db)
+    targets = [
+        item
+        for item in items
+        if item["state"] == "open" and (category == "all" or item["category"] == category)
+    ]
+    if not targets:
+        return 0
+
+    now = utc_naive_now()
+    monitoring_ids = [
+        int(item["key"].split(":", 1)[1])
+        for item in targets
+        if item["category"] == "monitoring"
+    ]
+    issue_items = [item for item in targets if item["category"] != "monitoring"]
+
+    acknowledged = 0
+    if monitoring_ids:
+        result = await db.execute(
+            update(HostAlert)
+            .where(
+                HostAlert.id.in_(monitoring_ids),
+                HostAlert.resolved_at.is_(None),
+                HostAlert.acknowledged_at.is_(None),
+            )
+            .values(acknowledged_at=now)
+        )
+        acknowledged += int(result.rowcount or 0)
+
+    if issue_items:
+        keys = [item["key"][:190] for item in issue_items]
+        existing_keys = set(
+            (
+                await db.scalars(
+                    select(NotificationIssue.key).where(NotificationIssue.key.in_(keys))
+                )
+            ).all()
+        )
+        if existing_keys:
+            result = await db.execute(
+                update(NotificationIssue)
+                .where(
+                    NotificationIssue.key.in_(existing_keys),
+                    NotificationIssue.acknowledged_at.is_(None),
+                )
+                .values(acknowledged_at=now, updated_at=now)
+            )
+            acknowledged += int(result.rowcount or 0)
+
+        missing_rows: list[dict[str, Any]] = []
+        seen_missing: set[str] = set()
+        for item in issue_items:
+            key = item["key"][:190]
+            if key in existing_keys or key in seen_missing:
+                continue
+            seen_missing.add(key)
+            missing_rows.append(
+                {
+                    "key": key,
+                    "category": item["category"],
+                    "severity": item["severity"],
+                    "title": (item.get("title") or "")[:200],
+                    "body": (item.get("body") or "")[:8000],
+                    "path": (item.get("path") or "")[:500],
+                    "created_at": now,
+                    "updated_at": now,
+                    "acknowledged_at": now,
+                }
+            )
+
+        if missing_rows:
+            stmt = insert(NotificationIssue).values(missing_rows)
+            result = await db.execute(
+                stmt.on_duplicate_key_update([
+                    (
+                        "acknowledged_at",
+                        case(
+                            (NotificationIssue.acknowledged_at.is_(None), now),
+                            else_=NotificationIssue.acknowledged_at,
+                        ),
+                    ),
+                    ("updated_at", now),
+                ])
+            )
+            # MySQL reports 1 per inserted row and 2 per updated row on duplicate key.
+            acknowledged += min(int(result.rowcount or 0), len(missing_rows))
+
+    return acknowledged

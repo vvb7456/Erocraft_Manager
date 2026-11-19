@@ -90,6 +90,9 @@ class PterodactylActivityLogger:
         api_key_id: int | None = None,
         timestamp: datetime | None = None,
     ) -> ActivityLog:
+        ts = timestamp or datetime.now(UTC)
+        if ts.tzinfo is not None:
+            ts = ts.astimezone(UTC).replace(tzinfo=None)
         activity = ActivityLog(
             batch=batch,
             event=event,
@@ -99,7 +102,7 @@ class PterodactylActivityLogger:
             actor_id=actor.id if actor is not None else None,
             api_key_id=api_key_id,
             properties=json.dumps(properties if properties is not None else {}, ensure_ascii=False, separators=(",", ":")),
-            timestamp=(timestamp or datetime.now(UTC)).replace(tzinfo=None),
+            timestamp=ts,
         )
         db.add(activity)
         await db.flush()

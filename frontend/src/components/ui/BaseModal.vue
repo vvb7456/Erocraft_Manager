@@ -288,6 +288,10 @@ const footerClass = computed(() => {
   min-width: 0;
 }
 
+.modal-header__title-group :deep(.ms) {
+  flex-shrink: 0;
+}
+
 .modal-title {
   font-size: var(--text-md);
   font-weight: 600;
@@ -326,6 +330,7 @@ const footerClass = computed(() => {
 .modal-footer {
   padding: 0 16px 12px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--sp-2);
 }

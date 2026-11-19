@@ -17,6 +17,7 @@ Design: ``docs/HOST_ALLOCATIONS_DESIGN.md``.
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,7 @@ from app.api.utils.port_expression import (
     PortExpressionError,
     parse_port_expression,
 )
+from app.core.time import utc_naive_now_sec
 from app.db.models.pterodactyl import Allocation, PanelNode, PteroUser
 from app.db.repositories.allocations import allocation_repository
 from app.schemas.allocations import (
@@ -37,6 +39,7 @@ from app.schemas.allocations import (
     AllocationOut,
     AllocationSkip,
     AllocationSummary,
+    AllocationUpdateIn,
     ServerBrief,
 )
 from app.services import host_registry
@@ -130,6 +133,8 @@ async def list_host_allocations(
     search: str | None = Query(default=None, max_length=191),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=50, ge=1, le=200),
+    sort_by: Literal["ip", "alias", "port", "server"] | None = Query(default=None),
+    sort_order: Literal["asc", "desc"] = Query(default="asc"),
     _admin: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> AllocationListResponse:
@@ -138,6 +143,7 @@ async def list_host_allocations(
     items, total = await allocation_repository.list_all(
         db, node_id, assigned=assigned, search=search,
         limit=per_page, offset=offset,
+        sort_by=sort_by, sort_order=sort_order,
     )
     serialized = await _serialize_many(db, items)
     assigned_count, unassigned_count = await allocation_repository.summary(db, node_id)
@@ -219,6 +225,66 @@ async def create_host_allocations(
         created=serialized,
         skipped=[AllocationSkip(port=p, reason=r) for p, r in skipped],
     )
+
+
+@router.patch(
+    "/{host_id}/allocations/{allocation_id}",
+    response_model=AllocationOut,
+)
+async def update_host_allocation(
+    host_id: int,
+    allocation_id: int,
+    body: AllocationUpdateIn,
+    admin: PteroUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AllocationOut:
+    node_id = await _resolve_node_id(db, host_id)
+    row = await allocation_repository.get(db, node_id, allocation_id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"allocation {allocation_id} not found on host {host_id}",
+        )
+
+    changed: dict[str, str | None] = {}
+    if "alias" in body.model_fields_set and row.ip_alias != body.alias:
+        row.ip_alias = body.alias
+        changed["alias"] = body.alias
+    if "notes" in body.model_fields_set and row.notes != body.notes:
+        row.notes = body.notes
+        changed["notes"] = body.notes
+
+    if changed:
+        row.updated_at = utc_naive_now_sec()
+        await db.commit()
+        await db.refresh(row)
+
+    serialized = (await _serialize_many(db, [row]))[0]
+
+    if changed:
+        await log_manager_activity(
+            db,
+            actor=admin.username,
+            category="server",
+            operation=OperationResult(
+                action="allocation.update",
+                phase="execution",
+                outcome="success",
+                target={"host_id": host_id, "node_id": node_id, "allocation_id": allocation_id},
+            ),
+            detail_key="allocation.update.ok",
+            detail_params={
+                "host_id": host_id,
+                "node_id": node_id,
+                "allocation_id": allocation_id,
+                "ip": row.ip,
+                "port": row.port,
+                "alias": row.ip_alias,
+                "notes": row.notes,
+                "changed_fields": sorted(changed.keys()),
+            },
+        )
+    return serialized
 
 
 @router.delete(

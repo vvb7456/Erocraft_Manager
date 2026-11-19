@@ -5,9 +5,8 @@
  * Conventions (mirrors ServersPage / UsersPage):
  *   - SectionToolbar: #start = FilterInput + count, #end = BaseSelects
  *   - DataTable with percentage-based column widths
- *   - Client-side sort via computed, toggleSort updates sortBy/sortOrder
+ *   - Server-side sort & pagination (backend: GET /api/admin/billing/orders)
  *   - Badge colors use palette CSS variables
- *   - Server-side pagination (backend: GET /api/admin/billing/orders)
  */
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -18,6 +17,9 @@ import { useToast } from '@/composables/useToast'
 import { useFormatDate } from '@/composables/useFormatDate'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useServerPagination } from '@/composables/useTablePagination'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import Badge from '@/components/ui/Badge.vue'
@@ -56,17 +58,15 @@ const searchTerm = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const statusFilter = ref('')
 const kindFilter = ref('')
 const channelFilter = ref('')
-const page = ref(1)
-const perPage = ref(20)
-const sortBy = ref('created_at')
-const sortOrder = ref<'asc' | 'desc'>('desc')
+const { sortBy, sortOrder, toggleSort } = useTableSort({
+  defaultBy: 'created_at',
+  defaultOrder: 'desc',
+  descColumns: ['created_at', 'total_fen', 'user_id'],
+})
 
 const rawOrders = ref<OrderItem[]>([])
-const totalCount = ref(0)
-const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / perPage.value)))
-const loading = ref(false)
 
-const statusOptions = [
+const statusOptions = computed(() => [
   { value: '',               label: t('billing.admin.orders.filterAllStatus') },
   { value: 'pending',        label: t('billing.orders.status.pending') },
   { value: 'processing',     label: t('billing.orders.status.processing') },
@@ -77,124 +77,109 @@ const statusOptions = [
   { value: 'refunded',       label: t('billing.orders.status.refunded') },
   { value: 'closed',         label: t('billing.orders.status.closed') },
   { value: 'cancelled',      label: t('billing.orders.status.cancelled') },
-]
+])
 
-const kindOptions = [
+const kindOptions = computed(() => [
   { value: '',              label: t('billing.admin.orders.filterAllKind') },
   { value: 'new_purchase',  label: t('billing.admin.orders.kindNewPurchase') },
   { value: 'renew',         label: t('billing.admin.orders.kindRenew') },
   { value: 'upgrade',       label: t('billing.admin.orders.kindUpgrade') },
   { value: 'convert',       label: t('billing.admin.orders.kindConvert') },
-]
+])
 
-const channelOptions = [
+const channelOptions = computed(() => [
   { value: '',        label: t('billing.admin.orders.filterAllChannel') },
   { value: 'alipay',  label: t('billing.channel.alipay') },
   { value: 'wechat',  label: t('billing.channel.wechat') },
   { value: 'taobao',  label: t('billing.channel.taobao') },
   { value: 'xianyu',  label: t('billing.channel.xianyu') },
   { value: 'other',   label: t('billing.channel.other') },
-]
+])
 
-// ── Fetch ──
-async function loadOrders() {
-  loading.value = true
-  const params = new URLSearchParams()
-  params.set('limit', String(perPage.value))
-  params.set('offset', String((page.value - 1) * perPage.value))
-  if (searchTerm.value.trim()) params.set('q', searchTerm.value.trim())
-  if (statusFilter.value) params.set('status', statusFilter.value)
-  if (kindFilter.value) params.set('kind', kindFilter.value)
-  if (channelFilter.value) params.set('channel', channelFilter.value)
-
-  const data = await get<{ items: OrderItem[]; total: number }>(
-    `/api/admin/billing/orders?${params}`,
-    { silent: true },
-  ).finally(() => { loading.value = false })
-  if (data !== null) {
+const {
+  page,
+  perPage,
+  total: totalCount,
+  totalPages,
+  loading,
+  reload: loadOrders,
+  setPerPage,
+} = useServerPagination(
+  async ({ perPage: reqPerPage, offset, isCurrent }) => {
+    const params = new URLSearchParams()
+    params.set('limit', String(reqPerPage))
+    params.set('offset', String(offset))
+    if (searchTerm.value.trim()) params.set('q', searchTerm.value.trim())
+    if (statusFilter.value) params.set('status', statusFilter.value)
+    if (kindFilter.value) params.set('kind', kindFilter.value)
+    if (channelFilter.value) params.set('channel', channelFilter.value)
+    if (sortBy.value) {
+      params.set('sort_by', sortBy.value)
+      params.set('sort_order', sortOrder.value)
+    }
+    const data = await get<{ items: OrderItem[]; total: number }>(
+      `/api/admin/billing/orders?${params}`,
+      { silent: true },
+    )
+    if (!data || !isCurrent()) return null
     rawOrders.value = data.items
-    totalCount.value = data.total
-    if (page.value > totalPages.value) page.value = totalPages.value
-  }
-}
+    return { total: data.total }
+  },
+  {
+    initialPerPage: 20,
+    filters: [statusFilter, kindFilter, channelFilter, sortBy, sortOrder],
+    search: searchTerm,
+    onError: handleError,
+    immediate: true,
+  },
+)
 
 watch(() => route.query.q, value => { searchTerm.value = typeof value === 'string' ? value : '' })
-watch([searchTerm, statusFilter, kindFilter, channelFilter], () => {
-  if (page.value === 1) {
-    void loadOrders().catch(handleError)
-  } else {
-    page.value = 1
-  }
-})
-watch([page, perPage], () => loadOrders(), { immediate: true })
 
 let refundPollTimer: ReturnType<typeof setInterval> | null = null
 watch(() => rawOrders.value.some(order => order.status === 'refunding'), (active) => {
   if (refundPollTimer !== null) clearInterval(refundPollTimer)
   refundPollTimer = active ? setInterval(() => {
-    if (document.visibilityState === 'visible' && !loading.value) void loadOrders().catch(handleError)
+    if (document.visibilityState === 'visible' && !loading.value) void loadOrders()
   }, 10000) : null
 })
 onBeforeUnmount(() => {
   if (refundPollTimer !== null) clearInterval(refundPollTimer)
 })
 
-// ── Client-side sort ──
-function toggleSort(col: string) {
-  if (sortBy.value === col) {
-    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
-  } else {
-    sortBy.value = col
-    sortOrder.value = 'asc'
-  }
-}
-
-const sortedOrders = computed(() => {
-  const list = [...rawOrders.value]
-  const col = sortBy.value as keyof OrderItem
-  const asc = sortOrder.value === 'asc'
-  list.sort((a, b) => {
-    const va = a[col]
-    const vb = b[col]
-    if (va == null && vb == null) return 0
-    if (va == null) return 1
-    if (vb == null) return -1
-    const sa = typeof va === 'string' ? va.toLowerCase() : String(va)
-    const sb = typeof vb === 'string' ? vb.toLowerCase() : String(vb)
-    if (sa < sb) return asc ? -1 : 1
-    if (sa > sb) return asc ? 1 : -1
-    return 0
-  })
-  return list
-})
-
-// ── Mobile filter sheet ──
 const mobileFilterOpen = ref(false)
 const sortColumns = computed(() => [
   { key: 'created_at', label: t('billing.admin.orders.col.time') },
   { key: 'order_no', label: t('billing.admin.orders.col.orderNo') },
+  { key: 'channel', label: t('billing.admin.orders.col.channel') },
+  { key: 'kind', label: t('billing.admin.orders.col.kind') },
   { key: 'total_fen', label: t('billing.admin.orders.col.amount') },
+  { key: 'status', label: t('billing.admin.orders.col.status') },
   { key: 'user_id', label: t('billing.admin.orders.col.user') },
 ])
 const filterGroups = computed(() => [
   {
+    key: 'channel',
+    label: t('billing.admin.orders.filterChannelPrefix'),
+    modelValue: channelFilter.value,
+    options: channelOptions.value,
+  },
+  {
     key: 'status',
     label: t('billing.admin.orders.filterStatusPrefix'),
     modelValue: statusFilter.value,
-    options: statusOptions,
+    options: statusOptions.value,
   },
   {
     key: 'kind',
     label: t('billing.admin.orders.filterKindPrefix'),
     modelValue: kindFilter.value,
-    options: kindOptions,
+    options: kindOptions.value,
   },
 ])
-function onMobileSort(col: string) {
-  toggleSort(col)
-}
 function onMobileFilter(groupKey: string, value: string | number | boolean) {
-  if (groupKey === 'status') statusFilter.value = String(value)
+  if (groupKey === 'channel') channelFilter.value = String(value)
+  else if (groupKey === 'status') statusFilter.value = String(value)
   else if (groupKey === 'kind') kindFilter.value = String(value)
 }
 
@@ -326,13 +311,13 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
     :sort-by="sortBy"
     :sort-order="sortOrder"
     :filters="filterGroups"
-    @sort="onMobileSort"
+    @sort="toggleSort"
     @update:filter="onMobileFilter"
   />
 
   <div class="orders-table-wrap">
     <DataTable
-    :items="sortedOrders"
+    :items="rawOrders"
     :page="page"
     :total-pages="totalPages"
     :per-page="perPage"
@@ -344,30 +329,18 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
       : t('billing.admin.orders.empty')"
     row-key="id"
     @update:page="page = $event"
-    @update:per-page="perPage = $event; page = 1"
+    @update:per-page="setPerPage"
   >
     <template #header>
-      <th class="col-time sortable" @click="toggleSort('created_at')">
-        {{ t('billing.admin.orders.col.time') }}
-        <MsIcon v-if="sortBy === 'created_at'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-      </th>
-      <th class="col-orderno sortable" @click="toggleSort('order_no')">
-        {{ t('billing.admin.orders.col.orderNo') }}
-        <MsIcon v-if="sortBy === 'order_no'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-      </th>
-      <th class="col-channel">{{ t('billing.admin.orders.col.channel') }}</th>
-      <th class="col-kind">{{ t('billing.admin.orders.col.kind') }}</th>
+      <SortTh class="col-time" col="created_at" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.orders.col.time') }}</SortTh>
+      <SortTh class="col-orderno" col="order_no" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.orders.col.orderNo') }}</SortTh>
+      <SortTh class="col-channel" col="channel" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.orders.col.channel') }}</SortTh>
+      <SortTh class="col-kind" col="kind" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.orders.col.kind') }}</SortTh>
       <th class="col-plan">{{ t('billing.admin.orders.col.plan') }}</th>
-      <th class="col-amount sortable" @click="toggleSort('total_fen')">
-        {{ t('billing.admin.orders.col.amount') }}
-        <MsIcon v-if="sortBy === 'total_fen'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-      </th>
-      <th class="col-status">{{ t('billing.admin.orders.col.status') }}</th>
-      <th class="col-user sortable" @click="toggleSort('user_id')">
-        {{ t('billing.admin.orders.col.user') }}
-        <MsIcon v-if="sortBy === 'user_id'" :name="sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'" size="xs" />
-      </th>
+      <SortTh class="col-amount" col="total_fen" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.orders.col.amount') }}</SortTh>
+      <SortTh class="col-user" col="user_id" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.orders.col.user') }}</SortTh>
       <th class="col-server">{{ t('billing.admin.orders.col.server') }}</th>
+      <SortTh class="col-status" col="status" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.orders.col.status') }}</SortTh>
       <th class="col-actions">{{ t('billing.admin.orders.col.actions') }}</th>
     </template>
 
@@ -384,12 +357,6 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
         <span class="plan-name">{{ o.plan_name }}</span>
       </td>
       <td class="col-amount mono">¥{{ fenToYuan(o.total_fen) }}</td>
-      <td class="col-status">
-        <span class="status-cell">
-          <MsIcon v-if="o.status === 'manual_review' || o.status === 'apply_failed'" name="warning" size="xs" class="status-warn-icon" />
-          <Badge :color="statusColor(o.status)">{{ t(`billing.orders.status.${o.status}`) }}</Badge>
-        </span>
-      </td>
       <td class="col-user">
         <template v-if="o.user_id && o.owner_username">
           <a href="#" class="cell-link" @click.prevent="goUser(o.user_id, o.owner_username)">{{ o.owner_username }}</a>
@@ -404,9 +371,17 @@ function openMobile(o: OrderItem) { mobileOrder.value = o; mobileOpen.value = tr
         <span v-else-if="o.target_server_id" class="cell-deleted">{{ t('billing.admin.orders.deletedServer', { id: o.target_server_id }) }}</span>
         <span v-else class="cell-muted">—</span>
       </td>
+      <td class="col-status">
+        <span class="status-cell">
+          <MsIcon v-if="o.status === 'manual_review' || o.status === 'apply_failed'" name="warning" size="xs" class="status-warn-icon" />
+          <Badge :color="statusColor(o.status)">{{ t(`billing.orders.status.${o.status}`) }}</Badge>
+        </span>
+      </td>
       <td class="col-actions">
         <div class="action-group">
-          <BaseButton size="sm" @click="emit('selectOrder', o.id)">{{ t('billing.admin.orders.view') }}</BaseButton>
+          <BaseButton size="sm" @click="emit('selectOrder', o.id)">
+            <MsIcon name="visibility" size="xs" /> {{ t('billing.admin.orders.view') }}
+          </BaseButton>
           <BaseButton v-if="canForceApply(o)" size="sm" variant="primary" @click="forceApply(o)">
             <MsIcon name="play_arrow" size="xs" /> {{ t('billing.admin.orders.forceApply') }}
           </BaseButton>
@@ -475,7 +450,6 @@ code {
   text-overflow: ellipsis;
   white-space: nowrap;
   display: block;
-  max-width: 140px;
 }
 
 .cell-link {
@@ -535,26 +509,20 @@ code {
   flex-shrink: 0;
 }
 
-@media (max-width: 768px) {
-  .toolbar-half {
-    flex: 1;
-    min-width: 0;
-  }
-}
 .orders-table-wrap :deep(.dt-table) {
-  table-layout: fixed;
+  min-width: 1120px;
 }
 
-.orders-table-wrap .col-time     { width: 11%; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.orders-table-wrap .col-orderno  { width: 13%; }
-.orders-table-wrap .col-channel  { width: 7%;  white-space: nowrap; }
-.orders-table-wrap .col-kind     { width: 7%;  white-space: nowrap; }
-.orders-table-wrap .col-plan     { width: 12%; }
-.orders-table-wrap .col-amount   { width: 7%;  white-space: nowrap; }
-.orders-table-wrap .col-status   { width: 8%;  white-space: nowrap; }
-.orders-table-wrap .col-user     { width: 10%; }
-.orders-table-wrap .col-server   { width: 10%; }
-.orders-table-wrap .col-actions  { width: 15%; }
+.orders-table-wrap :deep(.col-time)     { width: 14%; font-size: .8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.orders-table-wrap :deep(.col-orderno)  { width: 16%; }
+.orders-table-wrap :deep(.col-channel)  { width: 8%;  white-space: nowrap; }
+.orders-table-wrap :deep(.col-kind)     { width: 6%;  white-space: nowrap; }
+.orders-table-wrap :deep(.col-plan)     { width: 13%; }
+.orders-table-wrap :deep(.col-amount)   { width: 7%;  white-space: nowrap; }
+.orders-table-wrap :deep(.col-user)     { width: 9%; }
+.orders-table-wrap :deep(.col-server)   { width: 10%; }
+.orders-table-wrap :deep(.col-status)   { width: 8%;  white-space: nowrap; }
+.orders-table-wrap :deep(.col-actions)  { width: 9%; }
 
 .orders-table-wrap .cell-deleted {
   color: var(--t3);

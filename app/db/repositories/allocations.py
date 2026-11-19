@@ -10,20 +10,24 @@ the same FK semantics: ``servers.allocation_id`` → primary, and
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Iterable
+from typing import Any, Iterable
 
 from sqlalchemy import String, cast, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import contains_eager, joinedload
 
-from app.core.time import utc_naive_now
+from app.core.time import utc_naive_now_sec
 from app.db.models.pterodactyl import Allocation, PteroServer, PteroUser
+from app.db.sorting import SortSpec, build_order_by
 
 
-def _now() -> datetime:
-    return utc_naive_now().replace(microsecond=0)
+_ALLOCATION_SORT_COLUMNS: dict[str, Any] = {
+    "ip": SortSpec(Allocation.ip, tie_breakers=(Allocation.port, Allocation.id)),
+    "port": SortSpec(Allocation.port, tie_breakers=(Allocation.ip, Allocation.id)),
+    "alias": SortSpec(Allocation.ip_alias, nulls_last=True, empty_as_null=True),
+    "server": SortSpec(PteroServer.name, nulls_last=True),
+}
 
 
 class AllocationRepository:
@@ -38,17 +42,23 @@ class AllocationRepository:
         search: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        sort_by: str | None = None,
+        sort_order: str = "asc",
     ) -> tuple[list[Allocation], int]:
         """Return ``(items, total)`` filtered by ``assigned`` and ``search``.
 
         ``search`` matches against port (numeric prefix), ip, ip_alias,
         notes, server name, server uuid_short — case-insensitive.
         """
-        stmt = (
-            select(Allocation)
-            .where(Allocation.node_id == node_id)
-            .options(joinedload(Allocation.server))
-        )
+        need_server_join = bool(search) or sort_by == "server"
+        stmt = select(Allocation).where(Allocation.node_id == node_id)
+        if need_server_join:
+            stmt = stmt.outerjoin(
+                PteroServer, Allocation.server_id == PteroServer.id
+            ).options(contains_eager(Allocation.server))
+        else:
+            stmt = stmt.options(joinedload(Allocation.server))
+
         count_stmt = select(func.count()).select_from(Allocation).where(
             Allocation.node_id == node_id
         )
@@ -62,8 +72,7 @@ class AllocationRepository:
 
         if search:
             needle = f"%{search.strip()}%"
-            # Outer-join servers for search across server fields.
-            stmt = stmt.outerjoin(PteroServer, Allocation.server_id == PteroServer.id).where(
+            stmt = stmt.where(
                 or_(
                     Allocation.ip.ilike(needle),
                     Allocation.ip_alias.ilike(needle),
@@ -94,7 +103,14 @@ class AllocationRepository:
             elif assigned is False:
                 count_stmt = count_stmt.where(Allocation.server_id.is_(None))
 
-        stmt = stmt.order_by(Allocation.ip.asc(), Allocation.port.asc()).limit(limit).offset(offset)
+        order_clauses = build_order_by(
+            sort_by,
+            sort_order,
+            _ALLOCATION_SORT_COLUMNS,
+            default=(Allocation.ip.asc(), Allocation.port.asc(), Allocation.id.asc()),
+            tie_breakers=(Allocation.ip, Allocation.port, Allocation.id),
+        )
+        stmt = stmt.order_by(*order_clauses).limit(limit).offset(offset)
 
         rows = (await db.execute(stmt)).unique().scalars().all()
         total = (await db.execute(count_stmt)).scalar_one()
@@ -169,7 +185,7 @@ class AllocationRepository:
         if not to_create:
             return [], skipped
 
-        now = _now()
+        now = utc_naive_now_sec()
         new_rows = [
             Allocation(
                 node_id=node_id,

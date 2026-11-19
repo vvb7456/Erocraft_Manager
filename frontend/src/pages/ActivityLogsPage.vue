@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useFormatDate } from '@/composables/useFormatDate'
@@ -10,6 +10,9 @@ import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import Badge from '@/components/ui/Badge.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useServerPagination } from '@/composables/useTablePagination'
 import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 
@@ -17,7 +20,7 @@ defineOptions({ name: 'ActivityLogsPage' })
 
 const { t, te } = useI18n({ useScope: 'global' })
 const { detailLabel } = useActivityLog()
-const { get, loading } = useApiFetch()
+const { get, handleError } = useApiFetch()
 const { formatDateTime } = useFormatDate()
 
 // ── Types ──
@@ -43,38 +46,53 @@ interface LogResponse {
   }
 }
 
-// ── State ──
 const logs = ref<LogItem[]>([])
-const page = ref(1)
-const perPage = ref(20)
-const totalPages = ref(1)
-const totalCount = ref(0)
 const filterActor = ref('')
 const filterCategory = ref('')
 const filterStatus = ref('')
 const categoryOptions = ref<string[]>([])
+const { sortBy, sortOrder, toggleSort } = useTableSort({
+  defaultBy: 'timestamp',
+  defaultOrder: 'desc',
+  descColumns: ['timestamp'],
+})
 
-// ── Fetch ──
-async function loadLogs() {
-  const params = new URLSearchParams()
-  params.set('page', String(page.value))
-  params.set('per_page', String(perPage.value))
-  if (filterActor.value) params.set('actor', filterActor.value)
-  if (filterCategory.value) params.set('category', filterCategory.value)
-  if (filterStatus.value) params.set('status', filterStatus.value)
-  const data = await get<LogResponse>(`/api/admin/activity-logs?${params}`)
-  if (data) {
+const {
+  page,
+  perPage,
+  total: totalCount,
+  totalPages,
+  loading,
+  reload: loadLogs,
+  setPerPage,
+} = useServerPagination(
+  async ({ page: reqPage, perPage: reqPerPage, isCurrent }) => {
+    const params = new URLSearchParams()
+    params.set('page', String(reqPage))
+    params.set('per_page', String(reqPerPage))
+    if (filterActor.value.trim()) params.set('actor', filterActor.value.trim())
+    if (filterCategory.value) params.set('category', filterCategory.value)
+    if (filterStatus.value) params.set('status', filterStatus.value)
+    if (sortBy.value) {
+      params.set('sort_by', sortBy.value)
+      params.set('sort_order', sortOrder.value)
+    }
+    const data = await get<LogResponse>(`/api/admin/activity-logs?${params}`)
+    if (!data || !isCurrent()) return null
     logs.value = data.logs
-    totalPages.value = data.totalPages
-    totalCount.value = data.total
     categoryOptions.value = data.filters.categories
-  }
-}
+    return { total: data.total }
+  },
+  {
+    initialPerPage: 20,
+    filters: [filterCategory, filterStatus, sortBy, sortOrder],
+    search: filterActor,
+    onError: handleError,
+  },
+)
 
-onMounted(loadLogs)
-watch([filterActor, filterCategory, filterStatus], () => {
-  page.value = 1
-  return loadLogs()
+onMounted(() => {
+  void loadLogs()
 })
 
 // ── Helpers ──
@@ -104,6 +122,12 @@ const statusOptions = ['success', 'failed']
 
 // ── Mobile filter sheet ──
 const mobileFilterOpen = ref(false)
+const sortColumns = computed(() => [
+  { key: 'timestamp', label: t('logs.table.time') },
+  { key: 'actor', label: t('logs.table.actor') },
+  { key: 'category', label: t('logs.table.category') },
+  { key: 'status', label: t('logs.table.status') },
+])
 const filterGroups = computed(() => [
   {
     key: 'category',
@@ -170,10 +194,11 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
     <!-- Mobile filter sheet -->
     <MobileFilterSheet
       v-model:open="mobileFilterOpen"
-      :sort-columns="[]"
-      :sort-by="''"
-      :sort-order="'asc'"
+      :sort-columns="sortColumns"
+      :sort-by="sortBy"
+      :sort-order="sortOrder"
       :filters="filterGroups"
+      @sort="toggleSort"
       @update:filter="onMobileFilter"
     />
 
@@ -187,14 +212,14 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
       :loading="loading"
       empty-icon="history"
       :empty-text="t('logs.empty')"
-      @update:page="v => { page = v; return loadLogs() }"
-      @update:per-page="v => { perPage = v; page = 1; return loadLogs() }"
+      @update:page="page = $event"
+      @update:per-page="setPerPage"
     >
       <template #header>
-        <th class="col-time">{{ t('logs.table.time') }}</th>
-        <th class="col-actor">{{ t('logs.table.actor') }}</th>
-        <th class="col-action">{{ t('logs.table.category') }}</th>
-        <th class="col-status">{{ t('logs.table.status') }}</th>
+        <SortTh class="col-time" col="timestamp" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('logs.table.time') }}</SortTh>
+        <SortTh class="col-actor" col="actor" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('logs.table.actor') }}</SortTh>
+        <SortTh class="col-action" col="category" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('logs.table.category') }}</SortTh>
+        <SortTh class="col-status" col="status" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('logs.table.status') }}</SortTh>
         <th class="col-details">{{ t('logs.table.details') }}</th>
       </template>
       <template #row="{ item: log }">
@@ -207,7 +232,7 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
           </Badge>
         </td>
         <td class="col-details">
-          <span class="details-text">{{ detailLabel(log) }}</span>
+          <span class="details-text" :title="detailLabel(log)">{{ detailLabel(log) }}</span>
         </td>
       </template>
 
@@ -228,14 +253,21 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 </template>
 
 <style scoped>
-.col-time { width: 14%; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.col-actor { width: 10%; white-space: nowrap; }
-.col-action { width: 13%; white-space: nowrap; }
-.col-status { width: 7%; white-space: nowrap; }
-.col-details { width: 56%; }
+:deep(.dt-table)    { min-width: 820px; }
+:deep(.col-time)    { width: 15%; white-space: nowrap; font-variant-numeric: tabular-nums; }
+:deep(.col-actor)   { width: 11%; white-space: nowrap; }
+:deep(.col-action)  { width: 14%; white-space: nowrap; }
+:deep(.col-status)  { width: 8%; white-space: nowrap; }
+:deep(.col-details) { width: 52%; }
+:deep(.dt-table td.col-details) { white-space: normal; }
 
 .details-text {
-  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-word;
   color: var(--t2);
   font-size: .82rem;
 }

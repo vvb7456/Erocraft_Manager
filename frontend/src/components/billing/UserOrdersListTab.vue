@@ -10,6 +10,9 @@ import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useClientPagination } from '@/composables/useTablePagination'
 import Badge from '@/components/ui/Badge.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
@@ -34,8 +37,11 @@ const orders = ref<UserOrder[]>([])
 const initialLoading = ref(true)
 const searchTerm = ref('')
 const statusFilter = ref<string>('all')
-const page = ref(1)
-const perPage = ref(20)
+const { sortBy, sortOrder, toggleSort, sortItems } = useTableSort({
+  defaultBy: 'created_at',
+  defaultOrder: 'desc',
+  descColumns: ['created_at', 'total_fen', 'total_days'],
+})
 const supportOpen = ref(false)
 const payingId = ref<number | null>(null)
 const cancellingId = ref<number | null>(null)
@@ -108,6 +114,14 @@ const statusOptions = computed(() => [
 
 // ── Mobile filter sheet ──
 const mobileFilterOpen = ref(false)
+const sortColumns = computed(() => [
+  { key: 'order_no', label: t('billing.orders.table.orderNo') },
+  { key: 'plan_name', label: t('billing.orders.table.plan') },
+  { key: 'total_days', label: t('billing.orders.table.period') },
+  { key: 'total_fen', label: t('billing.orders.table.amount') },
+  { key: 'status', label: t('billing.orders.table.status') },
+  { key: 'created_at', label: t('billing.orders.table.createdAt') },
+])
 const filterGroups = computed(() => [
   {
     key: 'status',
@@ -119,7 +133,6 @@ const filterGroups = computed(() => [
 function onMobileFilter(groupKey: string, value: string | number | boolean) {
   if (groupKey === 'status') {
     statusFilter.value = String(value)
-    page.value = 1
   }
 }
 
@@ -146,10 +159,21 @@ function statusBucket(status: string): string {
   return status
 }
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage.value)))
-const paginated = computed(() => {
-  const start = (page.value - 1) * perPage.value
-  return filtered.value.slice(start, start + perPage.value)
+const sorted = computed(() =>
+  sortItems(filtered.value, {
+    order_no: (o) => o.order_no,
+    plan_name: (o) => o.plan_name,
+    total_days: (o) => o.total_days,
+    total_fen: (o) => o.total_fen,
+    status: (o) => statusLabel(o.status),
+    created_at: (o) => o.created_at,
+  }, {
+    tieBreaker: (a, b) => b.id - a.id,
+  }),
+)
+
+const { page, perPage, totalPages, paginated, setPerPage } = useClientPagination(sorted, {
+  resetDeps: [searchTerm, statusFilter, sortBy, sortOrder],
 })
 
 function fenToYuan(fen: number): string {
@@ -269,13 +293,15 @@ defineExpose({
 
   <MobileFilterSheet
     v-model:open="mobileFilterOpen"
-    :sort-columns="[]"
-    :sort-by="''"
-    :sort-order="'asc'"
+    :sort-columns="sortColumns"
+    :sort-by="sortBy"
+    :sort-order="sortOrder"
     :filters="filterGroups"
+    @sort="toggleSort"
     @update:filter="onMobileFilter"
   />
 
+  <div class="user-orders-table-wrap">
   <DataTable
     :items="paginated"
     :page="page"
@@ -287,19 +313,20 @@ defineExpose({
     :empty-text="t('billing.orders.empty')"
     row-key="id"
     @update:page="page = $event"
-    @update:per-page="perPage = $event; page = 1"
+    @update:per-page="setPerPage"
   >
     <template #header>
-      <th class="col-no">{{ t('billing.orders.table.orderNo') }}</th>
-      <th class="col-plan">{{ t('billing.orders.table.plan') }}</th>
-      <th class="col-period">{{ t('billing.orders.table.period') }}</th>
-      <th class="col-amount">{{ t('billing.orders.table.amount') }}</th>
-      <th class="col-status">{{ t('billing.orders.table.status') }}</th>
-      <th class="col-time">{{ t('billing.orders.table.createdAt') }}</th>
+      <SortTh class="col-time" col="created_at" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.orders.table.createdAt') }}</SortTh>
+      <SortTh class="col-no" col="order_no" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.orders.table.orderNo') }}</SortTh>
+      <SortTh class="col-plan" col="plan_name" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.orders.table.plan') }}</SortTh>
+      <SortTh class="col-period" col="total_days" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.orders.table.period') }}</SortTh>
+      <SortTh class="col-amount" col="total_fen" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.orders.table.amount') }}</SortTh>
+      <SortTh class="col-status" col="status" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.orders.table.status') }}</SortTh>
       <th class="col-actions">{{ t('billing.orders.table.actions') }}</th>
     </template>
 
     <template #row="{ item: o }">
+      <td class="col-time mono">{{ formatDate(o.created_at) }}</td>
       <td class="col-no mono">
         <a class="order-link" href="#" @click.prevent="goDetail(o)">{{ o.order_no }}</a>
       </td>
@@ -309,7 +336,6 @@ defineExpose({
       <td class="col-status">
         <Badge :color="statusColor(o.status)">{{ statusLabel(o.status) }}</Badge>
       </td>
-      <td class="col-time mono">{{ formatDate(o.created_at) }}</td>
       <td class="col-actions">
         <div class="action-group">
           <template v-if="o.status === 'pending'">
@@ -321,7 +347,7 @@ defineExpose({
             </BaseButton>
           </template>
           <BaseButton v-else size="sm" @click="goDetail(o)">
-            {{ t('billing.orders.viewDetail') }}
+            <MsIcon name="visibility" size="xs" /> {{ t('billing.orders.viewDetail') }}
           </BaseButton>
         </div>
       </td>
@@ -344,6 +370,7 @@ defineExpose({
       </CardTap>
     </template>
   </DataTable>
+  </div>
 
   <ActionSheet v-model="mobileActionOpen" :title="mobileActionOrder?.order_no">
     <template v-if="mobileActionOrder" #info>
@@ -352,7 +379,7 @@ defineExpose({
     </template>
     <template v-if="mobileActionOrder">
       <button @click="mobileActionOpen = false; goDetail(mobileActionOrder)">
-        <MsIcon name="receipt_long" size="sm" /> {{ t('billing.orders.viewDetail') }}
+        <MsIcon name="visibility" size="sm" /> {{ t('billing.orders.viewDetail') }}
       </button>
       <template v-if="mobileActionOrder.status === 'pending'">
         <button :disabled="busy" @click="mobileActionOpen = false; goPay(mobileActionOrder)">
@@ -370,6 +397,15 @@ defineExpose({
 </template>
 
 <style scoped>
+.user-orders-table-wrap :deep(.dt-table)    { min-width: 880px; }
+.user-orders-table-wrap :deep(.col-time)    { width: 16%; }
+.user-orders-table-wrap :deep(.col-no)      { width: 19%; }
+.user-orders-table-wrap :deep(.col-plan)    { width: 17%; }
+.user-orders-table-wrap :deep(.col-period)  { width: 12%; }
+.user-orders-table-wrap :deep(.col-amount)  { width: 10%; }
+.user-orders-table-wrap :deep(.col-status)  { width: 10%; }
+.user-orders-table-wrap :deep(.col-actions) { width: 16%; }
+
 .action-group {
   display: flex;
   gap: var(--sp-2);

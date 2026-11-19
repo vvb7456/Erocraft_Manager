@@ -1,5 +1,10 @@
 {
   "title": "Host Management",
+  "tabs": {
+    "hosts": "Hosts",
+    "nodes": "Wings Nodes",
+    "locations": "Locations"
+  },
   "summary": {
     "total": "{n} total"
   },
@@ -45,7 +50,6 @@
   },
   "actions": {
     "delete": "Delete",
-    "open": "Open",
     "deleted": "Host {name} deleted"
   },
   "confirm": {
@@ -74,7 +78,9 @@
     "cancel": "Cancel",
     "creating": "Creating…",
     "created": "Host created",
-    "createFailed": "Create failed"
+    "createFailed": "Create failed",
+    "refreshNodes": "Refresh nodes",
+    "noUnboundNodesHint": "No unbound Wings nodes available. Create one in the “Wings Nodes” tab first."
   },
   "tokenReveal": {
     "title": "One-time token",
@@ -215,6 +221,7 @@
       "serviceUptime": "up {dur}",
       "restartRequired": "The following fields require a Wings restart to take effect: {fields}",
       "restart": "Restart Wings",
+      "viewConfig": "View initial config.yml",
       "restartConfirmTitle": "Restart Wings?",
       "restartConfirmMsg": "All servers on this host will briefly go offline while Wings restarts.",
       "restartOk": "Wings restarted ({ms} ms)",
@@ -336,6 +343,15 @@
       "create": "New allocations",
       "delete": "Delete"
     },
+    "edit": {
+      "title": "Edit allocation",
+      "aliasHint": "Leave empty to clear alias and display the raw IP.",
+      "aliasPlaceholder": "e.g. node1.example.com",
+      "aliasTooLong": "Alias cannot exceed 191 characters",
+      "notesPlaceholder": "Optional notes (max 191 chars)",
+      "notesTooLong": "Notes cannot exceed 191 characters",
+      "toastOk": "Allocation updated"
+    },
     "create": {
       "title": "New allocations",
       "ip": "IP",
@@ -452,5 +468,87 @@
     },
     "serversEmptyNoTunnel": "Tunnel not installed. Server list will appear once deployment finishes.",
     "serversEmptyReady": "No servers have enabled tunnel access yet. Bind a subdomain to a server in its detail page to see it here."
+  },
+  "locations": {
+    "createTitle": "Add Location",
+    "editTitle": "Edit Location",
+    "addBtn": "Add Location",
+    "searchPlaceholder": "Search short code or description",
+    "totalCount": "{n} location(s)",
+    "empty": "No locations yet. Create one before adding a Wings node.",
+    "created": "Location created",
+    "updated": "Location updated",
+    "deleteTitle": "Delete Location",
+    "deleteMsg": "Delete location “{short}”?",
+    "deleted": "Location “{short}” deleted",
+    "deleteBlocked": "Cannot delete a location that still has nodes",
+    "fields": {
+      "short": "Short Code",
+      "shortPlaceholder": "e.g. us-east / sg-1",
+      "long": "Description",
+      "longPlaceholder": "e.g. Singapore DC"
+    },
+    "columns": {
+      "short": "Short Code",
+      "long": "Description",
+      "nodes": "Nodes",
+      "servers": "Servers",
+      "actions": "Actions"
+    },
+    "validation": {
+      "shortRequired": "Short code is required",
+      "shortTooLong": "Short code cannot exceed 60 characters",
+      "longTooLong": "Description cannot exceed 191 characters"
+    }
+  },
+  "nodes": {
+    "createBtn": "New Wings Node",
+    "searchPlaceholder": "Search name / FQDN / location / host",
+    "totalCount": "{n} node(s)",
+    "empty": "No Wings nodes yet. Click “New Wings Node” in the top right to create one.",
+    "unbound": "Unbound",
+    "columns": {
+      "name": "Node Name",
+      "location": "Location",
+      "address": "Daemon Address",
+      "host": "Bound Host",
+      "usage": "Servers / Plans"
+    },
+    "viewConfig": "config.yml",
+    "bindHost": "Bind Host",
+    "serversCount": "{n} server(s)",
+    "plansCount": "{n} plan(s)",
+    "deleteTitle": "Delete Wings Node",
+    "deleteMsg": "Delete Panel node “{name}”? Deletion is blocked if servers, billing plans, or pending orders reference it.",
+    "deleted": "Node “{name}” deleted",
+    "fields": {
+      "location": "Location",
+      "public": "Public"
+    },
+    "tips": {
+      "public": "When disabled, automatic deployment will skip this node."
+    },
+    "create": {
+      "title": "New Wings Node",
+      "tabBasic": "Basic & Network",
+      "tabResources": "Resources & Paths",
+      "noLocations": "No locations found. Create a location first.",
+      "namePlaceholder": "e.g. SG-Node-01",
+      "descPlaceholder": "Optional description",
+      "selectLocation": "Select location",
+      "httpsBareIpError": "FQDN cannot be a bare IP address when HTTPS is enabled without a reverse proxy",
+      "submit": "Create Node",
+      "created": "Node “{name}” created — copy its initial config.yml to the target machine"
+    },
+    "config": {
+      "title": "Initial Wings Configuration (config.yml)",
+      "hint": "Save the following YAML to {path} on the target node and start Wings.",
+      "remote": "Panel remote URL:",
+      "copyYaml": "Copy config.yml",
+      "copyCmd": "Copy write command",
+      "download": "Download .yml",
+      "copied": "config.yml copied to clipboard",
+      "cmdCopied": "Deploy command copied to clipboard"
+    }
   }
 }

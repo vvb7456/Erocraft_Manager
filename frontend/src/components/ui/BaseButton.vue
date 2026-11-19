@@ -75,6 +75,7 @@ function onClick(e: MouseEvent) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   gap: 5px;
   box-sizing: border-box;
   border: 1px solid var(--bd);

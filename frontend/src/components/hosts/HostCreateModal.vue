@@ -17,16 +17,25 @@ import BaseSelect from '@/components/form/BaseSelect.vue'
 import FormField from '@/components/form/FormField.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import HelpTip from '@/components/ui/HelpTip.vue'
+import AlertBanner from '@/components/ui/AlertBanner.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
+import MsIcon from '@/components/ui/MsIcon.vue'
 import HostTokenRevealModal from '@/components/hosts/HostTokenRevealModal.vue'
 
 defineOptions({ name: 'HostCreateModal' })
+
+export interface PresetNodeInfo {
+  id: number
+  name: string
+  fqdn: string
+}
 
 const props = defineProps<{
   modelValue: boolean
   /** Pterodactyl node IDs already bound to an existing host — rendered
    *  as disabled options to prevent duplicate assignment. */
   usedNodeIds?: number[]
+  presetNode?: PresetNodeInfo | null
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -68,9 +77,13 @@ const createdHostName = ref('')
 // ── Panel nodes (only needed for wings_node kind) ──
 interface NodeOption { id: number; name: string }
 const nodes = ref<NodeOption[]>([])
+const nodesLoaded = ref(false)
 async function loadNodes() {
   const r = await get<{ nodes: NodeOption[] }>('/api/admin/resources/nodes')
-  if (r) nodes.value = r.nodes || []
+  if (r) {
+    nodes.value = r.nodes || []
+    nodesLoaded.value = true
+  }
 }
 
 // ── Kind options ──
@@ -88,11 +101,12 @@ const nodeOptions = computed(() => {
   }))
 })
 
+const hasAvailableNodes = computed(() =>
+  nodeOptions.value.some(opt => !opt.disabled),
+)
+
 const isWings = computed(() => form.value.kind === 'wings_node')
 
-// Clearing the node id when user flips away from wings_node keeps the
-// payload tidy and avoids sending a stale id that the backend would
-// otherwise reject for a non-wings kind.
 watch(isWings, (now) => {
   if (!now) form.value.pterodactyl_node_id = null
 })
@@ -111,7 +125,13 @@ const canSubmit = computed(() => {
 watch(() => props.modelValue, (open) => {
   if (open) {
     form.value = blankForm()
-    loadNodes()
+    if (props.presetNode) {
+      form.value.kind = 'wings_node'
+      form.value.pterodactyl_node_id = props.presetNode.id
+      form.value.name = props.presetNode.name
+      form.value.hostname = props.presetNode.fqdn
+    }
+    void loadNodes()
   }
 })
 
@@ -138,7 +158,6 @@ async function submit() {
     if (!res) return
 
     toast(t('hosts.create.created'), 'success')
-    // Show auto-generated token if backend created one.
     if (res.generated_agent_token) {
       revealToken.value = res.generated_agent_token
       createdHostName.value = form.value.name
@@ -171,7 +190,7 @@ function onTokenCopied() {
     size="md"
   >
     <div class="form-grid">
-      <FormField layout="horizontal" bordered>
+      <FormField layout="horizontal" keep-horizontal control-fit bordered>
         <template #label>
           {{ t('hosts.create.fields.enabled') }}
           <HelpTip :text="t('hosts.create.fields.enabledHint')" />
@@ -199,19 +218,42 @@ function onTokenCopied() {
         />
       </FormField>
 
-      <FormField layout="horizontal" bordered>
+      <FormField
+        layout="horizontal"
+        bordered
+      >
         <template #label>
           {{ t('hosts.create.fields.pteroNode') }}
           <HelpTip :text="t('hosts.create.fields.pteroNodeHint')" />
         </template>
-        <BaseSelect
-          teleport
-          :disabled="!isWings"
-          :options="nodeOptions"
-          :modelValue="form.pterodactyl_node_id ?? ''"
-          @update:modelValue="(v: any) => form.pterodactyl_node_id = (v === '' || v == null) ? null : Number(v)"
-        />
+        <div class="node-select-row">
+          <BaseSelect
+            teleport
+            :disabled="!isWings"
+            :options="nodeOptions"
+            :modelValue="form.pterodactyl_node_id ?? ''"
+            @update:modelValue="(v: any) => form.pterodactyl_node_id = (v === '' || v == null) ? null : Number(v)"
+          />
+          <BaseButton
+            size="sm"
+            variant="ghost"
+            square
+            :disabled="!isWings"
+            :title="t('hosts.create.refreshNodes')"
+            @click="loadNodes()"
+          >
+            <MsIcon name="refresh" size="xs" />
+          </BaseButton>
+        </div>
       </FormField>
+
+      <AlertBanner
+        v-if="isWings && nodesLoaded && !hasAvailableNodes"
+        tone="info"
+        dense
+      >
+        {{ t('hosts.create.noUnboundNodesHint') }}
+      </AlertBanner>
 
       <FormField layout="horizontal" bordered>
         <template #label>
@@ -285,6 +327,19 @@ function onTokenCopied() {
 }
 
 .token-row :deep(.secret-input) {
+  flex: 1;
+  min-width: 0;
+}
+
+.node-select-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  width: 100%;
+  min-width: 0;
+}
+
+.node-select-row :deep(.base-select) {
   flex: 1;
   min-width: 0;
 }

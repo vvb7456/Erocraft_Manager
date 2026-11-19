@@ -9,6 +9,10 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useServerPagination } from '@/composables/useTablePagination'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -99,20 +103,62 @@ const { formatDateTime: fmtDate } = useFormatDate()
 
 const batch = ref<RedemptionBatchSummary | null>(null)
 const items = ref<RedemptionCodeItem[]>([])
-const total = ref(0)
-const loading = ref(false)
 const exporting = ref(false)
 
 const searchQuery = ref('')
 const statusFilter = ref('all')
-const limit = ref(20)
-const offset = ref(0)
-
-const page = computed({
-  get: () => Math.floor(offset.value / limit.value) + 1,
-  set: (p: number) => { offset.value = Math.max(0, (p - 1) * limit.value) },
+const mobileFilterOpen = ref(false)
+const { sortBy, sortOrder, toggleSort } = useTableSort({
+  descColumns: ['redeemed_at', 'expires_at'],
 })
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.value)))
+
+const {
+  page,
+  perPage: limit,
+  total,
+  totalPages,
+  loading,
+  reload: loadCodes,
+  setPerPage,
+  resetStateWithoutFetch,
+} = useServerPagination(
+  async ({ perPage, offset, isCurrent }) => {
+    if (!props.batchId) return null
+    const qs = new URLSearchParams({
+      batch_id: String(props.batchId),
+      limit: String(perPage),
+      offset: String(offset),
+    })
+    if (statusFilter.value !== 'all') qs.set('status', statusFilter.value)
+    if (searchQuery.value.trim()) qs.set('q', searchQuery.value.trim())
+    if (sortBy.value) {
+      qs.set('sort_by', sortBy.value)
+      qs.set('sort_order', sortOrder.value)
+    }
+    const data = await get<{ items: RedemptionCodeItem[]; total: number }>(
+      `/api/admin/billing/redemption/codes?${qs.toString()}`,
+      { silent: true },
+    )
+    if (!data || !isCurrent()) return null
+    items.value = data.items
+    return { total: data.total }
+  },
+  {
+    initialPerPage: 20,
+    enabled: () => props.modelValue && !!props.batchId,
+    filters: [statusFilter, sortBy, sortOrder],
+    search: searchQuery,
+    onError: handleError,
+  },
+)
+
+const sortColumns = computed(() => [
+  { key: 'code', label: t('billing.admin.redemption.detail.codeCol.code') },
+  { key: 'status', label: t('billing.admin.redemption.detail.codeCol.status') },
+  { key: 'external_order_id', label: t('billing.admin.redemption.detail.codeCol.externalOrder') },
+  { key: 'redeemed_at', label: t('billing.admin.redemption.detail.codeCol.redeemedInfo') },
+  { key: 'expires_at', label: t('billing.admin.redemption.detail.codeCol.expiresAt') },
+])
 
 const statusOptions = computed(() => [
   { value: 'all', label: t('billing.admin.redemption.detail.filterAllStatus') },
@@ -121,6 +167,19 @@ const statusOptions = computed(() => [
   { value: 'expired', label: t('billing.admin.redemption.detail.status.expired') },
   { value: 'void', label: t('billing.admin.redemption.detail.status.void') },
 ])
+
+const filterGroups = computed(() => [
+  {
+    key: 'status',
+    label: t('billing.admin.redemption.detail.statusFilterLabel'),
+    modelValue: statusFilter.value,
+    options: statusOptions.value,
+  },
+])
+
+function onMobileFilter(groupKey: string, value: string | number | boolean) {
+  if (groupKey === 'status') statusFilter.value = String(value)
+}
 
 function statusColor(s: string): string {
   switch (s) {
@@ -151,53 +210,24 @@ async function loadDetail() {
   if (data) batch.value = data
 }
 
-async function loadCodes() {
-  if (!props.batchId) return
-  loading.value = true
-  const qs = new URLSearchParams({
-    batch_id: String(props.batchId),
-    limit: String(limit.value),
-    offset: String(offset.value),
-  })
-  if (statusFilter.value !== 'all') qs.set('status', statusFilter.value)
-  if (searchQuery.value.trim()) qs.set('q', searchQuery.value.trim())
-  try {
-    const data = await get<{ items: RedemptionCodeItem[]; total: number }>(
-      `/api/admin/billing/redemption/codes?${qs.toString()}`,
-      { silent: true },
-    )
-    if (data) {
-      items.value = data.items
-      total.value = data.total
-    }
-  } finally {
-    loading.value = false
-  }
-}
-
 watch(
   () => [props.modelValue, props.batchId] as const,
   async ([open, id]) => {
     if (open && id) {
-      searchQuery.value = ''
-      statusFilter.value = 'all'
-      offset.value = 0
-      await Promise.all([loadDetail(), loadCodes()]).catch(handleError)
+      resetStateWithoutFetch(() => {
+        searchQuery.value = ''
+        statusFilter.value = 'all'
+        sortBy.value = ''
+        sortOrder.value = 'asc'
+      })
+      await Promise.all([loadDetail().catch(handleError), loadCodes()])
+    } else if (!open) {
+      resetStateWithoutFetch()
+      mobileFilterOpen.value = false
     }
   },
   { immediate: true },
 )
-
-watch([searchQuery, statusFilter], () => {
-  if (!props.modelValue || !props.batchId) return
-  offset.value = 0
-  void loadCodes().catch(handleError)
-})
-
-watch(page, () => {
-  if (!props.modelValue || !props.batchId) return
-  void loadCodes().catch(handleError)
-})
 
 async function copyCode(code: string) {
   try {
@@ -342,44 +372,66 @@ function openMobile(c: RedemptionCodeItem) {
 
       <SectionToolbar>
         <template #start>
-          <FilterInput
-            v-model="searchQuery"
-            :placeholder="t('billing.admin.redemption.detail.searchCodePlaceholder')"
-            class="tb-search"
-          />
+          <div class="tb-search-row">
+            <FilterInput
+              v-model="searchQuery"
+              :placeholder="t('billing.admin.redemption.detail.searchCodePlaceholder')"
+              class="tb-search"
+            />
+            <button
+              class="tb-filter-btn"
+              :title="t('common.filterSort.title')"
+              @click="mobileFilterOpen = true"
+            >
+              <MsIcon name="tune" size="sm" />
+            </button>
+          </div>
           <span class="toolbar-status tb-status">
             {{ t('billing.admin.redemption.detail.totalCodes', { n: total }) }}
           </span>
         </template>
         <template #end>
-          <BaseSelect
-            v-model="statusFilter"
-            :options="statusOptions"
-            :prefix="t('billing.admin.redemption.detail.statusFilterLabel') + ': '"
-            size="sm"
-            fit
-          />
+          <div class="tb-select-group tb-desktop-only">
+            <BaseSelect
+              v-model="statusFilter"
+              :options="statusOptions"
+              :prefix="t('billing.admin.redemption.detail.statusFilterLabel') + ': '"
+              size="sm"
+              fit
+            />
+          </div>
         </template>
       </SectionToolbar>
+
+      <MobileFilterSheet
+        v-model:open="mobileFilterOpen"
+        :sort-columns="sortColumns"
+        :sort-by="sortBy"
+        :sort-order="sortOrder"
+        :filters="filterGroups"
+        @sort="toggleSort"
+        @update:filter="onMobileFilter"
+      />
 
       <DataTable
         :items="items"
         :page="page"
         :total-pages="totalPages"
         :per-page="limit"
+        :per-page-label="t('billing.orders.perPage')"
         :loading="loading"
         empty-icon="redeem"
         :empty-text="t('billing.admin.redemption.detail.emptyCodes')"
         row-key="id"
         @update:page="page = $event"
-        @update:per-page="limit = $event; offset = 0"
+        @update:per-page="setPerPage"
       >
         <template #header>
-          <th class="col-code">{{ t('billing.admin.redemption.detail.codeCol.code') }}</th>
-          <th class="col-status">{{ t('billing.admin.redemption.detail.codeCol.status') }}</th>
-          <th class="col-ext">{{ t('billing.admin.redemption.detail.codeCol.externalOrder') }}</th>
-          <th class="col-redeemed">{{ t('billing.admin.redemption.detail.codeCol.redeemedInfo') }}</th>
-          <th class="col-expires">{{ t('billing.admin.redemption.detail.codeCol.expiresAt') }}</th>
+          <SortTh class="col-code" col="code" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.redemption.detail.codeCol.code') }}</SortTh>
+          <SortTh class="col-ext" col="external_order_id" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.redemption.detail.codeCol.externalOrder') }}</SortTh>
+          <SortTh class="col-redeemed" col="redeemed_at" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.redemption.detail.codeCol.redeemedInfo') }}</SortTh>
+          <SortTh class="col-expires" col="expires_at" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.redemption.detail.codeCol.expiresAt') }}</SortTh>
+          <SortTh class="col-status" col="status" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.redemption.detail.codeCol.status') }}</SortTh>
           <th class="col-actions">{{ t('billing.admin.redemption.detail.codeCol.actions') }}</th>
         </template>
         <template #row="{ item: c }">
@@ -391,9 +443,6 @@ function openMobile(c: RedemptionCodeItem) {
               </BaseButton>
             </div>
           </td>
-          <td class="col-status">
-            <Badge :color="statusColor(c.status)">{{ statusLabel(c.status) }}</Badge>
-          </td>
           <td class="col-ext mono">{{ c.external_order_id || '—' }}</td>
           <td class="col-redeemed">
             <template v-if="c.redeemed_by">
@@ -404,6 +453,9 @@ function openMobile(c: RedemptionCodeItem) {
           </td>
           <td class="col-expires">
             {{ c.expires_at ? fmtDate(c.expires_at) : t('billing.admin.redemption.neverExpire') }}
+          </td>
+          <td class="col-status">
+            <Badge :color="statusColor(c.status)">{{ statusLabel(c.status) }}</Badge>
           </td>
           <td class="col-actions">
             <BaseButton
@@ -469,11 +521,12 @@ function openMobile(c: RedemptionCodeItem) {
 }
 .export-pill:hover { border-color: var(--ac); color: var(--ac); }
 
+:deep(.dt-table)     { min-width: 760px; }
 :deep(.col-code)     { width: 28%; }
-:deep(.col-status)   { width: 10%; white-space: nowrap; }
 :deep(.col-ext)      { width: 16%; font-size: var(--text-xs); color: var(--t2); }
 :deep(.col-redeemed) { width: 20%; }
 :deep(.col-expires)  { width: 14%; color: var(--t2); font-size: var(--text-sm); }
+:deep(.col-status)   { width: 10%; white-space: nowrap; }
 :deep(.col-actions)  { width: 12%; }
 
 .code-cell { display: inline-flex; align-items: center; gap: var(--sp-1); }

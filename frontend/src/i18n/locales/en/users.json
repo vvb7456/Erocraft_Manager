@@ -20,10 +20,11 @@
   },
   "role": {
     "admin": "Admin",
-    "user": "User"
+    "user": "User",
+    "root_admin": "System Administrator",
+    "root_admin_hint": "Grants full access to the admin panel, infrastructure, and payment gateway."
   },
   "action": {
-    "edit": "Edit",
     "delete": "Delete",
     "create": "Create User"
   },
@@ -43,7 +44,10 @@
     "first_name": "First Name",
     "last_name": "Last Name",
     "password": "New Password",
-    "password_hint": "Leave blank to keep current password",    "language": "Default language",    "success": "User updated"
+    "password_hint": "Leave blank to keep current password",
+    "language": "Default language",
+    "self_demote_disabled": "You cannot revoke administrator privileges from your own account.",
+    "success": "User updated"
   },
   "confirm": {
     "delete_title": "Delete User",

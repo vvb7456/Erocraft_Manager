@@ -59,6 +59,11 @@ def utc_naive_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def utc_naive_now_sec() -> datetime:
+    """UTC naive timestamp truncated to whole seconds for MySQL DATETIME/TIMESTAMP."""
+    return utc_naive_now().replace(microsecond=0)
+
+
 def to_iso_z(dt: datetime | None) -> str | None:
     """Serialize a (possibly naive-UTC) datetime as ``...Z``.
 

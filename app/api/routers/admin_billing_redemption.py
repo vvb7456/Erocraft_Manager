@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -45,11 +46,28 @@ async def list_batches(
     q: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    sort_by: Literal[
+        "id",
+        "name",
+        "plan_id",
+        "amount_fen",
+        "quantity",
+        "expires_at",
+        "created_at",
+    ] | None = Query(default=None),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> RedemptionBatchListResponse:
     return await svc.list_batches(
-        db, source=source, plan_id=plan_id, q=q, limit=limit, offset=offset
+        db,
+        source=source,
+        plan_id=plan_id,
+        q=q,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -120,6 +138,16 @@ async def list_codes(
     q: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    sort_by: Literal[
+        "id",
+        "code",
+        "status",
+        "external_order_id",
+        "redeemed_at",
+        "expires_at",
+        "created_at",
+    ] | None = Query(default=None),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> RedemptionCodeListResponse:
@@ -131,6 +159,8 @@ async def list_codes(
         q=q,
         limit=limit,
         offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 

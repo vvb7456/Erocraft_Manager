@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.contracts import OperationResult
 from app.core.runtime_settings import AUTOMATION_SPECS, BILLING_SPECS
 from app.core.settings_store import get_settings_store
-from app.core.time import local_today, utc_naive_now
+from app.core.time import local_today, utc_naive_now_sec
 from app.db.models.billing import BillingInvoice, BillingInvoiceItem, BillingOrder, BillingOrderEffect, BillingPayment, BillingPlan
 from app.db.models.manager import ServerMeta
 from app.db.models.pterodactyl import Allocation, PteroServer, PteroUser
@@ -168,7 +168,7 @@ async def create_order(db: AsyncSession, user: PteroUser, payload: CreateOrderRe
             order.target_server_id = await _create_placeholder_server(db, user=user, order=order, plan=plan, snapshot=snapshot)
             order.reserved_node_id = plan.node_id
         invoice = BillingInvoice(invoice_no=gen_invoice_no(), order_id=order.id, user_id=user.id, status="pending",
-                                 total_fen=order.total_fen, currency_code="CNY", due_at=utc_naive_now().replace(microsecond=0) + timedelta(minutes=timeout),
+                                 total_fen=order.total_fen, currency_code="CNY", due_at=utc_naive_now_sec() + timedelta(minutes=timeout),
                                  gateway_code=None)
         db.add(invoice)
         await db.flush()

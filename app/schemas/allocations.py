@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ServerBrief(BaseModel):
@@ -50,6 +50,32 @@ class AllocationSkip(BaseModel):
 class AllocationCreateResponse(BaseModel):
     created: list[AllocationOut]
     skipped: list[AllocationSkip]
+
+
+class AllocationUpdateIn(BaseModel):
+    alias: str | None = None
+    # DB column allocations.notes is varchar(191) despite Panel PHP model saying max:256
+    notes: str | None = None
+
+    @field_validator("alias")
+    @classmethod
+    def _validate_alias(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip()
+        if len(s) > 191:
+            raise ValueError("IP 别名长度不能超过 191")
+        return s or None
+
+    @field_validator("notes")
+    @classmethod
+    def _validate_notes(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip()
+        if len(s) > 191:
+            raise ValueError("端口备注长度不能超过 191")
+        return s or None
 
 
 class AllocationBulkDeleteIn(BaseModel):

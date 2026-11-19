@@ -44,14 +44,14 @@
     "emailGroup": "邮件接收组", "wecomGroup": "企业微信接收组", "wecomResolved": "企业微信恢复通知", "channelTest": "渠道测试", "usedBy": "关联规则", "groupCount": "共 {count} 个接收组",
     "inheritValue": "继承全局（{value}）", "selectedAdmins": "指定管理员", "selectAdmin": "请选择至少一位管理员", "minutes": "{count} 分钟", "customCooldown": "自定义间隔（分钟）",
     "percentThreshold": "使用率阈值（%）", "loadThreshold": "负载阈值（× CPU 核数）", "warningThreshold": "警告阈值（%）", "criticalThreshold": "严重阈值（%）", "sustain": "持续时间（分钟）",
-    "alert": "告警内容", "type": "类型", "status": "状态", "severity": "等级", "createdAt": "发生时间", "actions": "操作", "handle": "处理", "refresh": "刷新", "perPage": "条/页", "alertCount": "共 {count} 条", "loadFailed": "告警加载失败", "mutedUntil": "静默至", "emailTemplate": "邮件模板",
+    "alert": "告警内容", "type": "类型", "status": "状态", "severity": "等级", "createdAt": "发生时间", "actions": "操作", "refresh": "刷新", "perPage": "条/页", "alertCount": "共 {count} 条", "loadFailed": "告警加载失败", "mutedUntil": "静默至", "emailTemplate": "邮件模板",
     "alertSeverity": { "info": "提示", "warning": "警告", "critical": "严重" },
     "email": "邮件", "wecom": "企业微信", "emailResolved": "邮件恢复通知", "emailRecipients": "接收邮件的管理员",
     "recipientGroup": "接收组", "recipientGroups": "接收组", "groupName": "接收组名称", "newGroup": "新接收组", "addGroup": "添加接收组", "deleteGroup": "删除", "allAdmins": "全部管理员邮箱",
     "inherited": "继承默认", "overridden": "已自定义", "inherit": "使用全局默认", "globalDefaults": "全局默认规则", "scope": "适用主机", "cooldown": "重复提醒间隔（分钟）",
     "lifecycle": "用户邮件通知", "lifecycleTypes": { "expiry": "服务器到期前一天", "expired": "服务器过期后一天", "pre_delete": "服务器删除前一天", "installed": "服务器安装完成" },
     "reminderTime": "每日提醒时间", "certificateDays": "证书提前提醒天数", "testSuccess": "测试通知发送成功", "testFailed": "测试通知发送失败",
-    "allCategories": "全部", "search": "搜索告警", "noAlerts": "暂无待处理告警", "acknowledge": "确认已知", "mute": "静默 1 小时", "unmute": "恢复提醒", "close": "标记已处理", "details": "查看详情",
+    "allCategories": "全部", "search": "搜索告警", "noAlerts": "暂无待处理告警", "acknowledge": "确认已知", "acknowledgeAll": "确认全部", "acknowledgeAllTitle": "确认全部告警", "acknowledgeAllConfirm": "确定将当前全部未确认的活跃告警（共 {count} 条）标记为已确认？静默中的告警不受影响。", "acknowledgeAllSuccess": "已确认 {count} 条告警", "mute": "静默 1 小时", "unmute": "恢复提醒", "close": "标记已处理", "details": "查看详情",
     "state": { "all": "全部", "open": "待处理", "acknowledged": "已确认", "muted": "已静默" }
   }
 }

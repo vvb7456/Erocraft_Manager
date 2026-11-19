@@ -15,6 +15,9 @@ import { useFormatDate } from '@/composables/useFormatDate'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import PageHeaderActions from '@/components/layout/PageHeaderActions.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useServerPagination } from '@/composables/useTablePagination'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -51,21 +54,55 @@ const { toast } = useToast()
 const { formatDateTime: fmtDate } = useFormatDate()
 
 const items = ref<RedemptionBatchSummary[]>([])
-const total = ref(0)
-const tableLoading = ref(false)
 const plans = ref<PlanLite[]>([])
 
 const searchQuery = ref('')
 const sourceFilter = ref('all')
 const planFilter = ref('all')
 
-const limit = ref(20)
-const offset = ref(0)
-const page = computed({
-  get: () => Math.floor(offset.value / limit.value) + 1,
-  set: (p: number) => { offset.value = Math.max(0, (p - 1) * limit.value) },
+const { sortBy, sortOrder, toggleSort } = useTableSort({
+  defaultBy: 'created_at',
+  defaultOrder: 'desc',
+  descColumns: ['amount_fen', 'quantity', 'expires_at', 'created_at'],
 })
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.value)))
+
+const {
+  page,
+  perPage: limit,
+  total,
+  totalPages,
+  loading: tableLoading,
+  reload: loadBatches,
+  setPerPage,
+  resetStateWithoutFetch,
+} = useServerPagination(
+  async ({ perPage, offset, isCurrent }) => {
+    const qs = new URLSearchParams({
+      limit: String(perPage),
+      offset: String(offset),
+    })
+    if (sourceFilter.value !== 'all') qs.set('source', sourceFilter.value)
+    if (planFilter.value !== 'all') qs.set('plan_id', planFilter.value)
+    if (searchQuery.value.trim()) qs.set('q', searchQuery.value.trim())
+    if (sortBy.value) {
+      qs.set('sort_by', sortBy.value)
+      qs.set('sort_order', sortOrder.value)
+    }
+    const data = await get<{ items: RedemptionBatchSummary[]; total: number }>(
+      `/api/admin/billing/redemption/batches?${qs.toString()}`,
+      { silent: true },
+    )
+    if (!data || !isCurrent()) return null
+    items.value = data.items
+    return { total: data.total }
+  },
+  {
+    initialPerPage: 20,
+    filters: [sourceFilter, planFilter, sortBy, sortOrder],
+    search: searchQuery,
+    onError: handleError,
+  },
+)
 
 const sourceOptions = computed(() => [
   { value: 'all', label: t('billing.admin.redemption.filterAllSource') },
@@ -93,6 +130,14 @@ const channelOptions = computed(() => [
 
 // ── Mobile filter sheet ──
 const mobileFilterOpen = ref(false)
+const sortColumns = computed(() => [
+  { key: 'name', label: t('billing.admin.redemption.col.name') },
+  { key: 'plan_id', label: t('billing.admin.redemption.col.plan') },
+  { key: 'amount_fen', label: t('billing.admin.redemption.col.price') },
+  { key: 'quantity', label: t('billing.admin.redemption.col.progress') },
+  { key: 'expires_at', label: t('billing.admin.redemption.col.expiresAt') },
+  { key: 'created_at', label: t('billing.admin.redemption.col.createdAt') },
+])
 const filterGroups = computed(() => [
   {
     key: 'source',
@@ -121,40 +166,8 @@ async function loadPlans() {
   if (data) plans.value = data
 }
 
-async function loadBatches() {
-  tableLoading.value = true
-  const qs = new URLSearchParams({
-    limit: String(limit.value),
-    offset: String(offset.value),
-  })
-  if (sourceFilter.value !== 'all') qs.set('source', sourceFilter.value)
-  if (planFilter.value !== 'all') qs.set('plan_id', planFilter.value)
-  if (searchQuery.value.trim()) qs.set('q', searchQuery.value.trim())
-  try {
-    const data = await get<{ items: RedemptionBatchSummary[]; total: number }>(
-      `/api/admin/billing/redemption/batches?${qs.toString()}`,
-      { silent: true },
-    )
-    if (data) {
-      items.value = data.items
-      total.value = data.total
-    }
-  } finally {
-    tableLoading.value = false
-  }
-}
-
 onMounted(async () => {
-  await Promise.all([loadPlans(), loadBatches()]).catch(handleError)
-})
-
-watch([searchQuery, sourceFilter, planFilter], () => {
-  offset.value = 0
-  void loadBatches().catch(handleError)
-})
-
-watch(page, () => {
-  void loadBatches().catch(handleError)
+  await Promise.all([loadPlans().catch(handleError), loadBatches()])
 })
 
 // ── Create batch modal ──
@@ -242,7 +255,7 @@ async function doCreateBatch() {
     const created = (await res.json()) as RedemptionBatchSummary
     toast(t('billing.admin.redemption.batchCreatedOk', { count: created.quantity }), 'success')
     createOpen.value = false
-    offset.value = 0
+    resetStateWithoutFetch()
     await loadBatches()
     openDetail(created)
   } catch (err) {
@@ -364,37 +377,38 @@ function openMobile(b: RedemptionBatchSummary) {
 
   <MobileFilterSheet
     v-model:open="mobileFilterOpen"
-    :sort-columns="[]"
-    :sort-by="''"
-    :sort-order="'asc'"
+    :sort-columns="sortColumns"
+    :sort-by="sortBy"
+    :sort-order="sortOrder"
     :filters="filterGroups"
+    @sort="toggleSort"
     @update:filter="onMobileFilter"
   />
 
+  <div class="batches-table-wrap">
   <DataTable
     :items="items"
     :page="page"
     :total-pages="totalPages"
     :per-page="limit"
+    :per-page-label="t('billing.orders.perPage')"
     :loading="tableLoading"
     empty-icon="redeem"
     :empty-text="t('billing.admin.redemption.emptyBatches')"
     row-key="id"
     @update:page="page = $event"
-    @update:per-page="limit = $event; offset = 0"
+    @update:per-page="setPerPage"
   >
     <template #header>
-      <th class="col-id">#</th>
-      <th class="col-name">{{ t('billing.admin.redemption.col.name') }}</th>
-      <th class="col-plan">{{ t('billing.admin.redemption.col.plan') }}</th>
-      <th class="col-price">{{ t('billing.admin.redemption.col.price') }}</th>
-      <th class="col-progress">{{ t('billing.admin.redemption.col.progress') }}</th>
-      <th class="col-expires">{{ t('billing.admin.redemption.col.expiresAt') }}</th>
-      <th class="col-created">{{ t('billing.admin.redemption.col.createdAt') }}</th>
+      <SortTh class="col-name" col="name" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.redemption.col.name') }}</SortTh>
+      <SortTh class="col-plan" col="plan_id" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.redemption.col.plan') }}</SortTh>
+      <SortTh class="col-price" col="amount_fen" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.redemption.col.price') }}</SortTh>
+      <SortTh class="col-progress" col="quantity" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.redemption.col.progress') }}</SortTh>
+      <SortTh class="col-expires" col="expires_at" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.redemption.col.expiresAt') }}</SortTh>
+      <SortTh class="col-created" col="created_at" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('billing.admin.redemption.col.createdAt') }}</SortTh>
       <th class="col-actions">{{ t('billing.admin.redemption.col.actions') }}</th>
     </template>
     <template #row="{ item: b }">
-      <td class="col-id">{{ b.id }}</td>
       <td class="col-name">
         <div class="name-main">{{ b.name }}</div>
         <div class="name-sub">
@@ -440,7 +454,7 @@ function openMobile(b: RedemptionBatchSummary) {
             :disabled="b.unused_count <= 0"
             @click="doVoidBatch(b)"
           >
-            <MsIcon name="block" size="xs" />
+            <MsIcon name="block" size="xs" /> {{ t('billing.admin.redemption.void') }}
           </BaseButton>
         </div>
       </td>
@@ -467,6 +481,7 @@ function openMobile(b: RedemptionBatchSummary) {
       </CardTap>
     </template>
   </DataTable>
+  </div>
 
   <ActionSheet v-model="mobileOpen" :title="mobileTarget?.name">
     <template v-if="mobileTarget">
@@ -546,23 +561,23 @@ function openMobile(b: RedemptionBatchSummary) {
   <RedemptionBatchDetailModal
     v-model="detailOpen"
     :batch-id="detailBatchId"
-    @updated="loadBatches"
+    @updated="() => void loadBatches()"
   />
 </template>
 
 <style scoped>
-:deep(.col-id)       { width: 4%;  color: var(--t3); }
-:deep(.col-name)     { width: 19%; }
-:deep(.col-plan)     { width: 15%; }
-:deep(.col-price)    { width: 10%; white-space: nowrap; }
-:deep(.col-progress) { width: 16%; }
-:deep(.col-expires)  { width: 11%; color: var(--t2); font-size: var(--text-sm); }
-:deep(.col-created)  { width: 11%; color: var(--t2); font-size: var(--text-sm); }
-:deep(.col-actions)  { width: 14%; }
+.batches-table-wrap :deep(.dt-table)     { min-width: 1060px; }
+.batches-table-wrap :deep(.col-name)     { width: 13%; }
+.batches-table-wrap :deep(.col-plan)     { width: 12%; }
+.batches-table-wrap :deep(.col-price)    { width: 10%; white-space: nowrap; }
+.batches-table-wrap :deep(.col-progress) { width: 15%; }
+.batches-table-wrap :deep(.col-expires)  { width: 12%; color: var(--t2); font-size: var(--text-sm); }
+.batches-table-wrap :deep(.col-created)  { width: 12%; color: var(--t2); font-size: var(--text-sm); }
+.batches-table-wrap :deep(.col-actions)  { width: 26%; }
 
-.row-actions { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: nowrap; }
+.row-actions { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .mono { font-family: var(--font-mono); }
-.name-main { font-weight: 500; color: var(--t1); }
+.name-main { font-weight: 500; color: var(--t1); overflow: hidden; text-overflow: ellipsis; }
 .name-sub { display: flex; align-items: center; gap: var(--sp-1); color: var(--t3); font-size: var(--text-xs); margin-top: 2px; }
 .card-name { font-weight: 600; font-size: .92rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-id-inline { font-size: .78rem; font-weight: 400; color: var(--t3); margin-left: var(--sp-1); }

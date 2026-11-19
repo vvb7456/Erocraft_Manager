@@ -10,6 +10,9 @@ See ``docs/REFERRAL_AND_COUPON_DESIGN.md`` §11.
 """
 
 from __future__ import annotations
+
+from typing import Any, Literal
+
 from app.core.api_errors import ApiError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -20,6 +23,7 @@ from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
 from app.db.models.billing import Coupon, CouponTemplate
 from app.db.models.pterodactyl import PteroUser
+from app.db.sorting import build_order_by
 from app.schemas.coupons import (
     CouponListResponse,
     CouponOut,
@@ -64,6 +68,17 @@ def _serialize(c: Coupon, *, template_name: str | None = None) -> CouponOut:
     )
 
 
+_COUPON_SORT_COLUMNS: dict[str, Any] = {
+    "id": Coupon.id,
+    "code": Coupon.code,
+    "user_id": Coupon.user_id,
+    "status": cast(Coupon.status, String),
+    "discount_fen": Coupon.discount_fen,
+    "issued_at": Coupon.issued_at,
+    "expires_at": Coupon.expires_at,
+}
+
+
 @router.get("", response_model=CouponListResponse)
 async def list_coupons(
     user_id: int | None = None,
@@ -73,6 +88,16 @@ async def list_coupons(
     q: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    sort_by: Literal[
+        "id",
+        "code",
+        "user_id",
+        "status",
+        "discount_fen",
+        "issued_at",
+        "expires_at",
+    ] | None = Query(default=None),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CouponListResponse:
@@ -102,7 +127,14 @@ async def list_coupons(
     for f in filters:
         stmt = stmt.where(f)
         count_stmt = count_stmt.where(f)
-    stmt = stmt.order_by(Coupon.id.desc()).limit(limit).offset(offset)
+    order_clauses = build_order_by(
+        sort_by,
+        sort_order,
+        _COUPON_SORT_COLUMNS,
+        default=(Coupon.id.desc(),),
+        tie_breakers=(Coupon.id,),
+    )
+    stmt = stmt.order_by(*order_clauses).limit(limit).offset(offset)
     rows = list((await db.execute(stmt)).scalars().all())
     total = int(await db.scalar(count_stmt) or 0)
 

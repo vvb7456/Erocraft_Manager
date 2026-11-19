@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from app.core.api_errors import ApiError
 import secrets
@@ -76,7 +77,7 @@ async def update_user_account(
     if not new_password:
         raise ApiError(422, "account.password_required")
 
-    if not current_user.check_password(current_password):
+    if not await asyncio.to_thread(current_user.check_password, current_password):
         raise ApiError(422, "account.current_password_incorrect")
 
     try:

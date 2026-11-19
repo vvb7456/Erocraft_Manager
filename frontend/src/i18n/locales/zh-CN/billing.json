@@ -317,7 +317,6 @@
     "plans": {
       "pageTitle": "套餐设置",
       "create": "新建套餐",
-      "edit": "编辑",
       "editTitle": "编辑套餐 {code}",
       "duplicate": "复制",
       "duplicateTitle": "复制自 {code}",
@@ -469,6 +468,7 @@
       "viewDetail": "明细",
       "exportTxt": "导出 TXT",
       "exportAllOk": "已下载 TXT 兑换码文件",
+      "void": "作废",
       "voidBatch": "整批作废",
       "voidBatchConfirm": "确定作废批次“{name}”中所有未使用的兑换码（共 {count} 张）？已兑换的记录不受影响。",
       "voidBatchOk": "已作废 {count} 张未使用兑换码",
@@ -530,7 +530,6 @@
       "pageTitle": "优惠券模板",
       "create": "新建模板",
       "createTitle": "新建优惠券模板",
-      "edit": "编辑",
       "editTitle": "编辑模板 {code}",
       "delete": "删除",
       "deleteConfirm": "确定删除模板 {code}？已发出的券不受影响。",

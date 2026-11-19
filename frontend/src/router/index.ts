@@ -222,6 +222,51 @@ const router = createRouter({
       meta: { admin: true },
     },
     {
+      path: '/admin/nests',
+      name: 'nests',
+      component: () => import('@/pages/admin/nests/NestsPage.vue'),
+      meta: { admin: true },
+    },
+    {
+      path: '/admin/nests/:nestId',
+      name: 'nest-detail',
+      redirect: (to) => ({
+        name: 'nests',
+        query: { tab: 'eggs', nest: String(to.params.nestId) },
+      }),
+      meta: { admin: true },
+    },
+    {
+      path: '/admin/eggs/:eggId',
+      component: () => import('@/pages/admin/nests/EggDetailPage.vue'),
+      meta: { admin: true },
+      children: [
+        {
+          path: '',
+          name: 'egg-detail',
+          redirect: (to) => ({ name: 'egg-settings', params: to.params }),
+        },
+        {
+          path: 'settings',
+          name: 'egg-settings',
+          component: () => import('@/pages/admin/nests/EggSettingsPane.vue'),
+          meta: { admin: true },
+        },
+        {
+          path: 'variables',
+          name: 'egg-variables',
+          component: () => import('@/pages/admin/nests/EggVariablesPane.vue'),
+          meta: { admin: true },
+        },
+        {
+          path: 'scripts',
+          name: 'egg-scripts',
+          component: () => import('@/pages/admin/nests/EggScriptsPane.vue'),
+          meta: { admin: true },
+        },
+      ],
+    },
+    {
       path: '/admin/hosts/:id',
       component: () => import('@/pages/HostDetailPage.vue'),
       meta: { admin: true },

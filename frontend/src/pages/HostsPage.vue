@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
+import type { NodeOut } from '@/api/adminNodesLocations'
 import PageHeader from '@/components/layout/PageHeader.vue'
+import PageHeaderActions from '@/components/layout/PageHeaderActions.vue'
+import TabSwitcher from '@/components/ui/TabSwitcher.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import StatCard from '@/components/ui/StatCard.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -13,23 +16,49 @@ import Badge from '@/components/ui/Badge.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useClientPagination } from '@/composables/useTablePagination'
 import CardTap from '@/components/ui/CardTap.vue'
 import CardKV from '@/components/ui/CardKV.vue'
 import ActionSheet from '@/components/ui/ActionSheet.vue'
 import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
-import HostCreateModal from '@/components/hosts/HostCreateModal.vue'
+import HostCreateModal, { type PresetNodeInfo } from '@/components/hosts/HostCreateModal.vue'
+import HostsNodesTab from '@/pages/host/HostsNodesTab.vue'
+import HostsLocationsTab from '@/pages/host/HostsLocationsTab.vue'
 import { classifyHostStatus } from '@/utils/heartbeat'
 
 defineOptions({ name: 'HostsPage' })
 
 const { t } = useI18n({ useScope: 'global' })
+const route = useRoute()
 const router = useRouter()
-// Note: we deliberately do NOT pull `loading` out of useApiFetch — that ref is
-// shared across every request this composable instance issues, so a per-row
-// probe/rotate/delete would briefly flip the table into a skeleton state.
-// Instead we maintain a separate `listLoading` that tracks ONLY `loadHosts`.
-  const { get, handleError } = useApiFetch()
+const { get, handleError } = useApiFetch()
 const listLoading = ref(false)
+
+// ── Top-level tabs (?tab=hosts|nodes|locations) ──
+type TabKey = 'hosts' | 'nodes' | 'locations'
+const VALID_TABS: TabKey[] = ['hosts', 'nodes', 'locations']
+
+function pickInitialTab(): TabKey {
+  const q = route.query.tab
+  const raw = Array.isArray(q) ? q[0] : q
+  if (raw && (VALID_TABS as string[]).includes(raw)) return raw as TabKey
+  return 'hosts'
+}
+
+const activeTab = computed<TabKey>({
+  get: pickInitialTab,
+  set: (tab) => {
+    void router.push({ query: { ...route.query, tab } })
+  },
+})
+
+const tabs = computed(() => [
+  { key: 'hosts', icon: 'dvr', label: t('hosts.tabs.hosts') },
+  { key: 'nodes', icon: 'dns', label: t('hosts.tabs.nodes') },
+  { key: 'locations', icon: 'public', label: t('hosts.tabs.locations') },
+])
 
 // ── Types ──
 interface HostItem {
@@ -53,9 +82,11 @@ const rawHosts = ref<HostItem[]>([])
 const searchTerm = ref('')
 const filterKind = ref<string>('all')
 const filterStatus = ref<string>('all')
-const page = ref(1)
-const perPage = ref(20)
+const { sortBy, sortOrder, toggleSort, sortItems } = useTableSort({
+  descColumns: ['last_seen_at'],
+})
 
+const nodesTabRef = ref<InstanceType<typeof HostsNodesTab> | null>(null)
 let reloadTimer: number | null = null
 
 // ── Fetching ──
@@ -71,7 +102,11 @@ async function loadHosts(silent = false) {
 
 onMounted(() => {
   void loadHosts().catch(handleError)
-  reloadTimer = window.setInterval(() => { void loadHosts(true).catch(handleError) }, 15000)
+  reloadTimer = window.setInterval(() => {
+    if (activeTab.value === 'hosts') {
+      void loadHosts(true).catch(handleError)
+    }
+  }, 15000)
 })
 
 onBeforeUnmount(() => {
@@ -123,8 +158,30 @@ const statusOptions = computed(() => [
   { value: 'unconfigured', label: t('hosts.status.unconfigured') },
 ])
 
+const STATUS_RANK: Record<StatusKey, number> = {
+  online: 0,
+  warning: 1,
+  offline: 2,
+  disabled: 3,
+  unconfigured: 4,
+}
+
+function parseHeartbeatMs(iso: string | null): number | null {
+  if (!iso) return null
+  const hasTz = /Z|[+-]\d{2}:?\d{2}$/.test(iso)
+  const ts = new Date(hasTz ? iso : iso + 'Z').getTime()
+  return Number.isNaN(ts) ? null : ts
+}
+
 // ── Mobile filter sheet ──
 const mobileFilterOpen = ref(false)
+const sortColumns = computed(() => [
+  { key: 'name', label: t('hosts.columns.name') },
+  { key: 'kind', label: t('hosts.columns.kind') },
+  { key: 'status', label: t('hosts.columns.status') },
+  { key: 'last_seen_at', label: t('hosts.columns.lastSeen') },
+  { key: 'hostname', label: t('hosts.columns.hostname') },
+])
 const filterGroups = computed(() => [
   {
     key: 'kind',
@@ -158,10 +215,20 @@ const filtered = computed(() => {
   })
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage.value)))
-const paginated = computed(() => {
-  const start = (page.value - 1) * perPage.value
-  return filtered.value.slice(start, start + perPage.value)
+const sorted = computed(() =>
+  sortItems(filtered.value, {
+    name: (h) => h.name,
+    kind: (h) => t(`hosts.kind.${h.kind}`),
+    status: (h) => STATUS_RANK[classifyStatus(h)],
+    last_seen_at: (h) => parseHeartbeatMs(h.last_seen_at),
+    hostname: (h) => h.hostname,
+  }, {
+    tieBreaker: (a, b) => a.id - b.id,
+  }),
+)
+
+const { page, perPage, totalPages, paginated, setPerPage } = useClientPagination(sorted, {
+  resetDeps: [searchTerm, filterKind, filterStatus, sortBy, sortOrder],
 })
 
 const summary = computed(() => ({ total: filtered.value.length }))
@@ -181,22 +248,32 @@ function openHost(h: HostItem) {
   router.push({ name: 'host-detail', params: { id: h.id } })
 }
 
-// ── Modals ──
+// ── Create host modal (shared by Hosts tab & "Bind host" in Nodes tab) ──
 const createOpen = ref(false)
+const presetNode = ref<PresetNodeInfo | null>(null)
 
 const usedNodeIds = computed(() =>
   rawHosts.value
     .map(h => h.pterodactyl_node_id)
-    .filter((x): x is number => typeof x === 'number')
+    .filter((x): x is number => typeof x === 'number'),
 )
 
-function openCreate() { createOpen.value = true }
-function onCreated() { loadHosts() }
+function openCreate() {
+  presetNode.value = null
+  createOpen.value = true
+}
+
+function openBindNode(n: NodeOut) {
+  presetNode.value = { id: n.id, name: n.name, fqdn: n.fqdn }
+  createOpen.value = true
+}
+
+function onCreated() {
+  void loadHosts()
+  void nodesTabRef.value?.reload()
+}
 
 // ── Mobile action sheet ──
-// Action sheet only carries one entry ("open detail") so the interaction
-// stays consistent with how other admin list pages behave; probe / delete
-// / token-reset all live on the host detail page.
 const mobileActionHost = ref<HostItem | null>(null)
 const mobileActionOpen = ref(false)
 function openMobileAction(h: HostItem) {
@@ -214,166 +291,188 @@ function handleMobile(action: 'open') {
 
 <template>
   <PageHeader icon="dvr" :title="t('hosts.title')">
-    <template #controls>
-      <BaseButton size="sm" variant="primary" @click="openCreate"><MsIcon name="add" size="xs" />{{ t('hosts.toolbar.create') }}</BaseButton>
-    </template>
+    <TabSwitcher v-model="activeTab" :tabs="tabs" />
   </PageHeader>
 
   <div class="page-body">
-    <section class="stat-grid" aria-label="host summary">
-      <StatCard :label="t('hosts.stats.total')" status="info" variant="kpi">
-        <template #value>{{ hostStats.total }}</template>
-        <template #sub>{{ t('hosts.stats.filtered', { n: filtered.length }) }}</template>
-      </StatCard>
-      <StatCard :label="t('hosts.stats.online')" status="running" variant="kpi">
-        <template #value>{{ hostStats.online }}</template>
-        <template #sub>{{ t('hosts.stats.agentReachable') }}</template>
-      </StatCard>
-      <StatCard :label="t('hosts.stats.wings')" status="info" variant="kpi">
-        <template #value>{{ hostStats.wings }}</template>
-        <template #sub>{{ t('hosts.kind.wings_node') }}</template>
-      </StatCard>
-      <StatCard :label="t('hosts.stats.other')" status="loading" variant="kpi">
-        <template #value>{{ hostStats.other }}</template>
-        <template #sub>{{ t('hosts.stats.otherSub') }}</template>
-      </StatCard>
-    </section>
+    <div v-if="activeTab === 'hosts'" class="tab-content">
+      <PageHeaderActions>
+        <BaseButton size="sm" variant="primary" @click="openCreate">
+          <MsIcon name="add" size="xs" />{{ t('hosts.toolbar.create') }}
+        </BaseButton>
+      </PageHeaderActions>
 
-    <SectionToolbar>
-      <template #start>
-        <div class="tb-search-row">
-          <FilterInput
-            v-model="searchTerm"
-            :placeholder="t('hosts.toolbar.search')"
-            class="tb-search"
-          />
-          <button
-            class="tb-filter-btn"
-            :title="t('common.filterSort.title')"
-            @click="mobileFilterOpen = true"
-          >
-            <MsIcon name="tune" size="sm" />
-          </button>
-        </div>
-        <div class="summary tb-status" role="status">
-          <span>{{ t('hosts.summary.total', { n: summary.total }) }}</span>
-        </div>
-      </template>
-      <template #end>
-        <div class="tb-select-group tb-desktop-only">
-          <BaseSelect
-            v-model="filterKind"
-            :options="kindOptions"
-            :prefix="t('hosts.toolbar.filterKind') + ': '"
-            size="sm"
-            fit
-          />
-          <BaseSelect
-            v-model="filterStatus"
-            :options="statusOptions"
-            :prefix="t('hosts.toolbar.filterStatus') + ': '"
-            size="sm"
-            fit
-          />
-        </div>
-      </template>
-    </SectionToolbar>
+      <section class="stat-grid" aria-label="host summary">
+        <StatCard :label="t('hosts.stats.total')" status="info" variant="kpi">
+          <template #value>{{ hostStats.total }}</template>
+          <template #sub>{{ t('hosts.stats.filtered', { n: filtered.length }) }}</template>
+        </StatCard>
+        <StatCard :label="t('hosts.stats.online')" status="running" variant="kpi">
+          <template #value>{{ hostStats.online }}</template>
+          <template #sub>{{ t('hosts.stats.agentReachable') }}</template>
+        </StatCard>
+        <StatCard :label="t('hosts.stats.wings')" status="info" variant="kpi">
+          <template #value>{{ hostStats.wings }}</template>
+          <template #sub>{{ t('hosts.kind.wings_node') }}</template>
+        </StatCard>
+        <StatCard :label="t('hosts.stats.other')" status="loading" variant="kpi">
+          <template #value>{{ hostStats.other }}</template>
+          <template #sub>{{ t('hosts.stats.otherSub') }}</template>
+        </StatCard>
+      </section>
 
-    <MobileFilterSheet
-      v-model:open="mobileFilterOpen"
-      :sort-columns="[]"
-      :sort-by="''"
-      :sort-order="'asc'"
-      :filters="filterGroups"
-      @update:filter="onMobileFilter"
-    />
-
-    <DataTable
-      :items="paginated"
-      :page="page"
-      :total-pages="totalPages"
-      :per-page="perPage"
-      :per-page-label="t('hosts.list.perPage')"
-      :loading="listLoading"
-      empty-icon="dvr"
-      :empty-text="t('hosts.list.empty')"
-      @update:page="page = $event"
-      @update:per-page="perPage = $event; page = 1"
-    >
-      <template #header>
-        <th class="col-name">{{ t('hosts.columns.name') }}</th>
-        <th class="col-kind">{{ t('hosts.columns.kind') }}</th>
-        <th class="col-status">{{ t('hosts.columns.status') }}</th>
-        <th class="col-seen">{{ t('hosts.columns.lastSeen') }}</th>
-        <th class="col-hostname">{{ t('hosts.columns.hostname') }}</th>
-        <th class="col-agent">{{ t('hosts.columns.agentUrl') }}</th>
-        <th class="col-actions">{{ t('hosts.columns.actions') }}</th>
-      </template>
-
-      <template #row="{ item: h }">
-        <td class="col-name" @click="openHost(h)">
-          <span class="host-name-link">{{ h.name }}</span>
-        </td>
-        <td class="col-kind" @click="openHost(h)">
-          <Badge :color="KIND_BADGE_COLOR[h.kind]" size="sm">
-            {{ t(`hosts.kind.${h.kind}`) }}
-          </Badge>
-        </td>
-        <td class="col-status" @click="openHost(h)">
-          <span class="status-cell">
-            <StatusDot :status="statusDotKey(classifyStatus(h))" size="sm" />
-            <span>{{ t(`hosts.status.${classifyStatus(h)}`) }}</span>
-          </span>
-        </td>
-        <td class="col-seen tabular" @click="openHost(h)">{{ formatAgo(h.last_seen_at) }}</td>
-        <td class="col-hostname mono" @click="openHost(h)">{{ h.hostname || '—' }}</td>
-        <td class="col-agent mono" @click="openHost(h)">{{ h.agent_url }}</td>
-        <td class="col-actions">
-          <div class="action-group">
-            <BaseButton size="sm" @click.stop="openHost(h)" :title="t('hosts.actions.open')">
-              <MsIcon name="open_in_new" size="xs" />
-            </BaseButton>
+      <SectionToolbar>
+        <template #start>
+          <div class="tb-search-row">
+            <FilterInput
+              v-model="searchTerm"
+              :placeholder="t('hosts.toolbar.search')"
+              class="tb-search"
+            />
+            <button
+              class="tb-filter-btn"
+              :title="t('common.filterSort.title')"
+              @click="mobileFilterOpen = true"
+            >
+              <MsIcon name="tune" size="sm" />
+            </button>
           </div>
-        </td>
-      </template>
+          <div class="summary tb-status" role="status">
+            <span>{{ t('hosts.summary.total', { n: summary.total }) }}</span>
+          </div>
+        </template>
+        <template #end>
+          <div class="tb-select-group tb-desktop-only">
+            <BaseSelect
+              v-model="filterKind"
+              :options="kindOptions"
+              :prefix="t('hosts.toolbar.filterKind') + ': '"
+              size="sm"
+              fit
+            />
+            <BaseSelect
+              v-model="filterStatus"
+              :options="statusOptions"
+              :prefix="t('hosts.toolbar.filterStatus') + ': '"
+              size="sm"
+              fit
+            />
+          </div>
+        </template>
+      </SectionToolbar>
 
-      <template #card="{ item: h }">
-        <CardTap @tap="openMobileAction(h)">
-          <div class="card-row--main">
-            <span class="card-name">
-              <StatusDot :status="statusDotKey(classifyStatus(h))" size="sm" />
-              {{ h.name }}
-            </span>
+      <MobileFilterSheet
+        v-model:open="mobileFilterOpen"
+        :sort-columns="sortColumns"
+        :sort-by="sortBy"
+        :sort-order="sortOrder"
+        :filters="filterGroups"
+        @sort="toggleSort"
+        @update:filter="onMobileFilter"
+      />
+
+      <div class="hosts-table-wrap">
+      <DataTable
+        :items="paginated"
+        :page="page"
+        :total-pages="totalPages"
+        :per-page="perPage"
+        :per-page-label="t('hosts.list.perPage')"
+        :loading="listLoading"
+        empty-icon="dvr"
+        :empty-text="t('hosts.list.empty')"
+        @update:page="page = $event"
+        @update:per-page="setPerPage"
+      >
+        <template #header>
+          <SortTh class="col-name" col="name" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.columns.name') }}</SortTh>
+          <SortTh class="col-kind" col="kind" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.columns.kind') }}</SortTh>
+          <SortTh class="col-hostname" col="hostname" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.columns.hostname') }}</SortTh>
+          <th class="col-agent">{{ t('hosts.columns.agentUrl') }}</th>
+          <SortTh class="col-seen" col="last_seen_at" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.columns.lastSeen') }}</SortTh>
+          <SortTh class="col-status" col="status" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('hosts.columns.status') }}</SortTh>
+          <th class="col-actions">{{ t('hosts.columns.actions') }}</th>
+        </template>
+
+        <template #row="{ item: h }">
+          <td class="col-name" @click="openHost(h)">
+            <span class="host-name-link">{{ h.name }}</span>
+          </td>
+          <td class="col-kind" @click="openHost(h)">
             <Badge :color="KIND_BADGE_COLOR[h.kind]" size="sm">
               {{ t(`hosts.kind.${h.kind}`) }}
             </Badge>
-          </div>
-          <div class="card-row--sub mono">{{ h.hostname || h.agent_url }}</div>
-          <div class="card-detail">
-            <CardKV :label="t('hosts.columns.status')">
-              {{ t(`hosts.status.${classifyStatus(h)}`) }}
-            </CardKV>
-            <CardKV :label="t('hosts.columns.lastSeen')">
-              <span class="tabular">{{ formatAgo(h.last_seen_at) }}</span>
-            </CardKV>
-          </div>
-        </CardTap>
-      </template>
-    </DataTable>
+          </td>
+          <td class="col-hostname mono" @click="openHost(h)">{{ h.hostname || '—' }}</td>
+          <td class="col-agent mono" @click="openHost(h)">{{ h.agent_url }}</td>
+          <td class="col-seen tabular" @click="openHost(h)">{{ formatAgo(h.last_seen_at) }}</td>
+          <td class="col-status" @click="openHost(h)">
+            <span class="status-cell">
+              <StatusDot :status="statusDotKey(classifyStatus(h))" size="sm" />
+              <span>{{ t(`hosts.status.${classifyStatus(h)}`) }}</span>
+            </span>
+          </td>
+          <td class="col-actions">
+            <div class="action-group">
+              <BaseButton size="sm" @click.stop="openHost(h)">
+                <MsIcon name="edit" size="xs" /> {{ t('common.btn.edit') }}
+              </BaseButton>
+            </div>
+          </td>
+        </template>
+
+        <template #card="{ item: h }">
+          <CardTap @tap="openMobileAction(h)">
+            <div class="card-row--main">
+              <span class="card-name">
+                <StatusDot :status="statusDotKey(classifyStatus(h))" size="sm" />
+                {{ h.name }}
+              </span>
+              <Badge :color="KIND_BADGE_COLOR[h.kind]" size="sm">
+                {{ t(`hosts.kind.${h.kind}`) }}
+              </Badge>
+            </div>
+            <div class="card-row--sub mono">{{ h.hostname || h.agent_url }}</div>
+            <div class="card-detail">
+              <CardKV :label="t('hosts.columns.status')">
+                {{ t(`hosts.status.${classifyStatus(h)}`) }}
+              </CardKV>
+              <CardKV :label="t('hosts.columns.lastSeen')">
+                <span class="tabular">{{ formatAgo(h.last_seen_at) }}</span>
+              </CardKV>
+            </div>
+          </CardTap>
+        </template>
+      </DataTable>
+      </div>
+
+      <ActionSheet v-model="mobileActionOpen" :title="mobileActionHost?.name">
+        <template v-if="mobileActionHost" #info>
+          {{ mobileActionHost.agent_url }}
+        </template>
+        <template v-if="mobileActionHost">
+          <button @click="handleMobile('open')">
+            <MsIcon name="edit" size="sm" /> {{ t('common.btn.edit') }}
+          </button>
+        </template>
+      </ActionSheet>
+    </div>
+
+    <div v-else-if="activeTab === 'nodes'" class="tab-content">
+      <HostsNodesTab ref="nodesTabRef" @bindNode="openBindNode" />
+    </div>
+
+    <div v-else-if="activeTab === 'locations'" class="tab-content">
+      <HostsLocationsTab />
+    </div>
   </div>
 
-  <ActionSheet v-model="mobileActionOpen" :title="mobileActionHost?.name">
-    <template v-if="mobileActionHost" #info>
-      {{ mobileActionHost.agent_url }}
-    </template>
-    <template v-if="mobileActionHost">
-      <button @click="handleMobile('open')">
-        <MsIcon name="open_in_new" size="sm" /> {{ t('hosts.actions.open') }}
-      </button>
-    </template>
-  </ActionSheet>
-
-  <HostCreateModal v-model="createOpen" :usedNodeIds="usedNodeIds" @created="onCreated" />
+  <HostCreateModal
+    v-model="createOpen"
+    :usedNodeIds="usedNodeIds"
+    :presetNode="presetNode"
+    @created="onCreated"
+  />
 </template>
 
 <style scoped>
@@ -388,13 +487,14 @@ function handleMobile(action: 'open') {
 }
 
 /* ── Table cells ── */
-.col-name      { width: 18%; cursor: pointer; }
-.col-kind      { width: 10%; cursor: pointer; }
-.col-hostname  { width: 14%; cursor: pointer; }
-.col-agent     { width: 24%; cursor: pointer; }
-.col-status    { width: 12%; cursor: pointer; }
-.col-seen      { width: 10%; cursor: pointer; }
-.col-actions   { width: 12%; text-align: right; }
+.hosts-table-wrap :deep(.dt-table)      { min-width: 960px; }
+.hosts-table-wrap :deep(.col-name)      { width: 16%; cursor: pointer; }
+.hosts-table-wrap :deep(.col-kind)      { width: 10%; cursor: pointer; }
+.hosts-table-wrap :deep(.col-hostname)  { width: 18%; cursor: pointer; }
+.hosts-table-wrap :deep(.col-agent)     { width: 24%; cursor: pointer; }
+.hosts-table-wrap :deep(.col-seen)      { width: 10%; cursor: pointer; }
+.hosts-table-wrap :deep(.col-status)    { width: 12%; cursor: pointer; }
+.hosts-table-wrap :deep(.col-actions)   { width: 10%; }
 
 .mono {
   font-family: var(--font-mono);
@@ -403,7 +503,6 @@ function handleMobile(action: 'open') {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 0;
 }
 
 .tabular {
@@ -428,9 +527,10 @@ function handleMobile(action: 'open') {
 }
 
 .action-group {
-  display: inline-flex;
-  gap: var(--sp-1);
-  justify-content: flex-end;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
 }
 
 /* ── Mobile cards ── */

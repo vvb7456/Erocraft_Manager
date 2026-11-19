@@ -12,6 +12,10 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import SectionToolbar from '@/components/ui/SectionToolbar.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import SortTh from '@/components/ui/SortTh.vue'
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet.vue'
+import { useTableSort } from '@/composables/useTableSort'
+import { useClientPagination } from '@/composables/useTablePagination'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import Badge from '@/components/ui/Badge.vue'
@@ -54,6 +58,7 @@ interface Server {
   daysLeft: number | null
   address: string | null
   planId: number | null
+  planName?: string | null
   hasUpgradeOptions: boolean
   isTrial: boolean
 }
@@ -61,21 +66,59 @@ interface Server {
 const servers = ref<Server[]>([])
 const initialLoading = ref(true)
 const searchTerm = ref('')
-const page = ref(1)
-const perPage = ref(20)
+const mobileFilterOpen = ref(false)
+const { sortBy, sortOrder, toggleSort, sortItems } = useTableSort({
+  descColumns: ['cpu', 'memory', 'disk', 'uptime'],
+})
 
-// ── Filtered & paginated list ──
+const STATUS_RANK: Record<string, number> = {
+  running: 0,
+  starting: 1,
+  stopping: 2,
+  installing: 3,
+  offline: 4,
+  suspended: 5,
+  disconnected: 6,
+}
+
+const sortColumns = computed(() => [
+  { key: 'name', label: t('userServers.table.name') },
+  { key: 'planName', label: t('userServers.table.plan') },
+  { key: 'status', label: t('userServers.table.status') },
+  { key: 'cpu', label: 'CPU' },
+  { key: 'memory', label: t('userServers.resources.memory') },
+  { key: 'disk', label: t('userServers.resources.disk') },
+  { key: 'uptime', label: t('userServers.resources.uptime') },
+  { key: 'expirationDate', label: t('userServers.table.expiry') },
+])
+
+// ── Filtered, sorted & paginated list ──
 const filteredServers = computed(() => {
   const q = searchTerm.value.toLowerCase().trim()
   if (!q) return servers.value
   return servers.value.filter(s => s.name.toLowerCase().includes(q))
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredServers.value.length / perPage.value)))
+const sortedServers = computed(() =>
+  sortItems(filteredServers.value, {
+    name: (s) => s.name,
+    planName: (s) => s.planName || s.eggName,
+    status: (s) => STATUS_RANK[displayState(s)] ?? 99,
+    cpu: (s) => resourceStore.resources[s.id]?.cpu ?? null,
+    memory: (s) => resourceStore.resources[s.id]?.memoryBytes ?? null,
+    disk: (s) => resourceStore.resources[s.id]?.diskBytes ?? null,
+    uptime: (s) => {
+      const ms = resourceStore.resources[s.id]?.uptime ?? 0
+      return ms > 0 ? ms : null
+    },
+    expirationDate: (s) => s.expirationDate,
+  }, {
+    tieBreaker: (a, b) => a.id - b.id,
+  }),
+)
 
-const paginated = computed(() => {
-  const start = (page.value - 1) * perPage.value
-  return filteredServers.value.slice(start, start + perPage.value)
+const { page, perPage, totalPages, paginated, setPerPage } = useClientPagination(sortedServers, {
+  resetDeps: [searchTerm, sortBy, sortOrder],
 })
 
 // ── Load data ──
@@ -369,9 +412,31 @@ function openMobileAction(s: Server) {
     <!-- Toolbar -->
     <SectionToolbar>
       <template #start>
-        <FilterInput v-model="searchTerm" :placeholder="t('userServers.searchPlaceholder')" class="tb-search" />
+        <div class="tb-search-row">
+          <FilterInput
+            v-model="searchTerm"
+            :placeholder="t('userServers.searchPlaceholder')"
+            class="tb-search"
+          />
+          <button
+            class="tb-filter-btn"
+            :title="t('common.filterSort.title')"
+            @click="mobileFilterOpen = true"
+          >
+            <MsIcon name="tune" size="sm" />
+          </button>
+        </div>
       </template>
     </SectionToolbar>
+
+    <MobileFilterSheet
+      v-model:open="mobileFilterOpen"
+      :sort-columns="sortColumns"
+      :sort-by="sortBy"
+      :sort-order="sortOrder"
+      :filters="[]"
+      @sort="toggleSort"
+    />
 
     <!-- Table / Cards -->
     <DataTable
@@ -385,7 +450,7 @@ function openMobileAction(s: Server) {
       :empty-text="t('userServers.empty')"
       row-key="id"
       @update:page="page = $event"
-      @update:per-page="perPage = $event; page = 1"
+      @update:per-page="setPerPage"
     >
       <template #empty>
         <EmptyState
@@ -400,28 +465,23 @@ function openMobileAction(s: Server) {
       </template>
 
       <template #header>
-        <th class="col-dot"></th>
-        <th class="col-name">{{ t('userServers.table.name') }}</th>
-        <th class="col-plan">{{ t('userServers.table.plan') }}</th>
-        <th class="col-status">{{ t('userServers.table.status') }}</th>
-        <th class="col-cpu">CPU</th>
-        <th class="col-mem">{{ t('userServers.resources.memory') }}</th>
-        <th class="col-disk">{{ t('userServers.resources.disk') }}</th>
+        <SortTh class="col-name" col="name" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('userServers.table.name') }}</SortTh>
+        <SortTh class="col-plan" col="planName" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('userServers.table.plan') }}</SortTh>
+        <SortTh class="col-cpu" col="cpu" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">CPU</SortTh>
+        <SortTh class="col-mem" col="memory" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('userServers.resources.memory') }}</SortTh>
+        <SortTh class="col-disk" col="disk" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('userServers.resources.disk') }}</SortTh>
         <th class="col-net">{{ t('userServers.resources.network') }}</th>
-        <th class="col-uptime">{{ t('userServers.resources.uptime') }}</th>
-        <th class="col-expiry">{{ t('userServers.table.expiry') }}</th>
+        <SortTh class="col-uptime" col="uptime" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('userServers.resources.uptime') }}</SortTh>
+        <SortTh class="col-expiry" col="expirationDate" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('userServers.table.expiry') }}</SortTh>
+        <SortTh class="col-status" col="status" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('userServers.table.status') }}</SortTh>
         <th class="col-actions">{{ t('userServers.table.actions') }}</th>
       </template>
 
       <template #row="{ item: s }">
-        <td class="col-dot">
-          <StatusDot :status="statusDotKeyFor(s)" size="sm" />
-        </td>
         <td class="col-name">
           <a class="server-link" href="#" @click.prevent="goToDetail(s)">{{ s.name }}</a>
         </td>
         <td class="col-plan">{{ s.planName || s.eggName }}</td>
-        <td class="col-status" :style="{ color: statusBadgeColor(s), fontWeight: s.isSuspended || s.isInstalling ? 600 : undefined }">{{ t(`userServers.status.${displayState(s)}`) }}</td>
         <td class="col-cpu mono">{{ cpuText(s) }}</td>
         <td class="col-mem mono">
           <div class="dual-line">{{ fmtBytes(resourceStore.resources[s.id]?.memoryBytes ?? 0) }}<span class="dual-sub">{{ s.limits.memory }} MB</span></div>
@@ -438,6 +498,12 @@ function openMobileAction(s: Server) {
             <span class="expiry-date">{{ expirationDisplay(s).date }}</span>
             <span v-if="expirationDisplay(s).tag" class="expiry-tag" :style="{ color: expirationDisplay(s).color }">{{ expirationDisplay(s).tag }}</span>
           </div>
+        </td>
+        <td class="col-status" :style="{ color: statusBadgeColor(s), fontWeight: s.isSuspended || s.isInstalling ? 600 : undefined }">
+          <span class="status-cell">
+            <StatusDot :status="statusDotKeyFor(s)" size="sm" />
+            <span>{{ t(`userServers.status.${displayState(s)}`) }}</span>
+          </span>
         </td>
         <td class="col-actions">
           <div class="action-group">
@@ -592,17 +658,23 @@ function openMobileAction(s: Server) {
 }
 
 /* ── Table columns ── */
-.col-dot { width: 1%; text-align: center !important; vertical-align: middle; }
-.col-name { width: 13%; }
-.col-plan { width: 8%; color: var(--t2); }
-.col-status { width: 7%; }
-.col-cpu { width: 8%; }
-.col-mem { width: 8%; }
-.col-disk { width: 8%; }
-.col-uptime { width: 6%; }
-.col-net { width: 8%; }
-.col-expiry { width: 10%; }
-.col-actions { width: auto; }
+:deep(.dt-table) { min-width: 1120px; }
+:deep(.col-name) { width: 13%; }
+:deep(.col-plan) { width: 9%; color: var(--t2); }
+:deep(.col-cpu) { width: 7%; }
+:deep(.col-mem) { width: 8%; }
+:deep(.col-disk) { width: 8%; }
+:deep(.col-net) { width: 8%; }
+:deep(.col-uptime) { width: 8%; }
+:deep(.col-expiry) { width: 10%; }
+:deep(.col-status) { width: 8%; }
+:deep(.col-actions) { width: auto; }
+
+.status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
 
 .server-link {
   font-weight: 600;
