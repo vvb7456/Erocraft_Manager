@@ -19,13 +19,15 @@
   },
   "email": {
     "title": "修改邮箱",
-    "desc": "更新当前账户使用的邮箱地址。",
+    "desc": "验证码将发送至新邮箱，验证并确认当前密码后立即生效。",
     "new": "新邮箱",
-    "placeholder": "name＠example.com",
-    "submit": "发送验证邮件",
-    "success": "验证邮件已发送，请前往当前邮箱完成确认。",
+    "placeholder": "请输入新邮箱",
+    "currentPassword": "当前密码",
+    "submit": "更换邮箱",
+    "success": "邮箱已成功更改。",
     "validation": {
       "required": "请输入新邮箱",
+      "format": "邮箱格式不正确",
       "same": "新邮箱不能与当前邮箱相同"
     }
   },
@@ -33,13 +35,15 @@
     "title": "修改密码",
     "desc": "修改当前账户的登录密码。",
     "current": "当前密码",
+    "currentPlaceholder": "请输入当前密码",
     "new": "新密码",
+    "newPlaceholder": "请输入新密码",
     "confirm": "确认新密码",
+    "confirmPlaceholder": "请再次输入新密码",
     "submit": "保存新密码",
     "success": "密码已更新",
     "validation": {
       "required": "请完整填写密码表单",
-      "length": "新密码至少需要 8 个字符",
       "mismatch": "两次输入的新密码不一致"
     }
   },

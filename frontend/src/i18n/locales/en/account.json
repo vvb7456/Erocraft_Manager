@@ -19,13 +19,15 @@
   },
   "email": {
     "title": "Change Email",
-    "desc": "Update the email address used for this account.",
+    "desc": "A verification code will be sent to your new email. Confirm with the code and your current password.",
     "new": "New Email",
-    "placeholder": "name＠example.com",
-    "submit": "Send Verification Email",
-    "success": "Verification email sent. Finish the confirmation from your current inbox.",
+    "placeholder": "Enter new email",
+    "currentPassword": "Current Password",
+    "submit": "Change Email",
+    "success": "Your email address has been updated.",
     "validation": {
       "required": "Please enter a new email address",
+      "format": "Enter a valid email address",
       "same": "The new email must be different from the current one"
     }
   },
@@ -33,13 +35,15 @@
     "title": "Change Password",
     "desc": "Update the sign-in password for this account.",
     "current": "Current Password",
+    "currentPlaceholder": "Enter current password",
     "new": "New Password",
+    "newPlaceholder": "Enter new password",
     "confirm": "Confirm New Password",
+    "confirmPlaceholder": "Re-enter new password",
     "submit": "Save New Password",
     "success": "Password updated",
     "validation": {
       "required": "Please complete the password form",
-      "length": "The new password must be at least 8 characters",
       "mismatch": "The new passwords do not match"
     }
   },

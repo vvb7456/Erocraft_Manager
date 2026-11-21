@@ -3,35 +3,33 @@
 from __future__ import annotations
 
 import asyncio
-from app.core.api_errors import ApiError
-from app.core.error_codes import ErrorCode
+import hashlib
 import logging
-import secrets
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.db import get_db
+from app.core.api_errors import ApiError
+from app.core.contracts import OperationResult
+from app.core.error_codes import ErrorCode
 from app.core.rate_limit import limiter
 from app.core.runtime_settings import BILLING_SPECS, SETTINGS_SPECS
 from app.core.security import SESSION_USER_ID_KEY
 from app.core.settings_store import get_settings_store
-from app.core.tokens import (
-    compute_lookup_hash,
-    hash_token_async,
-    verify_token_async,
-)
-from app.db.models.manager import ManagerPasswordReset, ManagerPendingRegistration
+from app.core.tokens import VERIFICATION_CODE_EXPIRY_MINUTES, verify_token_async
+from app.db.models.manager import ManagerPasswordReset
 from app.db.models.pterodactyl import PteroUser
 from app.db.repositories.users import user_repository
+from app.db.session import get_engine
 from app.schemas.agreements import AcceptanceItem
 from app.services import agreements as agreements_svc
 from app.services import panel_db
+from app.services import verification_codes as code_svc
 from app.services.audit import log_manager_activity
-from app.core.contracts import OperationResult
 from app.services.email import (
     SiteUrlNotConfiguredError,
     get_site_url,
@@ -39,14 +37,13 @@ from app.services.email import (
     render_template_body,
     send_email,
 )
-from app.services.user.validation import normalize_email, normalize_username
+from app.services.user.validation import NewPassword, normalize_email, normalize_username
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["public"])
 
-TOKEN_EXPIRY_MINUTES = 30
-REGISTER_TOKEN_EXPIRY_MINUTES = 30
-FORGOT_PASSWORD_GENERIC_MESSAGE = "如果该邮箱已注册，您将收到密码重置链接。"
+TOKEN_EXPIRY_MINUTES = VERIFICATION_CODE_EXPIRY_MINUTES
+FORGOT_PASSWORD_GENERIC_MESSAGE = "如果该邮箱已注册，您将收到密码重置验证码。"
 
 
 # ── Schemas ──
@@ -72,8 +69,32 @@ class MessageResponse(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
-    token: str
-    newPassword: str = Field(min_length=8, max_length=72)
+    code: str = ""
+    token: str = ""
+    newPassword: NewPassword
+
+
+class SendRegisterCodeRequest(BaseModel):
+    email: EmailStr = Field(max_length=191)
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr = Field(max_length=191)
+    username: str = Field(max_length=255)
+    code: str = Field(min_length=1, max_length=32)
+    password: NewPassword
+    first_name: str = Field(default="", max_length=255)
+    last_name: str = Field(default="", max_length=255)
+    # 8-char invite code from the referring user, optional.
+    invite_code: str | None = Field(default=None, max_length=8)
+    accepted_agreements: list[AcceptanceItem] = Field(default_factory=list)
+
+
+class RegisterResponse(BaseModel):
+    message: str
+    auto_login: bool = True
+    username: str | None = None
+    is_admin: bool = False
 
 
 # ── Helpers ──
@@ -83,17 +104,24 @@ async def _brand_name(db: AsyncSession) -> str:
     return str(await store.get(db, "BRAND_NAME", SETTINGS_SPECS["BRAND_NAME"].default_value()))
 
 
-async def _site_url(db: AsyncSession) -> str:
-    return await get_site_url(db)
-
-
 async def _site_url_or_503(db: AsyncSession, *, detail_key: ErrorCode) -> str:
-    """get_site_url with HTTPException 503 conversion for user-facing flows."""
+    """get_site_url with ApiError conversion for user-facing flows."""
     try:
         return await get_site_url(db)
     except SiteUrlNotConfiguredError:
         logger.error("SITE_URL not configured; aborting flow %s", detail_key)
         raise ApiError(409, detail_key) from None
+
+
+async def _allow_registration(db: AsyncSession) -> bool:
+    store = get_settings_store()
+    return bool(
+        await store.get(
+            db,
+            "ALLOW_PUBLIC_REGISTRATION",
+            SETTINGS_SPECS["ALLOW_PUBLIC_REGISTRATION"].default_value(),
+        )
+    )
 
 
 # ── Routes ──
@@ -139,45 +167,27 @@ async def forgot_password(
     username = user.username
     await db.execute(select(PteroUser.id).where(PteroUser.id == user_id).with_for_update())
 
-    # Rate limit: 60s per email
-    recent = await db.execute(
-        select(ManagerPasswordReset)
-        .where(ManagerPasswordReset.user_id == user_id)
-        .order_by(ManagerPasswordReset.created_at.desc())
-        .limit(1)
-    )
-    last_reset = recent.scalar_one_or_none()
-    if last_reset and last_reset.created_at:
-        elapsed = (datetime.now(UTC).replace(tzinfo=None) - last_reset.created_at).total_seconds()
-        if elapsed < 60:
-            await db.rollback()
-            return MessageResponse(message=FORGOT_PASSWORD_GENERIC_MESSAGE)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if await code_svc.is_within_cooldown(db, purpose="password_reset", user_id=user_id, now=now):
+        await db.rollback()
+        return MessageResponse(message=FORGOT_PASSWORD_GENERIC_MESSAGE)
 
-    raw_token = secrets.token_hex(32)
-    token_hash = await hash_token_async(raw_token)
+    try:
+        await _site_url_or_503(db, detail_key="forgot_password.site_url_not_configured")
+    except ApiError:
+        await db.rollback()
+        raise
 
-    # Invalidate all prior unused tokens for this user
-    await db.execute(
-        update(ManagerPasswordReset)
-        .where(ManagerPasswordReset.user_id == user_id)
-        .where(ManagerPasswordReset.used_at.is_(None))
-        .values(used_at=datetime.now(UTC).replace(tzinfo=None))
-    )
-
-    reset = ManagerPasswordReset(
+    record_id, raw_code = await code_svc.issue_code(
+        db,
+        purpose="password_reset",
+        email=email,
         user_id=user_id,
-        token=token_hash,
+        now=now,
     )
-    db.add(reset)
-    await db.flush()
-    reset_id = int(reset.id)
     await db.commit()
 
-    # Build reset URL
     brand_name = await _brand_name(db)
-    site_url = await _site_url_or_503(db, detail_key="forgot_password.site_url_not_configured")
-    reset_url = f"{site_url}/#/reset-password?token={raw_token}&email={email}"
-
     template = await load_template(db, "password_reset")
     subject, body = render_template_body(
         template,
@@ -185,7 +195,7 @@ async def forgot_password(
             "brand_name": brand_name,
             "username": username,
             "email": email,
-            "reset_url": reset_url,
+            "verification_code": raw_code,
         },
     )
 
@@ -195,21 +205,23 @@ async def forgot_password(
         subject=subject,
         main_content_raw=body,
         greeting=f"您好，{username}！",
-        action_text="重置密码",
-        action_url=reset_url,
+        verification_code=raw_code,
     )
-    if success:
-        pass
-    else:
-        await db.execute(delete(ManagerPasswordReset).where(ManagerPasswordReset.id == reset_id))
+    if not success:
+        await code_svc.delete_code(db, record_id)
         await db.commit()
-        logger.error("Failed to send password reset email to %s: %s", email, err)
+        logger.error("Failed to send password reset code email to %s: %s", email, err)
 
     await log_manager_activity(
         db,
         actor=username,
         category="auth",
-        operation=OperationResult(action="auth.password_reset.email", phase="acceptance", outcome="success" if success else "failed", target={"username": username}),
+        operation=OperationResult(
+            action="auth.password_reset.email",
+            phase="acceptance",
+            outcome="success" if success else "failed",
+            target={"username": username},
+        ),
         detail_key="forgot_password",
         detail_params={"username": username, "email": email},
     )
@@ -225,51 +237,85 @@ async def reset_password(
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
     email = normalize_email(payload.email)
+    raw_token = payload.token.strip()
+    raw_code = payload.code.strip()
+    using_token = bool(raw_token)
+    invalid_error: ErrorCode = (
+        "account.invalid_reset_link" if using_token else "account.invalid_reset_code"
+    )
+
     user = await user_repository.get_by_email(db, email)
     if not user:
-        raise ApiError(422, "account.invalid_reset_link")
+        raise ApiError(422, invalid_error)
 
-    # Find latest unused reset token for this user
-    result = await db.execute(
-        select(ManagerPasswordReset)
-        .where(ManagerPasswordReset.user_id == int(user.id))
-        .where(ManagerPasswordReset.used_at.is_(None))
-        .order_by(ManagerPasswordReset.created_at.desc())
-        .limit(1)
-    )
-    reset_record = result.scalar_one_or_none()
-    if not reset_record:
-        raise ApiError(422, "account.invalid_reset_link")
+    user_id = int(user.id)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
-    # Check expiry
-    if reset_record.created_at:
-        age = datetime.now(UTC).replace(tzinfo=None) - reset_record.created_at
-        if age > timedelta(minutes=TOKEN_EXPIRY_MINUTES):
-            raise ApiError(422, "account.reset_link_expired")
+    if using_token:
+        result = await db.execute(
+            select(ManagerPasswordReset)
+            .where(ManagerPasswordReset.user_id == user_id)
+            .where(ManagerPasswordReset.used_at.is_(None))
+            .order_by(ManagerPasswordReset.created_at.desc(), ManagerPasswordReset.id.desc())
+            .limit(1)
+        )
+        reset_record = result.scalar_one_or_none()
+        if not reset_record:
+            raise ApiError(422, "account.invalid_reset_link")
 
-    # Verify token
-    if not await verify_token_async(payload.token, reset_record.token):
-        raise ApiError(422, "account.invalid_reset_link")
+        if reset_record.created_at:
+            age = now - reset_record.created_at
+            if age > timedelta(minutes=TOKEN_EXPIRY_MINUTES):
+                raise ApiError(422, "account.reset_link_expired")
 
-    claim_time = datetime.now(UTC).replace(tzinfo=None)
-    claim_result = await db.execute(
-        update(ManagerPasswordReset)
-        .where(ManagerPasswordReset.id == int(reset_record.id))
-        .where(ManagerPasswordReset.used_at.is_(None))
-        .values(used_at=claim_time)
-    )
-    if not claim_result.rowcount:
-        await db.rollback()
-        raise ApiError(422, "account.invalid_reset_link")
-    await db.commit()
+        if not await verify_token_async(raw_token, reset_record.token):
+            raise ApiError(422, "account.invalid_reset_link")
 
-    # Sync to panel via direct DB write
+        claim_result = await db.execute(
+            update(ManagerPasswordReset)
+            .where(ManagerPasswordReset.id == int(reset_record.id))
+            .where(ManagerPasswordReset.used_at.is_(None))
+            .values(used_at=now)
+        )
+        if not claim_result.rowcount:
+            await db.rollback()
+            raise ApiError(422, "account.invalid_reset_link")
+        await code_svc.revoke_user_codes(db, user_id, now)
+        await db.commit()
+    else:
+        record, code_status = await code_svc.verify_latest_code(
+            db,
+            purpose="password_reset",
+            email=email,
+            code=raw_code,
+            user_id=user_id,
+            now=now,
+        )
+        if code_status != "ok" or record is None:
+            await db.rollback()
+            raise ApiError(
+                422,
+                "account.reset_code_expired"
+                if code_status == "expired"
+                else "account.invalid_reset_code",
+            )
+        await code_svc.consume_code(db, record, now)
+        await db.execute(
+            update(ManagerPasswordReset)
+            .where(ManagerPasswordReset.user_id == user_id)
+            .where(ManagerPasswordReset.used_at.is_(None))
+            .values(used_at=now)
+        )
+        await code_svc.revoke_user_codes(db, user_id, now)
+        await db.commit()
+
     from app.services import server_lifecycle
     from app.services.server_lifecycle import LifecycleError
+
     try:
         await server_lifecycle.update_user(
             db,
-            int(user.id),
+            user_id,
             email=user.email,
             username=user.username,
             first_name=user.name_first or user.username,
@@ -278,17 +324,19 @@ async def reset_password(
         )
         await db.commit()
     except LifecycleError as exc:
-        logger.exception("Failed to sync password to panel for user %s", user.username)
-        raise ApiError(
-            502,
-            "account.password_reset_status_unknown",
-        ) from exc
+        logger.exception("Failed to sync password for user %s", user.username)
+        raise ApiError(502, "account.password_reset_status_unknown") from exc
 
     await log_manager_activity(
         db,
         actor=user.username,
         category="auth",
-        operation=OperationResult(action="auth.password.reset", phase="execution", outcome="success", target={"user_id": user.id}),
+        operation=OperationResult(
+            action="auth.password.reset",
+            phase="execution",
+            outcome="success",
+            target={"user_id": user.id},
+        ),
         detail_key="reset_password",
         detail_params={"username": user.username},
     )
@@ -298,209 +346,65 @@ async def reset_password(
 
 # ── Public registration ──
 
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    username: str = Field(max_length=255)
-    password: str = Field(min_length=8, max_length=72)
-    first_name: str = Field(default="", max_length=255)
-    last_name: str = Field(default="", max_length=255)
-    # 8-char invite code from the referring user, optional.
-    invite_code: str | None = Field(default=None, max_length=8)
-    # Agreement consent intent — captured at /register, materialized to
-    # acceptances rows at /register/verify (when the real user.id exists).
-    # Validated against current versions of required register agreements.
-    accepted_agreements: list[AcceptanceItem] = Field(default_factory=list)
-
-
-class VerifyRegisterRequest(BaseModel):
-    token: str
-
-
-class RegisterVerifyResponse(BaseModel):
-    message: str
-    auto_login: bool = False
-    username: str | None = None
-    is_admin: bool = False
-
-
-async def _allow_registration(db: AsyncSession) -> bool:
-    store = get_settings_store()
-    return bool(
-        await store.get(
-            db,
-            "ALLOW_PUBLIC_REGISTRATION",
-            SETTINGS_SPECS["ALLOW_PUBLIC_REGISTRATION"].default_value(),
-        )
-    )
-
-
-@router.post("/register", response_model=MessageResponse)
+@router.post("/register/code", response_model=MessageResponse)
 @limiter.limit("5/minute")
-async def register(
-    payload: RegisterRequest,
+async def send_register_code(
+    payload: SendRegisterCodeRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
     if not await _allow_registration(db):
         raise ApiError(403, "register.disabled")
 
-    # SITE_URL must exist before we even build the verify_url. Bail out
-    # *before* hashing / sending so the user gets a fast, accurate error.
-    site_url = await _site_url_or_503(db, detail_key="register.site_url_not_configured")
+    await _site_url_or_503(db, detail_key="register.site_url_not_configured")
 
     email = normalize_email(payload.email)
-    username = normalize_username(payload.username)
-
-    # ── Agreement consent validation ──
-    # Validate the user's claimed agreement versions against the current
-    # versions of the required register agreements. Stale or tampered
-    # versions (or missing required agreements) are rejected before any
-    # row is written. The validated items are stored on the pending row
-    # and materialized into acceptances at /register/verify time (when
-    # the real user.id is finally known).
-    try:
-        agreements_items = await agreements_svc.validate_acceptance(
-            db,
-            payload.accepted_agreements,
-            context="register",
-        )
-    except agreements_svc.AgreementError:
-        raise ApiError(
-            422,
-            "register.agreement_required",
-        ) from None
-
-    # Conflict checks against the panel users table
     if await user_repository.get_by_email(db, email):
         raise ApiError(409, "register.email_taken")
-    if await user_repository.get_by_username(db, username):
-        raise ApiError(409, "register.username_taken")
 
-    now = datetime.now(UTC).replace(tzinfo=None)
-    token_alive_after = now - timedelta(minutes=REGISTER_TOKEN_EXPIRY_MINUTES)
-
-    # Expired rows can never be verified, and same-email rows surface as
-    # verification_pending below rather than masquerading as username_taken.
-    pending_user = await db.execute(
-        select(ManagerPendingRegistration.id)
-        .where(
-            ManagerPendingRegistration.username == username,
-            ManagerPendingRegistration.email != email,
-            ManagerPendingRegistration.used_at.is_(None),
-            ManagerPendingRegistration.created_at > token_alive_after,
+    # 用独立连接的 MySQL 命名锁串行化同邮箱首次发码：
+    # 1) 避免空索引范围 FOR UPDATE 触发 InnoDB 间隙锁死锁；
+    # 2) 确保 GET_LOCK 与 RELEASE_LOCK 始终落在同一连接上，且在 db.commit() 之后释放；
+    # 3) 拿锁后先 rollback() 刷新 REPEATABLE READ 快照，确保看到前序并发请求刚提交的验证码。
+    lock_name = f"erocraft:reg_code:{hashlib.sha256(email.encode()).hexdigest()[:32]}"
+    async with get_engine().connect() as lock_conn:
+        acquired = await lock_conn.scalar(
+            text("SELECT GET_LOCK(:lock_name, 5)"),
+            {"lock_name": lock_name},
         )
-        .limit(1)
-    )
-    if pending_user.scalar_one_or_none() is not None:
-        raise ApiError(409, "register.username_taken")
+        if acquired != 1:
+            await db.rollback()
+            raise ApiError(429, "register.code_rate_limited")
 
-    # ── Serialize concurrent POST /register for the same email ──
-    # Two requests can race here (e.g. a double-submitted form). The
-    # idx_pr_email index lets InnoDB take a next-key gap lock on the
-    # ``email`` column even when no row matches, so a second concurrent
-    # request blocks on this SELECT...FOR UPDATE until the first commits
-    # or rolls back. Without this, both branches read "no pending",
-    # both insert, and both send a verification email — producing the
-    # duplicate-second register_request entries seen in audit logs.
-    pending_rows = (
-        await db.execute(
-            select(ManagerPendingRegistration)
-            .where(ManagerPendingRegistration.email == email)
-            .order_by(ManagerPendingRegistration.id.desc())
-            .with_for_update()
-        )
-    ).scalars().all()
+        try:
+            await db.rollback()
+            if await user_repository.get_by_email(db, email):
+                await db.rollback()
+                raise ApiError(409, "register.email_taken")
 
-    # ── Refuse to re-send while the previous verification link is live ──
-    # The link itself (30 min TTL) is the only bound we need on email
-    # frequency: while it's valid, the user can finish registration with
-    # the email already in their inbox, so emitting a second one is
-    # both spam and a vector for mail-bomb abuse.
-    active_pending = next(
-        (
-            row for row in pending_rows
-            if row.used_at is None
-            and row.created_at is not None
-            and row.created_at > token_alive_after
-        ),
-        None,
-    )
-    if active_pending:
-        raise ApiError(
-            409,
-            "register.verification_pending",
-        )
+            now = datetime.now(UTC).replace(tzinfo=None)
+            if await code_svc.is_within_cooldown(db, purpose="register", email=email, now=now):
+                await db.rollback()
+                raise ApiError(429, "register.code_rate_limited")
 
-    raw_hash = await asyncio.to_thread(PteroUser.hash_password_sync, payload.password)
-
-    raw_token = secrets.token_hex(32)
-    token_hash = await hash_token_async(raw_token)
-    lookup_hash = compute_lookup_hash(raw_token)
-
-    # Resolve optional invite code → inviter user id. Bad codes are
-    # silently ignored here (no UX leak about whether a code is valid —
-    # the dedicated /api/invite/check endpoint is the documented probe).
-    # Per design doc §6.2 we do NOT block self-invite (same email
-    # registering with the inviter's own code) — the abuse vector is
-    # already gated by requiring real payment on the qualifying order.
-    from app.services.user import invite_codes as invite_svc
-    inviter_user_id: int | None = None
-    normalized_code: str | None = None
-    raw_invite = (payload.invite_code or "").strip().upper() or None
-    if raw_invite:
-        candidate_id = await invite_svc.resolve_active_inviter(db, raw_invite)
-        if candidate_id is not None:
-            inviter_user_id = candidate_id
-            normalized_code = raw_invite
-
-    # Invalidate any prior unused pending rows for this email so the link
-    # in the latest email is the only one that works. (At this point any
-    # surviving rows are already past the token TTL window; this is a
-    # housekeeping mark.)
-    await db.execute(
-        update(ManagerPendingRegistration)
-        .where(
-            ManagerPendingRegistration.email == email,
-            ManagerPendingRegistration.used_at.is_(None),
-        )
-        .values(used_at=now)
-    )
-
-    pending = ManagerPendingRegistration(
-        email=email,
-        username=username,
-        first_name=(payload.first_name or username).strip(),
-        last_name=(payload.last_name or "User").strip(),
-        password_hash=raw_hash,
-        token=token_hash,
-        lookup_hash=lookup_hash,
-        inviter_user_id=inviter_user_id,
-        invite_code=normalized_code,
-        agreements_json=(
-            [
-                {"agreement_id": item.agreement_id, "version": item.version}
-                for item in agreements_items
-            ]
-            if agreements_items
-            else None
-        ),
-    )
-    db.add(pending)
-    await db.flush()
-    pending_id = int(pending.id)
-    await db.commit()
+            record_id, raw_code = await code_svc.issue_code(
+                db,
+                purpose="register",
+                email=email,
+                now=now,
+            )
+            await db.commit()
+        finally:
+            await lock_conn.execute(text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name})
 
     brand_name = await _brand_name(db)
-    verify_url = f"{site_url}/#/verify-email?token={raw_token}"
-
     template = await load_template(db, "register_verify")
     subject, body = render_template_body(
         template,
         {
             "brand_name": brand_name,
-            "username": username,
             "email": email,
-            "verify_url": verify_url,
+            "verification_code": raw_code,
         },
     )
 
@@ -509,201 +413,160 @@ async def register(
         recipient_email=email,
         subject=subject,
         main_content_raw=body,
-        greeting=f"您好，{username}！",
-        action_text="验证邮箱并完成注册",
-        action_url=verify_url,
+        greeting="您好！",
+        verification_code=raw_code,
     )
     if not success:
-        await db.execute(
-            delete(ManagerPendingRegistration).where(
-                ManagerPendingRegistration.id == pending_id
-            )
-        )
+        await code_svc.delete_code(db, record_id)
         await db.commit()
-        logger.error("Failed to send registration email to %s: %s", email, err)
-        raise ApiError(
-            502, "register.email_send_failed"
-        )
+        logger.error("Failed to send registration code email to %s: %s", email, err)
+        raise ApiError(502, "register.email_send_failed")
 
     await log_manager_activity(
         db,
-        actor=username,
+        actor=email,
         category="auth",
-        operation=OperationResult(action="auth.register", phase="acceptance", outcome="success", target={"username": username}),
+        operation=OperationResult(
+            action="auth.register",
+            phase="acceptance",
+            outcome="success",
+            target={"email": email},
+        ),
         detail_key="register_request",
-        detail_params={"username": username, "email": email},
+        detail_params={"username": email, "email": email},
     )
 
-    return MessageResponse(message="验证邮件已发送，请查收并点击邮件中的链接完成注册。")
+    return MessageResponse(message="验证码已发送，请查收邮件。")
 
 
-@router.post("/register/verify", response_model=RegisterVerifyResponse)
+@router.post("/register", response_model=RegisterResponse)
 @limiter.limit("10/minute")
-async def verify_registration(
-    payload: VerifyRegisterRequest,
+async def register(
+    payload: RegisterRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-) -> RegisterVerifyResponse:
-    raw_token = (payload.token or "").strip()
-    if not raw_token:
-        raise ApiError(422, "register.invalid_token")
+) -> RegisterResponse:
+    if not await _allow_registration(db):
+        raise ApiError(403, "register.disabled")
 
-    # O(1) lookup via SHA-256 lookup_hash; bcrypt verify still required to
-    # actually authorize (defends against DB read).
-    lookup = compute_lookup_hash(raw_token)
-    pending = (
-        await db.execute(
-            select(ManagerPendingRegistration)
-            .where(ManagerPendingRegistration.lookup_hash == lookup)
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-
-    if pending is None or not await verify_token_async(raw_token, pending.token):
-        raise ApiError(422, "register.invalid_token")
-
-    # Distinguish already-used vs expired vs valid for clearer UX.
-    if pending.used_at is not None:
-        raise ApiError(409, "register.token_used")
-
-    if pending.created_at:
-        age = datetime.now(UTC).replace(tzinfo=None) - pending.created_at
-        if age > timedelta(minutes=REGISTER_TOKEN_EXPIRY_MINUTES):
-            raise ApiError(422, "register.token_expired")
-
-    # Last-second conflict check (someone else might have grabbed the email
-    # / username between sign-up and verify).
-    if await user_repository.get_by_email(db, pending.email):
-        raise ApiError(409, "register.email_taken")
-    if await user_repository.get_by_username(db, pending.username):
-        raise ApiError(409, "register.username_taken")
-
-    # Atomically claim the pending row so a double-click can't create two users
-    claim_time = datetime.now(UTC).replace(tzinfo=None)
-    claim = await db.execute(
-        update(ManagerPendingRegistration)
-        .where(
-            ManagerPendingRegistration.id == pending.id,
-            ManagerPendingRegistration.used_at.is_(None),
-        )
-        .values(used_at=claim_time)
-    )
-    if not claim.rowcount:
-        await db.rollback()
-        # Lost the race: someone else already claimed (or the row was
-        # marked used between our check and update). Surface as token_used
-        # so the user can just go log in.
-        raise ApiError(409, "register.token_used")
-    await db.commit()
+    email = normalize_email(payload.email)
+    username = normalize_username(payload.username)
+    raw_code = payload.code.strip()
+    if not raw_code:
+        raise ApiError(422, "register.invalid_code")
 
     try:
+        agreements_items = await agreements_svc.validate_acceptance(
+            db,
+            payload.accepted_agreements,
+            context="register",
+        )
+    except agreements_svc.AgreementError:
+        raise ApiError(422, "register.agreement_required") from None
+
+    if await user_repository.get_by_email(db, email):
+        raise ApiError(409, "register.email_taken")
+    if await user_repository.get_by_username(db, username):
+        raise ApiError(409, "register.username_taken")
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    record, code_status = await code_svc.verify_latest_code(
+        db,
+        purpose="register",
+        email=email,
+        code=raw_code,
+        now=now,
+    )
+    if code_status != "ok" or record is None:
+        await db.rollback()
+        raise ApiError(
+            422,
+            "register.code_expired" if code_status == "expired" else "register.invalid_code",
+        )
+
+    raw_hash = await asyncio.to_thread(PteroUser.hash_password_sync, payload.password)
+
+    try:
+        await code_svc.consume_code(db, record, now)
         created = await panel_db.create_user_with_hashed_password(
             db,
-            username=pending.username,
-            email=pending.email,
-            first_name=pending.first_name or pending.username,
-            last_name=pending.last_name or "User",
-            password_hash=pending.password_hash,
+            username=username,
+            email=email,
+            first_name=(payload.first_name or username).strip(),
+            last_name=(payload.last_name or "User").strip(),
+            password_hash=raw_hash,
         )
         await db.commit()
     except panel_db.PanelDBError as exc:
-        # Roll back the claim so the user can retry / re-register.
-        try:
-            await db.execute(
-                update(ManagerPendingRegistration)
-                .where(ManagerPendingRegistration.id == pending.id)
-                .values(used_at=None)
-            )
-            await db.commit()
-        except Exception:
-            logger.exception("Failed to revert pending claim for id=%s", pending.id)
-        logger.error("create_user (public register) failed for %s: %s", pending.email, exc)
-        raise ApiError(
-            502, "register.create_failed"
-        ) from exc
+        await db.rollback()
+        if await user_repository.get_by_email(db, email):
+            raise ApiError(409, "register.email_taken") from None
+        if await user_repository.get_by_username(db, username):
+            raise ApiError(409, "register.username_taken") from None
+        logger.error("create_user (public register) failed for %s: %s", email, exc)
+        raise ApiError(502, "register.create_failed") from exc
 
     await log_manager_activity(
         db,
         actor=created.username,
         category="auth",
-        operation=OperationResult(action="auth.register", phase="execution", outcome="success", target={"user_id": created.id}),
+        operation=OperationResult(
+            action="auth.register",
+            phase="execution",
+            outcome="success",
+            target={"user_id": created.id},
+        ),
         detail_key="register_verified",
         detail_params={"username": created.username, "email": created.email},
     )
 
-    # ── Materialize agreement acceptances ──
-    # The consent intent was captured on the pending row at /register
-    # time (after validating against current versions). Now that the real
-    # user.id exists we can write the persistent acceptance rows. This is
-    # best-effort: a failure here does not roll back the user creation
-    # (the user is already created and can re-consent via the gate), but
-    # it is logged so an admin can investigate a discrepancy.
-    if pending.agreements_json:
+    # Best-effort agreement consent persistence.
+    if agreements_items:
         try:
-            items = [
-                AcceptanceItem(
-                    agreement_id=int(row["agreement_id"]),
-                    version=int(row["version"]),
-                )
-                for row in pending.agreements_json
-                if isinstance(row, dict)
-                and "agreement_id" in row
-                and "version" in row
-            ]
-            if items:
-                fwd = request.headers.get("x-forwarded-for", "")
-                request_ip: str | None = (
-                    fwd.split(",")[0].strip() if fwd else None
-                )
-                if request_ip is None and request.client is not None:
-                    request_ip = request.client.host
-                await agreements_svc.record(
-                    db,
-                    user_id=int(created.id),
-                    items=items,
-                    context="register",
-                    ip=request_ip,
-                    locale=None,
-                    commit=False,
-                )
-                await db.commit()
+            fwd = request.headers.get("x-forwarded-for", "")
+            request_ip: str | None = fwd.split(",")[0].strip() if fwd else None
+            if request_ip is None and request.client is not None:
+                request_ip = request.client.host
+            await agreements_svc.record(
+                db,
+                user_id=int(created.id),
+                items=agreements_items,
+                context="register",
+                ip=request_ip,
+                locale=None,
+                commit=False,
+            )
+            await db.commit()
         except Exception:  # noqa: BLE001
             await db.rollback()
-            logger.exception(
-                "register_verify: failed to record agreement acceptances "
-                "for user=%s",
-                created.id,
-            )
+            logger.exception("register: failed to record agreement acceptances for user=%s", created.id)
 
-    # ── Referral row creation (registered state) ──
-    # If this pending row had an inviter, persist the link now and
-    # immediately issue the invitee's welcome coupon so it can be used
-    # on the *first* paid order (otherwise the new-user discount has no
-    # practical value). The inviter reward is still deferred to the
-    # invitee's first qualifying paid order (anti-abuse). We dedupe on
-    # invitee_user_id (uk_ur_invitee) so a re-verify is a no-op.
-    if pending.inviter_user_id and pending.invite_code:
+    # Best-effort referral row + invitee welcome coupon.
+    from app.services.user import invite_codes as invite_svc
+
+    raw_invite = (payload.invite_code or "").strip().upper() or None
+    inviter_user_id: int | None = None
+    if raw_invite:
+        inviter_user_id = await invite_svc.resolve_active_inviter(db, raw_invite)
+
+    if inviter_user_id and raw_invite:
+        invitee_coupon = None
         try:
-            from app.db.models.manager import UserReferral
             from app.core.time import utc_naive_now as _now
-            from app.services.billing import coupons as coupon_service
             from app.db.models.billing import CouponTemplate
-            from sqlalchemy import select as _select
+            from app.db.models.manager import UserReferral
+            from app.services.billing import coupons as coupon_service
 
             referral = UserReferral(
-                inviter_user_id=int(pending.inviter_user_id),
+                inviter_user_id=int(inviter_user_id),
                 invitee_user_id=int(created.id),
-                invite_code=pending.invite_code,
+                invite_code=raw_invite,
                 status="registered",
                 created_at=_now(),
             )
             db.add(referral)
             await db.flush()
 
-            # Issue the invitee welcome coupon now (only if the feature
-            # is enabled and the template resolves). A missing template
-            # is logged but does not block registration — the grant path
-            # at first-order time will retry issuance.
             store = get_settings_store()
             enabled = bool(
                 await store.get(
@@ -712,7 +575,6 @@ async def verify_registration(
                     BILLING_SPECS["REFERRAL_REWARD_ENABLED"].default_value(),
                 )
             )
-            invitee_coupon = None
             if enabled:
                 invitee_code = str(
                     await store.get(
@@ -723,7 +585,7 @@ async def verify_registration(
                 )
                 tpl = (
                     await db.execute(
-                        _select(CouponTemplate).where(
+                        select(CouponTemplate).where(
                             CouponTemplate.code == invitee_code,
                             CouponTemplate.is_active.is_(True),
                         )
@@ -731,8 +593,7 @@ async def verify_registration(
                 ).scalar_one_or_none()
                 if tpl is None:
                     logger.warning(
-                        "register_verify: invitee template %s missing; "
-                        "deferring coupon issuance to first-order grant",
+                        "register: invitee template %s missing; deferring coupon issuance to first-order grant",
                         invitee_code,
                     )
                 else:
@@ -748,34 +609,24 @@ async def verify_registration(
             await db.commit()
         except Exception:  # noqa: BLE001
             await db.rollback()
-            logger.exception(
-                "register_verify: failed to create UserReferral for invitee=%s",
-                created.id,
-            )
+            logger.exception("register: failed to create UserReferral for invitee=%s", created.id)
             invitee_coupon = None
 
-        # Best-effort welcome-coupon email (outside critical tx).
         if invitee_coupon is not None:
             try:
-                from app.services.billing.referral_rewards import (
-                    send_invitee_welcome_email,
-                )
+                from app.services.billing.referral_rewards import send_invitee_welcome_email
+
                 await send_invitee_welcome_email(
                     db, invitee_user_id=int(created.id), coupon=invitee_coupon
                 )
             except Exception:
-                logger.exception(
-                    "register_verify: invitee welcome email failed (user=%s)",
-                    created.id,
-                )
+                logger.exception("register: invitee welcome email failed (user=%s)", created.id)
 
-    # Auto-login: set the session cookie so the user lands directly on the
-    # app instead of being asked to log in immediately after verifying.
     request.session.clear()
     request.session[SESSION_USER_ID_KEY] = int(created.id)
 
-    return RegisterVerifyResponse(
-        message="邮箱验证成功，账户已激活。",
+    return RegisterResponse(
+        message="注册成功。",
         auto_login=True,
         username=created.username,
         is_admin=False,
@@ -796,12 +647,7 @@ async def check_invite_code(
     code: str,
     db: AsyncSession = Depends(get_db),
 ) -> InviteCheckResponse:
-    """Lightweight probe used by the register page.
-
-    Returns ``valid=False`` for any malformed or unknown code; never
-    reveals user-identifying information beyond the username string
-    (which the inviter has already shared with the invitee anyway).
-    """
+    """Lightweight probe used by the register page."""
     normalized = (code or "").strip().upper()
     if not normalized or len(normalized) != 8:
         return InviteCheckResponse(valid=False)

@@ -351,53 +351,20 @@ class ManagerPasswordReset(Base):
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
-class ManagerEmailChange(Base):
-    __tablename__ = "manager_email_changes"
-    __table_args__ = (Index("idx_email_change_user_id", "user_id"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    new_email: Mapped[str] = mapped_column(String(255), nullable=False)
-    token: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
-    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-
-class ManagerPendingRegistration(Base):
-    __tablename__ = "manager_pending_registrations"
+class ManagerEmailVerificationCode(Base):
+    __tablename__ = "manager_email_verification_codes"
     __table_args__ = (
-        Index("idx_pr_email", "email"),
-        Index("idx_pr_username", "username"),
-        Index("uq_pr_lookup_hash", "lookup_hash", unique=True),
-        Index("idx_pr_inviter", "inviter_user_id"),
+        Index("ix_mevc_purpose_email_created", "purpose", "email", "created_at"),
+        Index("ix_mevc_user_purpose_created", "user_id", "purpose", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    email: Mapped[str] = mapped_column(String(255), nullable=False)
-    username: Mapped[str] = mapped_column(String(191), nullable=False)
-    first_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    last_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    lookup_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    token: Mapped[str] = mapped_column(String(255), nullable=False)
-    # Captured at /register time when the URL or form carried a valid
-    # invite code. ``invite_code`` stores the literal 8-char string so we
-    # can write a referral row at verify-time even if the inviter rotated
-    # / disabled their code in between (rare). ``inviter_user_id`` is the
-    # resolved user.id snapshot taken at /register; if NULL, no referral
-    # is recorded on verify.
-    inviter_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    invite_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
-    # Captured at /register time: the agreement ids + versions the user
-    # consented to on the registration form. Materialized into
-    # ``manager_user_agreement_acceptances`` rows on /register/verify (when
-    # the real user.id is finally known). ``list[dict]`` shape:
-    # ``[{"agreement_id": int, "version": int}, ...]``.
-    agreements_json: Mapped[list[dict[str, Any]] | None] = mapped_column(
-        JSON, nullable=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False)
+    email: Mapped[str] = mapped_column(String(191), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, nullable=False)
 
 
 class UserInviteCode(Base):
@@ -425,7 +392,7 @@ class UserInviteCode(Base):
 class UserReferral(Base):
     """Inviter→invitee binding + reward-grant audit row.
 
-    Lifecycle: ``registered`` (created on /register/verify) → ``rewarded``
+    Lifecycle: ``registered`` (created on /register) → ``rewarded``
     (set when ``referral_rewards.try_grant_for_order`` writes the two
     coupons + ``qualifying_order_id``) → ``revoked`` (admin only). The
     UNIQUE on ``invitee_user_id`` makes each new account belong to at

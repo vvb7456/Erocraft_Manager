@@ -8,9 +8,7 @@ import zhSettings from './locales/zh-CN/settings.json'
 import zhLogin from './locales/zh-CN/login.json'
 import zhForgotPassword from './locales/zh-CN/forgot-password.json'
 import zhResetPassword from './locales/zh-CN/reset-password.json'
-import zhConfirmEmail from './locales/zh-CN/confirm-email.json'
 import zhRegister from './locales/zh-CN/register.json'
-import zhVerifyEmail from './locales/zh-CN/verify-email.json'
 import zhServers from './locales/zh-CN/servers.json'
 import zhUsers from './locales/zh-CN/users.json'
 import zhLogs from './locales/zh-CN/logs.json'
@@ -38,9 +36,7 @@ import enSettings from './locales/en/settings.json'
 import enLogin from './locales/en/login.json'
 import enForgotPassword from './locales/en/forgot-password.json'
 import enResetPassword from './locales/en/reset-password.json'
-import enConfirmEmail from './locales/en/confirm-email.json'
 import enRegister from './locales/en/register.json'
-import enVerifyEmail from './locales/en/verify-email.json'
 import enServers from './locales/en/servers.json'
 import enUsers from './locales/en/users.json'
 import enLogs from './locales/en/logs.json'
@@ -78,9 +74,7 @@ const i18n = createI18n({
       settings: zhSettings, login: zhLogin, servers: zhServers,
       forgotPassword: zhForgotPassword,
       resetPassword: zhResetPassword,
-      confirmEmail: zhConfirmEmail,
       register: zhRegister,
-      verifyEmail: zhVerifyEmail,
       users: zhUsers, logs: zhLogs,
       emailTemplates: zhEmailTemplates,
       userServers: zhUserServers,
@@ -104,9 +98,7 @@ const i18n = createI18n({
       settings: enSettings, login: enLogin, servers: enServers,
       forgotPassword: enForgotPassword,
       resetPassword: enResetPassword,
-      confirmEmail: enConfirmEmail,
       register: enRegister,
-      verifyEmail: enVerifyEmail,
       users: enUsers, logs: enLogs,
       emailTemplates: enEmailTemplates,
       userServers: enUserServers,

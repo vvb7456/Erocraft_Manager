@@ -1,11 +1,17 @@
-"""Shared token hashing utilities for password reset and email change."""
+"""Shared token and email verification code hashing utilities."""
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import secrets
+from hmac import compare_digest
 
 import bcrypt
+
+VERIFICATION_CODE_LENGTH = 6
+VERIFICATION_CODE_EXPIRY_MINUTES = 30
+VERIFICATION_CODE_COOLDOWN_SECONDS = 60
 
 
 def hash_token(raw: str) -> str:
@@ -34,12 +40,15 @@ async def verify_token_async(raw: str, hashed: str) -> bool:
     return await asyncio.to_thread(verify_token, raw, hashed)
 
 
-def compute_lookup_hash(raw: str) -> str:
-    """Deterministic, indexable SHA-256 of a raw token.
+def generate_verification_code() -> str:
+    return f"{secrets.randbelow(10 ** VERIFICATION_CODE_LENGTH):0{VERIFICATION_CODE_LENGTH}d}"
 
-    Allows O(1) DB lookup without exposing raw tokens in the database. The
-    actual authorization decision still uses the bcrypt-hashed ``token``
-    column (via ``verify_token``), so a DB dump alone cannot forge a valid
-    verification request.
-    """
-    return hashlib.sha256(raw.encode()).hexdigest()
+
+def code_digest(purpose: str, email: str, code: str) -> str:
+    # 绑定用途与归一化邮箱后再计算摘要，避免跨场景或跨邮箱复用。
+    normalized = f"{purpose}:{email.strip().lower()}:{code.strip()}"
+    return hashlib.sha256(normalized.encode()).hexdigest()
+
+
+def verify_verification_code(purpose: str, email: str, code: str, digest: str) -> bool:
+    return compare_digest(code_digest(purpose, email, code), digest)

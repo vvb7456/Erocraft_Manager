@@ -2,9 +2,11 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
+import { useCodeCooldown } from '@/composables/useCodeCooldown'
 import { useToast } from '@/composables/useToast'
 import { switchLanguage } from '@/i18n/vue-i18n'
 import { backendToFrontendLocale, type BackendLocale } from '@/i18n/locale-map'
+import { isValidEmail, isValidVerificationCode, passwordErrorKey } from '@/utils/username'
 import { useAppStore } from '@/stores/app'
 import { useSupportStore } from '@/stores/support'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -12,6 +14,7 @@ import AlertBanner from '@/components/ui/AlertBanner.vue'
 import LoadingCenter from '@/components/ui/LoadingCenter.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
+import VerificationCodeInput from '@/components/form/VerificationCodeInput.vue'
 import BaseSelect from '@/components/form/BaseSelect.vue'
 import FormField from '@/components/form/FormField.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
@@ -29,8 +32,9 @@ interface UserProfile {
   language: string
 }
 
-interface MessageResponse {
+interface ChangeEmailResponse {
   message: string
+  user?: UserProfile | null
 }
 
 const { t, locale } = useI18n({ useScope: 'global' })
@@ -43,10 +47,15 @@ const initialLoading = ref(true)
 const profile = ref<UserProfile | null>(null)
 
 const emailLoading = ref(false)
+const sendingEmailCode = ref(false)
+const emailCodeCooldown = useCodeCooldown(60)
+let emailCodeRequestSeq = 0
 const passwordLoading = ref(false)
 const languageLoading = ref(false)
 
 const newEmail = ref('')
+const emailCode = ref('')
+const emailCurrentPassword = ref('')
 const emailBanner = ref('')
 
 const currentPassword = ref('')
@@ -73,16 +82,22 @@ const accountTypeLabel = computed(() => {
 const emailError = computed(() => {
   if (!newEmail.value) return ''
   if (!normalizedNewEmail.value) return t('account.email.validation.required')
+  if (!isValidEmail(normalizedNewEmail.value)) return t('account.email.validation.format')
   if (normalizedNewEmail.value === normalizedCurrentEmail.value) {
     return t('account.email.validation.same')
   }
   return ''
 })
 
+const emailCodeError = computed(() => {
+  const v = emailCode.value.trim()
+  if (!v) return ''
+  return isValidVerificationCode(v) ? '' : t('common.verificationCode.invalid')
+})
+
 const passwordLengthError = computed(() => {
-  if (!newPassword.value) return ''
-  if (newPassword.value.length < 8) return t('account.password.validation.length')
-  return ''
+  const kind = passwordErrorKey(newPassword.value)
+  return kind ? t(`common.passwordValidation.${kind}`) : ''
 })
 
 const confirmPasswordError = computed(() => {
@@ -93,10 +108,22 @@ const confirmPasswordError = computed(() => {
   return ''
 })
 
+const canSendEmailCode = computed(() =>
+  !!profile.value
+  && !!normalizedNewEmail.value
+  && !emailError.value
+  && !emailLoading.value
+  && !sendingEmailCode.value
+  && emailCodeCooldown.remaining.value === 0,
+)
+
 const canSubmitEmail = computed(() =>
   !!profile.value
   && !!normalizedNewEmail.value
   && !emailError.value
+  && !!emailCode.value.trim()
+  && !emailCodeError.value
+  && !!emailCurrentPassword.value
   && !emailLoading.value,
 )
 
@@ -109,12 +136,12 @@ const canSubmitPassword = computed(() =>
   && !passwordLoading.value,
 )
 
-watch(newEmail, () => {
-  emailBanner.value = ''
+watch([newEmail, emailCode, emailCurrentPassword], (values) => {
+  if (values.some(Boolean)) emailBanner.value = ''
 })
 
-watch([currentPassword, newPassword, confirmPassword], () => {
-  passwordBanner.value = ''
+watch([currentPassword, newPassword, confirmPassword], (values) => {
+  if (values.some(Boolean)) passwordBanner.value = ''
 })
 
 async function loadProfile() {
@@ -133,9 +160,27 @@ async function loadProfile() {
   }
 }
 
+async function sendEmailChangeCode() {
+  if (!canSendEmailCode.value) return
+  const seq = ++emailCodeRequestSeq
+  sendingEmailCode.value = true
+  emailBanner.value = ''
+  try {
+    const data = await post<ChangeEmailResponse>('/api/user/account/change-email', {
+      newEmail: normalizedNewEmail.value,
+    })
+    if (seq !== emailCodeRequestSeq || !data) return
+    emailCodeCooldown.start(60)
+    toast(t('common.verificationCode.sent'), 'success')
+  } finally {
+    if (seq === emailCodeRequestSeq) {
+      sendingEmailCode.value = false
+    }
+  }
+}
+
 async function submitEmailChange() {
-  if (emailLoading.value) return
-  if (!profile.value) return
+  if (emailLoading.value || !profile.value) return
   if (!normalizedNewEmail.value) {
     toast(t('account.email.validation.required'), 'warning')
     return
@@ -144,17 +189,35 @@ async function submitEmailChange() {
     toast(emailError.value, 'warning')
     return
   }
+  if (!emailCode.value.trim() || emailCodeError.value) {
+    toast(emailCodeError.value || t('common.verificationCode.invalid'), 'warning')
+    return
+  }
+  if (!emailCurrentPassword.value) {
+    toast(t('account.password.validation.required'), 'warning')
+    return
+  }
 
   emailLoading.value = true
   try {
-    const data = await post<MessageResponse>('/api/user/account/change-email', {
+    const data = await post<ChangeEmailResponse>('/api/user/account/confirm-email', {
       newEmail: normalizedNewEmail.value,
+      code: emailCode.value.trim(),
+      currentPassword: emailCurrentPassword.value,
     })
     if (!data) return
 
+    if (data.user) {
+      profile.value = data.user
+    } else {
+      await loadProfile()
+    }
     emailBanner.value = t('account.email.success')
     toast(emailBanner.value, 'success')
     newEmail.value = ''
+    emailCode.value = ''
+    emailCurrentPassword.value = ''
+    emailCodeCooldown.reset()
   } finally {
     emailLoading.value = false
   }
@@ -253,6 +316,17 @@ onMounted(loadProfile)
       </SectionHeader>
 
       <form class="account-form" @submit.prevent="submitEmailChange">
+        <input
+          :value="profile?.username ?? ''"
+          type="text"
+          name="username"
+          autocomplete="username"
+          class="account-form__sr-only"
+          tabindex="-1"
+          aria-hidden="true"
+          readonly
+        />
+
         <AlertBanner v-if="emailBanner" tone="success" icon="check_circle">
           {{ emailBanner }}
         </AlertBanner>
@@ -268,6 +342,36 @@ onMounted(loadProfile)
             type="email"
             :placeholder="t('account.email.placeholder')"
             autocomplete="email"
+            :disabled="emailLoading || sendingEmailCode"
+          />
+        </FormField>
+
+        <FormField
+          :label="t('common.verificationCode.label')"
+          layout="horizontal"
+          bordered
+          :error="emailCodeError || undefined"
+        >
+          <VerificationCodeInput
+            v-model="emailCode"
+            :disabled="emailLoading"
+            :sending="sendingEmailCode"
+            :can-send="canSendEmailCode"
+            :cooldown-seconds="emailCodeCooldown.remaining.value"
+            @send="sendEmailChangeCode"
+          />
+        </FormField>
+
+        <FormField
+          :label="t('account.email.currentPassword')"
+          layout="horizontal"
+          bordered
+        >
+          <SecretInput
+            v-model="emailCurrentPassword"
+            :placeholder="t('account.password.currentPlaceholder')"
+            :is-password="true"
+            autocomplete="current-password"
           />
         </FormField>
 
@@ -309,6 +413,7 @@ onMounted(loadProfile)
         <FormField :label="t('account.password.current')" layout="horizontal" bordered>
           <SecretInput
             v-model="currentPassword"
+            :placeholder="t('account.password.currentPlaceholder')"
             :is-password="true"
             autocomplete="current-password"
           />
@@ -322,6 +427,7 @@ onMounted(loadProfile)
         >
           <SecretInput
             v-model="newPassword"
+            :placeholder="t('account.password.newPlaceholder')"
             :is-password="true"
             autocomplete="new-password"
           />
@@ -335,6 +441,7 @@ onMounted(loadProfile)
         >
           <SecretInput
             v-model="confirmPassword"
+            :placeholder="t('account.password.confirmPlaceholder')"
             :is-password="true"
             autocomplete="new-password"
           />

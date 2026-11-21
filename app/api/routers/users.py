@@ -396,12 +396,16 @@ async def update_user(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     if payload.password:
+        from app.services import verification_codes as code_svc
+
+        now = _utc_now()
         await db.execute(
             update(ManagerPasswordReset)
             .where(ManagerPasswordReset.user_id == user_id)
             .where(ManagerPasswordReset.used_at.is_(None))
-            .values(used_at=_utc_now())
+            .values(used_at=now)
         )
+        await code_svc.revoke_user_codes(db, user_id, now)
         await db.commit()
 
     await log_manager_activity(

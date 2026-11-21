@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.services.user.validation import NewPassword
+
 
 class UserListItem(BaseModel):
     id: int
@@ -45,7 +47,7 @@ class UpdateUserRequest(BaseModel):
     # Bcrypt has a 72-byte hard limit; the panel rejects longer passwords with
     # an opaque "invalid password" later in the flow. Min length matches the
     # public-registration / reset-password screens. (Audit M8.)
-    password: str | None = Field(default=None, min_length=8, max_length=72)
+    password: NewPassword | None = None
     language: str | None = None
     root_admin: bool | None = None
 

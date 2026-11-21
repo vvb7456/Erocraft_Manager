@@ -14,6 +14,7 @@ export interface ToastAPI {
 }
 
 const TOAST_KEY = Symbol('toast')
+const MAX_TOASTS = 3
 let _nextId = 0
 
 /**
@@ -22,11 +23,13 @@ let _nextId = 0
 export function provideToast(): ToastAPI {
   const items = reactive<ToastItem[]>([])
 
-  function toast(message: string, type: ToastItem['type'] = 'info', duration = 3000) {
+  function toast(message: string, type: ToastItem['type'] = 'info', duration?: number) {
+    const ms = duration ?? (type === 'error' || type === 'warning' ? 4500 : 3000)
     const id = ++_nextId
-    items.push({ id, message, type, duration })
-    if (duration > 0) {
-      setTimeout(() => remove(id), duration)
+    if (items.length >= MAX_TOASTS) items.shift()
+    items.push({ id, message, type, duration: ms })
+    if (ms > 0) {
+      setTimeout(() => remove(id), ms)
     }
   }
 

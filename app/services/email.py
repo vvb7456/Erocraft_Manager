@@ -185,6 +185,7 @@ _PREVIEW_DUMMY_VALUES: dict[str, str] = {
     "deletion_date": "2026-05-14",
     "password": "TempPass#123",
     "new_email": "new-preview@example.com",
+    "verification_code": "482916",
     "node_name": "node1-prod",
     "node_id": "1",
     "alert_type": "cpu_high",
@@ -229,9 +230,9 @@ _PREVIEW_ACTIONS: dict[str, tuple[str, str]] = {
     "expired": ("登录系统处理", "/#/servers"),
     "pre_delete": ("登录系统处理", "/"),
     "create_user": ("设置您的账户密码", "/#/reset-password?token=preview-token&email=preview@example.com"),
-    "password_reset": ("重置密码", "/#/reset-password?token=preview-token&email=preview@example.com"),
-    "email_change": ("确认更改", "/#/confirm-email?token=preview-token&uid=10001"),
-    "register_verify": ("验证邮箱并完成注册", "/#/verify-email?token=preview-token"),
+    "password_reset": ("", ""),
+    "email_change": ("", ""),
+    "register_verify": ("", ""),
     "alert_fired": ("查看监控面板", "/#/admin/dashboard"),
     "alert_resolved": ("查看监控面板", "/#/admin/dashboard"),
     "order_paid": ("查看服务器", "/#/servers"),
@@ -303,6 +304,11 @@ async def load_all_templates(db: AsyncSession) -> dict[str, EmailTemplate]:
     return {t: await load_template(db, t) for t in EMAIL_TEMPLATE_INTERNAL_KEYS}
 
 
+def load_all_default_templates() -> dict[str, EmailTemplate]:
+    """Load repository default JSON templates for all template types."""
+    return {t: _load_template_from_file(t) for t in EMAIL_TEMPLATE_INTERNAL_KEYS}
+
+
 # ── Template rendering ──
 
 def render_template_body(
@@ -339,7 +345,8 @@ def render_email_shell(
     main_content_raw: str,
     action_text: str | None = None,
     action_url: str | None = None,
-    theme: str = "light",
+    verification_code: str | None = None,
+    theme: str = "auto",
 ) -> str:
     main_content_html = main_content_raw.replace("\n", "<br>")
     template = _jinja_env.get_template("email_base.html")
@@ -351,9 +358,12 @@ def render_email_shell(
         main_content=main_content_html,
         action_text=action_text,
         action_url=action_url,
+        verification_code=verification_code,
         automated_notice=_AUTOMATED_NOTICE,
         current_year=datetime.now().year,
         colors=colors,
+        dark_colors=_EMAIL_THEME_COLORS["dark"],
+        theme=theme,
     )
 
 
@@ -432,8 +442,6 @@ async def build_template_preview(
         **_PREVIEW_DUMMY_VALUES,
         **{k: format_in_timezone(v, tz_name) or "" for k, v in _PREVIEW_SAMPLE_DATETIMES.items()},
         "reset_url": f"{site_url}/#/reset-password?token=preview-token&email=preview@example.com",
-        "confirm_url": f"{site_url}/#/confirm-email?token=preview-token&uid=10001",
-        "verify_url": f"{site_url}/#/verify-email?token=preview-token",
     }
     rendered_subject, rendered_body = render_template_body(
         EmailTemplate(subject=subject, body=body),
@@ -442,13 +450,20 @@ async def build_template_preview(
 
     action_text, action_path = _PREVIEW_ACTIONS[internal_key]
     action_url = f"{site_url}{action_path}" if action_path.startswith("/") else action_path
+    verification_code = (
+        _PREVIEW_DUMMY_VALUES["verification_code"]
+        if internal_key in ("register_verify", "password_reset", "email_change")
+        else None
+    )
+    greeting = "您好！" if internal_key == "register_verify" else "您好，preview_user！"
     html_body = render_email_shell(
         panel_name=brand_name,
         panel_url=site_url,
-        greeting="您好，preview_user！",
+        greeting=greeting,
         main_content_raw=rendered_body,
-        action_text=action_text,
-        action_url=action_url,
+        action_text=action_text or None,
+        action_url=action_url or None,
+        verification_code=verification_code,
         theme=theme,
     )
     return rendered_subject, html_body
@@ -563,11 +578,17 @@ class EmailClient:
         greeting: str,
         action_text: str | None = None,
         action_url: str | None = None,
+        verification_code: str | None = None,
     ) -> tuple[bool, str | None]:
+        audit_subject = (
+            subject.replace(verification_code, "[REDACTED]")
+            if subject and verification_code
+            else subject
+        )
         if not self._configured:
             err = "SMTP 配置不完整（主机、端口、密码、发件人地址），请检查系统设置。"
             logger.error(err)
-            await self._audit(recipient_email, subject, ok=False, err=err)
+            await self._audit(recipient_email, audit_subject, ok=False, err=err)
             return False, err
 
         html_body = render_email_shell(
@@ -577,6 +598,8 @@ class EmailClient:
             main_content_raw=main_content_raw,
             action_text=action_text,
             action_url=action_url,
+            verification_code=verification_code,
+            theme="auto",
         )
         mime = MIMEText(html_body, "html", "utf-8")
         mime["From"] = formataddr((Header(self._brand_name, "utf-8").encode(), self._sender_email))
@@ -602,7 +625,7 @@ class EmailClient:
                     logger.info("邮件在第 %d 次尝试后发送成功 to %s", attempt + 1, recipient_email)
                 else:
                     logger.info("邮件已成功发送至 %s", recipient_email)
-                await self._audit(recipient_email, subject, ok=True, err=None)
+                await self._audit(recipient_email, audit_subject, ok=True, err=None)
                 return True, None
             except _RETRYABLE_SMTP_EXC as exc:
                 last_err = exc
@@ -618,11 +641,11 @@ class EmailClient:
                     await asyncio.sleep(backoff)
                     continue
                 logger.error("邮件发送失败 (重试已用尽) to %s: %s", recipient_email, exc, exc_info=True)
-                await self._audit(recipient_email, subject, ok=False, err=str(exc))
+                await self._audit(recipient_email, audit_subject, ok=False, err=str(exc))
                 return False, str(exc)
             except Exception as exc:  # noqa: BLE001 - non-retryable: auth, refused, etc
                 logger.error("邮件发送失败 to %s: %s", recipient_email, exc, exc_info=True)
-                await self._audit(recipient_email, subject, ok=False, err=str(exc))
+                await self._audit(recipient_email, audit_subject, ok=False, err=str(exc))
                 return False, str(exc)
 
         return False, str(last_err) if last_err else "unknown error"
@@ -662,6 +685,7 @@ async def send_email(
     greeting: str,
     action_text: str | None = None,
     action_url: str | None = None,
+    verification_code: str | None = None,
     actor: str = "system",
 ) -> tuple[bool, str | None]:
     """Single-shot send. For batch sending, prefer ``EmailClient`` directly."""
@@ -675,6 +699,7 @@ async def send_email(
             greeting=greeting,
             action_text=action_text,
             action_url=action_url,
+            verification_code=verification_code,
         )
 
 

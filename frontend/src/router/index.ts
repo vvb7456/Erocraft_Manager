@@ -47,22 +47,10 @@ const router = createRouter({
       meta: { public: true, layout: 'blank' },
     },
     {
-      path: '/confirm-email',
-      name: 'confirm-email',
-      component: () => import('@/pages/ConfirmEmailPage.vue'),
-      meta: { public: true, layout: 'blank' },
-    },
-    {
       path: '/register',
       name: 'register',
       component: () => import('@/pages/LoadingPage.vue'),
       meta: { authEntry: 'register', layout: 'blank' },
-    },
-    {
-      path: '/verify-email',
-      name: 'verify-email',
-      component: () => import('@/pages/VerifyEmailPage.vue'),
-      meta: { public: true, layout: 'blank' },
     },
     {
       path: '/ToS',

@@ -10,9 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utc_naive_now
 from app.db.models.manager import (
-    ManagerEmailChange,
+    ManagerEmailVerificationCode,
     ManagerPasswordReset,
-    ManagerPendingRegistration,
 )
 from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
 from app.db.models.miniprogram import MiniProgramSession
@@ -84,27 +83,21 @@ async def run_token_cleanup() -> None:
         from app.core.settings_store import get_settings_store
         metrics_cutoff = utc_naive_now() - timedelta(days=int(await get_settings_store().get(db, "MONITOR_RETENTION_DAYS", 30)))
         try:
-            res_reg = await db.execute(
-                delete(ManagerPendingRegistration).where(
-                    ManagerPendingRegistration.created_at < cutoff
-                )
-            )
             res_pwd = await db.execute(
                 delete(ManagerPasswordReset).where(
                     ManagerPasswordReset.created_at < cutoff
                 )
             )
-            res_eml = await db.execute(
-                delete(ManagerEmailChange).where(
-                    ManagerEmailChange.created_at < cutoff
+            res_code = await db.execute(
+                delete(ManagerEmailVerificationCode).where(
+                    ManagerEmailVerificationCode.created_at < cutoff
                 )
             )
             await db.commit()
             logger.info(
-                "token cleanup: deleted %s pending registrations, %s password resets, %s email changes",
-                res_reg.rowcount,
+                "token cleanup: deleted %s password resets, %s verification codes",
                 res_pwd.rowcount,
-                res_eml.rowcount,
+                res_code.rowcount,
             )
             await db.execute(delete(MiniProgramSession).where(MiniProgramSession.expires_at < utc_naive_now()))
             await db.execute(delete(NotificationDelivery).where(

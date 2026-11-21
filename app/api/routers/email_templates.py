@@ -25,6 +25,7 @@ from app.services.audit import log_manager_activity
 from app.services.email import (
     EMAIL_TEMPLATE_API_TO_INTERNAL,
     build_template_preview,
+    load_all_default_templates,
     load_all_templates,
     save_template,
     send_test_email,
@@ -38,10 +39,35 @@ async def get_email_templates(
     db: AsyncSession = Depends(get_db),
 ) -> EmailTemplatesResponse:
     templates = await load_all_templates(db)
+    default_templates = load_all_default_templates()
 
     def _payload(internal_key: str) -> EmailTemplatePayload:
         t = templates[internal_key]
         return EmailTemplatePayload(subject=t.subject, body=t.body)
+
+    def _default_payload(internal_key: str) -> EmailTemplatePayload:
+        t = default_templates[internal_key]
+        return EmailTemplatePayload(subject=t.subject, body=t.body)
+
+    api_key_map = {
+        "bulk": "bulk",
+        "reminder": "reminder",
+        "expired": "expired",
+        "preDelete": "pre_delete",
+        "createUser": "create_user",
+        "passwordReset": "password_reset",
+        "emailChange": "email_change",
+        "registerVerify": "register_verify",
+        "alertFired": "alert_fired",
+        "alertResolved": "alert_resolved",
+        "orderPaid": "order_paid",
+        "orderApplyFailed": "order_apply_failed",
+        "orderApplyAlert": "order_apply_alert",
+        "orderRefunded": "order_refunded",
+        "serverInstalled": "server_installed",
+        "referralInviterRewarded": "referral_inviter_rewarded",
+        "referralInviteeRewarded": "referral_invitee_rewarded",
+    }
 
     return EmailTemplatesResponse(
         bulk=_payload("bulk"),
@@ -61,6 +87,7 @@ async def get_email_templates(
         serverInstalled=_payload("server_installed"),
         referralInviterRewarded=_payload("referral_inviter_rewarded"),
         referralInviteeRewarded=_payload("referral_invitee_rewarded"),
+        defaults={api_key: _default_payload(internal_key) for api_key, internal_key in api_key_map.items()},
     )
 
 

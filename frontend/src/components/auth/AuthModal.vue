@@ -6,7 +6,14 @@ import { switchLanguage } from '@/i18n/vue-i18n'
 import { backendToFrontendLocale } from '@/i18n/locale-map'
 import { useAppStore } from '@/stores/app'
 import { apiErrorMessage, fetchApi } from '@/composables/apiClient'
-import { isValidUsername } from '@/utils/username'
+import { useToast } from '@/composables/useToast'
+import { useCodeCooldown } from '@/composables/useCodeCooldown'
+import {
+  isValidEmail,
+  isValidUsername,
+  isValidVerificationCode,
+  passwordErrorKey,
+} from '@/utils/username'
 import {
   resolvePostAuthRoute,
   resolveSafeRedirect,
@@ -18,6 +25,7 @@ import AuthBrandHeader from '@/components/auth/AuthBrandHeader.vue'
 import AuthStatusView from '@/components/auth/AuthStatusView.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
+import VerificationCodeInput from '@/components/form/VerificationCodeInput.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import FormField from '@/components/form/FormField.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
@@ -30,6 +38,7 @@ defineOptions({ name: 'AuthModal' })
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n({ useScope: 'global' })
+const { toast } = useToast()
 const app = useAppStore()
 const { open, mode, inviteCode, switchMode, closeAuth, consumeSuccessHandler } = useAuthModal()
 
@@ -49,6 +58,10 @@ const mouseDownOnOverlay = ref(false)
 const bodyScrolled = ref(false)
 
 const loading = ref(false)
+const sendingCode = ref(false)
+const codeCooldown = useCodeCooldown(60)
+let codeRequestSeq = 0
+
 const allowRegistration = computed(() => app.branding.allowRegistration)
 const registrationDisabled = computed(() => app.brandingLoaded && !app.branding.allowRegistration)
 const agreementsDefaultChecked = computed(() => app.branding.agreementsDefaultChecked)
@@ -61,6 +74,7 @@ const loginError = ref('')
 // Register state
 const regUsername = ref('')
 const regEmail = ref('')
+const regCode = ref('')
 const regPassword = ref('')
 const regConfirmPassword = ref('')
 const inviteExpanded = ref(false)
@@ -68,32 +82,29 @@ const inviteState = ref<'idle' | 'checking' | 'valid' | 'invalid'>('idle')
 let inviteTimer: ReturnType<typeof setTimeout> | null = null
 let inviteAbort: AbortController | null = null
 const regError = ref('')
-const regSuccess = ref('')
 const acceptedAgreements = ref<{ agreement_id: number; version: number }[]>([])
 const allAgreementsAccepted = ref(false)
 
-// Forgot-password state
+// Forgot-password state (same-page reset with 6-digit code)
 const forgotEmail = ref('')
+const forgotCode = ref('')
+const forgotNewPassword = ref('')
+const forgotConfirmPassword = ref('')
 const forgotError = ref('')
-const forgotSuccess = ref('')
-const sentTargetEmail = ref('')
+const forgotDone = ref(false)
 
 const isStatusOnly = computed(
-  () => (mode.value === 'register' && (!!regSuccess.value || registrationDisabled.value))
-    || (mode.value === 'forgot-password' && !!forgotSuccess.value),
+  () => (mode.value === 'register' && registrationDisabled.value)
+    || (mode.value === 'forgot-password' && forgotDone.value),
 )
 
 const showTopBack = computed(
-  () => !isStatusOnly.value && (mode.value === 'register' || mode.value === 'forgot-password'),
-)
-
-const topBackLabel = computed(() =>
-  mode.value === 'register' ? t('register.back_link') : t('forgotPassword.back'),
+  () => !isStatusOnly.value && mode.value === 'forgot-password',
 )
 
 const brandIcon = computed(() => {
   if (mode.value === 'register') return 'person_add'
-  if (mode.value === 'forgot-password') return 'mail'
+  if (mode.value === 'forgot-password') return 'key'
   return 'dns'
 })
 
@@ -118,15 +129,16 @@ const usernameError = computed(() => {
 const emailError = computed(() => {
   const v = regEmail.value.trim()
   if (!v) return ''
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) {
-    return t('register.error.email_format')
-  }
-  return ''
+  return isValidEmail(v) ? '' : t('register.error.email_format')
+})
+const regCodeError = computed(() => {
+  const v = regCode.value.trim()
+  if (!v) return ''
+  return isValidVerificationCode(v) ? '' : t('common.verificationCode.invalid')
 })
 const passwordError = computed(() => {
-  if (!regPassword.value) return ''
-  if (regPassword.value.length < 8) return t('register.error.length')
-  return ''
+  const kind = passwordErrorKey(regPassword.value)
+  return kind ? t(`common.passwordValidation.${kind}`) : ''
 })
 const confirmPasswordError = computed(() => {
   if (!regConfirmPassword.value) return ''
@@ -134,28 +146,83 @@ const confirmPasswordError = computed(() => {
   return ''
 })
 
+const forgotEmailError = computed(() => {
+  const v = forgotEmail.value.trim()
+  if (!v) return ''
+  return isValidEmail(v) ? '' : t('register.error.email_format')
+})
+const forgotCodeError = computed(() => {
+  const v = forgotCode.value.trim()
+  if (!v) return ''
+  return isValidVerificationCode(v) ? '' : t('common.verificationCode.invalid')
+})
+const forgotPasswordError = computed(() => {
+  const kind = passwordErrorKey(forgotNewPassword.value)
+  return kind ? t(`common.passwordValidation.${kind}`) : ''
+})
+const forgotConfirmPasswordError = computed(() => {
+  if (!forgotConfirmPassword.value) return ''
+  if (forgotConfirmPassword.value !== forgotNewPassword.value) return t('forgotPassword.error.mismatch')
+  return ''
+})
+
+const canSendRegCode = computed(() =>
+  !loading.value
+  && !sendingCode.value
+  && codeCooldown.remaining.value === 0
+  && !registrationDisabled.value
+  && !!regEmail.value.trim()
+  && !emailError.value,
+)
+
+const canSendForgotCode = computed(() =>
+  !loading.value
+  && !sendingCode.value
+  && codeCooldown.remaining.value === 0
+  && !!forgotEmail.value.trim()
+  && !forgotEmailError.value,
+)
+
 const canSubmitRegister = computed(() =>
   !registrationDisabled.value
-  && !regSuccess.value
   && !!regUsername.value.trim()
   && !!regEmail.value.trim()
+  && !!regCode.value.trim()
   && !!regPassword.value
   && !!regConfirmPassword.value
   && !usernameError.value
   && !emailError.value
+  && !regCodeError.value
   && !passwordError.value
   && !confirmPasswordError.value
   && allAgreementsAccepted.value
   && !loading.value,
 )
 
+const canSubmitForgot = computed(() =>
+  !forgotDone.value
+  && !!forgotEmail.value.trim()
+  && !!forgotCode.value.trim()
+  && !!forgotNewPassword.value
+  && !!forgotConfirmPassword.value
+  && !forgotEmailError.value
+  && !forgotCodeError.value
+  && !forgotPasswordError.value
+  && !forgotConfirmPasswordError.value
+  && !loading.value,
+)
+
+function resetCodeState() {
+  codeRequestSeq += 1
+  sendingCode.value = false
+  codeCooldown.reset()
+}
+
 function clearMessages() {
   loginError.value = ''
   regError.value = ''
-  regSuccess.value = ''
   forgotError.value = ''
-  forgotSuccess.value = ''
-  sentTargetEmail.value = ''
+  forgotDone.value = false
 }
 
 function clearInviteCheck() {
@@ -245,9 +312,14 @@ watch(open, (isOpen) => {
       hasBodyLock.value = false
     }
     bodyScrolled.value = false
+    resetCodeState()
     loginPassword.value = ''
+    regCode.value = ''
     regPassword.value = ''
     regConfirmPassword.value = ''
+    forgotCode.value = ''
+    forgotNewPassword.value = ''
+    forgotConfirmPassword.value = ''
     acceptedAgreements.value = []
     allAgreementsAccepted.value = false
     if (!inviteCode.value.trim()) {
@@ -267,7 +339,12 @@ watch(
 )
 
 watch(mode, (nextMode) => {
+  resetCodeState()
   clearMessages()
+  regCode.value = ''
+  forgotCode.value = ''
+  forgotNewPassword.value = ''
+  forgotConfirmPassword.value = ''
   if (open.value && nextMode === 'register') {
     if (inviteCode.value.trim()) inviteExpanded.value = true
     scheduleInviteCheck(inviteCode.value)
@@ -280,13 +357,12 @@ watch(inviteCode, (value) => {
   scheduleInviteCheck(value)
 })
 
-watch([regUsername, regEmail, regPassword, regConfirmPassword], () => {
-  if (!regSuccess.value) regError.value = ''
+watch([regUsername, regEmail, regCode, regPassword, regConfirmPassword], () => {
+  regError.value = ''
 })
 
-watch(forgotEmail, () => {
-  forgotError.value = ''
-  forgotSuccess.value = ''
+watch([forgotEmail, forgotCode, forgotNewPassword, forgotConfirmPassword], () => {
+  if (!forgotDone.value) forgotError.value = ''
 })
 
 onBeforeUnmount(() => {
@@ -313,6 +389,81 @@ function goMode(target: AuthMode) {
   })
 }
 
+async function finishAuthSuccess(data: {
+  ok: boolean
+  username: string
+  is_admin: boolean
+  has_owned_server: boolean
+  language: string
+}) {
+  const { redirect, onSuccess } = consumeSuccessHandler()
+  app.setSessionUser(data)
+  switchLanguage(backendToFrontendLocale(data.language))
+  if (onSuccess) {
+    onSuccess()
+    return
+  }
+  const safeRedirect = resolveSafeRedirect(router, redirect)
+  if (safeRedirect) {
+    await router.push(safeRedirect)
+    return
+  }
+  const target = resolvePostAuthRoute(data)
+  if (router.currentRoute.value.name !== target.name) {
+    await router.push(target)
+  }
+}
+
+async function sendRegisterCode() {
+  if (!canSendRegCode.value) return
+  const seq = ++codeRequestSeq
+  const cleanEmail = regEmail.value.trim().toLowerCase()
+  sendingCode.value = true
+  regError.value = ''
+  try {
+    await fetchApi('/api/register/code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail }),
+    })
+    if (seq !== codeRequestSeq) return
+    codeCooldown.start(60)
+    toast(t('common.verificationCode.sent'), 'success')
+  } catch (failure) {
+    if (seq !== codeRequestSeq) return
+    regError.value = apiErrorMessage(failure)
+  } finally {
+    if (seq === codeRequestSeq) {
+      sendingCode.value = false
+    }
+  }
+}
+
+async function sendForgotCode() {
+  if (!canSendForgotCode.value) return
+  const seq = ++codeRequestSeq
+  const cleanEmail = forgotEmail.value.trim().toLowerCase()
+  sendingCode.value = true
+  forgotError.value = ''
+  try {
+    await fetchApi('/api/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail }),
+    })
+    if (seq !== codeRequestSeq) return
+    codeCooldown.start(60)
+    toast(t('common.verificationCode.resetSent'), 'success')
+  } catch (failure) {
+    if (seq !== codeRequestSeq) return
+    forgotError.value = apiErrorMessage(failure)
+  } finally {
+    if (seq === codeRequestSeq) {
+      sendingCode.value = false
+    }
+  }
+}
+
 async function handleLogin() {
   if (loading.value) return
   loginError.value = ''
@@ -335,22 +486,7 @@ async function handleLogin() {
     const data = await res.json()
 
     if (res.ok && data.ok) {
-      const { redirect, onSuccess } = consumeSuccessHandler()
-      app.setSessionUser(data)
-      switchLanguage(backendToFrontendLocale(data.language))
-      if (onSuccess) {
-        onSuccess()
-        return
-      }
-      const safeRedirect = resolveSafeRedirect(router, redirect)
-      if (safeRedirect) {
-        await router.push(safeRedirect)
-        return
-      }
-      const target = resolvePostAuthRoute(data)
-      if (router.currentRoute.value.name !== target.name) {
-        await router.push(target)
-      }
+      await finishAuthSuccess(data)
     } else {
       loginError.value = t('login.error.invalid')
     }
@@ -365,35 +501,46 @@ async function handleRegister() {
   if (loading.value) return
   regError.value = ''
   const username = regUsername.value.trim()
-  const email = regEmail.value.trim()
-  if (!username || !email || !regPassword.value || !regConfirmPassword.value) {
+  const email = regEmail.value.trim().toLowerCase()
+  const code = regCode.value.trim()
+  if (!username || !email || !code || !regPassword.value || !regConfirmPassword.value) {
     regError.value = t('register.error.empty')
     return
   }
   if (usernameError.value) { regError.value = usernameError.value; return }
   if (emailError.value) { regError.value = emailError.value; return }
+  if (regCodeError.value) { regError.value = regCodeError.value; return }
   if (passwordError.value) { regError.value = passwordError.value; return }
   if (confirmPasswordError.value) { regError.value = confirmPasswordError.value; return }
 
   loading.value = true
   try {
-    await fetchApi('/api/register', {
+    const res = await fetchApi('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
         username,
+        code,
         password: regPassword.value,
         ...(inviteCode.value.trim() ? { invite_code: inviteCode.value.trim().toUpperCase() } : {}),
         accepted_agreements: acceptedAgreements.value,
       }),
     })
-    sentTargetEmail.value = email
-    regSuccess.value = t('register.success')
+    const result = await res.json() as { auto_login?: boolean; username?: string; is_admin?: boolean }
+    regCode.value = ''
     regPassword.value = ''
     regConfirmPassword.value = ''
-    bodyScrolled.value = false
-    nextTick(() => { bodyRef.value?.scrollTo({ top: 0 }) })
+    resetCodeState()
+
+    if (result.auto_login) {
+      const meRes = await fetchApi('/api/me')
+      const meData = await meRes.json()
+      toast(t('register.success_toast'), 'success')
+      await finishAuthSuccess(meData)
+      return
+    }
+    goMode('login')
   } catch (failure) {
     regError.value = apiErrorMessage(failure)
   } finally {
@@ -404,25 +551,36 @@ async function handleRegister() {
 async function handleForgotPassword() {
   if (loading.value) return
   forgotError.value = ''
-  forgotSuccess.value = ''
 
-  if (!forgotEmail.value.trim()) {
+  const email = forgotEmail.value.trim().toLowerCase()
+  const code = forgotCode.value.trim()
+  if (!email || !code || !forgotNewPassword.value || !forgotConfirmPassword.value) {
     forgotError.value = t('forgotPassword.error.empty')
     return
   }
+  if (forgotEmailError.value) { forgotError.value = forgotEmailError.value; return }
+  if (forgotCodeError.value) { forgotError.value = forgotCodeError.value; return }
+  if (forgotPasswordError.value) { forgotError.value = forgotPasswordError.value; return }
+  if (forgotConfirmPasswordError.value) { forgotError.value = forgotConfirmPasswordError.value; return }
 
   loading.value = true
   try {
-    const email = forgotEmail.value.trim()
-    await fetchApi('/api/forgot-password', {
+    await fetchApi('/api/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
+        code,
+        newPassword: forgotNewPassword.value,
       }),
     })
-    sentTargetEmail.value = email
-    forgotSuccess.value = t('forgotPassword.success')
+    forgotCode.value = ''
+    forgotNewPassword.value = ''
+    forgotConfirmPassword.value = ''
+    resetCodeState()
+    forgotDone.value = true
+    bodyScrolled.value = false
+    nextTick(() => { bodyRef.value?.scrollTo({ top: 0 }) })
   } catch (failure) {
     forgotError.value = apiErrorMessage(failure)
   } finally {
@@ -465,7 +623,7 @@ function handleSubmit() {
               @click="goMode('login')"
             >
               <MsIcon name="arrow_back" size="sm" />
-              <span>{{ topBackLabel }}</span>
+              <span>{{ t('forgotPassword.back') }}</span>
             </button>
             <button
               type="button"
@@ -486,7 +644,7 @@ function handleSubmit() {
                 heading-tag="h2"
               />
 
-              <!-- ── Status Views (Mail Sent / Registration Closed) ── -->
+              <!-- ── Status Views (Registration Closed / Password Reset Done) ── -->
               <AuthStatusView
                 v-if="mode === 'register' && registrationDisabled"
                 tone="warning"
@@ -502,30 +660,14 @@ function handleSubmit() {
               </AuthStatusView>
 
               <AuthStatusView
-                v-else-if="mode === 'register' && regSuccess"
+                v-else-if="mode === 'forgot-password' && forgotDone"
                 tone="success"
-                icon="mark_email_read"
-                :title="t('register.success_title')"
-                :email="sentTargetEmail"
-                :description="regSuccess"
-              >
-                <template #actions>
-                  <BaseButton variant="default" size="lg" @click="goMode('login')">
-                    {{ t('register.back_link') }}
-                  </BaseButton>
-                </template>
-              </AuthStatusView>
-
-              <AuthStatusView
-                v-else-if="mode === 'forgot-password' && forgotSuccess"
-                tone="success"
-                icon="mark_email_read"
+                icon="check_circle"
                 :title="t('forgotPassword.success_title')"
-                :email="sentTargetEmail"
-                :description="forgotSuccess"
+                :description="t('forgotPassword.success')"
               >
                 <template #actions>
-                  <BaseButton variant="default" size="lg" @click="goMode('login')">
+                  <BaseButton variant="primary" size="lg" @click="goMode('login')">
                     {{ t('forgotPassword.back') }}
                   </BaseButton>
                 </template>
@@ -612,6 +754,18 @@ function handleSubmit() {
                       type="email"
                       :placeholder="t('register.email_placeholder')"
                       autocomplete="email"
+                      :disabled="loading || sendingCode"
+                    />
+                  </FormField>
+
+                  <FormField :label="t('common.verificationCode.label')" :error="regCodeError || undefined">
+                    <VerificationCodeInput
+                      v-model="regCode"
+                      :disabled="loading"
+                      :sending="sendingCode"
+                      :can-send="canSendRegCode"
+                      :cooldown-seconds="codeCooldown.remaining.value"
+                      @send="sendRegisterCode"
                     />
                   </FormField>
 
@@ -716,12 +870,42 @@ function handleSubmit() {
                     {{ forgotError }}
                   </AlertBanner>
 
-                  <FormField :label="t('forgotPassword.email')">
+                  <FormField :label="t('forgotPassword.email')" :error="forgotEmailError || undefined">
                     <BaseInput
                       v-model="forgotEmail"
                       type="email"
                       :placeholder="t('forgotPassword.email_placeholder')"
                       autocomplete="email"
+                      :disabled="loading || sendingCode"
+                    />
+                  </FormField>
+
+                  <FormField :label="t('common.verificationCode.label')" :error="forgotCodeError || undefined">
+                    <VerificationCodeInput
+                      v-model="forgotCode"
+                      :disabled="loading"
+                      :sending="sendingCode"
+                      :can-send="canSendForgotCode"
+                      :cooldown-seconds="codeCooldown.remaining.value"
+                      @send="sendForgotCode"
+                    />
+                  </FormField>
+
+                  <FormField :label="t('forgotPassword.newPassword')" :error="forgotPasswordError || undefined">
+                    <SecretInput
+                      v-model="forgotNewPassword"
+                      :placeholder="t('forgotPassword.newPassword_placeholder')"
+                      :is-password="true"
+                      autocomplete="new-password"
+                    />
+                  </FormField>
+
+                  <FormField :label="t('forgotPassword.confirmPassword')" :error="forgotConfirmPasswordError || undefined">
+                    <SecretInput
+                      v-model="forgotConfirmPassword"
+                      :placeholder="t('forgotPassword.confirmPassword_placeholder')"
+                      :is-password="true"
+                      autocomplete="new-password"
                     />
                   </FormField>
 
@@ -729,12 +913,12 @@ function handleSubmit() {
                     type="submit"
                     variant="primary"
                     size="lg"
-                    :disabled="loading"
+                    :disabled="!canSubmitForgot"
                     class="auth-submit-btn"
                   >
                     <Spinner v-if="loading" size="sm" />
                     <template v-else>
-                      <MsIcon name="mail" size="sm" />
+                      <MsIcon name="key" size="sm" />
                       {{ t('forgotPassword.submit') }}
                     </template>
                   </BaseButton>

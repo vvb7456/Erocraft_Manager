@@ -690,7 +690,7 @@
   },
   "register": {
     "inviteCodeLabel": "邀请码（选填）",
-    "inviteCodePlaceholder": "如有邀请码请在此填写",
+    "inviteCodePlaceholder": "请输入邀请码",
     "inviteValid": "邀请码有效",
     "inviteInvalid": "邀请码无效"
   },

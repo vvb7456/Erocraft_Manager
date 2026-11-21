@@ -5,6 +5,7 @@ import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useDirtyFormSection, useParentDirtyForm } from '@/composables/useDirtyForm'
 import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
 import BaseTextarea from '@/components/form/BaseTextarea.vue'
 import FormField from '@/components/form/FormField.vue'
@@ -24,9 +25,9 @@ const TEMPLATE_VARIABLES: Record<TemplateKey, string[]> = {
   expired: ['brand_name', 'username', 'server_count', 'expiration_date', 'server_list', 'grace_days', 'deletion_date'],
   preDelete: ['brand_name', 'username', 'server_name', 'server_id', 'deletion_date'],
   createUser: ['brand_name', 'username', 'email', 'password', 'reset_url'],
-  passwordReset: ['brand_name', 'username', 'email', 'reset_url'],
-  emailChange: ['brand_name', 'username', 'new_email', 'confirm_url'],
-  registerVerify: ['brand_name', 'username', 'email', 'verify_url'],
+  passwordReset: ['brand_name', 'username', 'email', 'verification_code'],
+  emailChange: ['brand_name', 'username', 'new_email', 'verification_code'],
+  registerVerify: ['brand_name', 'email', 'verification_code'],
   alertFired: ['brand_name', 'node_name', 'node_id', 'alert_type', 'alert_type_label', 'severity', 'severity_label', 'message', 'fired_at'],
   alertResolved: ['brand_name', 'node_name', 'node_id', 'alert_type', 'alert_type_label', 'message', 'fired_at', 'resolved_at'],
   orderPaid: ['brand_name', 'order_no', 'plan_name', 'period_count', 'total_days', 'total_yuan', 'currency_code', 'paid_at', 'applied_at', 'server_uuid'],
@@ -57,8 +58,16 @@ const all = ref<Record<TemplateKey, TemplateData>>(
 const savedAll = ref<Record<TemplateKey, TemplateData>>(
   Object.fromEntries(KEYS.map(k => [k, empty()])) as Record<TemplateKey, TemplateData>,
 )
+const defaultAll = ref<Record<TemplateKey, TemplateData>>(
+  Object.fromEntries(KEYS.map(k => [k, empty()])) as Record<TemplateKey, TemplateData>,
+)
 
 const isDirty = computed(() => KEYS.some(key => JSON.stringify(all.value[key]) !== JSON.stringify(savedAll.value[key])))
+const isDefault = computed(() => {
+  const cur = all.value[props.templateKey]
+  const def = defaultAll.value[props.templateKey]
+  return cur.subject === def.subject && cur.body === def.body
+})
 const vars = computed(() => TEMPLATE_VARIABLES[props.templateKey])
 
 // ── Variable chip actions ──
@@ -121,15 +130,28 @@ function discard() {
   for (const key of KEYS) all.value[key] = { ...savedAll.value[key] }
 }
 
+function restoreDefault() {
+  const def = defaultAll.value[props.templateKey]
+  if (!def.subject && !def.body) return
+  all.value[props.templateKey] = { ...def }
+}
+
 const dirtyForm = useParentDirtyForm()
 useDirtyFormSection({ name: 'email-templates', isDirty, save, discard }, dirtyForm)
 
+interface EmailTemplatesApiResponse extends Record<string, TemplateData | Record<string, TemplateData> | undefined> {
+  defaults?: Record<string, TemplateData>
+}
+
 async function loadData() {
-  const data = await get<Record<string, TemplateData>>('/api/admin/email-templates').finally(() => { loading.value = false })
+  const data = await get<EmailTemplatesApiResponse>('/api/admin/email-templates').finally(() => { loading.value = false })
   if (data) {
     for (const k of KEYS) {
-      const d = { subject: data[k]?.subject ?? '', body: data[k]?.body ?? '' }
+      const entry = data[k] as TemplateData | undefined
+      const d = { subject: entry?.subject ?? '', body: entry?.body ?? '' }
       all.value[k] = { ...d }; savedAll.value[k] = { ...d }
+      const defEntry = data.defaults?.[k]
+      defaultAll.value[k] = { subject: defEntry?.subject ?? d.subject, body: defEntry?.body ?? d.body }
     }
   }
   schedulePreview()
@@ -148,7 +170,17 @@ onBeforeUnmount(() => { previewReqId++; if (previewTimer) clearTimeout(previewTi
     <LoadingCenter v-if="loading" />
 
     <div v-else>
-      <h3 class="template-title">{{ t(`emailTemplates.${templateKey}.title`) }}</h3>
+      <div class="template-header">
+        <h3 class="template-title">{{ t(`emailTemplates.${templateKey}.title`) }}</h3>
+        <BaseButton
+          variant="ghost"
+          size="sm"
+          :disabled="dirtyForm.saving.value || isDefault"
+          @click="restoreDefault"
+        >
+          {{ t('emailTemplates.restoreDefault') }}
+        </BaseButton>
+      </div>
       <div class="tpl-workspace" :inert="dirtyForm.saving.value">
         <!-- Left: editor -->
         <section class="tpl-col">
@@ -206,6 +238,13 @@ onBeforeUnmount(() => { previewReqId++; if (previewTimer) clearTimeout(previewTi
 </template>
 
 <style scoped>
+.template-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
 .template-title { font-size: var(--text-md); font-weight: 600; margin: 0; }
 /* Two-column workspace */
 .tpl-workspace {

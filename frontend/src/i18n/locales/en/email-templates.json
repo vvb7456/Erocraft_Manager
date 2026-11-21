@@ -1,5 +1,6 @@
 {
   "saved": "Template saved",
+  "restoreDefault": "Restore default template",
   "preview": "Live Preview",
   "previewEmpty": "No preview available",
   "subject": "Email Subject",
@@ -70,9 +71,8 @@
     "deletion_date": "Deletion Date",
     "password": "Initial Password",
     "new_email": "New Email Address",
-    "reset_url": "Password Reset Link",
-    "confirm_url": "Email Confirmation Link",
-    "verify_url": "Email Verification Link",
+    "verification_code": "Verification Code",
+    "reset_url": "Password Setup Link",
     "node_name": "Node Name",
     "node_id": "Node ID",
     "alert_type": "Alert Type Key",

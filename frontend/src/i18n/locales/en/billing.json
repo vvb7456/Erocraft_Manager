@@ -690,7 +690,7 @@
   },
   "register": {
     "inviteCodeLabel": "Invite code (optional)",
-    "inviteCodePlaceholder": "Enter an invite code if you have one",
+    "inviteCodePlaceholder": "Enter invite code",
     "inviteValid": "Invite code is valid",
     "inviteInvalid": "Invalid invite code"
   },

@@ -1,5 +1,6 @@
 {
   "saved": "模板已保存",
+  "restoreDefault": "恢复默认模板",
   "preview": "实时预览",
   "previewEmpty": "暂无预览内容",
   "subject": "邮件主题",
@@ -70,9 +71,8 @@
     "deletion_date": "删除日期",
     "password": "初始密码",
     "new_email": "新邮箱地址",
-    "reset_url": "密码重置链接",
-    "confirm_url": "邮箱确认链接",
-    "verify_url": "邮箱验证链接",
+    "verification_code": "验证码",
+    "reset_url": "密码设置链接",
     "node_name": "节点名称",
     "node_id": "节点 ID",
     "alert_type": "告警类型键",

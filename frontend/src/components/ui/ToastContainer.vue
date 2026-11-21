@@ -4,7 +4,7 @@ import MsIcon from './MsIcon.vue'
 
 defineOptions({ name: 'ToastContainer' })
 
-const { items, remove } = useToast()
+const { items } = useToast()
 
 const iconMap: Record<string, string> = {
   success: 'check_circle',
@@ -41,25 +41,25 @@ const iconMap: Record<string, string> = {
 
 .cc-toast {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--sp-2);
   padding: 10px var(--sp-4);
   border-radius: var(--r);
   font-size: var(--text-sm);
+  line-height: 1.45;
   background: var(--bg2);
   border: 1px solid var(--bd);
   box-shadow: var(--sh);
   pointer-events: auto;
-  max-width: 420px;
-  white-space: nowrap;
+  max-width: min(420px, calc(100vw - 32px));
 }
 .cc-toast--success { border-color: var(--green); color: var(--green); }
 .cc-toast--error   { border-color: var(--red); color: var(--red); }
 .cc-toast--warning { border-color: var(--amber); color: var(--amber); }
 .cc-toast--info    { color: var(--t1); }
 
-.cc-toast__icon { flex-shrink: 0; }
-.cc-toast__msg  { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cc-toast__icon { flex-shrink: 0; margin-top: 1px; }
+.cc-toast__msg  { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; }
 
 /* TransitionGroup animation */
 .cc-toast-enter-active,

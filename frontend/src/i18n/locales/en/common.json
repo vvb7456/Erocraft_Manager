@@ -14,6 +14,19 @@
     "failed": "Copy failed",
     "empty": "Nothing to copy"
   },
+  "verificationCode": {
+    "label": "Verification code",
+    "placeholder": "Enter verification code",
+    "send": "Send code",
+    "resendCountdown": "Resend in {seconds}s",
+    "sent": "Verification code sent. Check your inbox.",
+    "resetSent": "If this email is registered, a verification code has been sent.",
+    "invalid": "Enter the 6-digit verification code"
+  },
+  "passwordValidation": {
+    "whitespace": "Password cannot contain whitespace",
+    "length": "Use 8–72 bytes"
+  },
   "btn": {
     "retry": "Retry",
     "clear": "Clear",
@@ -73,18 +86,20 @@
   "off": "OFF",
   "apiErrors": {
     "account": {
-      "confirm_link_expired": "The confirmation link has expired. Please request a new one",
       "current_password_incorrect": "Current password is incorrect",
+      "email_code_expired": "Verification code expired. Request a new one",
       "email_confirm_status_unknown": "Email change status is unknown. Refresh your account information later, and request a new change if needed",
-      "email_rate_limited": "Too many requests. Please try again later",
+      "email_rate_limited": "Please wait before requesting another code",
       "email_same": "The new email must be different from the current one",
       "email_send_failed": "Failed to send the verification email. Please try again later",
       "email_unavailable": "This email address is not available",
-      "invalid_confirm_link": "The confirmation link is invalid",
+      "invalid_email_code": "Invalid verification code",
+      "invalid_reset_code": "Invalid verification code",
       "invalid_reset_link": "The reset link is invalid",
       "password_required": "Please enter a new password",
-      "password_reset_status_unknown": "Password reset status is unknown. Try signing in later, and request a new reset link if needed",
+      "password_reset_status_unknown": "Password reset status is unknown. Try signing in later, and reset your password again if needed",
       "password_update_failed": "Password update failed. Please try again later",
+      "reset_code_expired": "Verification code expired. Request a new one",
       "reset_link_expired": "The reset link has expired. Please request a new one",
       "user_missing": "The user no longer exists"
     },
@@ -107,7 +122,6 @@
     },
     "auth": {
       "credentials_required": "Please enter your username and password",
-      "email_not_verified": "This email has not been verified yet. Please check your inbox for the registration email and click the link to finish signing up.",
       "forbidden": "You do not have permission to perform this action",
       "invalid_credentials": "Invalid username or password",
       "invalid_token": "Invalid authentication token",
@@ -189,19 +203,16 @@
     },
     "register": {
       "agreement_required": "Please read and accept all required agreements before continuing",
+      "code_expired": "Verification code expired. Request a new one",
+      "code_rate_limited": "Please wait before requesting another code",
       "create_failed": "Failed to create the account. Please register again or contact an administrator",
       "disabled": "Public registration is currently disabled",
       "email_send_failed": "Failed to send the verification email, please try again later",
       "email_taken": "This email is already registered",
-      "invalid_email": "Invalid email format",
-      "invalid_token": "The verification link is invalid",
+      "invalid_code": "Invalid verification code",
       "invalid_username": "Username may only contain letters, digits, underscores, dots and hyphens (3-32 chars)",
-      "rate_limited": "Too many requests, please try again later",
       "site_url_not_configured": "The system has not configured a public site URL. Please contact an administrator.",
-      "token_expired": "The verification link has expired, please register again",
-      "token_used": "The verification link has already been used. Please log in.",
-      "username_taken": "This username is already taken",
-      "verification_pending": "A verification email has already been sent. Please check your inbox (and spam folder). The link is valid for 30 minutes; you can register again once it expires."
+      "username_taken": "This username is already taken"
     },
     "request": {
       "invalid": "Invalid request",

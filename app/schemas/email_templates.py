@@ -54,6 +54,7 @@ class EmailTemplatesResponse(BaseModel):
     serverInstalled: EmailTemplatePayload
     referralInviterRewarded: EmailTemplatePayload
     referralInviteeRewarded: EmailTemplatePayload
+    defaults: dict[str, EmailTemplatePayload] = {}
 
 
 class SaveEmailTemplateRequest(BaseModel):

@@ -1,6 +1,6 @@
 {
   "username": "Username / Email",
-  "username_placeholder": "Username or registered email",
+  "username_placeholder": "Enter username or email",
   "password": "Password",
   "password_placeholder": "Enter password",
   "forgot": "Forgot Password?",
@@ -10,7 +10,6 @@
   "submit": "Sign In",
   "error": {
     "empty": "Please enter username/email and password",
-    "invalid": "Invalid username or password",
-    "network": "Network connection failed"
+    "invalid": "Invalid username or password"
   }
 }

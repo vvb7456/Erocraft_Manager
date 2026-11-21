@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { apiErrorMessage, fetchApi } from '@/composables/apiClient'
+import { passwordErrorKey } from '@/utils/username'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -36,9 +37,8 @@ const linkError = computed(() =>
   !email.value || !token.value ? t('resetPassword.error.invalidLink') : '',
 )
 const passwordLengthError = computed(() => {
-  if (!newPassword.value) return ''
-  if (newPassword.value.length < 8) return t('resetPassword.error.length')
-  return ''
+  const kind = passwordErrorKey(newPassword.value)
+  return kind ? t(`common.passwordValidation.${kind}`) : ''
 })
 const confirmPasswordError = computed(() => {
   if (!confirmPassword.value) return ''

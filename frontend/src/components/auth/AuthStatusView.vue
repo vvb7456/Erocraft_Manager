@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
-import Spinner from '@/components/ui/Spinner.vue'
 
 defineOptions({ name: 'AuthStatusView' })
 
 const props = withDefaults(defineProps<{
-  tone?: 'loading' | 'success' | 'warning' | 'danger'
+  tone?: 'success' | 'warning' | 'danger'
   icon?: string
   title: string
   email?: string
@@ -29,8 +28,7 @@ const resolvedIcon = computed(() => props.icon || defaultIcons[props.tone] || 'i
   <div class="auth-status-wrap" role="status" aria-live="polite">
     <div class="auth-status-panel" :class="`auth-status-panel--${tone}`">
       <div class="auth-status-panel__icon">
-        <Spinner v-if="tone === 'loading'" size="lg" />
-        <MsIcon v-else :name="resolvedIcon" size="lg" color="none" />
+        <MsIcon :name="resolvedIcon" size="lg" color="none" />
       </div>
 
       <h3 class="auth-status-panel__title">{{ title }}</h3>

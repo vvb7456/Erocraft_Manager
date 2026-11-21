@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from app.services.user.validation import NewPassword
 
 
 class UserAccountProfileResponse(BaseModel):
@@ -17,7 +19,7 @@ class UserAccountProfileResponse(BaseModel):
 
 class UpdateUserAccountRequest(BaseModel):
     currentPassword: str
-    newPassword: str = Field(min_length=8, max_length=72)
+    newPassword: NewPassword
 
 
 class UpdateUserAccountResponse(BaseModel):
