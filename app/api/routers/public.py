@@ -424,7 +424,7 @@ async def send_register_code(
 
     await log_manager_activity(
         db,
-        actor=email,
+        actor="system",
         category="auth",
         operation=OperationResult(
             action="auth.register",
@@ -432,8 +432,8 @@ async def send_register_code(
             outcome="success",
             target={"email": email},
         ),
-        detail_key="register_request",
-        detail_params={"username": email, "email": email},
+        detail_key="register_code_sent",
+        detail_params={"email": email},
     )
 
     return MessageResponse(message="验证码已发送，请查收邮件。")

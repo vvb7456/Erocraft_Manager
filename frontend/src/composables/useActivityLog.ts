@@ -63,7 +63,14 @@ export function useActivityLog() {
       }
     }
     const messages = tm('logs.detail') as Record<string, string>
-    let text = messages[log.detailKey] ? rt(messages[log.detailKey], params) : t('logs.detail.unknown', { key: log.detailKey })
+    const resolvedKey = (
+      log.detailKey === 'register_request'
+      && typeof params.email === 'string'
+      && (!params.username || params.username === params.email)
+    )
+      ? 'register_code_sent'
+      : log.detailKey
+    let text = messages[resolvedKey] ? rt(messages[resolvedKey], params) : t('logs.detail.unknown', { key: log.detailKey })
     if (operation?.error) {
       const reason = errorText(operation.error)
       if (!text.includes(reason)) text += `；${reason}`
