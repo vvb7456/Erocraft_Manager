@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.tokens import (
     VERIFICATION_CODE_COOLDOWN_SECONDS,
     VERIFICATION_CODE_EXPIRY_MINUTES,
+    VERIFICATION_CODE_MAX_ATTEMPTS,
     code_digest,
     generate_verification_code,
     verify_verification_code,
@@ -115,12 +116,18 @@ async def verify_latest_code(
             .with_for_update()
         )
     ).scalar_one_or_none()
+    if record is None:
+        return None, "invalid"
     if (
-        record is None
-        or not cleaned
+        not cleaned
         or record.email != email
         or not verify_verification_code(purpose, email, cleaned, record.code_hash)
     ):
+        # 失败计数必须立即提交，避免调用方随后的 rollback 把计数冲掉，防止代理池并发爆破 6 位数字码。
+        record.failed_attempts = int(record.failed_attempts or 0) + 1
+        if record.failed_attempts >= VERIFICATION_CODE_MAX_ATTEMPTS:
+            record.used_at = now
+        await db.commit()
         return None, "invalid"
     if now - record.created_at >= timedelta(minutes=VERIFICATION_CODE_EXPIRY_MINUTES):
         return record, "expired"

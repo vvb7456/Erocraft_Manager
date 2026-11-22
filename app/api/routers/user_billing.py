@@ -97,6 +97,12 @@ def _serialize_order(
     coupon_code: str | None = None,
 ) -> OrderOut:
     snap = order.plan_snapshot
+    # 未交付的新购订单仅关联内部占位服务器行，不向用户暴露其 ID。
+    visible_target_server_id = (
+        None
+        if order.kind == "new_purchase" and order.applied_at is None
+        else order.target_server_id
+    )
     return OrderOut(
         id=order.id,
         order_no=order.order_no,
@@ -110,7 +116,7 @@ def _serialize_order(
         total_fen=order.total_fen,
         total_days=order.total_days,
         currency_code=snap["currency_code"],
-        target_server_id=order.target_server_id,
+        target_server_id=visible_target_server_id,
         target_server_name=target_server_name,
         status=order.status,
         received_fen=order.received_fen,

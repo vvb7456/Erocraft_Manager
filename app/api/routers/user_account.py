@@ -169,7 +169,7 @@ async def update_user_language(
 
 
 @router.post("/account/change-email", response_model=ChangeEmailResponse)
-@limiter.limit("5/minute")
+@limiter.limit("5/minute;20/hour")
 async def change_email(
     payload: ChangeEmailRequest,
     request: Request,

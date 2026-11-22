@@ -149,7 +149,7 @@ async def get_branding(db: AsyncSession = Depends(get_db)) -> BrandingResponse:
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-@limiter.limit("5/minute")
+@limiter.limit("5/minute;20/hour")
 async def forgot_password(
     payload: ForgotPasswordRequest,
     request: Request,
@@ -347,7 +347,7 @@ async def reset_password(
 # ── Public registration ──
 
 @router.post("/register/code", response_model=MessageResponse)
-@limiter.limit("5/minute")
+@limiter.limit("5/minute;20/hour")
 async def send_register_code(
     payload: SendRegisterCodeRequest,
     request: Request,

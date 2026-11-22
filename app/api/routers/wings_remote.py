@@ -48,6 +48,7 @@ from app.db.models.pterodactyl import (
     Subuser,
     UserSshKey,
 )
+from app.db.repositories.servers import exclude_placeholders
 from app.services.pterodactyl_activity import (
     SUBJECT_BACKUP,
     SUBJECT_SERVER,
@@ -381,7 +382,10 @@ async def list_remote_servers(
     total = int(
         (
             await db.execute(
-                select(func.count(PteroServer.id)).where(PteroServer.node_id == node.id)
+                select(func.count(PteroServer.id)).where(
+                    PteroServer.node_id == node.id,
+                    exclude_placeholders(),
+                )
             )
         ).scalar_one()
         or 0
@@ -393,7 +397,7 @@ async def list_remote_servers(
         (
             await db.execute(
                 select(PteroServer)
-                .where(PteroServer.node_id == node.id)
+                .where(PteroServer.node_id == node.id, exclude_placeholders())
                 .order_by(PteroServer.id.asc())
                 .offset(offset)
                 .limit(limit)
@@ -444,6 +448,7 @@ async def reset_remote_servers_state(
                 select(PteroServer).where(
                     PteroServer.node_id == node.id,
                     PteroServer.status == "restoring_backup",
+                    exclude_placeholders(),
                 )
             )
         ).scalars().all()
@@ -496,6 +501,7 @@ async def reset_remote_servers_state(
         .where(
             PteroServer.node_id == node.id,
             PteroServer.status.in_(("installing", "restoring_backup")),
+            exclude_placeholders(),
         )
         .values(status=None, updated_at=utc_naive_now())
     )
@@ -648,6 +654,7 @@ async def authenticate_sftp(
             select(PteroServer).where(
                 or_(PteroServer.uuid == server_ident, PteroServer.uuid_short == server_ident),
                 PteroServer.node_id == node.id,
+                exclude_placeholders(),
             )
         )
     ).scalar_one_or_none()

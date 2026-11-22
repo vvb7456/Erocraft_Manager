@@ -30,6 +30,11 @@ def exclude_placeholders():
     )
 
 
+def is_placeholder_server(server: PteroServer) -> bool:
+    """Return True when a PteroServer row is an unpaid billing placeholder."""
+    return bool(server.external_id and server.external_id.startswith("pending:"))
+
+
 # Legacy alias kept for internal callers in this module.
 _exclude_placeholders = exclude_placeholders
 

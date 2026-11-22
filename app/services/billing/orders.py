@@ -16,6 +16,7 @@ from app.core.time import local_today, utc_naive_now_sec
 from app.db.models.billing import BillingInvoice, BillingInvoiceItem, BillingOrder, BillingOrderEffect, BillingPayment, BillingPlan
 from app.db.models.manager import ServerMeta
 from app.db.models.pterodactyl import Allocation, PteroServer, PteroUser
+from app.db.repositories.servers import is_placeholder_server
 from app.schemas.billing_orders import CreateOrderRequest
 from app.services import panel_db, server_lifecycle
 from app.services.audit import log_manager_activity
@@ -95,7 +96,7 @@ async def create_order(db: AsyncSession, user: PteroUser, payload: CreateOrderRe
             raise InvalidOrderRequest("试用套餐仅限从未拥有过服务器的用户购买")
     else:
         server = await db.get(PteroServer, payload.target_server_id)
-        if server is None or server.owner_id != user.id:
+        if server is None or is_placeholder_server(server) or server.owner_id != user.id:
             raise InvalidOrderRequest("服务器不存在或无权操作")
         meta = await db.get(ServerMeta, server.id)
         if meta is None or meta.plan_id is None:
