@@ -15,15 +15,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import panel_db
-from app.services.audit import log_manager_activity
-from app.core.contracts import OperationResult
 from app.services.panel_db import (
     CreatedServer,
     CreatedUser,
     PanelDBError,
     PanelDBValidationError,
 )
-from app.services.remote_mysql import PanelDatabaseError, drop_server_databases
 from app.services.wings import WingsServiceError, wings_service
 
 logger = logging.getLogger(__name__)
@@ -485,49 +482,12 @@ async def delete_server(db: AsyncSession, server_id: int, *, force: bool = False
         else:
             raise LifecycleError(f"Wings 删除失败: {exc}") from exc
 
-    # 3. DROP remote MySQL databases. Wings is already gone, so we MUST go
-    #    on to delete the panel ``servers`` row regardless — leaving the
-    #    server in the panel after its container is destroyed would show
-    #    users a "ghost" they can't start. ``drop_server_databases`` is
-    #    best-effort: it returns a list of remote-DB errors that we log /
-    #    surface but do not turn into a hard failure.
-    db_errors: list[str] = []
-    try:
-        _removed, db_errors = await drop_server_databases(db, server_id)
-    except PanelDatabaseError as exc:
-        # Connection-level failure (e.g. host row decrypt). Log and proceed.
-        logger.error(
-            "drop_server_databases hard-failed server=%s: %s — proceeding to "
-            "delete panel row anyway since Wings container is already gone",
-            server_id, exc,
-        )
-        db_errors = [f"远端数据库清理整体失败: {exc}"]
-
-    # 4. Delete panel rows
+    # 3. Delete panel rows
     try:
         await panel_db.delete_server_row(db, server_id)
     except PanelDBError as exc:
         raise LifecycleError(str(exc)) from exc
     await db.commit()
-
-    if db_errors:
-        # Wings + panel row are already gone — server is fully deleted from
-        # the user's perspective. The leftover remote MySQL artefacts are an
-        # operator-only concern; log loudly so monitoring can pick it up but
-        # do NOT turn the user-facing delete into a 502.
-        logger.error(
-            "server=%s deleted with %d leftover remote-DB issue(s):\n  - %s",
-            server_id, len(db_errors), "\n  - ".join(db_errors),
-        )
-        # Surface to the activity log so admins can see it in the UI.
-        await log_manager_activity(
-            db,
-            actor="system",
-            category="server",
-            operation=OperationResult(action="server.database.cleanup", phase="execution", outcome="failed", target={"server_id": server_id}, facts={"server_deleted": True}),
-            detail_key="server.delete.remote_db_leftover",
-            detail_params={"server_id": server_id, "errors": db_errors[:10]},
-        )
 
 
 async def update_server_expiration_description(

@@ -175,13 +175,13 @@ async def provision_server_llm(
     meta = await db.get(ServerMeta, server_id)
     if meta is None or meta.plan_id is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="该服务器未绑定套餐，无法开通 LLM 额度",
         )
     plan = await db.get(BillingPlan, meta.plan_id)
     if plan is None or not plan.llm_enabled or plan.llm_quota_grant <= 0:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="该服务器绑定的套餐未启用 LLM 额度",
         )
     existing = await db.get(ServerLlmKey, server_id)
@@ -206,7 +206,7 @@ async def provision_server_llm(
         ) from exc
     if row is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="LLM 全局开关未开启或套餐未配置 LLM 额度",
         )
     return await _serialize(db, row)

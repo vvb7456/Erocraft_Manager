@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Mapping
 
@@ -19,6 +20,10 @@ CERT_SOURCE_SCAN_JOB_ID = "cert_source_scan"
 CERT_DEPLOYMENT_SCAN_JOB_ID = "cert_deployment_scan"
 CERT_AUTO_DISPATCH_JOB_ID = "cert_auto_dispatch"
 CERT_EXPIRY_ALERT_JOB_ID = "cert_expiry_alert"
+
+# 串行化进程内更新 manager_certificates 源信息的定时任务，避免 MariaDB
+# REPEATABLE READ 下同刻并发写入触发 1020 (Record has changed since last read)。
+_cert_source_lock = asyncio.Lock()
 
 # Local hour to fire the daily certificate expiry alert scan. Mirrors the
 # daily lifecycle batch's use of AUTOMATION_RUN_HOUR but kept independent so
@@ -54,10 +59,11 @@ def sync_cert_expiry_alert_job(
 
 
 async def run_cert_source_scan() -> None:
-    session_factory = get_session_factory()
-    async with session_factory() as db:
-        results = await scan_all_certificate_sources(db)
-        logger.info("certificate source scan completed (%d rows)", len(results))
+    async with _cert_source_lock:
+        session_factory = get_session_factory()
+        async with session_factory() as db:
+            results = await scan_all_certificate_sources(db)
+            logger.info("certificate source scan completed (%d rows)", len(results))
 
 
 async def run_cert_deployment_scan() -> None:
@@ -69,11 +75,12 @@ async def run_cert_deployment_scan() -> None:
 
 
 async def run_cert_auto_dispatch() -> None:
-    session_factory = get_session_factory()
-    async with session_factory() as db:
-        await scan_all_certificate_sources(db)
-        results = await dispatch_pending_deployments(db, actor="system")
-        logger.info("certificate auto-dispatch completed (%d deployments)", len(results))
+    async with _cert_source_lock:
+        session_factory = get_session_factory()
+        async with session_factory() as db:
+            await scan_all_certificate_sources(db)
+            results = await dispatch_pending_deployments(db, actor="system")
+            logger.info("certificate auto-dispatch completed (%d deployments)", len(results))
 
 
 async def run_cert_expiry_alert() -> None:

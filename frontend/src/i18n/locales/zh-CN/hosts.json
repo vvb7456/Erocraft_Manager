@@ -60,17 +60,17 @@
     "title": "新建主机",
     "fields": {
       "name": "名称",
-      "nameHint": "展示用名，可重复，建议与面板节点名保持一致。",
+      "nameHint": "展示用名，可重复，建议与 Wings 节点名保持一致。",
       "kind": "类型",
-      "kindHint": "wings_node 用于 Pterodactyl 节点；其它为基础设施主机。",
+      "kindHint": "wings_node 用于 Wings 节点；其它为基础设施主机。",
       "hostname": "主机名",
       "hostnameHint": "DNS 或 IP，用于展示与告警上下文。",
       "agentUrl": "Agent 地址",
       "agentUrlHint": "形如 http://10.0.0.22:48765，Manager 将访问此地址 Pull 数据。",
       "agentToken": "Agent Token",
       "agentTokenHint": "先在主机上启动 agent；若配置中 token 为空，agent 会自动生成并写回配置，并在 systemctl/journal 日志里打印 AGENT_BOOTSTRAP_TOKEN。将该值粘贴到这里。",
-      "pteroNode": "面板节点",
-      "pteroNodeHint": "wings_node 必填：Pterodactyl Panel 中对应的节点。",
+      "pteroNode": "Wings 节点",
+      "pteroNodeHint": "wings_node 必填：对应「Wings 节点」标签页中的节点。",
       "enabled": "启用",
       "enabledHint": "禁用后 Manager 不再轮询此主机。"
     },
@@ -79,15 +79,9 @@
     "creating": "创建中…",
     "created": "主机已创建",
     "createFailed": "创建失败",
+    "tokenCopied": "Token 已复制",
     "refreshNodes": "刷新节点列表",
     "noUnboundNodesHint": "当前没有未绑定的 Wings 节点，请先在「Wings 节点」标签页新建节点。"
-  },
-  "tokenReveal": {
-    "title": "一次性 Token",
-    "subtitle": "请立即复制并粘贴到目标节点的 agent config.yaml；关闭此窗口后将无法再次查看。",
-    "label": "Agent Token",
-    "copied": "Token 已复制",
-    "done": "我已保存"
   },
   "time": {
     "never": "—"
@@ -157,7 +151,7 @@
       "kind": "类型",
       "hostname": "主机名",
       "agentUrl": "Agent 地址",
-      "panelNode": "面板节点 ID",
+      "panelNode": "Wings 节点 ID",
       "enabled": "启用",
       "createdAt": "创建时间",
       "lastSeenAt": "最后心跳"
@@ -186,7 +180,7 @@
       "desc": "管理主机身份、Agent 连接地址与访问凭据。",
       "title": "Agent 连接",
       "kindLocked": "创建后类型不可修改。",
-      "panelNodeLocked": "面板节点绑定不可修改。如需更换节点请重建主机。",
+      "panelNodeLocked": "Wings 节点绑定不可修改。如需更换节点请重建主机。",
       "enabledHint": "禁用后 Manager 不再轮询此主机。",
       "tokenLabel": "Agent Token",
       "tokenHint": "点击「重置」生成一个新 token，保存后同步更新主机 config.yaml。",
@@ -306,7 +300,7 @@
       "desc": "移除不再纳入管理的主机记录。",
       "title": "危险区域",
       "deleteTitle": "删除主机",
-      "deleteMsg": "永久删除该主机记录。不会删除 Pterodactyl Panel 侧的节点。"
+      "deleteMsg": "永久删除该主机记录。不会删除对应的 Wings 节点记录。"
     }
   },
   "allocations": {
@@ -519,7 +513,7 @@
     "serversCount": "{n} 台服务器",
     "plansCount": "{n} 个套餐",
     "deleteTitle": "删除 Wings 节点",
-    "deleteMsg": "确定要删除 Panel 节点「{name}」吗？若存在关联服务器、套餐或未完成订单将禁止删除。",
+    "deleteMsg": "确定要删除 Wings 节点「{name}」吗？若存在关联服务器、套餐或未完成订单将禁止删除。",
     "deleted": "节点「{name}」已删除",
     "fields": {
       "location": "所属地域",
@@ -543,7 +537,7 @@
     "config": {
       "title": "Wings 初始配置（config.yml）",
       "hint": "将以下内容保存至目标节点的 {path} 后启动 Wings 服务。",
-      "remote": "面板回调地址（remote）：",
+      "remote": "Manager 回调地址（remote）：",
       "copyYaml": "复制 config.yml",
       "copyCmd": "复制一键写入命令",
       "download": "下载 .yml",

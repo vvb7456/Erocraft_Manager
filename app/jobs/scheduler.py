@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import asyncio
+from datetime import datetime, timedelta, timezone
+import logging
 
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED, EVENT_JOB_EXECUTED
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -187,11 +188,13 @@ def build_scheduler() -> AsyncIOScheduler:
         max_instances=1,
         misfire_grace_time=60,
     )
+    cert_base = datetime.now(timezone.utc)
     scheduler.add_job(
         run_cert_source_scan,
         id=CERT_SOURCE_SCAN_JOB_ID,
         trigger="interval",
         minutes=10,
+        start_date=cert_base + timedelta(minutes=1),
         replace_existing=True,
         coalesce=True,
         max_instances=1,
@@ -202,6 +205,7 @@ def build_scheduler() -> AsyncIOScheduler:
         id=CERT_DEPLOYMENT_SCAN_JOB_ID,
         trigger="interval",
         minutes=10,
+        start_date=cert_base + timedelta(minutes=4),
         replace_existing=True,
         coalesce=True,
         max_instances=1,
@@ -212,6 +216,7 @@ def build_scheduler() -> AsyncIOScheduler:
         id=CERT_AUTO_DISPATCH_JOB_ID,
         trigger="interval",
         minutes=10,
+        start_date=cert_base + timedelta(minutes=7),
         replace_existing=True,
         coalesce=True,
         max_instances=1,

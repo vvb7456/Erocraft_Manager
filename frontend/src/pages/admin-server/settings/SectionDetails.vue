@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// SectionDetails — name / description / external_id.
+// SectionDetails — name / description (external_id is system-managed for order linkage).
 // Saves via PATCH /api/admin/servers/{id}/details. Sends only the fields
 // that actually changed so the backend's "no fields" guard doesn't fire.
 import { ref, computed, watch, inject, type Ref } from 'vue'
@@ -12,7 +12,6 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import FormField from '@/components/form/FormField.vue'
 import BaseInput from '@/components/form/BaseInput.vue'
 import BaseTextarea from '@/components/form/BaseTextarea.vue'
-import HelpTip from '@/components/ui/HelpTip.vue'
 import type { AdminServerDetailResponse } from '@/types/adminServer'
 
 defineOptions({ name: 'SectionDetails' })
@@ -25,10 +24,10 @@ const detail = inject<Ref<AdminServerDetailResponse | null>>('adminServerDetail'
 const serverId = inject<Ref<number | null>>('adminServerId')!
 const reload = inject<() => Promise<void>>('reloadAdminServer', async () => {})
 
-interface Form { name: string; description: string; externalId: string }
+interface Form { name: string; description: string }
 
-const initial = ref<Form>({ name: '', description: '', externalId: '' })
-const form = ref<Form>({ name: '', description: '', externalId: '' })
+const initial = ref<Form>({ name: '', description: '' })
+const form = ref<Form>({ name: '', description: '' })
 const syncing = ref(false)
 
 function syncFromDetail() {
@@ -38,7 +37,6 @@ function syncFromDetail() {
   const f: Form = {
     name: s.name,
     description: s.description ?? '',
-    externalId: s.externalId ?? '',
   }
   form.value = { ...f }
   initial.value = { ...f }
@@ -48,7 +46,7 @@ function syncFromDetail() {
 const isDirty = computed(() => {
   if (syncing.value) return false
   const a = form.value, b = initial.value
-  return a.name !== b.name || a.description !== b.description || a.externalId !== b.externalId
+  return a.name !== b.name || a.description !== b.description
 })
 
 // Container polls detail every 30s; gate sync on !isDirty so a poll
@@ -68,9 +66,6 @@ async function save(): Promise<boolean> {
   const body: Record<string, unknown> = {}
   if (form.value.name !== initial.value.name) body.name = form.value.name.trim()
   if (form.value.description !== initial.value.description) body.description = form.value.description
-  if (form.value.externalId !== initial.value.externalId) {
-    body.externalId = form.value.externalId.trim() === '' ? null : form.value.externalId.trim()
-  }
   await raw(`/api/admin/servers/${serverId.value}/details`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -100,13 +95,6 @@ useDirtyFormSection({ name: 'details', isDirty, save, discard })
         <FormField layout="horizontal" bordered>
           <template #label>{{ t('adminServer.settings.details.description') }}</template>
           <BaseTextarea v-model="form.description" :rows="2" />
-        </FormField>
-        <FormField layout="horizontal" bordered>
-          <template #label>
-            {{ t('adminServer.settings.details.externalId') }}
-            <HelpTip :text="t('adminServer.settings.details.externalIdHint')" />
-          </template>
-          <BaseInput v-model="form.externalId" />
         </FormField>
       </div>
     </CollapsibleGroup>

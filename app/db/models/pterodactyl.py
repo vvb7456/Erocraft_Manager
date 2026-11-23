@@ -102,20 +102,18 @@ class PteroUser(Base):
 
     def check_password(self, plain_password: str) -> bool:
         stored = self.password
+        # 历史用户密码可能带 PHP 风格的 $2y$ 前缀，需兼容归一化为 $2b$ 后再校验。
         if stored.startswith("$2y$"):
             stored = "$2b$" + stored[4:]
         return bcrypt.checkpw(plain_password.encode("utf-8"), stored.encode("utf-8"))
 
     @staticmethod
     def hash_password_sync(plain_password: str) -> str:
-        """Compute a panel-compatible ``$2y$`` bcrypt hash (CPU-bound)."""
-        hashed = bcrypt.hashpw(
+        """Compute a standard ``$2b$`` bcrypt hash (CPU-bound)."""
+        return bcrypt.hashpw(
             plain_password.encode("utf-8"),
             bcrypt.gensalt(rounds=10),
         ).decode("utf-8")
-        if hashed.startswith("$2b$"):
-            hashed = "$2y$" + hashed[4:]
-        return hashed
 
     def set_password(self, plain_password: str) -> None:
         self.password = self.hash_password_sync(plain_password)

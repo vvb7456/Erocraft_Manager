@@ -3,9 +3,7 @@
 // Minimal create flow; edit lives on the detail page's settings tab.
 // Workflow: user fills form → POST /api/admin/hosts. Backend probes
 // the agent BEFORE committing; failure returns 400 and we surface the
-// detail. On success, if backend generated a token we forward it to
-// HostTokenRevealModal (one-time disclosure). Parent is notified via
-// `@created` so the list can refresh.
+// detail. Parent is notified via `@created` so the list can refresh.
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApiFetch } from '@/composables/useApiFetch'
@@ -20,7 +18,6 @@ import HelpTip from '@/components/ui/HelpTip.vue'
 import AlertBanner from '@/components/ui/AlertBanner.vue'
 import SecretInput from '@/components/ui/SecretInput.vue'
 import MsIcon from '@/components/ui/MsIcon.vue'
-import HostTokenRevealModal from '@/components/hosts/HostTokenRevealModal.vue'
 
 defineOptions({ name: 'HostCreateModal' })
 
@@ -32,7 +29,7 @@ export interface PresetNodeInfo {
 
 const props = defineProps<{
   modelValue: boolean
-  /** Pterodactyl node IDs already bound to an existing host — rendered
+  /** Wings node IDs already bound to an existing host — rendered
    *  as disabled options to prevent duplicate assignment. */
   usedNodeIds?: number[]
   presetNode?: PresetNodeInfo | null
@@ -70,11 +67,8 @@ function blankForm(): FormState {
 
 const form = ref<FormState>(blankForm())
 const submitting = ref(false)
-const revealOpen = ref(false)
-const revealToken = ref('')
-const createdHostName = ref('')
 
-// ── Panel nodes (only needed for wings_node kind) ──
+// ── Wings nodes (only needed for wings_node kind) ──
 interface NodeOption { id: number; name: string }
 const nodes = ref<NodeOption[]>([])
 const nodesLoaded = ref(false)
@@ -117,6 +111,7 @@ const canSubmit = computed(() => {
   if (!f.name.trim()) return false
   if (!f.hostname.trim()) return false
   if (!f.agent_url.trim()) return false
+  if (!f.agent_token.trim()) return false
   if (isWings.value && f.pterodactyl_node_id == null) return false
   return true
 })
@@ -145,24 +140,18 @@ async function submit() {
       kind: form.value.kind,
       hostname: form.value.hostname.trim(),
       agent_url: form.value.agent_url.trim(),
+      agent_token: form.value.agent_token.trim(),
       enabled: form.value.enabled,
     }
-    if (form.value.agent_token) body.agent_token = form.value.agent_token
     if (isWings.value) body.pterodactyl_node_id = form.value.pterodactyl_node_id
 
     const res = await post<{
       host: { id: number }
-      generated_agent_token: string | null
     }>('/api/admin/hosts', body)
 
     if (!res) return
 
     toast(t('hosts.create.created'), 'success')
-    if (res.generated_agent_token) {
-      revealToken.value = res.generated_agent_token
-      createdHostName.value = form.value.name
-      revealOpen.value = true
-    }
     emit('created', res.host.id)
     emit('update:modelValue', false)
   } catch (err: any) {
@@ -177,7 +166,7 @@ function cancel() {
 }
 
 function onTokenCopied() {
-  toast(t('hosts.tokenReveal.copied'), 'success')
+  toast(t('hosts.create.tokenCopied'), 'success')
 }
 </script>
 
@@ -303,12 +292,6 @@ function onTokenCopied() {
       </BaseButton>
     </template>
   </BaseModal>
-
-  <HostTokenRevealModal
-    v-model="revealOpen"
-    :token="revealToken"
-    :info="createdHostName"
-  />
 </template>
 
 <style scoped>

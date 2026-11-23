@@ -33,7 +33,7 @@ async def login(
     username = payload.username.strip()
     password = payload.password
     if not username or not password:
-        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, "auth.credentials_required")
+        raise ApiError(status.HTTP_422_UNPROCESSABLE_CONTENT, "auth.credentials_required")
 
     user = await user_repository.get_by_username_or_email(db, username)
     valid_password = (

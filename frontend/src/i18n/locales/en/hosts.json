@@ -62,15 +62,15 @@
       "name": "Name",
       "nameHint": "Display name; duplicates are allowed.",
       "kind": "Kind",
-      "kindHint": "Use wings_node for Pterodactyl nodes; other kinds describe infrastructure hosts.",
+      "kindHint": "Use wings_node for Wings nodes; other kinds describe infrastructure hosts.",
       "hostname": "Hostname",
       "hostnameHint": "DNS name or IP; shown in UI and alert context.",
       "agentUrl": "Agent URL",
       "agentUrlHint": "e.g. http://10.0.0.22:48765 — Manager pulls data from this URL.",
       "agentToken": "Agent Token",
       "agentTokenHint": "Start the agent on the host first. If token is empty in config, the agent will auto-generate one, write it back, and print AGENT_BOOTSTRAP_TOKEN in systemctl/journal logs. Paste that value here.",
-      "pteroNode": "Panel node",
-      "pteroNodeHint": "Required for wings_node: the matching Pterodactyl node.",
+      "pteroNode": "Wings node",
+      "pteroNodeHint": "Required for wings_node: the matching node in the Wings Nodes tab.",
       "enabled": "Enabled",
       "enabledHint": "When disabled, Manager does not poll this host."
     },
@@ -79,15 +79,9 @@
     "creating": "Creating…",
     "created": "Host created",
     "createFailed": "Create failed",
+    "tokenCopied": "Token copied",
     "refreshNodes": "Refresh nodes",
     "noUnboundNodesHint": "No unbound Wings nodes available. Create one in the “Wings Nodes” tab first."
-  },
-  "tokenReveal": {
-    "title": "One-time token",
-    "subtitle": "Copy this token now and paste it into the target agent's config.yaml. It cannot be viewed again after this dialog closes.",
-    "label": "Agent Token",
-    "copied": "Token copied",
-    "done": "I have saved it"
   },
   "time": {
     "never": "—"
@@ -157,7 +151,7 @@
       "kind": "Kind",
       "hostname": "Hostname",
       "agentUrl": "Agent URL",
-      "panelNode": "Panel node ID",
+      "panelNode": "Wings node ID",
       "enabled": "Enabled",
       "createdAt": "Created",
       "lastSeenAt": "Last seen"
@@ -186,7 +180,7 @@
       "desc": "Manage host identity, Agent connection address, and access credentials.",
       "title": "Agent connection",
       "kindLocked": "Kind cannot be changed after creation.",
-      "panelNodeLocked": "Panel node binding is fixed; recreate the host to change it.",
+      "panelNodeLocked": "Wings node binding is fixed; recreate the host to change it.",
       "enabledHint": "When disabled, Manager stops polling this host.",
       "tokenLabel": "Agent token",
       "tokenHint": "Click reset to generate a new token; once saved, update the agent config.yaml to match.",
@@ -306,7 +300,7 @@
       "desc": "Remove host records that no longer need to be managed.",
       "title": "Danger zone",
       "deleteTitle": "Delete host",
-      "deleteMsg": "Permanently removes this host record. The Pterodactyl Panel node is not affected."
+      "deleteMsg": "Permanently removes this host record. The Wings node record is not affected."
     }
   },
   "allocations": {
@@ -519,7 +513,7 @@
     "serversCount": "{n} server(s)",
     "plansCount": "{n} plan(s)",
     "deleteTitle": "Delete Wings Node",
-    "deleteMsg": "Delete Panel node “{name}”? Deletion is blocked if servers, billing plans, or pending orders reference it.",
+    "deleteMsg": "Delete Wings node “{name}”? Deletion is blocked if servers, billing plans, or pending orders reference it.",
     "deleted": "Node “{name}” deleted",
     "fields": {
       "location": "Location",
@@ -543,7 +537,7 @@
     "config": {
       "title": "Initial Wings Configuration (config.yml)",
       "hint": "Save the following YAML to {path} on the target node and start Wings.",
-      "remote": "Panel remote URL:",
+      "remote": "Manager remote URL:",
       "copyYaml": "Copy config.yml",
       "copyCmd": "Copy write command",
       "download": "Download .yml",

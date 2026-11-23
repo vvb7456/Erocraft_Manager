@@ -307,17 +307,17 @@ async def create_server(
     if payload.channel in ("taobao", "xianyu"):
         if payload.plan_id is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="电商渠道开通必须选择套餐",
             )
         if not (payload.external_order_id or "").strip():
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="电商渠道开通必须填写外部订单号",
             )
         if payload.amount_yuan is None or payload.amount_yuan <= 0:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="电商渠道开通必须填写大于 0 的有效金额",
             )
         # 幂等检查：防止同一外部订单号重复创建服务器
@@ -362,7 +362,7 @@ async def create_server(
         )
     except LifecycleValidationError as exc:
         # User-correctable input error → 422 so the frontend can show a field-level message.
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except LifecycleError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -376,7 +376,7 @@ async def create_server(
             plan_obj = await db.get(BillingPlan, payload.plan_id)
             if plan_obj is None:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=f"套餐 {payload.plan_id} 不存在",
                 )
             meta = await db.get(ServerMeta, server_id)
@@ -562,13 +562,13 @@ async def renew_server(
         if plan_obj is not None and plan_obj.plan_type == "trial":
             if plan_obj.linked_plan_id is None:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="绑定的试用套餐未配置关联标准套餐，无法执行试用转正",
                 )
             linked_plan = await db.get(BillingPlan, plan_obj.linked_plan_id)
             if linked_plan is None:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=f"关联的标准套餐 (ID: {plan_obj.linked_plan_id}) 不存在",
                 )
             effective_plan = linked_plan
@@ -582,22 +582,22 @@ async def renew_server(
     if payload.channel in ("taobao", "xianyu"):
         if new_date is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="电商渠道续期必须指定具体到期日",
             )
         if effective_plan is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="该服务器未绑定有效套餐，无法生成电商订单，请选择“其他”来源或先绑定套餐",
             )
         if not ext_id:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="电商渠道续期必须填写外部订单号",
             )
         if payload.amount_yuan is None or payload.amount_yuan <= 0:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="电商渠道续期必须填写大于 0 的有效金额",
             )
         # 幂等检查：防止跨服务器盗用/重用外部订单号；同服务器重试支持幂等自愈后置动作

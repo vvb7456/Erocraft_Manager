@@ -43,7 +43,7 @@ def _server_management_http(exc: ServerManagementError) -> HTTPException:
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     if isinstance(exc, ServerManagementValidationError):
         return HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         )
     return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))

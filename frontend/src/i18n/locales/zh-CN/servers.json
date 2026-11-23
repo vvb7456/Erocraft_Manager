@@ -38,7 +38,7 @@
     "filtered": "当前筛选 {n} 台",
     "available": "未冻结且有效",
     "expiringSub": "需要关注续期",
-    "suspendedSub": "面板冻结状态"
+    "suspendedSub": "服务器冻结状态"
   },
   "action": {
     "renew": "续期",

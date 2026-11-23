@@ -547,7 +547,7 @@ async def register_acme_certificate(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="acme.sh certificate not found")
     if not acme_cert.source_path or not acme_cert.source_compatible:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="acme.sh certificate does not expose a compatible source path",
         )
     existing_id = (await _registered_source_map(db)).get(acme_cert.source_path.rstrip("/"))

@@ -418,7 +418,11 @@ async def get_user_server_wings_token(
         raise ApiError(403, "server.suspended")
     try:
         data = await wings_service.create_wings_token(
-            db, server.node_id, server.uuid, current_user.uuid,
+            db,
+            server.node_id,
+            server.uuid,
+            current_user.uuid,
+            is_admin=bool(current_user.root_admin),
         )
     except WingsServiceError as exc:
         raise translate_wings_error(exc) from exc

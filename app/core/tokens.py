@@ -16,15 +16,12 @@ VERIFICATION_CODE_MAX_ATTEMPTS = 5
 
 
 def hash_token(raw: str) -> str:
-    """Hash a raw token using bcrypt with $2y$ prefix for PHP compatibility."""
-    h = bcrypt.hashpw(raw.encode(), bcrypt.gensalt(rounds=10)).decode()
-    if h.startswith("$2b$"):
-        h = "$2y$" + h[4:]
-    return h
+    """Hash a raw token using standard bcrypt ($2b$)."""
+    return bcrypt.hashpw(raw.encode(), bcrypt.gensalt(rounds=10)).decode()
 
 
 def verify_token(raw: str, hashed: str) -> bool:
-    """Verify a raw token against a bcrypt hash."""
+    """Verify a raw token against a bcrypt hash (retains $2y$ read compat)."""
     check_hash = hashed
     if check_hash.startswith("$2y$"):
         check_hash = "$2b$" + check_hash[4:]

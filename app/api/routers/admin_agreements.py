@@ -60,7 +60,7 @@ async def agreements_create(
     """
     if payload.scope == "egg" and payload.egg_id is None:
         raise ApiError(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "agreements.egg_scope_requires_egg_id",
         )
     existing = (
@@ -115,7 +115,7 @@ async def agreements_update(
         raise ApiError(404, "agreements.not_found")
     if payload.scope == "egg" and payload.egg_id is None:
         raise ApiError(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "agreements.egg_scope_requires_egg_id",
         )
     agr.scope = payload.scope

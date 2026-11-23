@@ -226,9 +226,9 @@ async def create_user(
     username = normalize_username(payload.username)
 
     if await user_repository.get_by_email(db, email):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"邮箱 {email} 已存在")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"邮箱 {email} 已存在")
     if await user_repository.get_by_username(db, username):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"用户名 {username} 已存在")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"用户名 {username} 已存在")
 
     first_name = payload.firstName.strip() or username
     last_name = payload.lastName.strip() or "User"
@@ -342,10 +342,10 @@ async def update_user(
 
     existing_email = await user_repository.get_by_email(db, email)
     if existing_email and existing_email.id != user_id:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"邮箱 {email} 已存在")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"邮箱 {email} 已存在")
     existing_username = await user_repository.get_by_username(db, username)
     if existing_username and existing_username.id != user_id:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"用户名 {username} 已存在")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"用户名 {username} 已存在")
 
     if payload.root_admin is False and user_id == current_user.id:
         raise HTTPException(

@@ -44,12 +44,12 @@ def _coerce_egg_json_obj(raw: Any, error_detail: str) -> dict[str, Any]:
             raw = json.loads(raw)
         except json.JSONDecodeError as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"egg_json 字符串解析失败: {exc}",
             ) from exc
     if not isinstance(raw, dict):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=error_detail,
         )
     return raw
@@ -70,7 +70,7 @@ async def _extract_import_payload(
             raw_nest = form.get("nest_id")
             if raw_nest is None or not str(raw_nest).strip().isdigit():
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="必须提供合法的 nest_id",
                 )
             nest_id_val = int(str(raw_nest).strip())
@@ -78,7 +78,7 @@ async def _extract_import_payload(
         upload = form.get("file")
         if upload is None or not hasattr(upload, "read"):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="缺少上传文件字段 file",
             )
         raw_bytes = await upload.read(_MAX_EGG_IMPORT_BYTES + 1)
@@ -91,12 +91,12 @@ async def _extract_import_payload(
             parsed = json.loads(raw_bytes.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"上传文件不是合法的 UTF-8 JSON: {exc}",
             ) from exc
         if not isinstance(parsed, dict):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Egg JSON 根节点必须是对象",
             )
         return nest_id_val, parsed
@@ -111,12 +111,12 @@ async def _extract_import_payload(
         body = json.loads(raw_bytes.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"请求体不是合法的 JSON: {exc}",
         ) from exc
     if not isinstance(body, dict):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="请求体必须是 JSON 对象",
         )
 
@@ -124,7 +124,7 @@ async def _extract_import_payload(
         raw_nest_id = body.get("nest_id")
         if not isinstance(raw_nest_id, int) or isinstance(raw_nest_id, bool) or raw_nest_id < 1:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="必须提供合法的整型 nest_id",
             )
         return raw_nest_id, _coerce_egg_json_obj(

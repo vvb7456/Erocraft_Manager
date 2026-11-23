@@ -101,7 +101,7 @@ async def plans_create(
         plan = await create_plan(db, payload)
     except PlanValidationError as exc:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
+            status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
         ) from exc
     except PlanCodeConflictError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
@@ -133,7 +133,7 @@ async def plans_update(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except PlanValidationError as exc:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
+            status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
         ) from exc
     except PlanCodeConflictError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

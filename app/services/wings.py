@@ -567,6 +567,8 @@ class WingsService:
         node_id: int,
         server_uuid: str,
         user_uuid: str,
+        *,
+        is_admin: bool = False,
     ) -> dict[str, str | int]:
         """Create a unified Wings token for WS console + file upload.
 
@@ -575,16 +577,21 @@ class WingsService:
         node = await self._node_info(db, node_id)
         now = int(time.time())
         exp = now + 600  # 10 min
+        # 普通用户保留安装输出流权限（产品需要重装时查看实时进度），
+        # 仅管理员附带节点底层原始错误与跨节点迁移流权限。
+        permissions = ["*", "admin.websocket.install"]
+        if is_admin:
+            permissions.extend(
+                [
+                    "admin.websocket.errors",
+                    "admin.websocket.transfer",
+                ]
+            )
         token = jwt.encode(
             {
                 "server_uuid": server_uuid,
                 "scope": "websocket file-upload",
-                "permissions": [
-                    "*",
-                    "admin.websocket.errors",
-                    "admin.websocket.install",
-                    "admin.websocket.transfer",
-                ],
+                "permissions": permissions,
                 "user_uuid": user_uuid,
                 "unique_id": str(uuid.uuid4()),
                 "iat": now,
