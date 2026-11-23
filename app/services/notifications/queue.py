@@ -100,8 +100,72 @@ async def enqueue_safely(db: AsyncSession, **kwargs: Any) -> list[int]:
         return []
 
 
+async def enqueue_user_email(
+    db: AsyncSession,
+    *,
+    event_key: str,
+    recipient: str,
+    subject: str,
+    body: str = "",
+    template: str | None = None,
+    variables: dict[str, Any] | None = None,
+    greeting: str = "",
+    action_text: str | None = None,
+    action_url: str | None = None,
+    path: str = "",
+    topic: str = "",
+    context: dict[str, Any] | None = None,
+    delay: int = 0,
+) -> int | None:
+    """Enqueue a user-facing email into the transactional outbox."""
+    clean_recipient = recipient.strip()
+    if not clean_recipient:
+        return None
+    now = utc_naive_now()
+    key = hashlib.sha256(f"smtp:{clean_recipient}:{event_key}".encode()).hexdigest()
+    payload_context: dict[str, Any] = {
+        **(context or {}),
+        "audience": "user",
+        "greeting": greeting,
+    }
+    if template:
+        payload_context["template"] = template
+    if variables is not None:
+        payload_context["variables"] = variables
+    if action_text is not None:
+        payload_context["action_text"] = action_text
+    if action_url is not None:
+        payload_context["action_url"] = action_url
+    stmt = insert(NotificationDelivery).values(
+        dedup_key=key,
+        gateway_key="smtp",
+        channel="email",
+        recipient=clean_recipient,
+        category="user_email",
+        severity="info",
+        title=subject[:200],
+        body=body[:8000],
+        path=path[:500],
+        topic=(topic or event_key)[:120],
+        context=payload_context,
+        status="pending",
+        attempts=0,
+        created_at=now,
+        available_at=now + timedelta(seconds=delay),
+    )
+    await db.execute(stmt.on_duplicate_key_update(dedup_key=stmt.inserted.dedup_key))
+    return await db.scalar(select(NotificationDelivery.id).where(NotificationDelivery.dedup_key == key))
+
+
 async def prepare(db: AsyncSession, row: NotificationDelivery, settings: dict[str, Any]) -> str | datetime | None:
     """Return a skip reason or mute deadline; None means ready to send."""
+    if row.category == "user_email":
+        lifecycle_key = row.context.get("lifecycle_key")
+        if lifecycle_key:
+            policy = await load_policy(db)
+            if not getattr(policy.lifecycle, str(lifecycle_key), True):
+                return "该通知已关闭"
+        return None
     destinations = await targets(db, row.category, row.severity, row.context, settings)
     if row.recipient not in destinations.get(row.channel, []):
         return "该渠道已关闭或接收规则已变更"
@@ -242,7 +306,10 @@ async def _dispatch(db: AsyncSession, row_id: int) -> None:
     brand = await get_settings_store().get(db, "BRAND_NAME", SETTINGS_SPECS["BRAND_NAME"].default_value())
     site = str(site or "").rstrip("/")
     parsed = urlsplit(site)
-    if parsed.scheme not in {"https", "http"} or not parsed.netloc or parsed.username or parsed.password:
+    valid_site = bool(
+        parsed.scheme in {"https", "http"} and parsed.netloc and not parsed.username and not parsed.password
+    )
+    if not valid_site and row.category != "user_email":
         row.status, row.last_error = "failed", "请先在站点设置中配置有效的站点 URL"
         await db.commit()
         return
@@ -265,9 +332,41 @@ async def _dispatch(db: AsyncSession, row_id: int) -> None:
             if row.context.get("template"):
                 template = await load_template(db, row.context["template"])
                 subject, body = render_template_body(template, {"brand_name": brand, **row.context.get("variables", {})})
-            async with EmailClient(await get_smtp_config(db), site) as client:
-                ok, error = await client.send(recipient_email=row.recipient, subject=subject,
-                    main_content_raw=body, greeting="尊敬的管理员：", action_text="查看详情", action_url=site + "/#" + row.path)
+            if row.category == "user_email":
+                effective_site = site if valid_site else ""
+                greeting = str(row.context.get("greeting") or "您好!")
+                raw_action_url = row.context.get("action_url")
+                if raw_action_url:
+                    action_url: str | None = str(raw_action_url)
+                elif row.path and effective_site:
+                    action_url = effective_site + "/#" + row.path
+                else:
+                    action_url = None
+                action_text: str | None = (
+                    str(row.context["action_text"])
+                    if action_url and row.context.get("action_text")
+                    else None
+                )
+                async with EmailClient(
+                    await get_smtp_config(db),
+                    effective_site,
+                    db=db,
+                    actor="system",
+                    log_category="automation",
+                    audit_source=row.context.get("audit_source"),
+                ) as client:
+                    ok, error = await client.send(
+                        recipient_email=row.recipient,
+                        subject=subject,
+                        main_content_raw=body,
+                        greeting=greeting,
+                        action_text=action_text,
+                        action_url=action_url,
+                    )
+            else:
+                async with EmailClient(await get_smtp_config(db), site) as client:
+                    ok, error = await client.send(recipient_email=row.recipient, subject=subject,
+                        main_content_raw=body, greeting="尊敬的管理员：", action_text="查看详情", action_url=site + "/#" + row.path)
             if not ok:
                 raise wecom.DeliveryError(error or "邮件发送失败", retryable=True)
         row.status, row.sent_at, row.last_error = "sent", utc_naive_now(), None

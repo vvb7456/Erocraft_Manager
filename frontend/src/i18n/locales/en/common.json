@@ -88,7 +88,7 @@
     "account": {
       "current_password_incorrect": "Current password is incorrect",
       "email_code_expired": "Verification code expired. Request a new one",
-      "email_confirm_status_unknown": "Email change status is unknown. Refresh your account information later, and request a new change if needed",
+      "email_confirm_failed": "Failed to update email address. Please try again later",
       "email_rate_limited": "Please wait before requesting another code",
       "email_same": "The new email must be different from the current one",
       "email_send_failed": "Failed to send the verification email. Please try again later",
@@ -97,7 +97,7 @@
       "invalid_reset_code": "Invalid verification code",
       "invalid_reset_link": "The reset link is invalid",
       "password_required": "Please enter a new password",
-      "password_reset_status_unknown": "Password reset status is unknown. Try signing in later, and reset your password again if needed",
+      "password_reset_failed": "Password reset failed. Please try again later",
       "password_update_failed": "Password update failed. Please try again later",
       "reset_code_expired": "Verification code expired. Request a new one",
       "reset_link_expired": "The reset link has expired. Please request a new one",

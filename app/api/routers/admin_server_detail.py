@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
 from app.api.utils.wings_errors import translate_wings_error
-from app.db.models import PteroUser
+from app.core.exceptions import ApiError
+from app.db.models import PteroServer, PteroUser
 from app.schemas.admin_server_detail import (
     AdminServerDetailResponse,
     AllocationIdsRequest,
@@ -344,15 +346,41 @@ async def update_admin_server_variables(
     return MessageResponse(message="服务器变量已更新")
 
 
+class AdminReinstallRequest(BaseModel):
+    force: bool = False
+
+
 @router.post("/{server_id}/reinstall", response_model=MessageResponse)
 async def reinstall_admin_server(
     server_id: int,
+    payload: AdminReinstallRequest | None = Body(default=None),
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
+    server = await db.get(PteroServer, server_id)
+    if server is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"服务器 {server_id} 不存在")
+    if server.status == "installing":
+        raise ApiError(409, "server.installing")
+
+    from app.api.routers.wings_remote import (
+        clear_pending_force_reinstall,
+        mark_pending_force_reinstall,
+    )
+
+    server_uuid = server.uuid
+    force = bool(payload.force) if payload is not None else False
+    force_token: str | None = None
+    if force:
+        force_token = mark_pending_force_reinstall(server_uuid)
+    else:
+        clear_pending_force_reinstall(server_uuid)
+
     try:
         await server_lifecycle.reinstall_server(db, server_id)
     except LifecycleError as exc:
+        if force_token is not None:
+            clear_pending_force_reinstall(server_uuid, token=force_token)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     await log_manager_activity(
         db,

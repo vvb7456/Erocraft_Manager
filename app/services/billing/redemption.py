@@ -1285,7 +1285,7 @@ async def redeem_code(
                 allocation_additional=extra_allocs or None,
                 egg_id=plan_fresh.egg_id,
                 name=server_name,
-                description=f"到期时间：{new_exp.strftime('%Y/%m/%d')}",
+                description="",
                 memory=plan_fresh.memory_mb,
                 swap=plan_fresh.swap_mb,
                 disk=plan_fresh.disk_mb,
@@ -1473,19 +1473,6 @@ async def redeem_code(
     # Phase 3: Best-effort post-actions (never revert committed redemption).
     post_ok = True
     if kind != "new_purchase":
-        try:
-            await server_lifecycle.update_server_expiration_description(
-                db, server_id, new_exp
-            )
-        except Exception:
-            post_ok = False
-            logger.warning(
-                "Failed to update expiration description on server %s after redemption",
-                server_id,
-                exc_info=True,
-            )
-            await db.rollback()
-
         if was_suspended:
             try:
                 await server_lifecycle.unsuspend_server(db, server_id)

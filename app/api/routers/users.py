@@ -183,7 +183,10 @@ async def _delete_user_remote(db: AsyncSession, user_id: int) -> int:
             await db.commit()
         except Exception:  # noqa: BLE001
             await db.rollback()
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
     await db.commit()
     return deleted
 
@@ -249,7 +252,7 @@ async def create_user(
         await db.commit()
     except LifecycleError as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
     user_id = created.id
 
@@ -279,7 +282,7 @@ async def create_user(
             if cleanup_succeeded:
                 detail += "，已自动回滚"
             else:
-                detail += "，且自动回滚失败，请检查面板状态"
+                detail += "，且自动回滚失败，请检查用户数据状态"
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail) from exc
 
         template = await load_template(db, "create_user")
@@ -396,7 +399,7 @@ async def update_user(
         await db.commit()
     except LifecycleError as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
     if payload.password:
         from app.services import verification_codes as code_svc

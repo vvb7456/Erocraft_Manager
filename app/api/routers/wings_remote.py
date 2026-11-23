@@ -13,6 +13,7 @@ import ipaddress
 import json
 import logging
 import math
+import posixpath
 import re
 import struct
 import time
@@ -26,6 +27,7 @@ from cryptography.hazmat.primitives import serialization
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.db import get_db
@@ -34,7 +36,9 @@ from app.api.deps.wings_remote_auth import (
     remote_validation_error,
     require_wings_node,
 )
-from app.core.time import utc_naive_now, utc_naive_now_sec
+from app.core.contracts import OperationResult
+from app.core.time import format_in_timezone, get_runtime_timezone, utc_naive_now, utc_naive_now_sec
+from app.db.models.manager import ServerMeta
 from app.db.models.pterodactyl import (
     ActivityLog,
     ActivityLogSubject,
@@ -73,6 +77,54 @@ SFTP_THROTTLE_MAX_ATTEMPTS = 5
 SFTP_THROTTLE_WINDOW_SECONDS = 60.0
 _SFTP_THROTTLE_MAX_KEYS = 4096
 _sftp_failures: dict[str, deque[float]] = {}
+
+# One-shot in-memory force-reinstall tokens consumed on GET /api/remote/servers/{uuid}/install.
+# Avoids polluting persistent server_variables with a transient action flag.
+_FORCE_REINSTALL_TTL_SECONDS = 120.0
+_SHELL_ENTRYPOINTS = frozenset({"sh", "bash", "ash", "dash", "zsh"})
+_pending_force_reinstall: dict[str, tuple[str, float]] = {}
+
+
+def mark_pending_force_reinstall(server_uuid: str, ttl_seconds: float = _FORCE_REINSTALL_TTL_SECONDS) -> str:
+    now = time.monotonic()
+    expired = [uid for uid, (_, deadline) in _pending_force_reinstall.items() if deadline <= now]
+    for uid in expired:
+        _pending_force_reinstall.pop(uid, None)
+    token = uuid_lib.uuid4().hex
+    _pending_force_reinstall[server_uuid] = (token, now + ttl_seconds)
+    return token
+
+
+def clear_pending_force_reinstall(server_uuid: str, *, token: str | None = None) -> None:
+    if token is None:
+        _pending_force_reinstall.pop(server_uuid, None)
+        return
+    entry = _pending_force_reinstall.get(server_uuid)
+    if entry is not None and entry[0] == token:
+        _pending_force_reinstall.pop(server_uuid, None)
+
+
+def _consume_pending_force_reinstall(server_uuid: str) -> bool:
+    entry = _pending_force_reinstall.pop(server_uuid, None)
+    return entry is not None and entry[1] > time.monotonic()
+
+
+def _inject_force_reinstall_env(script: str | None, entrypoint: str | None, *, force: bool) -> str | None:
+    if not script:
+        return script
+    if not force and "FORCE_REINSTALL" not in script:
+        return script
+    entry_bin = posixpath.basename((entrypoint or "").strip().split()[0]) if (entrypoint or "").strip() else ""
+    if entry_bin not in _SHELL_ENTRYPOINTS:
+        return script
+    line = f'export FORCE_REINSTALL="{"true" if force else "false"}"'
+    newline = "\r\n" if "\r\n" in script else "\n"
+    if script.startswith("#!"):
+        idx = script.find("\n")
+        if idx == -1:
+            return script + newline + line + newline
+        return script[: idx + 1] + line + newline + script[idx + 1 :]
+    return line + newline + script
 
 
 def _extract_client_host(raw: str | None) -> str:
@@ -565,10 +617,14 @@ async def get_remote_server_install(
     parent_egg = (
         await db.get(Egg, egg.copy_script_from) if egg.copy_script_from is not None else None
     )
+    entrypoint = egg.resolve_script_entry(parent_egg)
+    raw_script = egg.resolve_script_install(parent_egg)
+    force_reinstall = _consume_pending_force_reinstall(server.uuid)
+    script = _inject_force_reinstall_env(raw_script, entrypoint, force=force_reinstall)
     return {
         "container_image": egg.resolve_script_container(parent_egg),
-        "entrypoint": egg.resolve_script_entry(parent_egg),
-        "script": egg.resolve_script_install(parent_egg),
+        "entrypoint": entrypoint,
+        "script": script,
     }
 
 
@@ -603,7 +659,100 @@ async def store_remote_server_install(
     server.status = new_status
     server.installed_at = now
     server.updated_at = now
+
+    # First successful install: atomically mark notified and enqueue user email into outbox.
+    # Rely solely on ServerMeta.install_notified_at (not payload.reinstall) so a server whose
+    # initial install failed still notifies once a subsequent reinstall succeeds.
+    no_email_owner_id: int | None = None
+    if payload.successful and new_status is None:
+        try:
+            async with db.begin_nested():
+                meta = (
+                    await db.execute(
+                        select(ServerMeta)
+                        .where(ServerMeta.server_id == server.id)
+                        .with_for_update()
+                    )
+                ).scalar_one_or_none()
+                if meta is None or meta.install_notified_at is None:
+                    if meta is None:
+                        await db.execute(
+                            mysql_insert(ServerMeta)
+                            .values(server_id=server.id, install_notified_at=now)
+                            .on_duplicate_key_update(
+                                install_notified_at=func.coalesce(ServerMeta.install_notified_at, now)
+                            )
+                        )
+                    else:
+                        meta.install_notified_at = now
+
+                    from app.services.notifications.policy import load_policy
+                    from app.services.notifications.queue import enqueue_user_email
+
+                    if (await load_policy(db)).lifecycle.installed:
+                        owner = await db.get(PteroUser, server.owner_id)
+                        email = (owner.email or "").strip() if owner is not None else ""
+                        if not email:
+                            no_email_owner_id = int(server.owner_id)
+                        else:
+                            username = (owner.username or "") if owner is not None else ""
+                            tz_name = await get_runtime_timezone(db)
+                            installed_str = format_in_timezone(now, tz_name) or ""
+                            await enqueue_user_email(
+                                db,
+                                event_key=f"server_installed:{server.id}",
+                                recipient=email,
+                                subject=f"服务器 {server.name} 已开通",
+                                template="server_installed",
+                                variables={
+                                    "username": username,
+                                    "server_name": server.name or "",
+                                    "server_id": int(server.id),
+                                    "server_uuid": server.uuid or "",
+                                    "installed_at": installed_str,
+                                },
+                                greeting=f"您好, {username}!" if username else "您好!",
+                                action_text="进入控制台",
+                                path=f"/servers/{server.id}/console",
+                                topic=f"server_installed:{server.id}",
+                                context={
+                                    "lifecycle_key": "installed",
+                                    "audit_source": "server_install_notify",
+                                    "server_id": int(server.id),
+                                    "owner_id": int(server.owner_id),
+                                },
+                            )
+        except Exception:
+            logger.warning(
+                "wings_remote: failed to enqueue install notification for server %s",
+                server.id,
+                exc_info=True,
+            )
+
+    server_id_val = int(server.id)
     await db.commit()
+
+    # Log audit outside the main transaction (log_manager_activity commits/rolls back internally).
+    if no_email_owner_id is not None:
+        from app.services.audit import log_manager_activity
+
+        await log_manager_activity(
+            db,
+            actor="system",
+            category="automation",
+            operation=OperationResult(
+                action="automation.install_notify",
+                phase="request",
+                outcome="failed",
+                target={"server_id": server_id_val, "owner_id": no_email_owner_id},
+            ),
+            detail_key="install_notify.no_email",
+            detail_params={
+                "server_id": server_id_val,
+                "owner_id": no_email_owner_id,
+            },
+        )
+
     return Response(status_code=204)
 
 

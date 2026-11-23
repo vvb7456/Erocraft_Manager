@@ -2,7 +2,7 @@
 export const errorCodes = [
   "account.current_password_incorrect",
   "account.email_code_expired",
-  "account.email_confirm_status_unknown",
+  "account.email_confirm_failed",
   "account.email_rate_limited",
   "account.email_same",
   "account.email_send_failed",
@@ -11,7 +11,7 @@ export const errorCodes = [
   "account.invalid_reset_code",
   "account.invalid_reset_link",
   "account.password_required",
-  "account.password_reset_status_unknown",
+  "account.password_reset_failed",
   "account.password_update_failed",
   "account.reset_code_expired",
   "account.reset_link_expired",

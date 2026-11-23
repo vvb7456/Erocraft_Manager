@@ -95,7 +95,7 @@ async def update_user_account(
             password=new_password,
         )
     except LifecycleError as exc:
-        raise ApiError(502, "account.password_update_failed") from exc
+        raise ApiError(500, "account.password_update_failed") from exc
 
     now = datetime.now(UTC).replace(tzinfo=None)
     await db.execute(
@@ -343,7 +343,7 @@ async def confirm_email(
         await db.commit()
     except LifecycleError as exc:
         await db.rollback()
-        raise ApiError(502, "account.email_confirm_status_unknown") from exc
+        raise ApiError(500, "account.email_confirm_failed") from exc
 
     await db.refresh(user)
 

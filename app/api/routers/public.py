@@ -332,8 +332,8 @@ async def reset_password(
         )
         await db.commit()
     except LifecycleError as exc:
-        logger.exception("Failed to sync password for user %s", user.username)
-        raise ApiError(502, "account.password_reset_status_unknown") from exc
+        logger.exception("Failed to reset password for user %s", user.username)
+        raise ApiError(500, "account.password_reset_failed") from exc
 
     await log_manager_activity(
         db,
@@ -522,7 +522,7 @@ async def register(
         if await user_repository.get_by_username(db, username):
             raise ApiError(409, "register.username_taken") from None
         logger.error("create_user (public register) failed for %s: %s", email, exc)
-        raise ApiError(502, "register.create_failed") from exc
+        raise ApiError(500, "register.create_failed") from exc
 
     await log_manager_activity(
         db,

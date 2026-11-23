@@ -9,7 +9,6 @@ See docs/PTERO_API_DECOUPLING.md for the architecture.
 from __future__ import annotations
 
 import logging
-from datetime import date
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -488,16 +487,3 @@ async def delete_server(db: AsyncSession, server_id: int, *, force: bool = False
     except PanelDBError as exc:
         raise LifecycleError(str(exc)) from exc
     await db.commit()
-
-
-async def update_server_expiration_description(
-    db: AsyncSession,
-    server_id: int,
-    expiration: date | None,
-) -> None:
-    """Sync the 到期时间 line in servers.description. Pure DB write, no Wings."""
-    iso = expiration.strftime("%Y/%m/%d") if expiration else None
-    try:
-        await panel_db.sync_server_expiration_description(db, server_id, iso)
-    except PanelDBError as exc:
-        raise LifecycleError(str(exc)) from exc

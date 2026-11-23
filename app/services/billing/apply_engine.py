@@ -564,20 +564,13 @@ async def _run_post_actions(
     db: AsyncSession, order: BillingOrder, server_id: int
 ) -> None:
     order_id = order.id
-    effect = (await db.scalars(select(BillingOrderEffect).where(BillingOrderEffect.order_id == order_id))).one()
 
-    # 1) Sync panel description's 到期 line.
-    await server_lifecycle.update_server_expiration_description(
-        db, server_id, effect.new_expiration_date
-    )
-    await db.commit()
-
-    # 2) Unsuspend if needed (idempotent — §0 commitment #1).
+    # 1) Unsuspend if needed (idempotent).
     server = await db.get(PteroServer, server_id)
     if server is not None and server.is_suspended:
         await server_lifecycle.unsuspend_server(db, server_id)
 
-    # 3) LLM free quota provision (best-effort — must never block the order).
+    # 2) LLM free quota provision (best-effort — must never block the order).
     # Renew does NOT trigger provision — it doesn't change the plan's LLM
     # config, and the key follows server status (sync job handles
     # suspend/unsuspend).

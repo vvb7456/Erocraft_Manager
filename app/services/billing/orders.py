@@ -214,7 +214,7 @@ async def _create_placeholder_server(db: AsyncSession, *, user: PteroUser, order
         io=snapshot["io"], cpu=snapshot["cpu"], image=snapshot["docker_image"], startup=snapshot["startup_command"],
         environment={key: str(value) for key, value in snapshot["env_snapshot"].items()},
         database_limit=snapshot["database_limit"], backup_limit=snapshot["backup_limit"], allocation_limit=snapshot["allocation_limit"],
-        oom_disabled=snapshot["oom_disabled"], description=f"订单 {order.order_no}", external_id=f"pending:order-{order.id}",
+        oom_disabled=snapshot["oom_disabled"], description="", external_id=f"pending:order-{order.id}",
         allocation_additional=extras or None,
     )
     order.reserved_allocation_id, order.reserved_additional_allocations = primary, extras or None

@@ -36,13 +36,8 @@ from app.jobs.tasks.certificates import (
 )
 from app.jobs.tasks.cleanup import CLEANUP_JOB_ID, run_token_cleanup
 from app.jobs.tasks.daily_lifecycle import sync_daily_lifecycle_job
-from app.jobs.tasks.force_reinstall_reset import (
-    FORCE_REINSTALL_RESET_JOB_ID,
-    run_force_reinstall_reset,
-)
 from app.jobs.tasks.monitoring import MONITORING_JOB_ID, run_monitoring_collect
 from app.jobs.tasks.reminders import sync_reminder_jobs
-from app.jobs.tasks.server_install_notify import sync_install_notify_job
 from app.services.notifications.queue import run_notifications
 from app.services.notifications.events import task_failure, task_recovered
 from app.core.time import utc_naive_now
@@ -135,7 +130,6 @@ async def sync_managed_jobs(scheduler: AsyncIOScheduler) -> bool:
 
     sync_daily_lifecycle_job(scheduler, values)
     sync_reminder_jobs(scheduler, values)
-    sync_install_notify_job(scheduler, values)
     sync_cert_expiry_alert_job(scheduler, values)
     _last_settings_signature = signature
     logger.info("manager-jobs schedule updated from runtime settings")
@@ -177,16 +171,6 @@ def build_scheduler() -> AsyncIOScheduler:
         coalesce=True,
         max_instances=1,
         misfire_grace_time=300,
-    )
-    scheduler.add_job(
-        run_force_reinstall_reset,
-        id=FORCE_REINSTALL_RESET_JOB_ID,
-        trigger="interval",
-        seconds=30,
-        replace_existing=True,
-        coalesce=True,
-        max_instances=1,
-        misfire_grace_time=60,
     )
     cert_base = datetime.now(timezone.utc)
     scheduler.add_job(

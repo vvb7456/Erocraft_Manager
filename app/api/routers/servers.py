@@ -187,7 +187,6 @@ async def _persist_expiration_after_remote(
     *,
     server_id: int,
     new_date: date | None,
-    old_date: date | None,
     resuspend_on_failure: bool = False,
 ) -> None:
     original_exc: Exception | None = None
@@ -202,23 +201,13 @@ async def _persist_expiration_after_remote(
     cleanup_attempted = False
     cleanup_failed: list[str] = []
 
-    if old_date is not None:
-        cleanup_attempted = True
-        try:
-            await server_lifecycle.update_server_expiration_description(db, server_id, old_date)
-            await db.commit()
-        except LifecycleError:
-            await db.rollback()
-            cleanup_failed.append("恢复面板到期描述失败")
-            logger.exception("Failed to restore server %s description after local persistence failure", server_id)
-
     if resuspend_on_failure:
         cleanup_attempted = True
         try:
             await server_lifecycle.suspend_server(db, server_id)
         except LifecycleError:
             await db.rollback()
-            cleanup_failed.append("恢复面板冻结状态失败")
+            cleanup_failed.append("恢复服务器冻结状态失败")
             logger.exception("Failed to restore server %s suspension after local persistence failure", server_id)
 
     logger.exception(
@@ -226,13 +215,13 @@ async def _persist_expiration_after_remote(
         server_id,
         exc_info=original_exc,
     )
-    detail = "面板更新成功，但写入管理元数据失败"
+    detail = "服务器解冻成功，但写入管理元数据失败" if resuspend_on_failure else "写入到期日期元数据失败"
     if cleanup_attempted and not cleanup_failed:
-        detail += "，已自动回滚远端变更"
+        detail += "，已自动恢复冻结状态"
     elif cleanup_failed:
-        detail += "，且" + "；".join(cleanup_failed) + "，请检查面板状态"
-    else:
-        detail += "，请检查面板状态"
+        detail += "，且" + "；".join(cleanup_failed) + "，请检查服务器状态"
+    elif resuspend_on_failure:
+        detail += "，请检查服务器状态"
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail) from original_exc
 
 
@@ -338,7 +327,6 @@ async def create_server(
                 detail=f"外部订单号 '{ext_id}' 已在订单 #{dup_order} 中录入，请勿重复使用",
             )
 
-    description = f"到期时间：{expiration_date.strftime('%Y/%m/%d')}"
     await db.commit()
 
     try:
@@ -349,7 +337,7 @@ async def create_server(
             allocation_id=payload.allocation_id,
             egg_id=payload.egg_id,
             name=payload.server_name.strip(),
-            description=description,
+            description="",
             image=payload.docker_image.strip(),
             startup=payload.startup_command.strip(),
             environment=payload.environment,
@@ -482,7 +470,7 @@ async def create_server(
         if cleanup_succeeded:
             detail += "，已自动回滚"
         else:
-            detail += "，且自动回滚失败，请检查面板状态"
+            detail += "，且自动回滚失败，请检查节点与服务器状态"
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail) from exc
 
     server_data = {
@@ -621,12 +609,9 @@ async def renew_server(
             # 同一服务器同一外部单号的重试请求：检查 effect.post_actions_done_at
             existing_effect = await db.get(BillingOrderEffect, existing_order.id)
             if existing_effect and existing_effect.post_actions_done_at is None:
-                # 上次后置动作（如解冻或面板描述）失败了，尝试重新执行后置动作
+                # 上次后置动作（如解冻）失败了，尝试重新执行后置动作
                 post_retry_err: Exception | None = None
                 try:
-                    await server_lifecycle.update_server_expiration_description(
-                        db, server_id, existing_effect.new_expiration_date
-                    )
                     if existing_effect.new_expiration_date is not None and was_suspended:
                         await server_lifecycle.unsuspend_server(db, server_id)
                 except Exception as exc:
@@ -743,14 +728,7 @@ async def renew_server(
     # 5. Step 2: 外部后置动作
     post_action_error: Exception | None = None
 
-    # 5.1 面板描述同步
-    try:
-        await server_lifecycle.update_server_expiration_description(db, server_id, new_date)
-    except Exception as exc:
-        post_action_error = exc
-        logger.warning("Failed to update panel expiration description for server %s: %s", server_id, exc)
-
-    # 5.2 解冻
+    # 5.1 解冻
     if new_date is not None and was_suspended:
         try:
             await server_lifecycle.unsuspend_server(db, server_id)
@@ -909,15 +887,12 @@ async def batch_servers(
             base_date = today if old_expiration_date and old_expiration_date < today else (old_expiration_date or today)
             new_date = base_date + timedelta(days=payload.days)
             try:
-                await server_lifecycle.update_server_expiration_description(db, server.id, new_date)
-                await db.commit()
                 if was_suspended:
                     await server_lifecycle.unsuspend_server(db, server.id)
                 await _persist_expiration_after_remote(
                     db,
                     server_id=server.id,
                     new_date=new_date,
-                    old_date=old_expiration_date,
                     resuspend_on_failure=was_suspended,
                 )
                 success += 1
@@ -1120,7 +1095,6 @@ async def update_server(
     server = await _get_server_or_404(db, server_id)
     actor_username = current_user.username
     server_name = server.name
-    old_expiration_date = server.expiration_date
     if not payload.expirationDate:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无有效更新内容")
 
@@ -1129,19 +1103,10 @@ async def update_server(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="日期格式无效") from exc
 
-    await db.commit()
-    try:
-        await server_lifecycle.update_server_expiration_description(db, server_id, new_date)
-        await db.commit()
-    except LifecycleError as exc:
-        await db.rollback()
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
     await _persist_expiration_after_remote(
         db,
         server_id=server_id,
         new_date=new_date,
-        old_date=old_expiration_date,
     )
     await log_manager_activity(
         db,

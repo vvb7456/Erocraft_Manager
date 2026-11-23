@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import uuid as _uuid
 from dataclasses import dataclass
 
@@ -478,40 +477,6 @@ async def update_server_limits(
     )
     if result.rowcount == 0:
         raise PanelDBError(f"服务器 {server_id} 不存在")
-
-
-_EXPIRATION_LINE_RE = re.compile(
-    r"(^|\n)到期时间[：:]\s*\d{4}[/-]\d{1,2}[/-]\d{1,2}(?=\n|$)"
-)
-# 占位阶段写入的「订单 EMxxxx…」行，apply 成功后一并清理。
-_ORDER_PLACEHOLDER_LINE_RE = re.compile(
-    r"(^|\n)订单\s+EM[A-Z0-9]+(?=\n|$)"
-)
-
-
-async def sync_server_expiration_description(
-    db: AsyncSession,
-    server_id: int,
-    expiration_iso: str | None,
-) -> None:
-    """Replace any existing 到期时间 line in description with the new one.
-
-    ``expiration_iso`` should be in ``YYYY/MM/DD`` format already (see existing
-    callers). Pass ``None`` to remove the line.
-    """
-    server = await db.get(PteroServer, server_id)
-    if server is None:
-        raise PanelDBError(f"服务器 {server_id} 不存在")
-    old_desc = server.description or ""
-    cleaned = _EXPIRATION_LINE_RE.sub("", old_desc)
-    cleaned = _ORDER_PLACEHOLDER_LINE_RE.sub("", cleaned).strip()
-    if expiration_iso is None:
-        new_desc = cleaned
-    else:
-        line = f"到期时间：{expiration_iso}"
-        new_desc = f"{line}\n{cleaned}".strip() if cleaned else line
-    server.description = new_desc
-    server.updated_at = utc_naive_now_sec()
 
 
 async def delete_server_row(db: AsyncSession, server_id: int) -> None:
