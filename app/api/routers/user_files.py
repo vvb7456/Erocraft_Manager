@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
-from app.api.deps.ownership import get_owned_server
+from app.api.deps.ownership import get_active_owned_server
 from app.db.models.pterodactyl import PteroServer, PteroUser
 from app.schemas.user_servers import (
     FileCompressRequest,
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/user", tags=["user_files"])
 @router.get("/servers/{server_id}/files/list", response_model=list[WingsFileEntry])
 async def list_user_server_files(
     directory: str = Query(default="/"),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> list[WingsFileEntry]:
     try:
@@ -47,7 +47,7 @@ async def get_user_server_file_contents(
     request: Request,
     file: str = Query(min_length=1),
     current_user: PteroUser = Depends(get_current_user),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> FileContentResponse:
     try:
@@ -72,7 +72,7 @@ async def write_user_server_file(
     request: Request,
     file: str = Query(min_length=1),
     current_user: PteroUser = Depends(get_current_user),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     try:
@@ -96,7 +96,7 @@ async def rename_user_server_file(
     payload: FileRenameRequest,
     request: Request,
     current_user: PteroUser = Depends(get_current_user),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     try:
@@ -130,7 +130,7 @@ async def delete_user_server_files(
     payload: FileDeleteRequest,
     request: Request,
     current_user: PteroUser = Depends(get_current_user),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     try:
@@ -154,7 +154,7 @@ async def compress_user_server_files(
     payload: FileCompressRequest,
     request: Request,
     current_user: PteroUser = Depends(get_current_user),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
@@ -178,7 +178,7 @@ async def decompress_user_server_file(
     payload: FileDecompressRequest,
     request: Request,
     current_user: PteroUser = Depends(get_current_user),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     try:
@@ -202,7 +202,7 @@ async def create_user_server_folder(
     payload: FileCreateFolderRequest,
     request: Request,
     current_user: PteroUser = Depends(get_current_user),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     try:
@@ -226,7 +226,7 @@ async def get_user_server_download_url(
     request: Request,
     file: str = Query(min_length=1),
     current_user: PteroUser = Depends(get_current_user),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> SignedUrlResponse:
     try:
@@ -250,7 +250,7 @@ async def get_user_server_download_url(
 @router.post("/servers/{server_id}/files/upload", response_model=SignedUrlResponse)
 async def get_user_server_upload_url(
     current_user: PteroUser = Depends(get_current_user),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> SignedUrlResponse:
     try:

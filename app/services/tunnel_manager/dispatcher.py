@@ -422,6 +422,20 @@ async def _find_existing_tunnel_by_name(
 
 _SUBDOMAIN_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")
 
+# 命中保留词时统一抛出 HostnameConflict（对外表现为"已被占用"），不暴露保留词清单。
+RESERVED_SUBDOMAINS: frozenset[str] = frozenset({
+    "www", "api", "admin", "panel", "console", "wings", "agent",
+    "pay", "payment", "billing", "login", "auth", "sso", "oauth",
+    "account", "support", "help", "status", "dashboard", "portal",
+    "mail", "webmail", "smtp", "imap", "pop", "pop3",
+    "ftp", "ssh", "mx", "ns", "ns1", "ns2", "ns3", "ns4", "dns",
+    "app", "static", "cdn", "assets", "docs", "blog",
+    "vpn", "proxy", "gateway", "webhook", "cf-test",
+    "dev", "staging", "test", "root", "system", "security",
+    "abuse", "postmaster", "hostmaster", "webmaster",
+    "erocraft", "manager", "st", "sillytavern", "xiaoyue",
+})
+
 
 def _generated_subdomain(server_uuid_short: str) -> str:
     """Default subdomain derived from server uuid_short (8 chars)."""
@@ -434,6 +448,8 @@ def _normalize_subdomain(value: str | None, fallback: str) -> str:
     v = value.strip().lower()
     if not _SUBDOMAIN_RE.fullmatch(v):
         raise InvalidSubdomain(f"invalid subdomain format: {value!r}")
+    if v in RESERVED_SUBDOMAINS:
+        raise HostnameConflict(f"subdomain {v!r} is already in use")
     return v
 
 

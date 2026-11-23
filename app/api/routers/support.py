@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Literal
 
@@ -28,13 +29,25 @@ from app.services import support_images
 
 router = APIRouter(prefix="/support", tags=["support"])
 _MAX_IMAGE = 4 * 1024 * 1024
-_listeners: set[tuple[int, bool, asyncio.Event]] = set()
+_MAX_USER_SSE_STREAMS = 5
+_MAX_ADMIN_SSE_STREAMS = 15
+
+
+@dataclass(eq=False)
+class _SseListener:
+    uid: int
+    admin: bool
+    changed: asyncio.Event = field(default_factory=asyncio.Event)
+    closed: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+_listeners: list[_SseListener] = []
 
 
 def notify_change(user_id: int) -> None:
-    for uid, admin, event in _listeners:
-        if admin or uid == user_id:
-            event.set()
+    for listener in _listeners:
+        if listener.admin or listener.uid == user_id:
+            listener.changed.set()
 
 
 class MessageInput(BaseModel):
@@ -227,7 +240,7 @@ async def send_message(cid: int, request: Request, user: SupportUser = Depends(g
     ))
     if count and count >= 30:
         raise HTTPException(429, "发送过于频繁，请稍后重试")
-    image_path = await run_in_threadpool(support_images.save_image, image_data, image_type) if image_data and image_type else None
+    image_path = await run_in_threadpool(support_images.save_image, image_data, image_type, row.user_id) if image_data and image_type else None
     message = SupportMessage(
         conversation_id=cid, sender_id=user.id, is_admin=bool(user.root_admin),
         client_id=payload.client_id, content=content, image_path=image_path, image_type=image_type,
@@ -276,23 +289,32 @@ async def events(request: Request, user: SupportUser = Depends(get_support_user)
     await db.commit()
 
     async def stream():
-        changed = asyncio.Event()
-        listener = (uid, admin, changed)
-        _listeners.add(listener)
+        listener = _SseListener(uid=uid, admin=admin)
+        _listeners.append(listener)
+        max_streams = _MAX_ADMIN_SSE_STREAMS if admin else _MAX_USER_SSE_STREAMS
+        same_user = [item for item in _listeners if item.uid == uid and not item.closed.is_set()]
+        for stale in same_user[:-max_streams]:
+            stale.closed.set()
+            stale.changed.set()
         try:
             yield "retry: 2000\n\nevent: change\ndata: {}\n\n"
             # 每十分钟重连，经正常请求认证重新核对登录身份。
             until = asyncio.get_running_loop().time() + 600
             while asyncio.get_running_loop().time() < until:
-                if await request.is_disconnected():
+                if listener.closed.is_set() or await request.is_disconnected():
                     return
                 try:
-                    await asyncio.wait_for(changed.wait(), timeout=15)
-                    changed.clear()
+                    await asyncio.wait_for(listener.changed.wait(), timeout=15)
+                    if listener.closed.is_set():
+                        return
+                    listener.changed.clear()
                     yield "event: change\ndata: {}\n\n"
                 except TimeoutError:
                     yield "event: heartbeat\ndata: {}\n\n"
         finally:
-            _listeners.discard(listener)
+            try:
+                _listeners.remove(listener)
+            except ValueError:
+                pass
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

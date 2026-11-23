@@ -12,13 +12,15 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps.auth import revoke_user_external_sessions
 from app.api.deps.db import get_db
 from app.core.api_errors import ApiError
+from app.core.config import get_settings
 from app.core.contracts import OperationResult
 from app.core.error_codes import ErrorCode
-from app.core.rate_limit import limiter
+from app.core.rate_limit import extract_client_ip, limiter
 from app.core.runtime_settings import BILLING_SPECS, SETTINGS_SPECS
-from app.core.security import SESSION_USER_ID_KEY
+from app.core.security import set_user_session
 from app.core.settings_store import get_settings_store
 from app.core.tokens import VERIFICATION_CODE_EXPIRY_MINUTES, verify_token_async
 from app.db.models.manager import ManagerPasswordReset
@@ -322,6 +324,12 @@ async def reset_password(
             last_name=user.name_last or "User",
             password=payload.newPassword,
         )
+        await revoke_user_external_sessions(
+            db,
+            user_id,
+            user_uuid=user.uuid,
+            is_admin=bool(user.root_admin),
+        )
         await db.commit()
     except LifecycleError as exc:
         logger.exception("Failed to sync password for user %s", user.username)
@@ -496,6 +504,16 @@ async def register(
             last_name=(payload.last_name or "User").strip(),
             password_hash=raw_hash,
         )
+        if agreements_items:
+            await agreements_svc.record(
+                db,
+                user_id=int(created.id),
+                items=agreements_items,
+                context="register",
+                ip=extract_client_ip(request, fallback="127.0.0.1"),
+                locale=None,
+                commit=False,
+            )
         await db.commit()
     except panel_db.PanelDBError as exc:
         await db.rollback()
@@ -519,27 +537,6 @@ async def register(
         detail_key="register_verified",
         detail_params={"username": created.username, "email": created.email},
     )
-
-    # Best-effort agreement consent persistence.
-    if agreements_items:
-        try:
-            fwd = request.headers.get("x-forwarded-for", "")
-            request_ip: str | None = fwd.split(",")[0].strip() if fwd else None
-            if request_ip is None and request.client is not None:
-                request_ip = request.client.host
-            await agreements_svc.record(
-                db,
-                user_id=int(created.id),
-                items=agreements_items,
-                context="register",
-                ip=request_ip,
-                locale=None,
-                commit=False,
-            )
-            await db.commit()
-        except Exception:  # noqa: BLE001
-            await db.rollback()
-            logger.exception("register: failed to record agreement acceptances for user=%s", created.id)
 
     # Best-effort referral row + invitee welcome coupon.
     from app.services.user import invite_codes as invite_svc
@@ -622,8 +619,12 @@ async def register(
             except Exception:
                 logger.exception("register: invitee welcome email failed (user=%s)", created.id)
 
-    request.session.clear()
-    request.session[SESSION_USER_ID_KEY] = int(created.id)
+    set_user_session(
+        request.session,
+        int(created.id),
+        raw_hash,
+        get_settings().secret_key,
+    )
 
     return RegisterResponse(
         message="注册成功。",

@@ -89,7 +89,7 @@ async def _serialize_referral(
         inviter_user_id=r.inviter_user_id,
         invitee_user_id=r.invitee_user_id,
         invitee_username=invitee.username if invitee else None,
-        invitee_email=invitee.email if invitee else None,
+        invitee_email=None,
         invite_code=r.invite_code,
         status=r.status,
         qualifying_order_id=r.qualifying_order_id,

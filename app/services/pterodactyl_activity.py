@@ -7,7 +7,6 @@ can render them without custom code.
 
 from __future__ import annotations
 
-import ipaddress
 import json
 from datetime import UTC, datetime
 from typing import Any, Iterable
@@ -15,6 +14,7 @@ from typing import Any, Iterable
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rate_limit import extract_client_ip
 from app.db.models.pterodactyl import ActivityLog, ActivityLogSubject, PteroServer, PteroUser
 
 PTERODACTYL_DISABLED_ACTIVITY_EVENTS = frozenset({"server:file.upload"})
@@ -33,35 +33,8 @@ SUBJECT_USER = "user"
 
 
 def get_request_ip(request: Request | None) -> str:
-    """Return a Panel-compatible client IP string.
-
-    Pterodactyl stores a non-null string in `activity_logs.ip`. The app is
-    normally behind nginx, so prefer common proxy headers when present.
-    """
-
-    if request is not None:
-        forwarded_for = request.headers.get("x-forwarded-for")
-        if forwarded_for:
-            for item in forwarded_for.split(","):
-                ip = item.strip()
-                try:
-                    ipaddress.ip_address(ip)
-                except ValueError:
-                    continue
-                return ip
-
-        real_ip = request.headers.get("x-real-ip")
-        if real_ip:
-            try:
-                ipaddress.ip_address(real_ip)
-                return real_ip
-            except ValueError:
-                pass
-
-        if request.client and request.client.host:
-            return request.client.host
-
-    return "127.0.0.1"
+    """Return a trusted Panel-compatible client IP string."""
+    return extract_client_ip(request, fallback="127.0.0.1")
 
 
 def decode_activity_properties(raw: str | None) -> dict[str, Any] | list[Any]:

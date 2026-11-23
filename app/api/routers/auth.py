@@ -10,9 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
 from app.core.api_errors import ApiError
+from app.core.config import get_settings
 from app.core.contracts import OperationResult
 from app.core.rate_limit import limiter
-from app.core.security import SESSION_USER_ID_KEY
+from app.core.security import SESSION_USER_ID_KEY, set_user_session
 from app.db.models.pterodactyl import PteroUser
 from app.db.repositories.users import user_repository
 from app.schemas.auth import LoginRequest, LoginResponse, LogoutResponse, MeResponse
@@ -65,8 +66,12 @@ async def login(
         )
         raise ApiError(status.HTTP_401_UNAUTHORIZED, "auth.invalid_credentials")
 
-    request.session.clear()
-    request.session[SESSION_USER_ID_KEY] = int(user.id)
+    set_user_session(
+        request.session,
+        int(user.id),
+        user.password,
+        get_settings().secret_key,
+    )
 
     await pterodactyl_activity_logger.log_account_activity(
         db,

@@ -11,12 +11,14 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps.auth import get_current_user
+from app.api.deps.auth import get_current_user, revoke_user_external_sessions
 from app.api.deps.db import get_db
 from app.core.api_errors import ApiError
+from app.core.config import get_settings
 from app.core.contracts import OperationResult
 from app.core.rate_limit import limiter
 from app.core.runtime_settings import SETTINGS_SPECS
+from app.core.security import set_user_session
 from app.core.settings_store import get_settings_store
 from app.db.models.manager import ManagerPasswordReset
 from app.db.models.pterodactyl import PteroUser
@@ -103,7 +105,20 @@ async def update_user_account(
         .values(used_at=now)
     )
     await code_svc.revoke_user_codes(db, int(current_user.id), now)
+    await revoke_user_external_sessions(
+        db,
+        int(current_user.id),
+        user_uuid=current_user.uuid,
+        is_admin=bool(current_user.root_admin),
+    )
     await db.commit()
+    await db.refresh(current_user)
+    set_user_session(
+        request.session,
+        int(current_user.id),
+        current_user.password,
+        get_settings().secret_key,
+    )
 
     await log_manager_activity(
         db,

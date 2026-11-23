@@ -25,7 +25,7 @@ interface ActivityActor {
   id: number
   uuid: string
   username: string
-  email: string
+  email?: string | null
 }
 
 interface ActivityLogItem {

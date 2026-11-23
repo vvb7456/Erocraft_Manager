@@ -12,11 +12,12 @@ from __future__ import annotations
 
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
+from app.core.rate_limit import limiter
 from app.core.time import to_iso_z
 from app.db.models.billing import BillingInvoice, BillingOrder, BillingPayment
 from sqlalchemy import select
@@ -194,7 +195,9 @@ def _http_for(exc: OrderError) -> HTTPException:
 
 
 @router.post("", response_model=CreateOrderResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def create_order_endpoint(
+    request: Request,
     payload: CreateOrderRequest,
     user: PteroUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -263,7 +266,9 @@ async def resolve_order_endpoint(
 
 
 @router.post("/{order_id}/payments", response_model=CheckoutOut)
+@limiter.limit("10/minute")
 async def checkout_endpoint(
+    request: Request,
     order_id: int, replace: bool = False,
     user: PteroUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ) -> CheckoutOut:

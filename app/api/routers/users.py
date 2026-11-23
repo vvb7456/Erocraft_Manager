@@ -8,12 +8,14 @@ import logging
 import secrets
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps.auth import require_admin
+from app.api.deps.auth import require_admin, revoke_user_external_sessions
 from app.api.deps.db import get_db
+from app.core.config import get_settings
+from app.core.security import set_user_session
 from app.core.time import to_iso_z
 from app.core.runtime_settings import SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
@@ -327,6 +329,7 @@ async def create_user(
 async def update_user(
     user_id: int,
     payload: UpdateUserRequest,
+    request: Request,
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> UserMessageResponse:
@@ -406,7 +409,21 @@ async def update_user(
             .values(used_at=now)
         )
         await code_svc.revoke_user_codes(db, user_id, now)
+        await revoke_user_external_sessions(
+            db,
+            user_id,
+            user_uuid=locked_user.uuid,
+            is_admin=old_root_admin or new_root_admin,
+        )
         await db.commit()
+        if user_id == int(current_user.id):
+            await db.refresh(locked_user)
+            set_user_session(
+                request.session,
+                user_id,
+                locked_user.password,
+                get_settings().secret_key,
+            )
 
     await log_manager_activity(
         db,

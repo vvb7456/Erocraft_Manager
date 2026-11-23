@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from app.core.api_errors import ApiError
+from app.core.rate_limit import limiter
 import json
 import time
 import uuid
@@ -16,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
-from app.api.deps.ownership import get_owned_server
+from app.api.deps.ownership import get_active_owned_server, get_owned_server
 from app.config.egg_credentials import required_credential_vars, validate_startup_variable
 from app.core.runtime_settings import AUTOMATION_SPECS
 from app.core.settings_store import get_settings_store
@@ -132,17 +134,20 @@ def _serialize_server(
     )
 
 
+_ACTIVITY_FIELD_MAX_CHARS = 4096
+
+
 def _validate_activity_report(payload: UserActivityReportRequest) -> dict[str, str]:
     props = payload.properties
     if payload.event == "server:console.command":
-        command = str(props.get("command") or "").strip()
+        command = str(props.get("command") or "").strip()[:_ACTIVITY_FIELD_MAX_CHARS]
         if not command:
             raise ApiError(422, "activity.command_required")
         return {"command": command}
 
     if payload.event == "server:file.uploaded":
-        directory = str(props.get("directory") or "").strip() or "/"
-        file = str(props.get("file") or "").strip()
+        directory = (str(props.get("directory") or "").strip() or "/")[:_ACTIVITY_FIELD_MAX_CHARS]
+        file = str(props.get("file") or "").strip()[:_ACTIVITY_FIELD_MAX_CHARS]
         if not file:
             raise ApiError(422, "activity.file_required")
         return {"directory": directory, "file": file}
@@ -450,7 +455,7 @@ async def update_user_server_startup(
     payload: StartupVariableUpdate,
     request: Request,
     current_user: PteroUser = Depends(get_current_user),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     batch = str(uuid.uuid4()) if len(payload.variables) > 1 else None
@@ -487,6 +492,7 @@ async def update_user_server_startup(
 
 
 @router.post("/servers/{server_id}/reinstall", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("3/minute")
 async def reinstall_user_server(
     payload: ReinstallRequest,
     request: Request,
@@ -562,6 +568,7 @@ _ACTIVITY_SORT_COLUMNS: dict[str, Any] = {
 
 @router.get("/servers/{server_id}/activity", response_model=UserActivityLogsResponse)
 async def list_user_server_activity(
+    current_user: PteroUser = Depends(get_current_user),
     server: PteroServer = Depends(get_owned_server),
     db: AsyncSession = Depends(get_db),
     page: int = Query(default=1, ge=1),
@@ -633,7 +640,11 @@ async def list_user_server_activity(
                     id=actor.id,
                     uuid=actor.uuid,
                     username=actor.username,
-                    email=actor.email,
+                    email=(
+                        actor.email
+                        if actor.id == current_user.id or current_user.root_admin
+                        else None
+                    ),
                 ) if actor is not None else None,
             )
         )
@@ -673,7 +684,7 @@ def _hash_st_password(password: str) -> tuple[str, str]:
 
 @router.get("/servers/{server_id}/st-default-password", response_model=STDefaultPasswordResponse)
 async def get_st_default_password_status(
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> STDefaultPasswordResponse:
     filename = _st_storage_filename()
@@ -690,11 +701,12 @@ async def get_st_default_password_status(
 
 
 @router.put("/servers/{server_id}/st-default-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
 async def set_st_default_password(
     payload: STDefaultPasswordRequest,
     request: Request,
     current_user: PteroUser = Depends(get_current_user),
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     filename = _st_storage_filename()
@@ -720,7 +732,7 @@ async def set_st_default_password(
         }
 
     if payload.password:
-        pw_hash, salt = _hash_st_password(payload.password)
+        pw_hash, salt = await asyncio.to_thread(_hash_st_password, payload.password)
         data["value"]["password"] = pw_hash
         data["value"]["salt"] = salt
     else:

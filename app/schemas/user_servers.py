@@ -187,7 +187,7 @@ class ReinstallRequest(BaseModel):
 
 
 class STDefaultPasswordRequest(BaseModel):
-    password: str = Field(min_length=0)
+    password: str = Field(min_length=0, max_length=256)
 
 
 class STDefaultPasswordResponse(BaseModel):
@@ -198,7 +198,7 @@ class UserActivityActor(BaseModel):
     id: int
     uuid: str
     username: str
-    email: str
+    email: str | None = None
 
 
 class UserActivityLogItem(BaseModel):

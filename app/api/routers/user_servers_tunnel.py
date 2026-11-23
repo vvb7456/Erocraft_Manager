@@ -17,14 +17,15 @@ from __future__ import annotations
 import logging
 from app.core.api_errors import ApiError
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
-from app.api.deps.ownership import get_owned_server
+from app.api.deps.ownership import get_active_owned_server, get_owned_server
+from app.core.rate_limit import limiter
 from app.db.models.manager import ManagerHost, ManagerHostTunnel, ManagerServerTunnel
 from app.db.models.pterodactyl import PteroServer, PteroUser
 from app.services import host_registry
@@ -167,9 +168,11 @@ async def get_server_tunnel(
 
 
 @router.post("/servers/{server_id}/tunnel", response_model=TunnelStateResponse)
+@limiter.limit("3/minute;15/hour")
 async def enable_server_tunnel(
+    request: Request,
     body: TunnelEnableRequest,
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     current_user: PteroUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TunnelStateResponse:
@@ -241,9 +244,11 @@ async def enable_server_tunnel(
 
 
 @router.put("/servers/{server_id}/tunnel", response_model=TunnelStateResponse)
+@limiter.limit("3/minute;15/hour")
 async def change_server_tunnel_subdomain(
+    request: Request,
     body: TunnelChangeRequest,
-    server: PteroServer = Depends(get_owned_server),
+    server: PteroServer = Depends(get_active_owned_server),
     current_user: PteroUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TunnelStateResponse:
@@ -310,8 +315,10 @@ async def change_server_tunnel_subdomain(
 @router.delete(
     "/servers/{server_id}/tunnel", status_code=status.HTTP_204_NO_CONTENT,
 )
+@limiter.limit("3/minute;15/hour")
 async def disable_server_tunnel(
-    server: PteroServer = Depends(get_owned_server),
+    request: Request,
+    server: PteroServer = Depends(get_active_owned_server),
     current_user: PteroUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:

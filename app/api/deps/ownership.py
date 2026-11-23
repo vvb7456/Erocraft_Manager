@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
+from app.core.api_errors import ApiError
 from app.db.models.pterodactyl import PteroServer, PteroUser
 from app.db.repositories.servers import is_placeholder_server, server_repository
 
@@ -24,4 +25,12 @@ async def get_owned_server(
         or (server.owner_id != current_user.id and not current_user.root_admin)
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="服务器不存在")
+    return server
+
+
+async def get_active_owned_server(
+    server: PteroServer = Depends(get_owned_server),
+) -> PteroServer:
+    if server.is_suspended:
+        raise ApiError(403, "server.suspended")
     return server
