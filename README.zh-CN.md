@@ -104,7 +104,6 @@ $EDITOR .env
 |---|---|
 | `SECRET_KEY` | ≥32 字符随机密钥（`python -c "import secrets; print(secrets.token_hex(32))"`） |
 | `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | 数据库连接信息 |
-| `PANEL_APP_KEY` | 用于加密节点通信令牌的 AES-256-CBC 密钥（`python -c "import base64, os; print('base64:' + base64.b64encode(os.urandom(32)).decode())"`） |
 | `CERT_ACME_SH_HOME` / `CERT_ACME_SH_BIN` | `acme.sh` 安装目录与可执行文件路径 |
 
 执行迁移并启动服务：

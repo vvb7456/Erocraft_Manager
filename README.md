@@ -104,7 +104,6 @@ Required `.env` variables:
 |---|---|
 | `SECRET_KEY` | ≥32 chars (`python -c "import secrets; print(secrets.token_hex(32))"`) |
 | `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | Database credentials |
-| `PANEL_APP_KEY` | AES-256-CBC key (`base64:...`) for node token encryption (`python -c "import base64, os; print('base64:' + base64.b64encode(os.urandom(32)).decode())"`) |
 | `CERT_ACME_SH_HOME` / `CERT_ACME_SH_BIN` | `acme.sh` directory and binary path |
 
 Run migrations and start services:

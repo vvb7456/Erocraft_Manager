@@ -33,14 +33,6 @@ def _as_int(value: str | None, default: int) -> int:
         return default
 
 
-def _env_first(*names: str, default: str = "") -> str:
-    for name in names:
-        value = os.getenv(name)
-        if value not in (None, ""):
-            return value
-    return default
-
-
 @dataclass(slots=True)
 class Settings:
     app_name: str
@@ -62,7 +54,6 @@ class Settings:
     database_url: str | None
     async_database_url_override: str | None
     async_database_use_null_pool: bool
-    panel_app_key: str
     cert_acme_sh_home: str
     cert_acme_sh_bin: str
     support_image_dir: str
@@ -137,7 +128,6 @@ def _build_settings() -> Settings:
         database_url=os.getenv("DATABASE_URL"),
         async_database_url_override=os.getenv("ASYNC_DATABASE_URL"),
         async_database_use_null_pool=_as_bool(os.getenv("ASYNC_DATABASE_USE_NULL_POOL"), False),
-        panel_app_key=_env_first("PANEL_APP_KEY", "APP_KEY"),
         cert_acme_sh_home=_required_env("CERT_ACME_SH_HOME"),
         cert_acme_sh_bin=_required_env("CERT_ACME_SH_BIN"),
         support_image_dir=os.getenv("SUPPORT_IMAGE_DIR", "/opt/erocraft_manager/storage/support"),

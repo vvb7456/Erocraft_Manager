@@ -55,7 +55,7 @@ logger = logging.getLogger(__name__)
 #: / cert provisioning. Including fqdn here would force a daemon_token
 #: decryption + a content-less ``/api/update`` push (just token + token_id)
 #: on every panel-only label change — useless work that also makes a pure
-#: panel edit fail with 500 when ``PANEL_APP_KEY`` is missing or the cipher
+#: panel edit fail with 500 when the encryption key mismatches or the cipher
 #: is corrupt. fqdn lives in :data:`PANEL_ONLY_FIELDS` instead.
 WINGS_AFFECTING_FIELDS: tuple[str, ...] = (
     "scheme",
