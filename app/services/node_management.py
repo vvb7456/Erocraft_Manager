@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.node_crypto import decrypt_node_token, encrypt_node_token
 from app.core.time import to_iso_z, utc_naive_now_sec
 from app.db.models.billing import BillingOrder, BillingPlan
 from app.db.models.manager import ManagerHost
@@ -304,7 +305,7 @@ async def create_node(db: AsyncSession, payload: NodeCreateIn) -> NodeOut:
         raise AdminResourceError(422, f"地域 location_id={payload.location_id} 不存在")
 
     token_id, token_plain = wings_config._generate_token()
-    encrypted_token = wings_service._encrypt_laravel(token_plain)
+    encrypted_token = encrypt_node_token(token_plain)
     now = utc_naive_now_sec()
     node = PanelNode(
         uuid=str(_uuid.uuid4()),
@@ -463,7 +464,7 @@ async def build_node_configuration(
         )
     ).scalars().all()
 
-    token_plain = wings_service._decrypt_laravel(node.daemon_token)
+    token_plain = decrypt_node_token(node.daemon_token)
 
     config: dict[str, Any] = {
         "debug": False,

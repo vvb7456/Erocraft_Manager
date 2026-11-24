@@ -2,24 +2,16 @@
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
-import json
 import logging
-import re
-import secrets
 import time
 import uuid
 from dataclasses import dataclass
 
 import httpx
 import jwt
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
+from app.core.node_crypto import NodeTokenCryptoError, decrypt_node_token
 from app.db.models.pterodactyl import PanelNode
 
 logger = logging.getLogger(__name__)
@@ -59,57 +51,6 @@ class WingsService:
 
         clear_remote_auth_cache()
 
-    def _app_key(self) -> bytes:
-        raw = get_settings().panel_app_key or ""
-        if not raw:
-            raise WingsServiceError("PANEL_APP_KEY 未配置")
-        if raw.startswith("base64:"):
-            return base64.b64decode(raw[7:])
-        return raw.encode("utf-8")
-
-    def _decrypt_laravel(self, encrypted_b64: str) -> str:
-        payload = json.loads(base64.b64decode(encrypted_b64))
-        iv = base64.b64decode(payload["iv"])
-        value = base64.b64decode(payload["value"])
-        cipher = Cipher(algorithms.AES(self._app_key()), modes.CBC(iv))
-        decryptor = cipher.decryptor()
-        decrypted = decryptor.update(value) + decryptor.finalize()
-        unpadder = padding.PKCS7(128).unpadder()
-        plaintext = unpadder.update(decrypted) + unpadder.finalize()
-        match = re.match(rb's:\d+:"(.+)";', plaintext)
-        return match.group(1).decode("utf-8") if match else plaintext.decode("utf-8")
-
-    def _encrypt_laravel(self, plaintext: str) -> str:
-        """Laravel ``Crypt::encrypt()`` compatible encrypt for fields that the
-        Pterodactyl panel later decrypts (e.g. ``daemon_token``).
-
-        Mirrors PHP serialise → AES-256-CBC → base64 → HMAC-SHA256 of the
-        base64-encoded ``iv || value`` → JSON envelope ``{iv, value, mac, tag}``
-        → final base64. ``tag`` is empty for CBC (only used by GCM in newer
-        Laravel versions).
-        """
-        key = self._app_key()
-        # PHP ``serialize($string)`` → ``s:LEN:"VALUE";``
-        serialised = f's:{len(plaintext)}:"{plaintext}";'.encode("utf-8")
-        padder = padding.PKCS7(128).padder()
-        padded = padder.update(serialised) + padder.finalize()
-        iv = secrets.token_bytes(16)
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
-        encryptor = cipher.encryptor()
-        ciphertext = encryptor.update(padded) + encryptor.finalize()
-        iv_b64 = base64.b64encode(iv).decode("ascii")
-        value_b64 = base64.b64encode(ciphertext).decode("ascii")
-        mac = hmac.new(
-            key,
-            (iv_b64 + value_b64).encode("ascii"),
-            hashlib.sha256,
-        ).hexdigest()
-        envelope = json.dumps(
-            {"iv": iv_b64, "value": value_b64, "mac": mac, "tag": ""},
-            separators=(",", ":"),
-        )
-        return base64.b64encode(envelope.encode("utf-8")).decode("ascii")
-
     async def _node_info(self, db: AsyncSession, node_id: int) -> _NodeInfo:
         now = time.monotonic()
         cached = self._node_cache.get(node_id)
@@ -120,11 +61,16 @@ class WingsService:
         if node is None:
             raise WingsServiceError(f"节点 {node_id} 不存在")
 
+        try:
+            token = decrypt_node_token(node.daemon_token)
+        except NodeTokenCryptoError as exc:
+            raise WingsServiceError(str(exc)) from exc
+
         info = _NodeInfo(
             fqdn=node.fqdn,
             scheme=node.scheme,
             port=node.daemon_listen,
-            token=self._decrypt_laravel(node.daemon_token),
+            token=token,
             upload_size=node.upload_size,
         )
         self._node_cache[node_id] = _CachedNodeInfo(

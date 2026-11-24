@@ -12,8 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.db import get_db
+from app.core.node_crypto import decrypt_node_token
 from app.db.models.pterodactyl import PanelNode
-from app.services.wings import wings_service
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ def _decrypt_node_token(ciphertext: str) -> str | None:
     if cached is not None and cached[1] > now:
         return cached[0]
     try:
-        plaintext = wings_service._decrypt_laravel(ciphertext)
+        plaintext = decrypt_node_token(ciphertext)
     except Exception:
         logger.warning("Failed to decrypt node daemon_token during remote auth", exc_info=True)
         return None

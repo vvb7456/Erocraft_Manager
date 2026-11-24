@@ -12,6 +12,7 @@ status / metrics on non-wings hosts) live in :mod:`admin_hosts` instead.
 from __future__ import annotations
 from app.core.api_errors import ApiError
 from app.core.contracts import ErrorInfo, OperationResult
+from app.core.node_crypto import decrypt_node_token
 from app.core.operation import set_operation
 
 import asyncio
@@ -292,7 +293,7 @@ async def put_wings_config(
         pre_base_url = (
             f"{node.scheme}://{node.fqdn}:{node.daemon_listen}".lower()
         )
-        pre_token = wings_service._decrypt_laravel(node.daemon_token)
+        pre_token = decrypt_node_token(node.daemon_token)
     else:
         pre_base_url = None
         pre_token = None

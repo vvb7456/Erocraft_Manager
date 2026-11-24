@@ -36,6 +36,7 @@ from typing import Any, Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.node_crypto import NodeTokenCryptoError, decrypt_node_token, encrypt_node_token
 from app.db.models.pterodactyl import PanelNode
 from app.services import agent_client, host_registry
 from app.services.wings import WingsServiceError, wings_service
@@ -184,9 +185,14 @@ def _build_wings_payload(node: PanelNode, changed_fields: Iterable[str]) -> dict
     if not affecting:
         return None
 
+    try:
+        token_plain = decrypt_node_token(node.daemon_token)
+    except NodeTokenCryptoError as exc:
+        raise WingsServiceError(str(exc)) from exc
+
     payload: dict[str, Any] = {
         "token_id": node.daemon_token_id,
-        "token": wings_service._decrypt_laravel(node.daemon_token),
+        "token": token_plain,
     }
 
     api_block: dict[str, Any] = {}
@@ -300,7 +306,10 @@ async def reset_daemon_token(
     Returns ``{"applied": bool, "token_id": new_id}``.
     """
     new_token_id, new_token_plain = _generate_token()
-    old_token_plain = wings_service._decrypt_laravel(node.daemon_token)
+    try:
+        old_token_plain = decrypt_node_token(node.daemon_token)
+    except NodeTokenCryptoError as exc:
+        raise WingsServiceError(str(exc)) from exc
 
     payload: dict[str, Any] = {
         "token_id": new_token_id,
@@ -328,7 +337,10 @@ async def reset_daemon_token(
 
     # Wings accepted the new credentials — now make panel.nodes match.
     node.daemon_token_id = new_token_id
-    node.daemon_token = wings_service._encrypt_laravel(new_token_plain)
+    try:
+        node.daemon_token = encrypt_node_token(new_token_plain)
+    except NodeTokenCryptoError as exc:
+        raise WingsServiceError(str(exc)) from exc
     await db.commit()
     await db.refresh(node)
     wings_service.clear_cache()
