@@ -82,7 +82,7 @@ class HostAlert(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    host_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    host_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     alert_type: Mapped[str] = mapped_column(String(30), nullable=False)
     severity: Mapped[str] = mapped_column(String(10), nullable=False, default="warning")
     message: Mapped[str | None] = mapped_column(String(500), nullable=True)

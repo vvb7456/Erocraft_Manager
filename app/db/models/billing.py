@@ -17,15 +17,19 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CHAR,
+    Computed,
     Date,
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
+from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.time import utc_naive_now
@@ -76,6 +80,10 @@ class BillingPlan(Base):
     """
 
     __tablename__ = "manager_billing_plans"
+    __table_args__ = (
+        Index("idx_billing_plans_active", "is_active"),
+        Index("idx_billing_plans_type", "plan_type"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
@@ -148,6 +156,17 @@ class BillingPlan(Base):
 
 class BillingOrder(Base):
     __tablename__ = "manager_billing_orders"
+    __table_args__ = (
+        UniqueConstraint(
+            "channel", "external_order_id", name="uq_billing_orders_channel_external"
+        ),
+        UniqueConstraint("active_user_lock", name="uk_billing_orders_active_user"),
+        Index("idx_billing_orders_user_status", "user_id", "status", "created_at"),
+        Index("idx_billing_orders_status_next_apply", "status", "next_apply_at"),
+        Index("idx_billing_orders_locked", "locked_until"),
+        Index("idx_billing_orders_coupon", "coupon_id"),
+        Index("idx_billing_orders_channel", "channel"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     order_no: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
@@ -215,6 +234,11 @@ class BillingOrder(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     close_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    active_user_lock: Mapped[int | None] = mapped_column(
+        Integer,
+        Computed("case when `status` = 'pending' then `user_id` end", persisted=False),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_naive_now
     )
@@ -225,6 +249,11 @@ class BillingOrder(Base):
 
 class BillingInvoice(Base):
     __tablename__ = "manager_billing_invoices"
+    __table_args__ = (
+        Index("idx_billing_invoices_order", "order_id"),
+        Index("idx_billing_invoices_user_status", "user_id", "status", "created_at"),
+        Index("idx_billing_invoices_status_due", "status", "due_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     invoice_no: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
@@ -244,6 +273,16 @@ class BillingInvoice(Base):
     due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     gateway_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # 历史直连微信/支付宝阶段遗留存档列（零删列 DDL 保留，延迟加载避免日常 SELECT 开销）
+    gateway_prepay_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, deferred=True
+    )
+    gateway_code_url: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, deferred=True
+    )
+    gateway_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, deferred=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_naive_now
     )
@@ -276,6 +315,13 @@ class BillingPayment(Base):
 
 class BillingInvoiceItem(Base):
     __tablename__ = "manager_billing_invoice_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "invoice_id", "ref_type", "ref_id", name="uk_billing_invoice_items_ref"
+        ),
+        Index("idx_billing_invoice_items_invoice", "invoice_id"),
+        Index("idx_billing_invoice_items_ref", "ref_type", "ref_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     invoice_id: Mapped[int] = mapped_column(
@@ -299,6 +345,12 @@ class BillingInvoiceItem(Base):
 
 class BillingInvoiceTransaction(Base):
     __tablename__ = "manager_billing_invoice_transactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "gateway_code", "transaction_id", name="uk_billing_invoice_tx_gateway"
+        ),
+        Index("idx_billing_invoice_tx_invoice_status", "invoice_id", "status"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     invoice_id: Mapped[int] = mapped_column(
@@ -310,10 +362,14 @@ class BillingInvoiceTransaction(Base):
     payment_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("manager_billing_payments.id"), unique=True)
     transaction_id: Mapped[str] = mapped_column(String(64), nullable=False)
     amount_fen: Mapped[int] = mapped_column(Integer, nullable=False)
+    fee_fen: Mapped[int | None] = mapped_column(Integer, nullable=True, deferred=True)
     status: Mapped[str] = mapped_column(
         Enum(*TX_STATUS_VALUES, name="billing_tx_status"), nullable=False
     )
     refunded_fen: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    raw_event_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, deferred=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_naive_now
     )
@@ -324,6 +380,9 @@ class BillingInvoiceTransaction(Base):
 
 class BillingOrderEffect(Base):
     __tablename__ = "manager_billing_order_effects"
+    __table_args__ = (
+        Index("idx_billing_order_effects_server", "server_id"),
+    )
 
     order_id: Mapped[int] = mapped_column(
         BigInteger,
@@ -343,6 +402,11 @@ class BillingOrderEffect(Base):
 
 class BillingRefund(Base):
     __tablename__ = "manager_billing_refunds"
+    __table_args__ = (
+        Index("idx_billing_refunds_tx", "transaction_id"),
+        Index("idx_billing_refunds_order", "order_id"),
+        Index("idx_billing_refunds_status", "status"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     refund_no: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
@@ -364,6 +428,9 @@ class BillingRefund(Base):
         default="pending",
     )
     reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    previous_order_status: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, deferred=True
+    )
     gateway_refund_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     external_refund_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -379,6 +446,15 @@ class BillingRefund(Base):
 
 class BillingPaymentEvent(Base):
     __tablename__ = "manager_billing_payment_events"
+    __table_args__ = (
+        Index("idx_billing_payment_events_invoice", "invoice_id"),
+        Index(
+            "idx_billing_payment_events_gateway_tx",
+            "gateway_code",
+            "transaction_id",
+        ),
+        Index("idx_billing_payment_events_received", "received_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     gateway_code: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -387,7 +463,10 @@ class BillingPaymentEvent(Base):
     signature_ok: Mapped[bool] = mapped_column(Boolean, nullable=False)
     invoice_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     transaction_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    raw_body: Mapped[str] = mapped_column(Text(length=(1 << 32) - 1), nullable=False)
+    raw_headers: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, deferred=True
+    )
+    raw_body: Mapped[str] = mapped_column(mysql.LONGTEXT(), nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     process_result: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -395,6 +474,10 @@ class BillingPaymentEvent(Base):
 
 class BillingIncident(Base):
     __tablename__ = "manager_billing_incidents"
+    __table_args__ = (
+        Index("idx_billing_incidents_status_kind", "status", "kind"),
+        Index("idx_billing_incidents_order", "order_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     kind: Mapped[str] = mapped_column(
@@ -425,6 +508,9 @@ class CouponTemplate(Base):
     """
 
     __tablename__ = "manager_billing_coupon_templates"
+    __table_args__ = (
+        Index("idx_coupon_tpl_active", "is_active"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
@@ -458,6 +544,13 @@ class Coupon(Base):
     """
 
     __tablename__ = "manager_billing_coupons"
+    __table_args__ = (
+        UniqueConstraint("reserved_order_id", name="uk_coupon_reserved_order"),
+        Index("idx_coupon_user_status", "user_id", "status", "expires_at"),
+        Index("idx_coupon_template", "template_id"),
+        Index("idx_coupon_status_expires", "status", "expires_at"),
+        Index("idx_coupon_source_ref", "source", "source_ref_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(CHAR(16), nullable=False, unique=True)
@@ -512,6 +605,10 @@ REDEMPTION_CHANNEL_VALUES = ("taobao", "xianyu", "other")
 
 class RedemptionBatch(Base):
     __tablename__ = "manager_redemption_batches"
+    __table_args__ = (
+        Index("idx_redemption_batch_plan", "plan_id"),
+        Index("idx_redemption_batch_source", "source"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -535,13 +632,15 @@ class RedemptionBatch(Base):
 
 class RedemptionExport(Base):
     __tablename__ = "manager_redemption_exports"
+    __table_args__ = (
+        Index("idx_redemption_export_batch", "batch_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     batch_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("manager_redemption_batches.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -552,6 +651,15 @@ class RedemptionExport(Base):
 
 class RedemptionCode(Base):
     __tablename__ = "manager_redemption_codes"
+    __table_args__ = (
+        Index("idx_redemption_code_batch", "batch_id"),
+        Index("idx_redemption_code_plan", "plan_id"),
+        Index("idx_redemption_code_status", "status"),
+        Index("idx_redemption_code_export", "export_id"),
+        Index("idx_redemption_code_redeemed_by", "redeemed_by"),
+        Index("idx_redemption_code_ext_req", "channel", "external_request_id"),
+        Index("idx_redemption_code_ext_ord", "external_order_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(40), nullable=False, unique=True)
@@ -559,7 +667,6 @@ class RedemptionCode(Base):
         BigInteger,
         ForeignKey("manager_redemption_batches.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     plan_id: Mapped[int | None] = mapped_column(
         BigInteger,
@@ -571,21 +678,20 @@ class RedemptionCode(Base):
     channel: Mapped[str] = mapped_column(String(32), nullable=False, default="taobao")
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     external_request_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, index=True
+        String(64), nullable=True
     )
     external_order_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, index=True
+        String(64), nullable=True
     )
     status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="unused", index=True
+        String(16), nullable=False, default="unused"
     )
     export_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("manager_redemption_exports.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
-    redeemed_by: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    redeemed_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     redeemed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     order_id: Mapped[int | None] = mapped_column(
         BigInteger,

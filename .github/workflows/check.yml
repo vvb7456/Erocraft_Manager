@@ -27,7 +27,17 @@ jobs:
         run: pip install mypy types-requests types-PyYAML types-psutil
 
       - name: compile check
-        run: python -m compileall -q app agent
+        run: python -m compileall -q app agent alembic
+
+      - name: alembic single-head check
+        run: |
+          HEADS=$(alembic -c alembic.ini heads)
+          echo "$HEADS"
+          HEAD_COUNT=$(printf '%s\n' "$HEADS" | grep -c '(head)')
+          if [ "$HEAD_COUNT" -ne 1 ]; then
+            echo "Expected exactly 1 alembic head, got $HEAD_COUNT"
+            exit 1
+          fi
 
       - name: 检查共用接口契约
         run: python scripts/generate-contracts.py --check
@@ -42,6 +52,63 @@ jobs:
 
       - name: 检查 Agent 接口契约
         run: python scripts/check-agent-contracts.py
+
+  alembic-check:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: ci_root_password
+          MARIADB_DATABASE: erocraft_ci
+          MARIADB_USER: erocraft_ci
+          MARIADB_PASSWORD: ci_user_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=15
+    env:
+      SECRET_KEY: ci-alembic-check-secret-key-0123456789abcdef
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DB_USER: erocraft_ci
+      DB_PASSWORD: ci_user_password
+      DB_NAME: erocraft_ci
+      CERT_ACME_SH_HOME: /tmp/acme
+      CERT_ACME_SH_BIN: /tmp/acme/acme.sh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: install deps
+        run: pip install -r requirements.txt
+
+      - name: configure database collation
+        run: |
+          python -c "
+          import os, pymysql
+          conn = pymysql.connect(
+              host=os.environ['DB_HOST'],
+              port=int(os.environ['DB_PORT']),
+              user='root',
+              password='ci_root_password',
+          )
+          with conn.cursor() as cur:
+              cur.execute('ALTER DATABASE erocraft_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci')
+          conn.close()
+          "
+
+      - name: alembic upgrade head & schema drift check
+        run: |
+          alembic -c alembic.ini upgrade head
+          alembic -c alembic.ini check
 
   frontend:
     runs-on: ubuntu-24.04

@@ -402,20 +402,14 @@ async def delete_server(db: AsyncSession, server_id: int, *, force: bool = False
     """Destroy a server completely, mirroring Pterodactyl's ``ServerDeletionService``.
 
     Order of operations is chosen so that an early failure leaves the server
-    object intact and retryable. Anything that is **irreversible on the remote
-    side** (e.g. ``DROP DATABASE``) only runs AFTER Wings has successfully
-    destroyed the container/volume.
+    object intact and retryable.
 
     1. Delete every backup archive on the node (Wings ``DELETE
        /api/servers/{uuid}/backup/{backup_uuid}``). Failures are logged but
        do not block — leftover archives are recoverable manually.
     2. Destroy the Wings container/volume. 404 → success; any other error is
        fatal so the operator can retry unless ``force=True``.
-    3. DROP every per-server MySQL database + user on its remote host, then
-       remove the corresponding ``databases`` rows. By this point Wings is
-       already gone, so a remote-DB failure cannot leave the server in a
-       half-deleted state where users still see it but its DB is missing.
-    4. Delete the panel ``servers`` row (FK CASCADE handles
+    3. Delete the panel ``servers`` row (FK CASCADE handles
        ``server_variables`` / ``manager_server_meta`` / ``backups``;
        allocations FK ``ON DELETE SET NULL`` releases the ports).
     """

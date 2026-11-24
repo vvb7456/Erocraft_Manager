@@ -15,7 +15,7 @@ from alembic import op
 
 
 revision = "20260507_baseline"
-down_revision = None
+down_revision = "20260506_ptero_core_baseline"
 branch_labels = None
 depends_on = None
 

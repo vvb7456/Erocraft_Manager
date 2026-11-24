@@ -8,8 +8,10 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CHAR,
     Date,
     DateTime,
+    Enum,
     Float,
     ForeignKey,
     Index,
@@ -19,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -33,9 +36,12 @@ def _utc_now() -> datetime:
 
 class ServerMeta(Base):
     __tablename__ = "manager_server_meta"
+    __table_args__ = (
+        Index("idx_server_meta_plan", "plan_id"),
+    )
 
     server_id: Mapped[int] = mapped_column(
-        Integer,
+        mysql.INTEGER(unsigned=True),
         ForeignKey("servers.id", ondelete="CASCADE"),
         primary_key=True,
     )
@@ -94,13 +100,17 @@ class ServerLlmKey(Base):
     """
 
     __tablename__ = "manager_server_llm_keys"
+    __table_args__ = (
+        Index("idx_llm_keys_user", "user_id"),
+        Index("idx_llm_keys_status", "status"),
+    )
 
     server_id: Mapped[int] = mapped_column(
-        Integer,
+        mysql.INTEGER(unsigned=True),
         ForeignKey("servers.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[int] = mapped_column(mysql.INTEGER(unsigned=True), nullable=False)
     # NewAPI per-server user (username = srv_{server_id})
     newapi_user_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     newapi_user_access_token: Mapped[str] = mapped_column(
@@ -158,7 +168,7 @@ class ManagerHost(Base):
     agent_url: Mapped[str] = mapped_column(String(255), nullable=False)
     agent_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
     pterodactyl_node_id: Mapped[int | None] = mapped_column(
-        Integer,
+        mysql.INTEGER(unsigned=True),
         ForeignKey("nodes.id", ondelete="CASCADE"),
         nullable=True,
     )
@@ -315,7 +325,7 @@ class ManagerActivityLog(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
+    timestamp: Mapped[datetime] = mapped_column(mysql.TIMESTAMP(), default=_utc_now)
     actor: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     category: Mapped[str] = mapped_column(String(32), nullable=False, default="other")
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="")
@@ -387,7 +397,7 @@ class UserInviteCode(Base):
         Integer,
         primary_key=True,
     )
-    code: Mapped[str] = mapped_column(String(8), nullable=False)
+    code: Mapped[str] = mapped_column(CHAR(8), nullable=False)
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
 
@@ -416,12 +426,32 @@ class UserReferral(Base):
     invitee_user_id: Mapped[int] = mapped_column(
         Integer, nullable=False
     )
-    invite_code: Mapped[str] = mapped_column(String(8), nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="registered")
+    invite_code: Mapped[str] = mapped_column(CHAR(8), nullable=False)
+    status: Mapped[str] = mapped_column(
+        Enum("registered", "rewarded", "revoked", name="user_referral_status"),
+        nullable=False,
+        default="registered",
+    )
     qualifying_order_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     rewarded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    inviter_coupon_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    invitee_coupon_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    inviter_coupon_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "manager_billing_coupons.id",
+            name="fk_referral_inviter_coupon",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+    invitee_coupon_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "manager_billing_coupons.id",
+            name="fk_referral_invitee_coupon",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     revoke_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -658,10 +688,10 @@ class AgreementVersion(Base):
     title_zh: Mapped[str] = mapped_column(String(191), nullable=False, default="")
     title_en: Mapped[str] = mapped_column(String(191), nullable=False, default="")
     body_zh: Mapped[str] = mapped_column(
-        Text(length=(1 << 32) - 1), nullable=False, default=""
+        mysql.MEDIUMTEXT(), nullable=False, default=""
     )
     body_en: Mapped[str] = mapped_column(
-        Text(length=(1 << 32) - 1), nullable=False, default=""
+        mysql.MEDIUMTEXT(), nullable=False, default=""
     )
     published_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=_utc_now
