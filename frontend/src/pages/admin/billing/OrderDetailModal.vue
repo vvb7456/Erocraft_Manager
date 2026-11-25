@@ -623,12 +623,10 @@ async function queryRefund(refund: Refund) {
       </div>
     </div>
     <template #footer>
-      <div class="footer-actions">
-        <BaseButton size="sm" @click="refundOpen = false">{{ t('common.btn.cancel') }}</BaseButton>
-        <BaseButton size="sm" variant="danger" :loading="refundBusy" :disabled="refundAmount <= 0 || !refundReason.trim() || (!isGatewayOrder && !externalRefundId.trim()) || refundBusy" @click="doRefund">
-          <MsIcon name="payments" size="xs" /> {{ t('billing.admin.detail.refund') }}
-        </BaseButton>
-      </div>
+      <BaseButton size="sm" @click="refundOpen = false">{{ t('common.btn.cancel') }}</BaseButton>
+      <BaseButton size="sm" variant="danger" :loading="refundBusy" :disabled="refundAmount <= 0 || !refundReason.trim() || (!isGatewayOrder && !externalRefundId.trim()) || refundBusy" @click="doRefund">
+        <MsIcon name="payments" size="xs" /> {{ t('billing.admin.detail.refund') }}
+      </BaseButton>
     </template>
   </BaseModal>
 </template>
@@ -696,8 +694,6 @@ async function queryRefund(refund: Refund) {
 .form-row { display: flex; flex-direction: column; gap: var(--sp-1); }
 .form-row label { font-size: var(--text-sm); color: var(--t2); font-weight: 500; }
 
-.footer-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; justify-content: flex-end; }
-
 /* ── Shared ── */
 code {
   font-family: var(--font-mono);
@@ -713,6 +709,5 @@ code {
 @media (max-width: 640px) {
   .dl, .dl--dual { grid-template-columns: 100px 1fr; }
   .dl dt { margin-top: var(--sp-1); }
-  .footer-actions { flex-direction: column; }
 }
 </style>

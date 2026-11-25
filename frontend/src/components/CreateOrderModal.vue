@@ -591,21 +591,17 @@ function onCancel() {
     </template>
 
     <template #footer>
-      <div class="footer">
-        <div class="footer-actions">
-          <BaseButton :disabled="submitting" @click="onCancel">
-            {{ t('billing.cashier.btnCancel') }}
-          </BaseButton>
-          <BaseButton
-            variant="primary"
-            :loading="submitting"
-            :disabled="!canSubmit"
-            @click="onConfirm"
-          >
-            {{ t('billing.cashier.btnPay') }}
-          </BaseButton>
-        </div>
-      </div>
+      <BaseButton :disabled="submitting" @click="onCancel">
+        {{ t('billing.cashier.btnCancel') }}
+      </BaseButton>
+      <BaseButton
+        variant="primary"
+        :loading="submitting"
+        :disabled="!canSubmit"
+        @click="onConfirm"
+      >
+        {{ t('billing.cashier.btnPay') }}
+      </BaseButton>
     </template>
   </BaseModal>
 </template>
@@ -881,20 +877,6 @@ function onCancel() {
   font-size: var(--text-xs);
 }
 
-/* ── Footer ── */
-.footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  width: 100%;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
-.footer-actions {
-  display: flex;
-  gap: var(--sp-2);
-}
-
 @media (max-width: 520px) {
   .period-row {
     grid-template-columns: auto 1fr auto;
@@ -907,8 +889,5 @@ function onCancel() {
   .period-label { grid-area: label; }
   .period-unit { grid-area: unit; }
   .period-saved { grid-area: saved; min-width: 0; }
-  .footer { flex-direction: column; align-items: stretch; }
-  .footer-actions { justify-content: space-between; }
-  .footer-actions :deep(.base-button) { flex: 1; }
 }
 </style>

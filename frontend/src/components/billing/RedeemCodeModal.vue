@@ -342,28 +342,26 @@ function goServers() {
     </div>
 
     <template #footer>
-      <div class="footer-actions">
-        <template v-if="result">
-          <BaseButton @click="close">{{ t('billing.redeem.doneBtn') }}</BaseButton>
-          <BaseButton variant="primary" @click="goServers">{{ t('billing.redeem.goServers') }}</BaseButton>
-        </template>
-        <template v-else-if="!preview">
-          <BaseButton :disabled="loadingPreview" @click="close">{{ t('common.btn.cancel') }}</BaseButton>
-          <BaseButton variant="primary" :loading="loadingPreview" :disabled="!canPreview" @click="doPreview">
-            {{ t('billing.redeem.previewBtn') }}
-          </BaseButton>
-        </template>
-        <template v-else-if="preview.already_redeemed_by_me">
-          <BaseButton @click="close">{{ t('billing.redeem.doneBtn') }}</BaseButton>
-          <BaseButton variant="primary" @click="goServers">{{ t('billing.redeem.goServers') }}</BaseButton>
-        </template>
-        <template v-else>
-          <BaseButton :disabled="submitting" @click="close">{{ t('common.btn.cancel') }}</BaseButton>
-          <BaseButton variant="primary" :loading="submitting" :disabled="!canConfirm" @click="doRedeem">
-            {{ t('billing.redeem.confirmBtn') }}
-          </BaseButton>
-        </template>
-      </div>
+      <template v-if="result">
+        <BaseButton @click="close">{{ t('billing.redeem.doneBtn') }}</BaseButton>
+        <BaseButton variant="primary" @click="goServers">{{ t('billing.redeem.goServers') }}</BaseButton>
+      </template>
+      <template v-else-if="!preview">
+        <BaseButton :disabled="loadingPreview" @click="close">{{ t('common.btn.cancel') }}</BaseButton>
+        <BaseButton variant="primary" :loading="loadingPreview" :disabled="!canPreview" @click="doPreview">
+          {{ t('billing.redeem.previewBtn') }}
+        </BaseButton>
+      </template>
+      <template v-else-if="preview.already_redeemed_by_me">
+        <BaseButton @click="close">{{ t('billing.redeem.doneBtn') }}</BaseButton>
+        <BaseButton variant="primary" @click="goServers">{{ t('billing.redeem.goServers') }}</BaseButton>
+      </template>
+      <template v-else>
+        <BaseButton :disabled="submitting" @click="close">{{ t('common.btn.cancel') }}</BaseButton>
+        <BaseButton variant="primary" :loading="submitting" :disabled="!canConfirm" @click="doRedeem">
+          {{ t('billing.redeem.confirmBtn') }}
+        </BaseButton>
+      </template>
     </template>
   </BaseModal>
 </template>
@@ -435,6 +433,4 @@ code {
 .success-title { font-size: var(--text-base); font-weight: 600; color: var(--t1); }
 .success-desc { font-size: var(--text-sm); color: var(--t2); margin-top: 4px; line-height: 1.5; }
 .success-meta { font-size: var(--text-xs); color: var(--t3); padding-top: var(--sp-2); border-top: 1px solid var(--bd); }
-
-.footer-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); width: 100%; }
 </style>

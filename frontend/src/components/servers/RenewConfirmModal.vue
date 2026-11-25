@@ -206,12 +206,10 @@ function close() {
     </div>
 
     <template #footer>
-      <div class="modal-actions">
-        <BaseButton @click="close">{{ t('common.btn.cancel') }}</BaseButton>
-        <BaseButton variant="primary" :loading="loading" @click="submit">
-          {{ t('servers.renew_modal.confirm_btn') }}
-        </BaseButton>
-      </div>
+      <BaseButton @click="close">{{ t('common.btn.cancel') }}</BaseButton>
+      <BaseButton variant="primary" :loading="loading" @click="submit">
+        {{ t('servers.renew_modal.confirm_btn') }}
+      </BaseButton>
     </template>
   </BaseModal>
 </template>
@@ -267,11 +265,5 @@ function close() {
   .form-row {
     grid-template-columns: 1fr;
   }
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--sp-2, 8px);
 }
 </style>
