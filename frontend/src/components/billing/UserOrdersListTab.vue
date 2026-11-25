@@ -397,15 +397,6 @@ defineExpose({
 </template>
 
 <style scoped>
-.user-orders-table-wrap :deep(.dt-table)    { min-width: 880px; }
-.user-orders-table-wrap :deep(.col-time)    { width: 16%; }
-.user-orders-table-wrap :deep(.col-no)      { width: 19%; }
-.user-orders-table-wrap :deep(.col-plan)    { width: 17%; }
-.user-orders-table-wrap :deep(.col-period)  { width: 12%; }
-.user-orders-table-wrap :deep(.col-amount)  { width: 10%; }
-.user-orders-table-wrap :deep(.col-status)  { width: 10%; }
-.user-orders-table-wrap :deep(.col-actions) { width: 16%; }
-
 .action-group {
   display: flex;
   gap: var(--sp-2);

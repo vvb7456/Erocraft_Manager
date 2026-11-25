@@ -202,17 +202,6 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
   <DataTable :items="items" :page="page" :total-pages="totalPages" :per-page="perPage" :max-per-page="100" :loading="loading"
     row-key="key" empty-icon="check_circle" :empty-text="t('notifications.center.noAlerts')" :per-page-label="t('notifications.center.perPage')"
     @update:page="page = $event" @update:per-page="setPerPage">
-    <template #colgroup>
-      <colgroup>
-        <col class="col-time" />
-        <col class="col-category" />
-        <col class="col-content" />
-        <col class="col-description" />
-        <col class="col-severity" />
-        <col class="col-state" />
-        <col class="col-action" />
-      </colgroup>
-    </template>
     <template #header>
       <SortTh col="created_at" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('notifications.center.createdAt') }}</SortTh>
       <SortTh col="category" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('notifications.center.type') }}</SortTh>
@@ -220,7 +209,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
       <th>{{ t('notifications.center.description') }}</th>
       <SortTh col="severity" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('notifications.center.severity') }}</SortTh>
       <SortTh col="state" :sort-by="sortBy" :sort-order="sortOrder" @sort="toggleSort">{{ t('notifications.center.status') }}</SortTh>
-      <th class="alert-action">{{ t('notifications.center.actions') }}</th>
+      <th class="col-actions alert-action">{{ t('notifications.center.actions') }}</th>
     </template>
     <template #row="{ item }">
       <td class="alert-time"><time :datetime="item.created_at">{{ formatDateTime(item.created_at) }}</time></td>
@@ -231,7 +220,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
       <td class="alert-description"><span class="alert-summary" :title="item.body">{{ item.body || '—' }}</span></td>
       <td><Badge :color="severityColor(item.severity)">{{ t(`notifications.center.alertSeverity.${item.severity}`) }}</Badge></td>
       <td><Badge :color="stateColor(item.state)">{{ t(`notifications.center.state.${item.state}`) }}</Badge></td>
-      <td class="alert-action">
+      <td class="col-actions alert-action">
         <div class="action-group">
           <BaseButton size="sm" @click="showDetails(item)">
             <MsIcon name="edit" size="xs" /> {{ t('common.btn.edit') }}
@@ -267,21 +256,12 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 </template>
 
 <style scoped>
-.alerts-table :deep(.dt-table) { table-layout: fixed; min-width: 1040px; }
-.col-time { width: 14%; }
-.col-category { width: 11%; }
-.col-content { width: 19%; }
-.col-description { width: 25%; }
-.col-severity { width: 9%; }
-.col-state { width: 10%; }
-.col-action { width: 12%; }
 .alerts-table :deep(.alert-cell), .alerts-table :deep(.alert-category), .alerts-table :deep(.alert-description) { white-space: normal; }
 .alert-category, .alert-description { color: var(--t2); }
 .alert-summary { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: normal; line-height: 1.5; }
 .alert-link { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; border: 0; padding: 0; background: none; color: var(--t1); font: inherit; font-weight: 500; line-height: 1.5; text-align: left; cursor: pointer; overflow-wrap: anywhere; white-space: normal; }
 .alert-link:hover { color: var(--ac); }
 .alerts-table :deep(.alert-time) { color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.alerts-table :deep(.alert-action) { white-space: normal; }
 .action-group { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .alert-description { font-size: .82rem; }
 .card-heading, .card-meta { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }

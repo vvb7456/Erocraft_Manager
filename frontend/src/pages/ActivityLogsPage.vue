@@ -253,12 +253,10 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 </template>
 
 <style scoped>
-:deep(.dt-table)    { min-width: 820px; }
-:deep(.col-time)    { width: 15%; white-space: nowrap; font-variant-numeric: tabular-nums; }
-:deep(.col-actor)   { width: 11%; white-space: nowrap; }
-:deep(.col-action)  { width: 14%; white-space: nowrap; }
-:deep(.col-status)  { width: 8%; white-space: nowrap; }
-:deep(.col-details) { width: 52%; }
+:deep(.col-time)    { white-space: nowrap; font-variant-numeric: tabular-nums; }
+:deep(.col-actor)   { white-space: nowrap; }
+:deep(.col-action)  { white-space: nowrap; }
+:deep(.col-status)  { white-space: nowrap; }
 :deep(.dt-table td.col-details) { white-space: normal; }
 
 .details-text {

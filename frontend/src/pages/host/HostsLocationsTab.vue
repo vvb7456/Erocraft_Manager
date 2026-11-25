@@ -256,11 +256,9 @@ defineExpose({ reload: loadLocations })
 </template>
 
 <style scoped>
-.locations-table-wrap :deep(.dt-table)    { min-width: 720px; }
-.locations-table-wrap :deep(.col-short)   { width: 20%; white-space: nowrap; }
-.locations-table-wrap :deep(.col-long)    { width: 40%; color: var(--t2); }
-.locations-table-wrap :deep(.col-num)     { width: 10%; white-space: nowrap; }
-.locations-table-wrap :deep(.col-actions) { width: 20%; }
+.locations-table-wrap :deep(.col-short)   { white-space: nowrap; }
+.locations-table-wrap :deep(.col-long)    { color: var(--t2); }
+.locations-table-wrap :deep(.col-num)     { white-space: nowrap; }
 
 code {
   font-family: var(--font-mono);

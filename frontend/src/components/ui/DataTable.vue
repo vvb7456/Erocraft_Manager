@@ -233,7 +233,6 @@ function submitJump() {
 
 .dt-table {
   width: 100%;
-  table-layout: fixed;
   border-collapse: collapse;
   font-size: .85rem;
 }
@@ -254,8 +253,13 @@ function submitJump() {
   text-align: left;
   border-bottom: 1px solid var(--bd);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.dt-table :deep(th.col-actions),
+.dt-table :deep(td.col-actions),
+.dt-table :deep(th[class*="-actions"]),
+.dt-table :deep(td[class*="-actions"]) {
+  width: 22%;
 }
 
 .dt-table :deep(td.col-actions),

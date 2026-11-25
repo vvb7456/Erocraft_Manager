@@ -509,20 +509,11 @@ code {
   flex-shrink: 0;
 }
 
-.orders-table-wrap :deep(.dt-table) {
-  min-width: 1120px;
-}
-
-.orders-table-wrap :deep(.col-time)     { width: 14%; font-size: .8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.orders-table-wrap :deep(.col-orderno)  { width: 16%; }
-.orders-table-wrap :deep(.col-channel)  { width: 8%;  white-space: nowrap; }
-.orders-table-wrap :deep(.col-kind)     { width: 6%;  white-space: nowrap; }
-.orders-table-wrap :deep(.col-plan)     { width: 13%; }
-.orders-table-wrap :deep(.col-amount)   { width: 7%;  white-space: nowrap; }
-.orders-table-wrap :deep(.col-user)     { width: 9%; }
-.orders-table-wrap :deep(.col-server)   { width: 10%; }
-.orders-table-wrap :deep(.col-status)   { width: 8%;  white-space: nowrap; }
-.orders-table-wrap :deep(.col-actions)  { width: 9%; }
+.orders-table-wrap :deep(.col-time)     { font-size: .8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.orders-table-wrap :deep(.col-channel)  { white-space: nowrap; }
+.orders-table-wrap :deep(.col-kind)     { white-space: nowrap; }
+.orders-table-wrap :deep(.col-amount)   { white-space: nowrap; }
+.orders-table-wrap :deep(.col-status)   { white-space: nowrap; }
 
 .orders-table-wrap .cell-deleted {
   color: var(--t3);

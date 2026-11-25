@@ -566,14 +566,9 @@ function openMobile(b: RedemptionBatchSummary) {
 </template>
 
 <style scoped>
-.batches-table-wrap :deep(.dt-table)     { min-width: 1060px; }
-.batches-table-wrap :deep(.col-name)     { width: 13%; }
-.batches-table-wrap :deep(.col-plan)     { width: 12%; }
-.batches-table-wrap :deep(.col-price)    { width: 10%; white-space: nowrap; }
-.batches-table-wrap :deep(.col-progress) { width: 15%; }
-.batches-table-wrap :deep(.col-expires)  { width: 12%; color: var(--t2); font-size: var(--text-sm); }
-.batches-table-wrap :deep(.col-created)  { width: 12%; color: var(--t2); font-size: var(--text-sm); }
-.batches-table-wrap :deep(.col-actions)  { width: 26%; }
+.batches-table-wrap :deep(.col-price)    { white-space: nowrap; }
+.batches-table-wrap :deep(.col-expires)  { color: var(--t2); font-size: var(--text-sm); }
+.batches-table-wrap :deep(.col-created)  { color: var(--t2); font-size: var(--text-sm); }
 
 .row-actions { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .mono { font-family: var(--font-mono); }

@@ -721,18 +721,12 @@ function openMobileNestAction(n: NestOut) {
 .clickable { cursor: pointer; }
 
 /* Eggs table */
-:deep(.dt-table)        { min-width: 1020px; }
-:deep(.col-egg-name)    { width: 20%; }
-:deep(.col-egg-nest)    { width: 12%; color: var(--t2); white-space: nowrap; }
-:deep(.col-egg-image)   { width: 20%; }
-:deep(.col-egg-num)     { width: 9%; white-space: nowrap; }
-:deep(.col-egg-actions) { width: 21%; }
+:deep(.col-egg-nest)    { color: var(--t2); white-space: nowrap; }
+:deep(.col-egg-num)     { white-space: nowrap; }
 
 /* Nests table */
-:deep(.col-nest-name)    { width: 24%; }
-:deep(.col-nest-desc)    { width: 36%; color: var(--t2); }
-:deep(.col-nest-num)     { width: 10%; white-space: nowrap; }
-:deep(.col-nest-actions) { width: 20%; }
+:deep(.col-nest-desc)    { color: var(--t2); }
+:deep(.col-nest-num)     { white-space: nowrap; }
 
 code {
   font-family: var(--font-mono);
@@ -757,14 +751,14 @@ code {
   color: var(--t3);
   font-size: var(--text-xs);
   margin-top: 2px;
-  max-width: 100%;
+  max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .desc-text {
   display: inline-block;
-  max-width: 100%;
+  max-width: 340px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -774,7 +768,7 @@ code {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
-  max-width: 100%;
+  max-width: 280px;
 }
 .image-code {
   display: inline-block;

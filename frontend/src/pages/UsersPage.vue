@@ -624,17 +624,8 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 }
 .checkbox-label input { margin: 0; }
 
-:deep(.dt-table) { min-width: 1000px; }
 :deep(.col-check) { width: 40px; text-align: center !important; }
-:deep(.col-id) { width: 64px; }
-
-:deep(.col-username) { width: 14%; }
-:deep(.col-email) { width: auto; }
-:deep(.col-count) { width: 96px; text-align: center !important; }
-:deep(.col-created) { width: 11%; }
-:deep(.col-inviter) { width: 11%; }
-:deep(.col-role) { width: 92px; }
-:deep(.col-actions) { width: 168px; }
+:deep(.col-count) { text-align: center !important; }
 
 .count-link {
   color: var(--ac);

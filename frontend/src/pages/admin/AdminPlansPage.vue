@@ -428,15 +428,8 @@ function openMobileAction(plan: AdminPlan) {
 </template>
 
 <style scoped>
-/* Column widths use percentages (total 100%). */
-:deep(.dt-table)    { min-width: 1040px; }
-:deep(.col-name)    { width: 18%; }
-:deep(.col-code)    { width: 12%; }
-:deep(.col-price)   { width: 13%; white-space: nowrap; }
-:deep(.col-node)    { width: 9%; }
-:deep(.col-egg)     { width: 10%; }
-:deep(.col-status)  { width: 8%;  white-space: nowrap; }
-:deep(.col-actions) { width: 30%; }
+:deep(.col-price)   { white-space: nowrap; }
+:deep(.col-status)  { white-space: nowrap; }
 
 .mono {
   font-family: var(--font-mono);

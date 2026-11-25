@@ -756,12 +756,6 @@ td code {
   font-family: var(--font-mono);
 }
 
-:deep(.dt-table)     { min-width: 720px; }
-:deep(.col-server)   { width: 28%; }
-:deep(.col-hostname) { width: 32%; }
-:deep(.col-upstream) { width: 26%; }
-:deep(.col-status)   { width: 14%; }
-
 .actions {
   display: flex;
   align-items: center;

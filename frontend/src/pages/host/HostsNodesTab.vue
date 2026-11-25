@@ -345,13 +345,9 @@ defineExpose({ reload: loadNodes })
 </template>
 
 <style scoped>
-.nodes-table-wrap :deep(.dt-table)    { min-width: 980px; }
-.nodes-table-wrap :deep(.col-name)    { width: 20%; }
-.nodes-table-wrap :deep(.col-loc)     { width: 10%; white-space: nowrap; }
-.nodes-table-wrap :deep(.col-addr)    { width: 20%; }
-.nodes-table-wrap :deep(.col-host)    { width: 12%; white-space: nowrap; }
-.nodes-table-wrap :deep(.col-usage)   { width: 14%; white-space: nowrap; }
-.nodes-table-wrap :deep(.col-actions) { width: 24%; }
+.nodes-table-wrap :deep(.col-loc)     { white-space: nowrap; }
+.nodes-table-wrap :deep(.col-host)    { white-space: nowrap; }
+.nodes-table-wrap :deep(.col-usage)   { white-space: nowrap; }
 
 code {
   font-family: var(--font-mono);

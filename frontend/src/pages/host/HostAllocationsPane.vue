@@ -543,14 +543,8 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
 
 
 /* ── Table cells ── */
-:deep(.dt-table)    { min-width: 980px; }
 :deep(.col-check)   { width: 40px; text-align: center !important; padding-right: 0 !important; }
-:deep(.col-ip)      { width: 136px; }
-:deep(.col-alias)   { width: 16%; }
-:deep(.col-port)    { width: 148px; }
-:deep(.col-server)  { width: 20%; }
-:deep(.col-notes)   { width: auto; color: var(--t2); }
-:deep(.col-actions) { width: 176px; }
+:deep(.col-notes)   { color: var(--t2); }
 
 .action-group {
   display: flex;
@@ -582,7 +576,7 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
 
 .notes-text {
   display: inline-block;
-  max-width: 100%;
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

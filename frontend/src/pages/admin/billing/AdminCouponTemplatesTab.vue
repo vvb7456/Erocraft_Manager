@@ -337,14 +337,10 @@ function fmtScope(tpl: CouponTemplate): string {
 </template>
 
 <style scoped>
-.templates-table-wrap :deep(.dt-table)     { min-width: 920px; }
-.templates-table-wrap :deep(.col-name)     { width: 22%; }
-.templates-table-wrap :deep(.col-code)     { width: 13%; }
-.templates-table-wrap :deep(.col-discount) { width: 12%; white-space: nowrap; }
-.templates-table-wrap :deep(.col-scope)    { width: 15%; color: var(--t2); font-size: var(--text-sm); }
-.templates-table-wrap :deep(.col-valid)    { width: 10%; white-space: nowrap; }
-.templates-table-wrap :deep(.col-status)   { width: 13%; white-space: nowrap; }
-.templates-table-wrap :deep(.col-actions)  { width: 15%; }
+.templates-table-wrap :deep(.col-discount) { white-space: nowrap; }
+.templates-table-wrap :deep(.col-scope)    { color: var(--t2); font-size: var(--text-sm); }
+.templates-table-wrap :deep(.col-valid)    { white-space: nowrap; }
+.templates-table-wrap :deep(.col-status)   { white-space: nowrap; }
 
 .mono { font-family: var(--font-mono); }
 code {

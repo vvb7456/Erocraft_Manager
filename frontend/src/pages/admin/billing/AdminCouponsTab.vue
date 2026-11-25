@@ -463,15 +463,11 @@ async function doGrant() {
 </template>
 
 <style scoped>
-.coupons-table-wrap :deep(.dt-table)     { min-width: 960px; }
-.coupons-table-wrap :deep(.col-code)     { width: 13%; }
-.coupons-table-wrap :deep(.col-tpl)      { width: 16%; }
-.coupons-table-wrap :deep(.col-user)     { width: 8%;  white-space: nowrap; }
-.coupons-table-wrap :deep(.col-discount) { width: 11%; white-space: nowrap; }
-.coupons-table-wrap :deep(.col-issued)   { width: 16%; color: var(--t2); font-size: var(--text-sm); }
-.coupons-table-wrap :deep(.col-expires)  { width: 16%; color: var(--t2); font-size: var(--text-sm); }
-.coupons-table-wrap :deep(.col-status)   { width: 9%;  white-space: nowrap; }
-.coupons-table-wrap :deep(.col-actions)  { width: 11%; }
+.coupons-table-wrap :deep(.col-user)     { white-space: nowrap; }
+.coupons-table-wrap :deep(.col-discount) { white-space: nowrap; }
+.coupons-table-wrap :deep(.col-issued)   { color: var(--t2); font-size: var(--text-sm); }
+.coupons-table-wrap :deep(.col-expires)  { color: var(--t2); font-size: var(--text-sm); }
+.coupons-table-wrap :deep(.col-status)   { white-space: nowrap; }
 
 .mono { font-family: var(--font-mono); }
 code {

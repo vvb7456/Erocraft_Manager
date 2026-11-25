@@ -436,13 +436,8 @@ async function removeVar(v: EggVariableOut) {
 </template>
 
 <style scoped>
-:deep(.dt-table)    { min-width: 960px; }
-:deep(.col-name)    { width: 22%; }
-:deep(.col-env)     { width: 14%; white-space: nowrap; }
-:deep(.col-default) { width: 14%; }
-:deep(.col-rules)   { width: 18%; }
-:deep(.col-perms)   { width: 16%; white-space: nowrap; }
-:deep(.col-actions) { width: 16%; }
+:deep(.col-env)     { white-space: nowrap; }
+:deep(.col-perms)   { white-space: nowrap; }
 
 code {
   font-family: var(--font-mono);
@@ -454,7 +449,7 @@ code {
 }
 .code-ellipsis {
   display: inline-block;
-  max-width: 100%;
+  max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -470,7 +465,7 @@ code {
   color: var(--t3);
   font-size: var(--text-xs);
   margin-top: 2px;
-  max-width: 100%;
+  max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

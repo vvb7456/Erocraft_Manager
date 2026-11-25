@@ -521,13 +521,9 @@ function openMobile(c: RedemptionCodeItem) {
 }
 .export-pill:hover { border-color: var(--ac); color: var(--ac); }
 
-:deep(.dt-table)     { min-width: 760px; }
-:deep(.col-code)     { width: 28%; }
-:deep(.col-ext)      { width: 16%; font-size: var(--text-xs); color: var(--t2); }
-:deep(.col-redeemed) { width: 20%; }
-:deep(.col-expires)  { width: 14%; color: var(--t2); font-size: var(--text-sm); }
-:deep(.col-status)   { width: 10%; white-space: nowrap; }
-:deep(.col-actions)  { width: 12%; }
+:deep(.col-ext)      { font-size: var(--text-xs); color: var(--t2); }
+:deep(.col-expires)  { color: var(--t2); font-size: var(--text-sm); }
+:deep(.col-status)   { white-space: nowrap; }
 
 .code-cell { display: inline-flex; align-items: center; gap: var(--sp-1); }
 .mono { font-family: var(--font-mono); }

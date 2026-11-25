@@ -367,12 +367,7 @@ function getPropsText(log: ActivityLogItem): string {
 }
 
 /* ── Table columns ── */
-:deep(.dt-table) {
-  min-width: 820px;
-}
-
 :deep(.col-time) {
-  width: 15%;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
@@ -381,23 +376,16 @@ function getPropsText(log: ActivityLogItem): string {
 }
 
 :deep(.col-event) {
-  width: 15%;
   white-space: nowrap;
 }
 
 :deep(.col-user) {
-  width: 11%;
   white-space: nowrap;
   color: var(--t2);
 }
 
 :deep(.col-ip) {
-  width: 13%;
   white-space: nowrap;
-}
-
-:deep(.col-detail) {
-  width: 46%;
 }
 
 :deep(.dt-table td.col-detail) {

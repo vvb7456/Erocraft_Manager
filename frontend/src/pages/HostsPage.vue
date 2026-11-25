@@ -487,14 +487,12 @@ function handleMobile(action: 'open') {
 }
 
 /* ── Table cells ── */
-.hosts-table-wrap :deep(.dt-table)      { min-width: 960px; }
-.hosts-table-wrap :deep(.col-name)      { width: 16%; cursor: pointer; }
-.hosts-table-wrap :deep(.col-kind)      { width: 10%; cursor: pointer; }
-.hosts-table-wrap :deep(.col-hostname)  { width: 18%; cursor: pointer; }
-.hosts-table-wrap :deep(.col-agent)     { width: 24%; cursor: pointer; }
-.hosts-table-wrap :deep(.col-seen)      { width: 10%; cursor: pointer; }
-.hosts-table-wrap :deep(.col-status)    { width: 12%; cursor: pointer; }
-.hosts-table-wrap :deep(.col-actions)   { width: 10%; }
+.hosts-table-wrap :deep(.col-name),
+.hosts-table-wrap :deep(.col-kind),
+.hosts-table-wrap :deep(.col-hostname),
+.hosts-table-wrap :deep(.col-agent),
+.hosts-table-wrap :deep(.col-seen),
+.hosts-table-wrap :deep(.col-status) { cursor: pointer; }
 
 .mono {
   font-family: var(--font-mono);

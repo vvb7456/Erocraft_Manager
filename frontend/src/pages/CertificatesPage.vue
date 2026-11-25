@@ -708,16 +708,6 @@ function cardTone(cert: ManagedCertificate): 'default' | 'danger' {
   color: var(--t1);
 }
 
-:deep(.dt-table) { min-width: 1040px; }
-:deep(.col-host) { width: 14%; }
-:deep(.col-domains) { width: 17%; }
-:deep(.col-days) { width: 10%; }
-:deep(.col-next) { width: 14%; }
-:deep(.col-path) { width: 15%; }
-:deep(.col-agent) { width: 9%; }
-:deep(.col-sync) { width: 10%; }
-:deep(.col-actions) { width: 11%; }
-
 .host-cell {
   display: flex;
   flex-direction: column;

@@ -658,17 +658,7 @@ function openMobileAction(s: Server) {
 }
 
 /* ── Table columns ── */
-:deep(.dt-table) { min-width: 1120px; }
-:deep(.col-name) { width: 13%; }
-:deep(.col-plan) { width: 9%; color: var(--t2); }
-:deep(.col-cpu) { width: 7%; }
-:deep(.col-mem) { width: 8%; }
-:deep(.col-disk) { width: 8%; }
-:deep(.col-net) { width: 8%; }
-:deep(.col-uptime) { width: 8%; }
-:deep(.col-expiry) { width: 10%; }
-:deep(.col-status) { width: 8%; }
-:deep(.col-actions) { width: auto; }
+:deep(.col-plan) { color: var(--t2); }
 
 .status-cell {
   display: inline-flex;

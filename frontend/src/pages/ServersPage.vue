@@ -739,16 +739,10 @@ function onMobileFilter(groupKey: string, value: string | number | boolean) {
 </template>
 
 <style scoped>
-:deep(.dt-table) { min-width: 1140px; }
 :deep(.col-check) { width: 40px; text-align: center !important; }
-:deep(.col-id) { width: 64px; color: var(--t3); font-size: .82rem; }
-:deep(.col-name) { width: 14%; }
-:deep(.col-plan) { width: 11%; color: var(--t2); font-size: .85rem; }
-:deep(.col-egg) { width: 9%; color: var(--t2); font-size: .85rem; }
-:deep(.col-owner) { width: 8%; }
-:deep(.col-expiry) { width: 14%; }
-:deep(.col-status) { width: 7%; }
-:deep(.col-actions) { width: auto; }
+:deep(.col-id) { color: var(--t3); font-size: .82rem; }
+:deep(.col-plan) { color: var(--t2); font-size: .85rem; }
+:deep(.col-egg) { color: var(--t2); font-size: .85rem; }
 
 .plan-cell { color: var(--t1); }
 .plan-cell--none { color: var(--t3); }
