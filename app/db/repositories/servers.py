@@ -1,25 +1,13 @@
-"""Server repository helpers."""
+"""Read-only server repository helpers."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.pterodactyl import EggVariable, PteroServer, ServerVariable
-
-
-@dataclass(slots=True)
-class StartupVariableUpdateResult:
-    variable: EggVariable
-    old_value: str
-    new_value: str
-
-    @property
-    def changed(self) -> bool:
-        return self.old_value != self.new_value
 
 
 class ServerRepository:
@@ -67,50 +55,6 @@ class ServerRepository:
             .order_by(EggVariable.id.asc())
         )
         return [(variable, value) for variable, value in result.all()]
-
-    async def update_startup_variable(
-        self,
-        db: AsyncSession,
-        *,
-        server_id: int,
-        egg_id: int,
-        env_variable: str,
-        value: str,
-    ) -> StartupVariableUpdateResult | None:
-        """Update a single startup variable value and return Panel-style change data."""
-        result = await db.execute(
-            select(EggVariable).where(
-                EggVariable.egg_id == egg_id,
-                EggVariable.env_variable == env_variable,
-                EggVariable.user_editable == 1,
-            )
-        )
-        egg_var = result.scalar_one_or_none()
-        if egg_var is None:
-            return None
-
-        sv_result = await db.execute(
-            select(ServerVariable).where(
-                ServerVariable.server_id == server_id,
-                ServerVariable.variable_id == egg_var.id,
-            )
-        )
-        sv = sv_result.scalar_one_or_none()
-        old_value = sv.variable_value if sv is not None and sv.variable_value is not None else egg_var.default_value
-        new_value = value or ""
-        if sv is not None:
-            sv.variable_value = new_value
-        else:
-            db.add(ServerVariable(
-                server_id=server_id,
-                variable_id=egg_var.id,
-                variable_value=new_value,
-            ))
-        return StartupVariableUpdateResult(
-            variable=egg_var,
-            old_value=old_value,
-            new_value=new_value,
-        )
 
     async def list_suspend_candidates(self, db: AsyncSession, today: date) -> list[PteroServer]:
         """Return servers whose expiration_date < today and not yet suspended.

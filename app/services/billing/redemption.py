@@ -46,11 +46,17 @@ from app.schemas.redemption import (
     RedemptionCodeOut,
     RedemptionExportOut,
 )
-from app.services import server_lifecycle
 from app.services.audit import log_manager_activity
 from app.services.billing._ids import gen_order_no
-from app.services.billing.orders import _build_snapshot
-from app.services.server_lifecycle import LifecycleError, LifecycleValidationError
+from app.services.billing.plan_snapshot import build_plan_snapshot
+from app.services.server_engine import (
+    ServerBuildPatch,
+    ServerEngineError,
+    ServerNotFoundError,
+    ServerValidationError,
+    hooks as server_engine_hooks,
+    server_engine,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1130,7 +1136,7 @@ async def redeem_code(
     now = utc_naive_now()
 
     # Phase 1: Lock & validate code, then transition to 'redeeming' before any
-    # external Wings calls (since server_lifecycle.create_server commits internally).
+    # external Wings calls (since server_engine.create_server commits internally).
     row = await db.scalar(
         select(RedemptionCode).where(RedemptionCode.code == norm).with_for_update()
     )
@@ -1215,9 +1221,9 @@ async def redeem_code(
     row.redeemed_by = user_id
     await db.commit()
 
-    # Phase 2: Provision or sync build, then atomically commit BillingOrder + RedemptionCode.
+    # Phase 2: Provision or sync build, then atomically commit PteroServer + BillingOrder + RedemptionCode.
     created_server_id: int | None = None
-    converted_build_prev: tuple[int, dict[str, Any]] | None = None
+    converted_build_prev: tuple[int, ServerBuildPatch] | None = None
     try:
         plan_fresh = await db.get(BillingPlan, plan_id)
         if plan_fresh is None:
@@ -1225,11 +1231,11 @@ async def redeem_code(
 
         today = await _local_today(db)
         order_no = gen_order_no()
-        snapshot = _build_snapshot(
+        snapshot = build_plan_snapshot(
             plan_fresh,
-            {"count": 1, "discount_pct": 0},
-            code_amount_fen,
-            code_days,
+            period={"count": 1, "discount_pct": 0},
+            total_fen=code_amount_fen,
+            total_days=code_days,
         )
         snapshot["redemption_code"] = code_str
 
@@ -1259,7 +1265,7 @@ async def redeem_code(
             prev_exp: date | None = None
             new_exp = today + timedelta(days=code_days)
             server_name = f"{user.username}-{order_no[-6:]}"
-            created = await server_lifecycle.create_server(
+            created = await server_engine.create_server(
                 db,
                 owner_id=user_id,
                 node_id=plan_fresh.node_id,
@@ -1283,6 +1289,7 @@ async def redeem_code(
                 expiration_date=new_exp,
                 plan_id=plan_fresh.id,
                 is_trial=False,
+                plan_snapshot=snapshot,
             )
             created_server_id = int(created.id)
             server_id = created_server_id
@@ -1294,31 +1301,23 @@ async def redeem_code(
                 srv_before = await db.get(PteroServer, server_id, populate_existing=True)
                 if srv_before is None:
                     raise ApiError(422, "redemption.server_incompatible")
-                prev_build: dict[str, Any] = {
-                    "cpu": int(srv_before.cpu),
-                    "memory": int(srv_before.memory),
-                    "disk": int(srv_before.disk),
-                    "swap": int(srv_before.swap),
-                    "io": int(srv_before.io),
-                    "database_limit": int(srv_before.database_limit or 0),
-                    "backup_limit": int(srv_before.backup_limit),
-                    "allocation_limit": srv_before.allocation_limit,
-                    "oom_disabled": bool(srv_before.oom_disabled),
-                }
-                await server_lifecycle.update_server_build(
+                prev_build_patch = ServerBuildPatch(
+                    cpu=int(srv_before.cpu),
+                    memory=int(srv_before.memory),
+                    disk=int(srv_before.disk),
+                    swap=int(srv_before.swap),
+                    io=int(srv_before.io),
+                    database_limit=int(srv_before.database_limit or 0),
+                    backup_limit=int(srv_before.backup_limit),
+                    allocation_limit=srv_before.allocation_limit,
+                    oom_disabled=bool(srv_before.oom_disabled),
+                )
+                await server_engine.update_build(
                     db,
                     server_id,
-                    cpu=plan_fresh.cpu,
-                    memory=plan_fresh.memory_mb,
-                    disk=plan_fresh.disk_mb,
-                    swap=plan_fresh.swap_mb,
-                    io=plan_fresh.io,
-                    database_limit=plan_fresh.database_limit,
-                    backup_limit=plan_fresh.backup_limit,
-                    allocation_limit=plan_fresh.allocation_limit,
-                    oom_disabled=plan_fresh.oom_disabled,
+                    ServerBuildPatch.from_plan(plan_fresh),
                 )
-                converted_build_prev = (server_id, prev_build)
+                converted_build_prev = (server_id, prev_build_patch)
 
             srv_locked = await db.scalar(
                 select(PteroServer)
@@ -1331,11 +1330,6 @@ async def redeem_code(
             prev_exp = srv_locked.expiration_date
             base_date = prev_exp if (prev_exp is not None and prev_exp > today) else today
             new_exp = base_date + timedelta(days=code_days)
-            srv_locked.expiration_date = new_exp
-            srv_locked.updated_at = utc_naive_now()
-            if kind == "convert":
-                srv_locked.plan_id = plan_fresh.id
-                srv_locked.is_trial = False
 
         # Guard against external_order_id collision if an admin manually entered the same external order id earlier.
         final_ext_id = code_ext_order_id
@@ -1409,12 +1403,36 @@ async def redeem_code(
         order_id_val = int(order.id)
         order_no_val = str(order.order_no)
         actor_username = str(user.username)
-        await db.commit()
+        if kind == "convert":
+            # apply_plan_transition(build_patch=None) updates plan_id/is_trial/expiration_date
+            # and commits BillingOrder, BillingOrderEffect, and RedemptionCode in one tx.
+            await server_engine.apply_plan_transition(
+                db,
+                server_id,
+                new_plan_id=plan_fresh.id,
+                build_patch=None,
+                new_expiration_date=new_exp,
+                update_expiration=True,
+                clear_trial=True,
+                sync_llm=False,
+                auto_unsuspend=False,
+            )
+        elif kind == "renew":
+            # renew_server updates expiration_date and commits BillingOrder,
+            # BillingOrderEffect, and RedemptionCode atomically in one transaction.
+            await server_engine.renew_server(
+                db,
+                server_id,
+                new_expiration_date=new_exp,
+                auto_unsuspend=False,
+            )
+        else:
+            await db.commit()
     except Exception as exc:
         await db.rollback()
         if created_server_id is not None:
             try:
-                await server_lifecycle.delete_server(db, created_server_id)
+                await server_engine.delete_server(db, created_server_id)
             except Exception:
                 logger.exception(
                     "Failed to clean up newly created server %s after redemption error",
@@ -1422,9 +1440,9 @@ async def redeem_code(
                 )
                 await db.rollback()
         if converted_build_prev is not None:
-            conv_srv_id, conv_prev = converted_build_prev
+            conv_srv_id, conv_build_patch = converted_build_prev
             try:
-                await server_lifecycle.update_server_build(db, conv_srv_id, **conv_prev)
+                await server_engine.update_build(db, conv_srv_id, conv_build_patch)
             except Exception:
                 logger.exception(
                     "Failed to revert converted server %s build after redemption error",
@@ -1447,9 +1465,11 @@ async def redeem_code(
 
         if isinstance(exc, ApiError):
             raise
-        if isinstance(exc, LifecycleValidationError):
+        if isinstance(exc, ServerNotFoundError):
+            raise ApiError(422, "redemption.server_incompatible") from exc
+        if isinstance(exc, ServerValidationError):
             raise ApiError(422, "validation.invalid", detail=str(exc)) from exc
-        if isinstance(exc, LifecycleError):
+        if isinstance(exc, ServerEngineError):
             raise ApiError(502, "dependency.failed", detail=str(exc)) from exc
         logger.exception("Unexpected error redeeming code %s", code_str)
         raise ApiError(502, "billing.order.apply_failed", detail=str(exc)[:200]) from exc
@@ -1459,7 +1479,7 @@ async def redeem_code(
     if kind != "new_purchase":
         if was_suspended:
             try:
-                await server_lifecycle.unsuspend_server(db, server_id)
+                await server_engine.unsuspend_server(db, server_id, actor=actor_username)
             except Exception:
                 post_ok = False
                 logger.warning(
@@ -1480,27 +1500,13 @@ async def redeem_code(
             except Exception:
                 await db.rollback()
 
-    if kind != "renew":
-        try:
-            from app.services.llm_provision import provision as llm_provision
-
-            if kind == "convert":
-                await llm_provision.update_for_upgrade(db, server_id, snapshot)
-            elif bool(snapshot.get("llm_enabled")) and int(
-                snapshot.get("llm_quota_grant", 0)
-            ) > 0:
-                await llm_provision.provision_for_server(
-                    db, server_id, user_id, snapshot
-                )
-            await db.commit()
-        except Exception:
-            logger.warning(
-                "LLM provision failed after redemption order %s server %s (non-blocking)",
-                order_id_val,
-                server_id,
-                exc_info=True,
-            )
-            await db.rollback()
+    # new_purchase already provisioned LLM via server_engine.create_server(plan_snapshot=snapshot).
+    if kind == "convert":
+        await server_engine_hooks.on_plan_changed(
+            db,
+            server_id=server_id,
+            new_snapshot=snapshot,
+        )
 
     await log_manager_activity(
         db,

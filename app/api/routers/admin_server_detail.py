@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import require_admin
 from app.api.deps.db import get_db
 from app.api.utils.wings_errors import translate_wings_error
-from app.core.exceptions import ApiError
-from app.db.models import PteroServer, PteroUser
+from app.core.contracts import ErrorInfo, OperationResult
+from app.db.models import PteroUser
 from app.schemas.admin_server_detail import (
     AdminServerDetailResponse,
     AllocationIdsRequest,
@@ -26,29 +26,16 @@ from app.schemas.admin_server_detail import (
     UpdateVariablesRequest,
 )
 from app.schemas.servers import MessageResponse
-from app.services import server_lifecycle, server_management
 from app.services.audit import log_manager_activity
-from app.core.contracts import ErrorInfo, OperationResult
-from app.services.server_lifecycle import LifecycleError
-from app.services.server_management import (
-    ServerManagementError,
-    ServerManagementValidationError,
-    ServerNotFoundError,
+from app.services.server_engine import (
+    get_server_detail,
+    get_server_runtime,
+    list_available_allocations,
+    server_engine,
 )
 from app.services.wings import WingsServiceError
 
 router = APIRouter(prefix="/admin/servers", tags=["admin-server-detail"])
-
-
-def _server_management_http(exc: ServerManagementError) -> HTTPException:
-    if isinstance(exc, ServerNotFoundError):
-        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if isinstance(exc, ServerManagementValidationError):
-        return HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(exc),
-        )
-    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
 
 @router.get("/{server_id}", response_model=AdminServerDetailResponse)
@@ -57,10 +44,7 @@ async def get_admin_server_detail(
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> AdminServerDetailResponse:
-    try:
-        return await server_management.get_server_detail(db, server_id)
-    except ServerManagementError as exc:
-        raise _server_management_http(exc) from exc
+    return await get_server_detail(db, server_id)
 
 
 @router.get("/{server_id}/runtime", response_model=ServerRuntimeResponse)
@@ -70,9 +54,7 @@ async def get_admin_server_runtime(
     db: AsyncSession = Depends(get_db),
 ) -> ServerRuntimeResponse:
     try:
-        return await server_management.get_runtime(db, server_id)
-    except ServerManagementValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        return await get_server_runtime(db, server_id)
     except WingsServiceError as exc:
         raise translate_wings_error(exc) from exc
 
@@ -86,17 +68,14 @@ async def update_admin_server_details(
 ) -> MessageResponse:
     if not payload.model_fields_set:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无有效更新内容")
-    try:
-        await server_management.update_details(
-            db,
-            server_id,
-            name=payload.name,
-            description=payload.description,
-            external_id=payload.external_id,
-            provided=payload.model_fields_set,
-        )
-    except ServerManagementError as exc:
-        raise _server_management_http(exc) from exc
+    await server_engine.update_details(
+        db,
+        server_id,
+        name=payload.name,
+        description=payload.description,
+        external_id=payload.external_id,
+        provided=payload.model_fields_set,
+    )
     await log_manager_activity(
         db,
         actor=current_user.username,
@@ -115,14 +94,12 @@ async def update_admin_server_owner(
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MutationWarningResponse:
-    try:
-        warning = await server_management.update_owner(
-            db,
-            server_id,
-            owner_id=payload.owner_id,
-        )
-    except ServerManagementError as exc:
-        raise _server_management_http(exc) from exc
+    result = await server_engine.update_owner(
+        db,
+        server_id,
+        owner_id=payload.owner_id,
+    )
+    warning = result.warnings[0] if result.warnings else None
     await log_manager_activity(
         db,
         actor=current_user.username,
@@ -146,24 +123,21 @@ async def update_admin_server_build(
 ) -> MessageResponse:
     if not payload.model_fields_set:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无有效更新内容")
-    try:
-        await server_management.update_build(
-            db,
-            server_id,
-            memory=payload.memory,
-            swap=payload.swap,
-            disk=payload.disk,
-            io=payload.io,
-            cpu=payload.cpu,
-            threads=payload.threads,
-            update_threads="threads" in payload.model_fields_set,
-            oom_disabled=payload.oom_disabled,
-            allocation_limit=payload.allocation_limit,
-            database_limit=payload.database_limit,
-            backup_limit=payload.backup_limit,
-        )
-    except ServerManagementError as exc:
-        raise _server_management_http(exc) from exc
+    await server_engine.update_build(
+        db,
+        server_id,
+        memory=payload.memory,
+        swap=payload.swap,
+        disk=payload.disk,
+        io=payload.io,
+        cpu=payload.cpu,
+        threads=payload.threads,
+        update_threads="threads" in payload.model_fields_set,
+        oom_disabled=payload.oom_disabled,
+        allocation_limit=payload.allocation_limit,
+        database_limit=payload.database_limit,
+        backup_limit=payload.backup_limit,
+    )
     await log_manager_activity(
         db,
         actor=current_user.username,
@@ -181,10 +155,7 @@ async def list_admin_server_available_allocations(
     _: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> AvailableAllocationsResponse:
-    try:
-        allocations = await server_management.list_available_allocations(db, server_id)
-    except ServerManagementError as exc:
-        raise _server_management_http(exc) from exc
+    allocations = await list_available_allocations(db, server_id)
     return AvailableAllocationsResponse(allocations=allocations)
 
 
@@ -195,14 +166,11 @@ async def add_admin_server_allocations(
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    try:
-        await server_management.add_allocations(
-            db,
-            server_id,
-            allocation_ids=payload.allocation_ids,
-        )
-    except ServerManagementError as exc:
-        raise _server_management_http(exc) from exc
+    await server_engine.add_allocations(
+        db,
+        server_id,
+        allocation_ids=payload.allocation_ids,
+    )
     await log_manager_activity(
         db,
         actor=current_user.username,
@@ -221,10 +189,7 @@ async def remove_admin_server_allocation(
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    try:
-        await server_management.remove_allocation(db, server_id, allocation_id)
-    except ServerManagementError as exc:
-        raise _server_management_http(exc) from exc
+    await server_engine.remove_allocation(db, server_id, allocation_id)
     await log_manager_activity(
         db,
         actor=current_user.username,
@@ -243,14 +208,11 @@ async def set_admin_server_primary_allocation(
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    try:
-        await server_management.set_primary_allocation(
-            db,
-            server_id,
-            payload.allocation_id,
-        )
-    except ServerManagementError as exc:
-        raise _server_management_http(exc) from exc
+    await server_engine.set_primary_allocation(
+        db,
+        server_id,
+        payload.allocation_id,
+    )
     await log_manager_activity(
         db,
         actor=current_user.username,
@@ -271,17 +233,14 @@ async def update_admin_server_startup(
 ) -> MessageResponse:
     if not payload.model_fields_set:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无有效更新内容")
-    try:
-        await server_management.update_startup(
-            db,
-            server_id,
-            image=payload.image,
-            startup=payload.startup,
-            skip_scripts=payload.skip_scripts,
-            provided=payload.model_fields_set,
-        )
-    except ServerManagementError as exc:
-        raise _server_management_http(exc) from exc
+    await server_engine.update_startup(
+        db,
+        server_id,
+        image=payload.image,
+        startup=payload.startup,
+        skip_scripts=payload.skip_scripts,
+        provided=payload.model_fields_set,
+    )
     await log_manager_activity(
         db,
         actor=current_user.username,
@@ -300,19 +259,16 @@ async def switch_admin_server_egg(
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    try:
-        await server_management.switch_egg(
-            db,
-            server_id,
-            egg_id=payload.egg_id,
-            environment=payload.environment,
-            image=payload.image,
-            startup=payload.startup,
-            skip_scripts=payload.skip_scripts,
-            provided=payload.model_fields_set,
-        )
-    except ServerManagementError as exc:
-        raise _server_management_http(exc) from exc
+    await server_engine.switch_egg(
+        db,
+        server_id,
+        egg_id=payload.egg_id,
+        environment=payload.environment,
+        image=payload.image,
+        startup=payload.startup,
+        skip_scripts=payload.skip_scripts,
+        provided=payload.model_fields_set,
+    )
     await log_manager_activity(
         db,
         actor=current_user.username,
@@ -331,10 +287,7 @@ async def update_admin_server_variables(
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    try:
-        await server_management.update_variables(db, server_id, variables=payload.variables)
-    except ServerManagementError as exc:
-        raise _server_management_http(exc) from exc
+    await server_engine.update_variables(db, server_id, variables=payload.variables)
     await log_manager_activity(
         db,
         actor=current_user.username,
@@ -357,31 +310,13 @@ async def reinstall_admin_server(
     current_user: PteroUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    server = await db.get(PteroServer, server_id)
-    if server is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"服务器 {server_id} 不存在")
-    if server.status == "installing":
-        raise ApiError(409, "server.installing")
-
-    from app.api.routers.wings_remote import (
-        clear_pending_force_reinstall,
-        mark_pending_force_reinstall,
-    )
-
-    server_uuid = server.uuid
     force = bool(payload.force) if payload is not None else False
-    force_token: str | None = None
-    if force:
-        force_token = mark_pending_force_reinstall(server_uuid)
-    else:
-        clear_pending_force_reinstall(server_uuid)
-
-    try:
-        await server_lifecycle.reinstall_server(db, server_id)
-    except LifecycleError as exc:
-        if force_token is not None:
-            clear_pending_force_reinstall(server_uuid, token=force_token)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    await server_engine.reinstall_server(
+        db,
+        server_id,
+        force=force,
+        forbid_suspended=False,
+    )
     await log_manager_activity(
         db,
         actor=current_user.username,

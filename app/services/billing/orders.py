@@ -27,6 +27,7 @@ from app.services.billing import coupons, payments
 from app.services.billing._ids import gen_invoice_no, gen_order_no
 from app.services.billing._pricing import remaining_billable_days, upgrade_diff_fen
 from app.services.billing.gateway_client import GatewayClient, GatewayError
+from app.services.billing.plan_snapshot import build_plan_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -64,18 +65,12 @@ class PendingOrderExists(OrderError):
 
 
 def _build_snapshot(plan: BillingPlan, period: dict, total_fen: int, total_days: int) -> dict:
-    fields = (
-        "price_fen", "days", "currency_code", "egg_id", "nest_id", "node_id", "docker_image",
-        "startup_command", "cpu", "memory_mb", "disk_mb", "swap_mb", "io", "database_limit",
-        "backup_limit", "allocation_limit", "oom_disabled", "plan_type", "linked_plan_id",
-        "llm_enabled", "llm_quota_grant", "newapi_plan_id", "llm_group",
+    return build_plan_snapshot(
+        plan,
+        period=period,
+        total_fen=total_fen,
+        total_days=total_days,
     )
-    return {
-        **{key: getattr(plan, key) for key in fields}, "schema_version": 2,
-        "plan_id": plan.id, "plan_name": plan.display_name, "plan_code": plan.code,
-        "env_snapshot": dict(plan.env_defaults),
-        "selected_period": {**period, "total_fen": total_fen, "total_days": total_days},
-    }
 
 
 async def create_order(db: AsyncSession, user: PteroUser, payload: CreateOrderRequest) -> BillingOrder:
@@ -142,11 +137,13 @@ async def create_order(db: AsyncSession, user: PteroUser, payload: CreateOrderRe
         period = selected
         total_fen = int((Decimal(str(plan.price_fen * period["count"] * (100 - period["discount_pct"]))) / 100).quantize(Decimal("1")))
         total_days = plan.days * period["count"]
-    snapshot = _build_snapshot(plan, period, total_fen, total_days)
-    if payload.kind == "upgrade":
-        old_plan = cast(BillingPlan, old_plan)
-        snapshot["previous_plan"] = {"plan_id": old_plan.id, "plan_code": old_plan.code, "plan_name": old_plan.display_name,
-                                     "price_fen": old_plan.price_fen, "days": old_plan.days}
+    snapshot = build_plan_snapshot(
+        plan,
+        period=period,
+        total_fen=total_fen,
+        total_days=total_days,
+        previous_plan=cast(BillingPlan, old_plan) if payload.kind == "upgrade" else None,
+    )
 
     coupon_code = payload.coupon_code.strip().upper() if payload.coupon_code else None
     timeout = await get_settings_store().get(db, "BILLING_ORDER_PAY_TIMEOUT_MIN", BILLING_SPECS["BILLING_ORDER_PAY_TIMEOUT_MIN"].default_value())
@@ -238,8 +235,8 @@ async def get_invoice_for_order(db: AsyncSession, order_id: int) -> BillingInvoi
 
 async def cleanup_unapplied_order(order_id: int) -> None:
     from app.db.session import get_session_factory
-    from app.services import server_lifecycle
     from app.services.billing import incidents
+    from app.services.server_engine import server_engine
 
     # 关单已经提交；独立会话幂等释放端口预留及可能残留的未交付服务器，不影响调用方正在同步的付款对象。
     async with get_session_factory()() as db:
@@ -259,7 +256,7 @@ async def cleanup_unapplied_order(order_id: int) -> None:
 
         await db.commit()
         try:
-            await server_lifecycle.delete_server(db, int(residual_server_id))
+            await server_engine.delete_server(db, int(residual_server_id))
             refreshed = await db.scalar(select(BillingOrder).where(BillingOrder.id == order_id))
             if refreshed is not None and refreshed.target_server_id == residual_server_id:
                 refreshed.target_server_id = None

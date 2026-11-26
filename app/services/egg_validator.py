@@ -6,7 +6,7 @@ as a Laravel-style pipe-separated rule string, e.g.::
     required|string|regex:/^\\S*$/|in:true,false
 
 Panel runs these through the full Laravel validator. We re-implement a
-practical subset here so ``panel_db.create_server`` can refuse bad input
+practical subset here so ``server_engine.create_server`` can refuse bad input
 before writing rows. The set covers everything used by the SillyTavern
 egg and the common rules used by other Pterodactyl eggs.
 

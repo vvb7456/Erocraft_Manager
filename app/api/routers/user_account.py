@@ -29,7 +29,7 @@ from app.schemas.user_account import (
     UpdateUserAccountResponse,
     UserAccountProfileResponse,
 )
-from app.services import server_lifecycle
+from app.services import user_service
 from app.services import verification_codes as code_svc
 from app.services.audit import log_manager_activity
 from app.services.email import (
@@ -39,8 +39,8 @@ from app.services.email import (
     render_template_body,
     send_email,
 )
-from app.services.server_lifecycle import LifecycleError
 from app.services.user.validation import normalize_email
+from app.services.user_service import UserConflictError, UserNotFoundError, UserServiceError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/user", tags=["user_account"])
@@ -85,7 +85,7 @@ async def update_user_account(
         raise ApiError(422, "account.current_password_incorrect")
 
     try:
-        await server_lifecycle.update_user(
+        await user_service.update_user(
             db,
             int(current_user.id),
             email=current_user.email,
@@ -94,7 +94,8 @@ async def update_user_account(
             last_name=current_user.name_last or "User",
             password=new_password,
         )
-    except LifecycleError as exc:
+    except UserServiceError as exc:
+        await db.rollback()
         raise ApiError(500, "account.password_update_failed") from exc
 
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -332,7 +333,7 @@ async def confirm_email(
     await code_svc.consume_code(db, record, now)
 
     try:
-        await server_lifecycle.update_user(
+        await user_service.update_user(
             db,
             int(user.id),
             email=new_email,
@@ -341,7 +342,13 @@ async def confirm_email(
             last_name=user.name_last or "User",
         )
         await db.commit()
-    except LifecycleError as exc:
+    except UserConflictError as exc:
+        await db.rollback()
+        raise ApiError(409, "account.email_unavailable") from exc
+    except UserNotFoundError as exc:
+        await db.rollback()
+        raise ApiError(404, "account.user_missing") from exc
+    except UserServiceError as exc:
         await db.rollback()
         raise ApiError(500, "account.email_confirm_failed") from exc
 

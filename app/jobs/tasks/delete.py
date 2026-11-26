@@ -11,8 +11,7 @@ from app.db.session import get_session_factory
 from app.jobs.tasks.common import get_job_today
 from app.services.audit import log_manager_activity
 from app.core.contracts import ErrorInfo, OperationResult
-from app.services import server_lifecycle
-from app.services.server_lifecycle import LifecycleError
+from app.services.server_engine import ServerEngineError, server_engine
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +44,14 @@ async def run_delete_task() -> None:
             success_count = 0
             failed_ids: list[int] = []
             for server in servers:
+                server_id = int(server.id)
                 try:
-                    await server_lifecycle.delete_server(db, server.id)
+                    await server_engine.delete_server(db, server_id)
                     success_count += 1
-                except LifecycleError:
+                except ServerEngineError:
                     await db.rollback()
-                    failed_ids.append(server.id)
-                    logger.exception("Failed to delete server %s in automated task", server.id)
+                    failed_ids.append(server_id)
+                    logger.exception("Failed to delete server %s in automated task", server_id)
 
             await log_manager_activity(
                 db,

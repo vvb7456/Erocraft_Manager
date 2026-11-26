@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_current_user
 from app.api.deps.db import get_db
 from app.api.deps.ownership import get_active_owned_server, get_owned_server
-from app.config.egg_credentials import required_credential_vars, validate_startup_variable
+from app.config.egg_credentials import required_credential_vars
 from app.core.runtime_settings import AUTOMATION_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.time import local_today
@@ -53,8 +53,7 @@ from app.services.pterodactyl_activity import (
     decode_activity_properties,
     pterodactyl_activity_logger,
 )
-from app.services import server_lifecycle
-from app.services.server_lifecycle import LifecycleError
+from app.services.server_engine import server_engine
 from app.services.wings import WingsServiceError, wings_service
 from app.api.utils.wings_errors import translate_wings_error
 
@@ -462,36 +461,32 @@ async def update_user_server_startup(
     server: PteroServer = Depends(get_active_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    batch = str(uuid.uuid4()) if len(payload.variables) > 1 else None
-    egg_name = server.egg.name if server.egg else None
-    for env_var, value in payload.variables.items():
-        err = validate_startup_variable(egg_name, env_var, value)
-        if err:
-            raise ApiError(422, "server.startup_variable_invalid", detail=err, params={"variable": env_var})
-        result = await server_repository.update_startup_variable(
-            db,
-            server_id=server.id,
-            egg_id=server.egg_id,
-            env_variable=env_var,
-            value=value,
-        )
-        if result is None or not result.changed:
-            continue
-        await pterodactyl_activity_logger.log_server_activity(
-            db,
-            server=server,
-            actor=current_user,
-            event="server:startup.edit",
-            properties={
-                "variable": result.variable.env_variable,
-                "old": result.old_value,
-                "new": result.new_value,
-            },
-            request=request,
-            subjects=[(SUBJECT_EGG_VARIABLE, result.variable.id)],
-            batch=batch,
-        )
-    await db.commit()
+    result = await server_engine.update_variables(
+        db,
+        server.id,
+        variables=payload.variables,
+        user_editable_only=True,
+        sync_runtime=False,
+    )
+    changed_items = [item for item in result.changes if item.changed]
+    if changed_items:
+        batch = str(uuid.uuid4()) if len(changed_items) > 1 else None
+        for item in changed_items:
+            await pterodactyl_activity_logger.log_server_activity(
+                db,
+                server=server,
+                actor=current_user,
+                event="server:startup.edit",
+                properties={
+                    "variable": item.env_variable,
+                    "old": item.old_value,
+                    "new": item.new_value,
+                },
+                request=request,
+                subjects=[(SUBJECT_EGG_VARIABLE, item.variable_id)],
+                batch=batch,
+            )
+        await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -504,29 +499,12 @@ async def reinstall_user_server(
     server: PteroServer = Depends(get_owned_server),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    if server.is_suspended:
-        raise ApiError(403, "server.suspended")
-    if server.status == "installing":
-        raise ApiError(409, "server.installing")
-
-    from app.api.routers.wings_remote import (
-        clear_pending_force_reinstall,
-        mark_pending_force_reinstall,
+    await server_engine.reinstall_server(
+        db,
+        server.id,
+        force=payload.force,
+        forbid_suspended=True,
     )
-
-    force_token: str | None = None
-    if payload.force:
-        force_token = mark_pending_force_reinstall(server.uuid)
-    else:
-        clear_pending_force_reinstall(server.uuid)
-
-    try:
-        await server_lifecycle.reinstall_server(db, server.id)
-    except LifecycleError as exc:
-        if force_token is not None:
-            clear_pending_force_reinstall(server.uuid, token=force_token)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
     await pterodactyl_activity_logger.log_server_activity(
         db,
         server=server,

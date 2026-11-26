@@ -46,9 +46,10 @@ from app.services.email import (
     render_template_body,
     send_email,
 )
-from app.services import server_lifecycle
-from app.services.server_lifecycle import LifecycleError
+from app.services import user_service
+from app.services.server_engine import ServerEngineError, server_engine
 from app.services.user.validation import normalize_email, normalize_username
+from app.services.user_service import UserNotFoundError, UserServiceError
 
 router = APIRouter(prefix="/admin", tags=["users"])
 logger = logging.getLogger(__name__)
@@ -138,7 +139,7 @@ async def _delete_user_remote(db: AsyncSession, user_id: int) -> int:
 
     deleted = 0
     for server_id in server_ids:
-        await server_lifecycle.delete_server(db, server_id)
+        await server_engine.delete_server(db, server_id)
         deleted += 1
 
     # Re-verify under FOR UPDATE lock immediately before removing a root_admin user
@@ -158,8 +159,9 @@ async def _delete_user_remote(db: AsyncSession, user_id: int) -> int:
         )
 
     try:
-        await server_lifecycle.delete_user(db, user_id)
-    except LifecycleError as exc:
+        await user_service.delete_user(db, user_id)
+    except UserServiceError as exc:
+        await db.rollback()
         # Servers were deleted (each delete_server commits internally) but the
         # user row could not be removed — most likely a transient DB issue.
         # Log the partial state explicitly so an operator knows that retrying
@@ -240,7 +242,7 @@ async def create_user(
 
     target_root_admin = bool(payload.root_admin) if payload.root_admin is not None else False
     try:
-        created = await server_lifecycle.create_user(
+        created = await user_service.create_user(
             db,
             email=email,
             username=username,
@@ -250,7 +252,7 @@ async def create_user(
             root_admin=target_root_admin,
         )
         await db.commit()
-    except LifecycleError as exc:
+    except UserServiceError as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
@@ -270,10 +272,10 @@ async def create_user(
             await db.rollback()
             cleanup_succeeded = False
             try:
-                await server_lifecycle.delete_user(db, int(user_id))
+                await user_service.delete_user(db, int(user_id))
                 await db.commit()
                 cleanup_succeeded = True
-            except LifecycleError:
+            except UserServiceError:
                 await db.rollback()
                 logger.exception("Failed to delete user %s after password reset token creation failed", user_id)
 
@@ -385,7 +387,7 @@ async def update_user(
         )
 
     try:
-        await server_lifecycle.update_user(
+        await user_service.update_user(
             db,
             user_id,
             email=email,
@@ -397,7 +399,10 @@ async def update_user(
             root_admin=payload.root_admin,
         )
         await db.commit()
-    except LifecycleError as exc:
+    except UserNotFoundError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在") from exc
+    except UserServiceError as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
@@ -489,7 +494,7 @@ async def delete_user(
     admin_username = current_user.username
     try:
         deleted_server_count = await _delete_user_remote(db, user_id)
-    except LifecycleError as exc:
+    except ServerEngineError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     await log_manager_activity(
@@ -584,7 +589,7 @@ async def batch_users(
             try:
                 await _delete_user_remote(db, user_id)
                 success += 1
-            except (LifecycleError, HTTPException):
+            except (ServerEngineError, UserServiceError, HTTPException):
                 await db.rollback()
                 errors += 1
 

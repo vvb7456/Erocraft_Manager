@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -15,8 +15,10 @@ from starlette.exceptions import HTTPException
 from app.api.deps.wings_remote_auth import WingsRemoteError
 from app.core.api_errors import ApiError, HTTP_ERROR_CODES, problem_response
 from app.core.contracts import ErrorInfo
+from app.core.error_codes import ERROR_TITLES, ErrorCode
 from app.services.agent_client import AgentClientError
 from app.services.node_management import AdminResourceError
+from app.services.server_engine.errors import ServerEngineError
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,29 @@ def register_exception_handlers(app: FastAPI) -> None:
             ErrorInfo(
                 code=HTTP_ERROR_CODES.get(exc.status_code, "request.invalid"),
                 detail=exc.detail,
+            ),
+            request=request,
+        )
+
+    @app.exception_handler(ServerEngineError)
+    async def server_engine_error_handler(request: Request, exc: ServerEngineError) -> JSONResponse:
+        raw_code = exc.code
+        code: ErrorCode = (
+            cast(ErrorCode, raw_code)
+            if isinstance(raw_code, str) and raw_code in ERROR_TITLES
+            else HTTP_ERROR_CODES.get(exc.status_code, "request.invalid")
+        )
+        safe_params: dict[str, str | int | float | bool] = {
+            k: v
+            for k, v in (exc.params or {}).items()
+            if isinstance(v, (str, int, float, bool))
+        }
+        return problem_response(
+            exc.status_code,
+            ErrorInfo(
+                code=code,
+                detail=exc.detail,
+                params=safe_params,
             ),
             request=request,
         )

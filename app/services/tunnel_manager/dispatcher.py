@@ -737,12 +737,44 @@ async def _record_orphan_dns(
     ))
 
 
-async def on_server_pre_delete(db: AsyncSession, server_id: int) -> None:
-    """Hook called by ``app.services.server_lifecycle.delete_server`` before
-    the panel server row is removed.
+async def _best_effort_push_ingress(
+    db: AsyncSession,
+    host_tunnel: ManagerHostTunnel,
+    *,
+    context: str,
+    server_id: int,
+) -> bool:
+    """Push rebuilt ingress to Cloudflare without raising on network/API errors."""
+    if not host_tunnel.cf_tunnel_id:
+        return False
+    host = await host_registry.get_host_by_id(db, host_tunnel.host_id)
+    if host is None:
+        logger.warning(
+            "%s: host %s not found for host_tunnel %s (server %s); skipping ingress push",
+            context, host_tunnel.host_id, host_tunnel.id, server_id,
+        )
+        return False
+    try:
+        await push_remote_ingress(db, host_tunnel, host_lan_ip=host.hostname)
+        return True
+    except Exception as exc:  # noqa: BLE001 — best-effort lifecycle hook
+        logger.warning(
+            "%s: push_remote_ingress failed for host %s server %s: %s",
+            context, host.id, server_id, exc,
+        )
+        try:
+            await db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        return False
 
-    Best-effort cleanup: removes CF DNS + DB row. Failures are logged but
-    must not block server deletion (the reconciler will catch leftovers).
+
+async def on_server_pre_delete(db: AsyncSession, server_id: int) -> None:
+    """Hook called before a server row is removed.
+
+    Best-effort cleanup: removes CF DNS + DB row, then immediately pushes the
+    rebuilt ingress table to Cloudflare so the deleted hostname is evicted.
+    Failures are logged and never block server deletion.
     """
     st = await _get_server_tunnel(db, server_id)
     if st is None:
@@ -767,6 +799,51 @@ async def on_server_pre_delete(db: AsyncSession, server_id: int) -> None:
         )
         st.status = "deleted"
         st.last_error = str(exc)[:1024]
+        await db.commit()
+
+    await _best_effort_push_ingress(
+        db, ht, context="on_server_pre_delete", server_id=server_id,
+    )
+
+
+async def on_server_primary_port_changed(
+    db: AsyncSession,
+    server_id: int,
+    new_port: int,
+) -> None:
+    """Sync a server tunnel's upstream port after its primary allocation changes.
+
+    Updates ``ManagerServerTunnel.upstream_port`` and commits, then pushes the
+    rebuilt ingress to Cloudflare on a best-effort basis.
+    """
+    st = await _get_server_tunnel(db, server_id)
+    if st is None or st.status == "deleted":
+        return
+
+    target_port = int(new_port)
+    if st.upstream_port == target_port:
+        return
+
+    st.upstream_port = target_port
+    st.last_error = None
+    await db.commit()
+
+    if st.status != "active":
+        return
+
+    res = await db.execute(
+        select(ManagerHostTunnel).where(
+            ManagerHostTunnel.id == st.host_tunnel_id,
+        )
+    )
+    ht = res.scalar_one_or_none()
+    if ht is None:
+        return
+
+    if await _best_effort_push_ingress(
+        db, ht, context="on_server_primary_port_changed", server_id=server_id,
+    ):
+        st.last_synced_at = utc_naive_now()
         await db.commit()
 
 

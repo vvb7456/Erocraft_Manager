@@ -2,7 +2,7 @@
 
 Orchestrates NewAPI per-server user creation, subscription binding,
 and token CRUD. Called from ``apply_engine._run_post_actions`` and
-``server_lifecycle.delete_server``.
+``server_engine.hooks``.
 
 Each LLM-enabled server gets its own NewAPI user (``srv_{server_id}``)
 with a native subscription tied to the plan's NewAPI SubscriptionPlan.
@@ -15,17 +15,19 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.contracts import ErrorInfo, OperationResult
 from app.core.runtime_settings import LLM_SPECS, defaults_for
 from app.core.settings_store import get_settings_store
 from app.core.time import utc_naive_now
 from app.db.models.manager import ServerLlmKey
 from app.db.models.pterodactyl import PteroServer
+from app.db.session import get_session_factory
 from app.services.audit import log_manager_activity
-from app.core.contracts import ErrorInfo, OperationResult
 from app.services.llm_provision import newapi_client
 
 logger = logging.getLogger(__name__)
@@ -37,7 +39,9 @@ def _gen_password() -> str:
     return secrets.token_urlsafe(_USER_PASSWORD_LEN)[:20]
 
 
-def _llm_enabled_in_snapshot(snapshot: dict[str, Any]) -> bool:
+def _llm_enabled_in_snapshot(snapshot: Mapping[str, Any] | None) -> bool:
+    if not snapshot:
+        return False
     return bool(snapshot.get("llm_enabled")) and int(snapshot.get("llm_quota_grant", 0)) > 0
 
 
@@ -45,6 +49,29 @@ async def _is_llm_globally_enabled(db: AsyncSession) -> bool:
     store = get_settings_store()
     values = await store.get_many(db, defaults_for(LLM_SPECS))
     return bool(values.get("LLM_ENABLED"))
+
+
+async def _log_llm_activity(
+    *,
+    actor: str,
+    category: str,
+    operation: OperationResult,
+    detail_key: str,
+    detail_params: Mapping[str, Any],
+) -> None:
+    """Write management audit log in an isolated session so caller transactions are never committed early."""
+    try:
+        async with get_session_factory()() as audit_db:
+            await log_manager_activity(
+                audit_db,
+                actor=actor,
+                category=category,
+                operation=operation,
+                detail_key=detail_key,
+                detail_params=detail_params,
+            )
+    except Exception:
+        logger.exception("Failed to write LLM audit activity (%s)", detail_key)
 
 
 async def _reprovision_existing(
@@ -94,8 +121,7 @@ async def _reprovision_existing(
     row.last_synced_at = utc_naive_now()
     await db.flush()
 
-    await log_manager_activity(
-        db,
+    await _log_llm_activity(
         actor="system",
         category="billing",
         operation=OperationResult(action="llm.provision", phase="execution", outcome="success", target={"server_id": row.server_id}, children=children),
@@ -253,8 +279,7 @@ async def provision_for_server(
         db.add(existing)
     await db.flush()
 
-    await log_manager_activity(
-        db,
+    await _log_llm_activity(
         actor="system",
         category="billing",
         operation=OperationResult(action="llm.provision", phase="execution", outcome="success", target={"server_id": server_id}),
@@ -297,8 +322,7 @@ async def revoke_for_server(db: AsyncSession, server_id: int) -> None:
 
     await db.delete(row)
     await db.flush()
-    await log_manager_activity(
-        db,
+    await _log_llm_activity(
         actor="system",
         category="billing",
         operation=OperationResult(action="llm.revoke", phase="execution", outcome="failed" if error else "success", target={"server_id": server_id}, error=error, facts={"local_record_removed": True}),
@@ -309,6 +333,82 @@ async def revoke_for_server(db: AsyncSession, server_id: int) -> None:
         },
     )
     logger.info("revoked LLM for server %s", server_id)
+
+
+async def set_server_llm_enabled(
+    db: AsyncSession,
+    server_id: int,
+    *,
+    enabled: bool,
+    actor: str = "system",
+) -> ServerLlmKey | None:
+    """Real-time enable/disable of a server's NewAPI token (1=active, 2=disabled).
+
+    No-op returning ``None`` when LLM is globally disabled or the server has no
+    active/disabled key row. Only flushes on ``db`` (caller commits); management
+    audit runs in an isolated session.
+    """
+    if not await _is_llm_globally_enabled(db):
+        return None
+    row = await db.get(ServerLlmKey, server_id)
+    if row is None or row.status == "revoked":
+        return None
+
+    target_status = "active" if enabled else "disabled"
+    if row.status == target_status:
+        return row
+
+    await newapi_client.update_token(
+        db,
+        access_token=row.newapi_user_access_token,
+        user_id=row.newapi_user_id,
+        token_id=row.newapi_token_id,
+        status=1 if enabled else 2,
+    )
+    row.status = target_status
+    row.last_synced_at = utc_naive_now()
+    await db.flush()
+    await _log_llm_activity(
+        actor=actor,
+        category="server",
+        operation=OperationResult(
+            action="llm.status.update",
+            phase="execution",
+            outcome="success",
+            target={"server_id": server_id},
+        ),
+        detail_key="llm.status.sync",
+        detail_params={"server_id": server_id, "enabled": str(enabled).lower()},
+    )
+    logger.info("synced LLM token status for server %s: enabled=%s", server_id, enabled)
+    return row
+
+
+async def sync_server_llm_status(
+    db: AsyncSession,
+    server_id: int,
+    *,
+    is_suspended: bool | None = None,
+    actor: str = "system",
+) -> ServerLlmKey | None:
+    """Align a single server's LLM token with its current suspension/existence state.
+
+    If ``is_suspended`` is omitted, loads ``PteroServer`` from ``db``: a missing
+    server triggers :func:`revoke_for_server`; otherwise token enabled state is
+    aligned to ``not server.is_suspended``. Caller owns ``db.commit()``.
+    """
+    if is_suspended is None:
+        server = await db.get(PteroServer, server_id)
+        if server is None:
+            await revoke_for_server(db, server_id)
+            return None
+        is_suspended = bool(server.is_suspended)
+    return await set_server_llm_enabled(
+        db,
+        server_id,
+        enabled=not is_suspended,
+        actor=actor,
+    )
 
 
 class LlmAdminError(Exception):
@@ -343,9 +443,8 @@ async def admin_set_status(
         raise LlmAdminError(f"NewAPI status update failed: {exc}") from exc
 
     row.status = "active" if enabled else "disabled"
-    await db.flush()
-    await log_manager_activity(
-        db,
+    await db.commit()
+    await _log_llm_activity(
         actor=actor,
         category="server",
         operation=OperationResult(action="llm.status.update", phase="execution", outcome="success", target={"server_id": server_id}),
@@ -389,9 +488,8 @@ async def admin_reset_usage(
         pass  # keep disabled
     else:
         row.status = "active"
-    await db.flush()
-    await log_manager_activity(
-        db,
+    await db.commit()
+    await _log_llm_activity(
         actor=actor,
         category="server",
         operation=OperationResult(action="llm.usage.reset", phase="execution", outcome="success", target={"server_id": server_id}),
@@ -422,9 +520,8 @@ async def admin_revoke(db: AsyncSession, server_id: int, *, actor: str = "admin"
             newapi_user_id, server_id, exc_info=True,
         )
     await db.delete(row)
-    await db.flush()
-    await log_manager_activity(
-        db,
+    await db.commit()
+    await _log_llm_activity(
         actor=actor,
         category="server",
         operation=OperationResult(action="llm.revoke", phase="execution", outcome="failed" if error else "success", target={"server_id": server_id}, error=error, facts={"local_record_removed": True}),
@@ -440,15 +537,20 @@ async def admin_revoke(db: AsyncSession, server_id: int, *, actor: str = "admin"
 async def update_for_upgrade(
     db: AsyncSession,
     server_id: int,
-    new_snapshot: dict[str, Any],
+    new_snapshot: Mapping[str, Any] | None,
 ) -> None:
-    """Update an existing key's subscription after an upgrade/convert.
+    """Update an existing key's subscription after an upgrade/convert/plan change.
 
-    If the new plan has no LLM → revoke. Otherwise, invalidate the old
-    subscription and bind a new one from the new plan's newapi_plan_id.
+    If ``new_snapshot`` is ``None`` or the target plan has no LLM → automatically
+    revokes any existing key. Otherwise, invalidates the old subscription and
+    binds a new one from the target plan's ``newapi_plan_id``. Caller commits.
     """
     if not _llm_enabled_in_snapshot(new_snapshot):
         await revoke_for_server(db, server_id)
+        return
+
+    assert new_snapshot is not None
+    if not await _is_llm_globally_enabled(db):
         return
 
     new_plan_id = int(new_snapshot.get("newapi_plan_id") or 0)
@@ -465,7 +567,7 @@ async def update_for_upgrade(
         server = await db.get(PteroServer, server_id)
         if server is not None:
             user_id = server.owner_id
-        await provision_for_server(db, server_id, user_id, new_snapshot)
+        await provision_for_server(db, server_id, user_id, dict(new_snapshot))
         return
 
     # Invalidate old subscription + bind new
@@ -507,8 +609,7 @@ async def update_for_upgrade(
     if row.status != "disabled":
         row.status = "active"
     await db.flush()
-    await log_manager_activity(
-        db,
+    await _log_llm_activity(
         actor="system",
         category="billing",
         operation=OperationResult(action="llm.upgrade", phase="execution", outcome="success", target={"server_id": server_id}, children=children),

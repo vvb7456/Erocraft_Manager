@@ -29,8 +29,9 @@ from app.db.repositories.users import user_repository
 from app.db.session import get_engine
 from app.schemas.agreements import AcceptanceItem
 from app.services import agreements as agreements_svc
-from app.services import panel_db
+from app.services import user_service
 from app.services import verification_codes as code_svc
+from app.services.user_service import UserServiceError
 from app.services.audit import log_manager_activity
 from app.services.email import (
     SiteUrlNotConfiguredError,
@@ -311,11 +312,8 @@ async def reset_password(
         await code_svc.revoke_user_codes(db, user_id, now)
         await db.commit()
 
-    from app.services import server_lifecycle
-    from app.services.server_lifecycle import LifecycleError
-
     try:
-        await server_lifecycle.update_user(
+        await user_service.update_user(
             db,
             user_id,
             email=user.email,
@@ -331,7 +329,8 @@ async def reset_password(
             is_admin=bool(user.root_admin),
         )
         await db.commit()
-    except LifecycleError as exc:
+    except UserServiceError as exc:
+        await db.rollback()
         logger.exception("Failed to reset password for user %s", user.username)
         raise ApiError(500, "account.password_reset_failed") from exc
 
@@ -496,7 +495,7 @@ async def register(
 
     try:
         await code_svc.consume_code(db, record, now)
-        created = await panel_db.create_user_with_hashed_password(
+        created = await user_service.create_user_with_hashed_password(
             db,
             username=username,
             email=email,
@@ -515,7 +514,7 @@ async def register(
                 commit=False,
             )
         await db.commit()
-    except panel_db.PanelDBError as exc:
+    except UserServiceError as exc:
         await db.rollback()
         if await user_repository.get_by_email(db, email):
             raise ApiError(409, "register.email_taken") from None

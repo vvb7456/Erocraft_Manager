@@ -39,55 +39,17 @@ from app.schemas.servers import (
 from app.services.audit import log_manager_activity
 from app.core.contracts import ErrorInfo, OperationResult
 from app.services.billing._ids import gen_order_no
+from app.services.billing.plan_snapshot import build_plan_snapshot
 from app.services.email import get_email_delay, get_site_url, load_template, render_template_body, send_email
-from app.services import server_lifecycle
-from app.services.server_lifecycle import LifecycleError, LifecycleValidationError
+from app.services.server_engine import (
+    ServerBuildPatch,
+    ServerEngineError,
+    hooks as server_hooks,
+    server_engine,
+)
 
 router = APIRouter(prefix="/admin", tags=["servers"])
 logger = logging.getLogger(__name__)
-
-
-def _build_admin_plan_snapshot(
-    plan: BillingPlan,
-    total_fen: int,
-    total_days: int,
-) -> dict[str, Any]:
-    return {
-        "schema_version": 2,
-        "plan_id": plan.id,
-        "plan_name": plan.display_name,
-        "plan_code": plan.code,
-        "price_fen": plan.price_fen,
-        "days": plan.days,
-        "currency_code": plan.currency_code,
-        "selected_period": {
-            "count": 1,
-            "discount_pct": 0,
-            "total_fen": total_fen,
-            "total_days": total_days,
-        },
-        "egg_id": plan.egg_id,
-        "nest_id": plan.nest_id,
-        "node_id": plan.node_id,
-        "docker_image": plan.docker_image,
-        "startup_command": plan.startup_command,
-        "env_snapshot": dict(plan.env_defaults or {}),
-        "cpu": plan.cpu,
-        "memory_mb": plan.memory_mb,
-        "disk_mb": plan.disk_mb,
-        "swap_mb": plan.swap_mb,
-        "io": plan.io,
-        "database_limit": plan.database_limit,
-        "backup_limit": plan.backup_limit,
-        "allocation_limit": plan.allocation_limit,
-        "oom_disabled": plan.oom_disabled,
-        "plan_type": plan.plan_type,
-        "linked_plan_id": plan.linked_plan_id,
-        "llm_enabled": plan.llm_enabled,
-        "llm_quota_grant": plan.llm_quota_grant,
-        "newapi_plan_id": plan.newapi_plan_id,
-        "llm_group": plan.llm_group,
-    }
 
 
 def _classify_server(expiration_date: date | None, today: date) -> tuple[int | None, str]:
@@ -118,78 +80,6 @@ async def _get_today(db: AsyncSession) -> date:
         AUTOMATION_SPECS["TIMEZONE"].default_value(),
     )
     return local_today(str(timezone_name))
-
-
-async def _apply_plan_change(
-    db: AsyncSession,
-    server: PteroServer,
-    new_plan_id: int | None,
-) -> tuple[BillingPlan | None, BillingPlan | None]:
-    """Update servers.plan_id for a server (no resource side effects).
-
-    Returns (old_plan, new_plan) where each may be None. Raises HTTPException if new_plan_id is invalid.
-    """
-    old_plan: BillingPlan | None = None
-    new_plan: BillingPlan | None = None
-
-    old_plan_id = server.plan_id
-    if old_plan_id is not None:
-        old_plan = await db.get(BillingPlan, old_plan_id)
-
-    if new_plan_id is not None:
-        new_plan = await db.get(BillingPlan, new_plan_id)
-        if new_plan is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="套餐不存在")
-
-    server.plan_id = new_plan_id
-    return old_plan, new_plan
-
-
-async def _persist_expiration_after_remote(
-    db: AsyncSession,
-    *,
-    server_id: int,
-    new_date: date | None,
-    resuspend_on_failure: bool = False,
-) -> None:
-    original_exc: Exception | None = None
-    try:
-        await db.execute(
-            update(PteroServer)
-            .where(PteroServer.id == server_id)
-            .values(expiration_date=new_date)
-        )
-        await db.commit()
-        return
-    except Exception as exc:
-        original_exc = exc
-        await db.rollback()
-
-    cleanup_attempted = False
-    cleanup_failed: list[str] = []
-
-    if resuspend_on_failure:
-        cleanup_attempted = True
-        try:
-            await server_lifecycle.suspend_server(db, server_id)
-        except LifecycleError:
-            await db.rollback()
-            cleanup_failed.append("恢复服务器冻结状态失败")
-            logger.exception("Failed to restore server %s suspension after local persistence failure", server_id)
-
-    logger.exception(
-        "Failed to persist expiration date for server %s",
-        server_id,
-        exc_info=original_exc,
-    )
-    detail = "服务器解冻成功，但写入到期日期失败" if resuspend_on_failure else "写入到期日期失败"
-    if cleanup_attempted and not cleanup_failed:
-        detail += "，已自动恢复冻结状态"
-    elif cleanup_failed:
-        detail += "，且" + "；".join(cleanup_failed) + "，请检查服务器状态"
-    elif resuspend_on_failure:
-        detail += "，请检查服务器状态"
-    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail) from original_exc
 
 
 @router.get("/servers", response_model=ServersListResponse)
@@ -303,50 +193,53 @@ async def create_server(
                 detail=f"套餐 {payload.plan_id} 不存在",
             )
 
+    plan_snapshot: dict[str, Any] | None = None
+    total_fen = 0
+    if plan_obj is not None:
+        amount_yuan = payload.amount_yuan if payload.amount_yuan is not None else (plan_obj.price_fen / 100)
+        total_fen = int(round(amount_yuan * 100))
+        plan_snapshot = build_plan_snapshot(
+            plan_obj,
+            total_fen=total_fen,
+            total_days=payload.expiration_days,
+        )
+
     await db.commit()
 
-    try:
-        created = await server_lifecycle.create_server(
-            db,
-            owner_id=payload.user_id,
-            node_id=payload.node_id,
-            allocation_id=payload.allocation_id,
-            egg_id=payload.egg_id,
-            name=payload.server_name.strip(),
-            description="",
-            image=payload.docker_image.strip(),
-            startup=payload.startup_command.strip(),
-            environment=payload.environment,
-            cpu=payload.cpu,
-            memory=payload.memory,
-            disk=payload.disk,
-            database_limit=payload.databases,
-            backup_limit=payload.backups,
-            allocation_limit=payload.allocations,
-            expiration_date=expiration_date,
-            plan_id=payload.plan_id,
-            is_trial=bool(plan_obj is not None and plan_obj.plan_type == "trial"),
-        )
-    except LifecycleValidationError as exc:
-        # User-correctable input error → 422 so the frontend can show a field-level message.
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
-    except LifecycleError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    created = await server_engine.create_server(
+        db,
+        owner_id=payload.user_id,
+        node_id=payload.node_id,
+        allocation_id=payload.allocation_id,
+        egg_id=payload.egg_id,
+        name=payload.server_name.strip(),
+        description="",
+        image=payload.docker_image.strip(),
+        startup=payload.startup_command.strip(),
+        environment=payload.environment,
+        cpu=payload.cpu,
+        memory=payload.memory,
+        disk=payload.disk,
+        database_limit=payload.databases,
+        backup_limit=payload.backups,
+        allocation_limit=payload.allocations,
+        expiration_date=expiration_date,
+        plan_id=payload.plan_id,
+        is_trial=bool(plan_obj is not None and plan_obj.plan_type == "trial"),
+        plan_snapshot=plan_snapshot,
+    )
 
     server_id = int(created.id)
 
     try:
         # Generate BillingOrder for e-commerce channels
         if payload.channel in ("taobao", "xianyu") and payload.plan_id is not None and plan_obj is not None:
-            amount_yuan = payload.amount_yuan if payload.amount_yuan is not None else (plan_obj.price_fen / 100)
-            total_fen = int(round(amount_yuan * 100))
             order_no = gen_order_no()
-            snap = _build_admin_plan_snapshot(plan_obj, total_fen, payload.expiration_days)
             order = BillingOrder(
                 order_no=order_no,
                 user_id=payload.user_id,
                 plan_id=payload.plan_id,
-                plan_snapshot=snap,
+                plan_snapshot=plan_snapshot or build_plan_snapshot(plan_obj, total_fen=total_fen, total_days=payload.expiration_days),
                 kind="new_purchase",
                 channel=payload.channel,
                 external_order_id=payload.external_order_id.strip() if payload.external_order_id else None,
@@ -381,51 +274,36 @@ async def create_server(
                 .where(PteroServer.id == server_id)
                 .values(external_id=f"order:{order.id}")
             )
+            await db.commit()
 
-        await db.commit()
-
-        # LLM provision: if the bound plan has LLM enabled, provision a key
-        # for this server (mirrors apply_engine._run_post_actions).
-        if payload.plan_id is not None:
-            if plan_obj is not None and plan_obj.llm_enabled and plan_obj.llm_quota_grant > 0:
-                try:
-                    from app.services.llm_provision import provision as llm_provision
-                    snapshot = {
-                        "llm_enabled": True,
-                        "llm_quota_grant": plan_obj.llm_quota_grant,
-                        "newapi_plan_id": plan_obj.newapi_plan_id,
-                        "llm_group": plan_obj.llm_group,
-                    }
-                    await llm_provision.provision_for_server(
-                        db, server_id, payload.user_id, snapshot
-                    )
-                    await db.commit()
-                except Exception as exc:
-                    logger.warning(
-                        "LLM provision failed for admin-created server %s (non-blocking)",
-                        server_id, exc_info=True,
-                    )
-                    await db.rollback()
-                    await log_manager_activity(
-                        db,
-                        actor=actor_username,
-                        category="server",
-                        operation=OperationResult(action="llm.provision", phase="execution", outcome="failed", target={"server_id": server_id}, facts={"server_created": True}, error=ErrorInfo(code="dependency.failed", detail=str(exc)[:200])),
-                        detail_key="create_server_partial",
-                        detail_params={
-                            "actor": actor_username,
-                            "server_name": payload.server_name,
-                            "server_id": server_id,
-                            "llm_error": str(exc)[:200],
-                        },
-                    )
+        if created.warnings:
+            await log_manager_activity(
+                db,
+                actor=actor_username,
+                category="server",
+                operation=OperationResult(
+                    action="llm.provision",
+                    phase="execution",
+                    outcome="failed",
+                    target={"server_id": server_id},
+                    facts={"server_created": True},
+                    error=ErrorInfo(code="dependency.failed", detail="; ".join(created.warnings)[:200]),
+                ),
+                detail_key="create_server_partial",
+                detail_params={
+                    "actor": actor_username,
+                    "server_name": payload.server_name,
+                    "server_id": server_id,
+                    "llm_error": "; ".join(created.warnings)[:200],
+                },
+            )
     except Exception as exc:
         await db.rollback()
         cleanup_succeeded = False
         try:
-            await server_lifecycle.delete_server(db, server_id)
+            await server_engine.delete_server(db, server_id)
             cleanup_succeeded = True
-        except LifecycleError:
+        except ServerEngineError:
             await db.rollback()
             logger.exception("Failed to clean up server %s after local persistence failure", server_id)
 
@@ -577,7 +455,7 @@ async def renew_server(
                 post_retry_err: Exception | None = None
                 try:
                     if existing_effect.new_expiration_date is not None and was_suspended:
-                        await server_lifecycle.unsuspend_server(db, server_id)
+                        await server_engine.unsuspend_server(db, server_id, actor=actor_username)
                 except Exception as exc:
                     post_retry_err = exc
 
@@ -596,8 +474,32 @@ async def renew_server(
                 message=f"服务器 {server_name} 续期成功（已存在订单 #{existing_order.order_no}）"
             )
 
-    # 3. 计算快照与天数（无论何种渠道，只要有 effective_plan 均生成完整 snapshot）
+    # 3. 试用转正先幂等同步容器规格（失败则回滚规格并直接中止，绝不落单或改到期日）
     today = await _get_today(db)
+    convert_plan_id = effective_plan.id if (is_trial and effective_plan is not None) else None
+    is_ecommerce = payload.channel in ("taobao", "xianyu") and new_date is not None and effective_plan is not None
+
+    if convert_plan_id is not None and effective_plan is not None:
+        await server_engine.update_build(
+            db,
+            server_id,
+            ServerBuildPatch.from_plan(effective_plan),
+        )
+
+    # 4. Step 1: 单事务加 FOR UPDATE 锁读取到期日/停机态、写入订单与服务器状态并原子提交
+    locked_server = await db.scalar(
+        select(PteroServer)
+        .where(PteroServer.id == server_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_server is None:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="服务器不存在")
+
+    old_expiration_date = locked_server.expiration_date
+    was_suspended = locked_server.is_suspended
+    owner_id = int(locked_server.owner_id)
     base_date = old_expiration_date if (old_expiration_date and old_expiration_date >= today) else today
     added_days = max(1, (new_date - base_date).days) if new_date is not None else 30
     amount_yuan = payload.amount_yuan if payload.amount_yuan is not None else (
@@ -607,60 +509,14 @@ async def renew_server(
 
     snap: dict[str, Any] = {}
     if effective_plan is not None:
-        snap = _build_admin_plan_snapshot(effective_plan, total_fen, added_days)
+        snap = build_plan_snapshot(effective_plan, total_fen=total_fen, total_days=added_days)
 
-    # 4. Step 1: 核心业务事实原子落地（在一个干净的事务中写入并 Commit）
     created_order_id: int | None = None
-
-    if is_trial and effective_plan is not None:
-        # Convert: 必须先成功同步标准套餐规格 (update_build)，若失败抛错回滚
-        from app.services import server_management
-        try:
-            await server_management.update_build(
-                db,
-                server_id,
-                cpu=effective_plan.cpu,
-                memory=effective_plan.memory_mb,
-                disk=effective_plan.disk_mb,
-                swap=effective_plan.swap_mb,
-                io=effective_plan.io,
-                database_limit=effective_plan.database_limit,
-                backup_limit=effective_plan.backup_limit,
-                allocation_limit=effective_plan.allocation_limit,
-                oom_disabled=effective_plan.oom_disabled,
-            )
-        except Exception as exc:
-            await db.rollback()
-            logger.exception("Failed to sync build resources on convert for server %s", server_id)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"试用转正同步容器规格失败: {exc}",
-            ) from exc
-
-        # 清除试用标记、切换为标准套餐、更新到期日
-        await db.execute(
-            update(PteroServer)
-            .where(PteroServer.id == server_id)
-            .values(
-                is_trial=False,
-                plan_id=effective_plan.id,
-                expiration_date=new_date,
-            )
-        )
-    else:
-        # 普通续期 / 设为永久
-        await db.execute(
-            update(PteroServer)
-            .where(PteroServer.id == server_id)
-            .values(expiration_date=new_date)
-        )
-
-    # 若为电商渠道，生成订单与 effect
-    if payload.channel in ("taobao", "xianyu") and new_date is not None and effective_plan is not None:
+    if is_ecommerce and effective_plan is not None:
         order_no = gen_order_no()
         order = BillingOrder(
             order_no=order_no,
-            user_id=server.owner_id,
+            user_id=owner_id,
             plan_id=effective_plan.id,
             plan_snapshot=snap,
             kind=order_kind,
@@ -693,29 +549,29 @@ async def renew_server(
         )
         db.add(effect)
 
-    # 原子提交核心业务主数据
-    await db.commit()
+    await server_engine.renew_server(
+        db,
+        server_id,
+        new_expiration_date=new_date,
+        auto_unsuspend=False,
+        convert_plan_id=convert_plan_id,
+        convert_build=None,
+        sync_llm=False,
+        actor=actor_username,
+    )
 
-    # 5. Step 2: 外部后置动作
+    # 5. Step 2: 外部后置动作（先解冻 + 实时恢复 LLM，再按需执行转正套餐 LLM 同步/自动吊销）
     post_action_error: Exception | None = None
-
-    # 5.1 解冻
     if new_date is not None and was_suspended:
         try:
-            await server_lifecycle.unsuspend_server(db, server_id)
+            await server_engine.unsuspend_server(db, server_id, actor=actor_username)
         except Exception as exc:
             post_action_error = exc
             logger.warning("Failed to unsuspend server %s on Wings: %s", server_id, exc)
 
-    # 5.3 LLM 配额发放（如果是试用转正）
-    if is_trial and effective_plan is not None and effective_plan.llm_enabled and effective_plan.llm_quota_grant > 0:
-        try:
-            from app.services.llm_provision import provision as llm_provision
-            await llm_provision.update_for_upgrade(db, server_id, snap)
-        except Exception as exc:
-            logger.warning("Failed to provision LLM quota on convert for server %s: %s", server_id, exc)
+    if convert_plan_id is not None:
+        await server_hooks.on_plan_changed(db, server_id=server_id, new_snapshot=snap)
 
-    # 5.4 标记 post_actions_done_at（仅当后置动作全部成功时）
     if post_action_error is None:
         if created_order_id is not None:
             try:
@@ -728,7 +584,6 @@ async def renew_server(
             except Exception:
                 logger.warning("Failed to mark post_actions_done_at for order %s", created_order_id)
     else:
-        # 后置动作失败：抛出 502 明确告知，由于 DB 核心数据已落库且 post_actions_done_at=None，重试可自愈
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"服务器到期日已更新，但节点同步/解冻失败: {post_action_error}，请重试",
@@ -779,13 +634,10 @@ async def toggle_suspend(
     was_suspended = server.is_suspended
     action_text = "解冻" if was_suspended else "冻结"
 
-    try:
-        if was_suspended:
-            await server_lifecycle.unsuspend_server(db, server_id)
-        else:
-            await server_lifecycle.suspend_server(db, server_id)
-    except LifecycleError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    if was_suspended:
+        await server_engine.unsuspend_server(db, server_id, actor=current_user.username)
+    else:
+        await server_engine.suspend_server(db, server_id, actor=current_user.username)
 
     await log_manager_activity(
         db,
@@ -814,11 +666,11 @@ async def batch_servers(
         for server_id in server_ids:
             try:
                 if action == "suspend":
-                    await server_lifecycle.suspend_server(db, server_id)
+                    await server_engine.suspend_server(db, server_id, actor=actor_username)
                 else:
-                    await server_lifecycle.unsuspend_server(db, server_id)
+                    await server_engine.unsuspend_server(db, server_id, actor=actor_username)
                 success += 1
-            except LifecycleError:
+            except ServerEngineError:
                 await db.rollback()
                 errors += 1
 
@@ -852,21 +704,20 @@ async def batch_servers(
         await db.commit()
 
         for server in servers:
-            was_suspended = server.is_suspended
             old_expiration_date = server.expiration_date
             base_date = today if old_expiration_date and old_expiration_date < today else (old_expiration_date or today)
             new_date = base_date + timedelta(days=payload.days)
             try:
-                if was_suspended:
-                    await server_lifecycle.unsuspend_server(db, server.id)
-                await _persist_expiration_after_remote(
+                # 批量续期按产品约定允许直接延长试用服到期日；engine 先写新到期日再自动解冻
+                await server_engine.renew_server(
                     db,
-                    server_id=server.id,
-                    new_date=new_date,
-                    resuspend_on_failure=was_suspended,
+                    server.id,
+                    new_expiration_date=new_date,
+                    auto_unsuspend=True,
+                    actor=actor_username,
                 )
                 success += 1
-            except (LifecycleError, HTTPException):
+            except ServerEngineError:
                 await db.rollback()
                 errors += 1
 
@@ -889,11 +740,9 @@ async def batch_servers(
     if action == "delete":
         for server_id in server_ids:
             try:
-                await server_lifecycle.delete_server(db, server_id)
+                await server_engine.delete_server(db, server_id)
                 success += 1
-            except LifecycleError:
-                # Discard any half-applied state from the failed lifecycle call
-                # so the next iteration / audit log starts on a clean session.
+            except ServerEngineError:
                 await db.rollback()
                 errors += 1
 
@@ -915,9 +764,10 @@ async def batch_servers(
 
     if action == "update_plan":
         new_plan_id = payload.planId
+        new_plan: BillingPlan | None = None
         if new_plan_id is not None:
-            target = await db.get(BillingPlan, new_plan_id)
-            if target is None:
+            new_plan = await db.get(BillingPlan, new_plan_id)
+            if new_plan is None:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="套餐不存在")
 
         rows = await db.execute(
@@ -926,32 +776,42 @@ async def batch_servers(
             .order_by(PteroServer.id.asc())
         )
         servers = list(rows.scalars().all())
+        old_plan_ids = {s.plan_id for s in servers if s.plan_id is not None}
+        old_plans: dict[int, BillingPlan] = {}
+        if old_plan_ids:
+            old_plan_rows = await db.execute(select(BillingPlan).where(BillingPlan.id.in_(old_plan_ids)))
+            old_plans = {p.id: p for p in old_plan_rows.scalars().all()}
 
         for server in servers:
+            old_plan = old_plans.get(server.plan_id) if server.plan_id is not None else None
+            server_name = server.name
+            server_id = int(server.id)
             try:
-                old_plan, new_plan = await _apply_plan_change(db, server, new_plan_id)
-                await db.commit()
+                await server_engine.apply_plan_transition(
+                    db,
+                    server_id,
+                    new_plan_id=new_plan_id,
+                    sync_llm=False,
+                    actor=actor_username,
+                )
                 await log_manager_activity(
                     db,
                     actor=actor_username,
                     category="server",
                     detail_key="admin_server.plan.update",
-                    operation=OperationResult(action="server.plan.update", phase="execution", outcome="success", target={"server_id": server.id}),
+                    operation=OperationResult(action="server.plan.update", phase="execution", outcome="success", target={"server_id": server_id}),
                     detail_params={
-                        "server_name": server.name,
-                        "server_id": server.id,
+                        "server_name": server_name,
+                        "server_id": server_id,
                         "old_plan": old_plan.display_name if old_plan else "—",
                         "new_plan": new_plan.display_name if new_plan else "—",
                     },
                 )
                 success += 1
-            except HTTPException:
-                await db.rollback()
-                errors += 1
             except Exception:
                 await db.rollback()
                 errors += 1
-                logger.exception("Failed to update plan for server %s", server.id)
+                logger.exception("Failed to update plan for server %s", server_id)
 
         return BatchServersResponse(
             operation=batch_operation(f"server.batch.{action}", {"requested_server_ids": server_ids}, success, errors),
@@ -1036,10 +896,8 @@ async def delete_server(
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
     server = await _get_server_or_404(db, server_id)
-    try:
-        await server_lifecycle.delete_server(db, server_id, force=force)
-    except LifecycleError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    server_name = server.name
+    await server_engine.delete_server(db, server_id, force=force)
 
     await log_manager_activity(
         db,
@@ -1047,11 +905,11 @@ async def delete_server(
         category="server",
         detail_key="delete_server",
         operation=OperationResult(action="server.delete", phase="execution", outcome="success", target={"server_id": server_id}),
-        detail_params={"actor": current_user.username, "server_name": server.name, "server_id": server_id},
+        detail_params={"actor": current_user.username, "server_name": server_name, "server_id": server_id},
     )
     if force:
-        return MessageResponse(message=f"服务器 '{server.name}' 已强制删除")
-    return MessageResponse(message=f"服务器 '{server.name}' 已删除")
+        return MessageResponse(message=f"服务器 '{server_name}' 已强制删除")
+    return MessageResponse(message=f"服务器 '{server_name}' 已删除")
 
 
 @router.put("/servers/{server_id}", response_model=MessageResponse)
@@ -1072,10 +930,12 @@ async def update_server(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="日期格式无效") from exc
 
-    await _persist_expiration_after_remote(
+    await server_engine.renew_server(
         db,
-        server_id=server_id,
-        new_date=new_date,
+        server_id,
+        new_expiration_date=new_date,
+        auto_unsuspend=False,
+        actor=actor_username,
     )
     await log_manager_activity(
         db,
@@ -1100,16 +960,21 @@ async def update_server_plan(
     if server is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="服务器不存在")
 
-    try:
-        old_plan, new_plan = await _apply_plan_change(db, server, payload.planId)
-        await db.commit()
-    except HTTPException:
-        await db.rollback()
-        raise
-    except Exception as exc:
-        await db.rollback()
-        logger.exception("Failed to update plan for server %s", server_id)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="更新套餐绑定失败") from exc
+    old_plan = await db.get(BillingPlan, server.plan_id) if server.plan_id is not None else None
+    new_plan: BillingPlan | None = None
+    if payload.planId is not None:
+        new_plan = await db.get(BillingPlan, payload.planId)
+        if new_plan is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="套餐不存在")
+
+    server_name = server.name
+    await server_engine.apply_plan_transition(
+        db,
+        server_id,
+        new_plan_id=payload.planId,
+        sync_llm=False,
+        actor=current_user.username,
+    )
 
     await log_manager_activity(
         db,
@@ -1118,7 +983,7 @@ async def update_server_plan(
         detail_key="admin_server.plan.update",
         operation=OperationResult(action="server.plan.update", phase="execution", outcome="success", target={"server_id": server_id}),
         detail_params={
-            "server_name": server.name,
+            "server_name": server_name,
             "server_id": server_id,
             "old_plan": old_plan.display_name if old_plan else "—",
             "new_plan": new_plan.display_name if new_plan else "—",

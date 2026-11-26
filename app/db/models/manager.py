@@ -475,7 +475,7 @@ class ManagerServerTunnel(Base):
 
     ``server_id`` references panel.servers.id but is **not** a FK (cross-schema
     Pterodactyl table; consistency maintained at application layer via
-    pre-delete hooks in :mod:`app.services.server_lifecycle`).
+    post-delete hooks in :mod:`app.services.server_engine`).
 
     ``cf_dns_record_id`` is the CF DNS record id we created so we can delete
     it later. ``upstream_port`` is a snapshot of the server's primary
