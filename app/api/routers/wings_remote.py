@@ -27,8 +27,9 @@ from cryptography.hazmat.primitives import serialization
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select, update
-from sqlalchemy.dialects.mysql import insert as mysql_insert
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from app.api.deps.db import get_db
 from app.api.deps.wings_remote_auth import (
@@ -38,7 +39,6 @@ from app.api.deps.wings_remote_auth import (
 )
 from app.core.contracts import OperationResult
 from app.core.time import format_in_timezone, get_runtime_timezone, utc_naive_now, utc_naive_now_sec
-from app.db.models.manager import ServerMeta
 from app.db.models.pterodactyl import (
     ActivityLog,
     ActivityLogSubject,
@@ -49,10 +49,7 @@ from app.db.models.pterodactyl import (
     PteroServer,
     PteroUser,
     ServerTransfer,
-    Subuser,
-    UserSshKey,
 )
-from app.db.repositories.servers import exclude_placeholders
 from app.services.pterodactyl_activity import (
     SUBJECT_BACKUP,
     SUBJECT_SERVER,
@@ -295,14 +292,27 @@ def _parse_additional_allocations(raw: str | None) -> list[int]:
     return result
 
 
-async def _get_server_by_uuid_or_404(db: AsyncSession, server_uuid: str) -> PteroServer:
-    server = (
-        await db.execute(
-            select(PteroServer).where(
-                or_(PteroServer.uuid == server_uuid, PteroServer.uuid_short == server_uuid)
-            )
-        )
-    ).scalar_one_or_none()
+def _is_retryable_lock_error(exc: OperationalError) -> bool:
+    orig = getattr(exc, "orig", None)
+    args = getattr(orig, "args", ())
+    code = args[0] if args and isinstance(args[0], int) else None
+    # 1020: MariaDB 11.8 ER_CHECKREAD (row modified under REPEATABLE READ before FOR UPDATE)
+    # 1213: InnoDB deadlock
+    return code in (1020, 1213)
+
+
+async def _get_server_by_uuid_or_404(
+    db: AsyncSession,
+    server_uuid: str,
+    *,
+    for_update: bool = False,
+) -> PteroServer:
+    stmt = select(PteroServer).where(
+        or_(PteroServer.uuid == server_uuid, PteroServer.uuid_short == server_uuid)
+    )
+    if for_update:
+        stmt = stmt.options(noload("*")).with_for_update().execution_options(populate_existing=True)
+    server = (await db.execute(stmt)).scalar_one_or_none()
     if server is None:
         raise WingsRemoteError(404, "RecordNotFoundException", "")
     return server
@@ -330,8 +340,7 @@ async def _get_backup_by_uuid_or_404(db: AsyncSession, backup_uuid: str) -> Back
     return model
 
 
-async def _get_user_server_permissions(
-    db: AsyncSession,
+def _get_user_server_permissions(
     server: PteroServer,
     user: PteroUser,
 ) -> list[str]:
@@ -347,12 +356,7 @@ async def _get_user_server_permissions(
             )
         return perms
 
-    subuser = (
-        await db.execute(
-            select(Subuser).where(Subuser.server_id == server.id, Subuser.user_id == user.id)
-        )
-    ).scalar_one_or_none()
-    return subuser.permission_list if subuser is not None else []
+    return []
 
 
 def _parse_sftp_username(value: str) -> tuple[str, str]:
@@ -436,7 +440,6 @@ async def list_remote_servers(
             await db.execute(
                 select(func.count(PteroServer.id)).where(
                     PteroServer.node_id == node.id,
-                    exclude_placeholders(),
                 )
             )
         ).scalar_one()
@@ -449,7 +452,7 @@ async def list_remote_servers(
         (
             await db.execute(
                 select(PteroServer)
-                .where(PteroServer.node_id == node.id, exclude_placeholders())
+                .where(PteroServer.node_id == node.id)
                 .order_by(PteroServer.id.asc())
                 .offset(offset)
                 .limit(limit)
@@ -500,7 +503,6 @@ async def reset_remote_servers_state(
                 select(PteroServer).where(
                     PteroServer.node_id == node.id,
                     PteroServer.status == "restoring_backup",
-                    exclude_placeholders(),
                 )
             )
         ).scalars().all()
@@ -553,7 +555,6 @@ async def reset_remote_servers_state(
         .where(
             PteroServer.node_id == node.id,
             PteroServer.status.in_(("installing", "restoring_backup")),
-            exclude_placeholders(),
         )
         .values(status=None, updated_at=utc_naive_now())
     )
@@ -640,97 +641,100 @@ async def store_remote_server_install(
     node: PanelNode = Depends(require_wings_node),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    server = await _get_server_by_uuid_or_404(db, uuid)
-    if server.node_id != node.id:
-        raise WingsRemoteError(
-            403,
-            "HttpForbiddenException",
-            "Requesting node does not have permission to access this server.",
-        )
-
-    new_status: str | None = None
-    if not payload.successful:
-        new_status = "reinstall_failed" if payload.reinstall else "install_failed"
-
-    if server.status == "suspended":
-        new_status = "suspended"
-
-    now = utc_naive_now()
-    server.status = new_status
-    server.installed_at = now
-    server.updated_at = now
-
-    # First successful install: atomically mark notified and enqueue user email into outbox.
-    # Rely solely on ServerMeta.install_notified_at (not payload.reinstall) so a server whose
-    # initial install failed still notifies once a subsequent reinstall succeeds.
-    no_email_owner_id: int | None = None
-    if payload.successful and new_status is None:
-        try:
-            async with db.begin_nested():
-                meta = (
-                    await db.execute(
-                        select(ServerMeta)
-                        .where(ServerMeta.server_id == server.id)
-                        .with_for_update()
-                    )
-                ).scalar_one_or_none()
-                if meta is None or meta.install_notified_at is None:
-                    if meta is None:
-                        await db.execute(
-                            mysql_insert(ServerMeta)
-                            .values(server_id=server.id, install_notified_at=now)
-                            .on_duplicate_key_update(
-                                install_notified_at=func.coalesce(ServerMeta.install_notified_at, now)
-                            )
-                        )
-                    else:
-                        meta.install_notified_at = now
-
-                    from app.services.notifications.policy import load_policy
-                    from app.services.notifications.queue import enqueue_user_email
-
-                    if (await load_policy(db)).lifecycle.installed:
-                        owner = await db.get(PteroUser, server.owner_id)
-                        email = (owner.email or "").strip() if owner is not None else ""
-                        if not email:
-                            no_email_owner_id = int(server.owner_id)
-                        else:
-                            username = (owner.username or "") if owner is not None else ""
-                            tz_name = await get_runtime_timezone(db)
-                            installed_str = format_in_timezone(now, tz_name) or ""
-                            await enqueue_user_email(
-                                db,
-                                event_key=f"server_installed:{server.id}",
-                                recipient=email,
-                                subject=f"服务器 {server.name} 已开通",
-                                template="server_installed",
-                                variables={
-                                    "username": username,
-                                    "server_name": server.name or "",
-                                    "server_id": int(server.id),
-                                    "server_uuid": server.uuid or "",
-                                    "installed_at": installed_str,
-                                },
-                                greeting=f"您好, {username}!" if username else "您好!",
-                                action_text="进入控制台",
-                                path=f"/servers/{server.id}/console",
-                                topic=f"server_installed:{server.id}",
-                                context={
-                                    "lifecycle_key": "installed",
-                                    "audit_source": "server_install_notify",
-                                    "server_id": int(server.id),
-                                    "owner_id": int(server.owner_id),
-                                },
-                            )
-        except Exception:
-            logger.warning(
-                "wings_remote: failed to enqueue install notification for server %s",
-                server.id,
-                exc_info=True,
-            )
-
-    server_id_val = int(server.id)
+    node_id = int(node.id)
+    # End the read snapshot started by require_wings_node before acquiring FOR UPDATE,
+    # and retry on MariaDB 11.8 ER_CHECKREAD (1020) / deadlock (1213) under concurrent callbacks.
     await db.commit()
+
+    server_id_val: int = 0
+    no_email_owner_id: int | None = None
+    for attempt in range(5):
+        no_email_owner_id = None
+        try:
+            server = await _get_server_by_uuid_or_404(db, uuid, for_update=True)
+            if server.node_id != node_id:
+                raise WingsRemoteError(
+                    403,
+                    "HttpForbiddenException",
+                    "Requesting node does not have permission to access this server.",
+                )
+
+            new_status: str | None = None
+            if not payload.successful:
+                new_status = "reinstall_failed" if payload.reinstall else "install_failed"
+
+            if server.status == "suspended":
+                new_status = "suspended"
+
+            now = utc_naive_now()
+            server.status = new_status
+            server.installed_at = now
+            server.updated_at = now
+
+            # First successful install: atomically mark notified on the locked servers row
+            # and enqueue user email into outbox. Rely solely on server.install_notified_at
+            # (not payload.reinstall) so a server whose initial install failed still notifies
+            # once a subsequent reinstall succeeds.
+            if payload.successful and new_status is None and server.install_notified_at is None:
+                try:
+                    async with db.begin_nested():
+                        server.install_notified_at = now
+                        await db.flush()
+
+                        from app.services.notifications.policy import load_policy
+                        from app.services.notifications.queue import enqueue_user_email
+
+                        if (await load_policy(db)).lifecycle.installed:
+                            owner = await db.get(PteroUser, server.owner_id)
+                            email = (owner.email or "").strip() if owner is not None else ""
+                            if not email:
+                                no_email_owner_id = int(server.owner_id)
+                            else:
+                                username = (owner.username or "") if owner is not None else ""
+                                tz_name = await get_runtime_timezone(db)
+                                installed_str = format_in_timezone(now, tz_name) or ""
+                                await enqueue_user_email(
+                                    db,
+                                    event_key=f"server_installed:{server.id}",
+                                    recipient=email,
+                                    subject=f"服务器 {server.name} 已开通",
+                                    template="server_installed",
+                                    variables={
+                                        "username": username,
+                                        "server_name": server.name or "",
+                                        "server_id": int(server.id),
+                                        "server_uuid": server.uuid or "",
+                                        "installed_at": installed_str,
+                                    },
+                                    greeting=f"您好, {username}!" if username else "您好!",
+                                    action_text="进入控制台",
+                                    path=f"/servers/{server.id}/console",
+                                    topic=f"server_installed:{server.id}",
+                                    context={
+                                        "lifecycle_key": "installed",
+                                        "audit_source": "server_install_notify",
+                                        "server_id": int(server.id),
+                                        "owner_id": int(server.owner_id),
+                                    },
+                                )
+                except OperationalError:
+                    raise
+                except Exception:
+                    server.install_notified_at = None
+                    logger.warning(
+                        "wings_remote: failed to enqueue install notification for server %s",
+                        server.id,
+                        exc_info=True,
+                    )
+
+            server_id_val = int(server.id)
+            await db.commit()
+            break
+        except OperationalError as exc:
+            await db.rollback()
+            if _is_retryable_lock_error(exc) and attempt < 4:
+                continue
+            raise
 
     # Log audit outside the main transaction (log_manager_activity commits/rolls back internally).
     if no_email_owner_id is not None:
@@ -803,7 +807,6 @@ async def authenticate_sftp(
             select(PteroServer).where(
                 or_(PteroServer.uuid == server_ident, PteroServer.uuid_short == server_ident),
                 PteroServer.node_id == node.id,
-                exclude_placeholders(),
             )
         )
     ).scalar_one_or_none()
@@ -835,30 +838,17 @@ async def authenticate_sftp(
             )
     else:
         fingerprint = compute_ssh_public_key_fingerprint(payload.password)
-        matched_key = None
-        if fingerprint is not None:
-            matched_key = (
-                await db.execute(
-                    select(UserSshKey.id).where(
-                        UserSshKey.user_id == user.id,
-                        UserSshKey.fingerprint == fingerprint,
-                        UserSshKey.deleted_at.is_(None),
-                    )
-                )
-            ).scalar_one_or_none()
+        # SSH public-key login table (user_ssh_keys) is retired; keep format validation
+        # and malformed-key brute-force throttling before rejecting with 403.
+        if fingerprint is None:
+            _sftp_throttle_record_failure(throttle_key)
+        raise WingsRemoteError(
+            403,
+            "HttpForbiddenException",
+            "Authorization credentials were not correct, please try again.",
+        )
 
-        if fingerprint is None or matched_key is None:
-            # Matches SftpAuthenticationController.php: only count malformed keys against throttle,
-            # because SSH clients offer multiple valid keys sequentially during handshake.
-            if fingerprint is None:
-                _sftp_throttle_record_failure(throttle_key)
-            raise WingsRemoteError(
-                403,
-                "HttpForbiddenException",
-                "Authorization credentials were not correct, please try again.",
-            )
-
-    permissions = await _get_user_server_permissions(db, server, user)
+    permissions = _get_user_server_permissions(server, user)
     if not user.root_admin and server.owner_id != user.id and "file.sftp" not in permissions:
         await pterodactyl_activity_logger.log_server_activity(
             db,

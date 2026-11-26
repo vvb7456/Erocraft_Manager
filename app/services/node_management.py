@@ -553,6 +553,14 @@ async def delete_node(db: AsyncSession, node_id: int) -> PanelNode:
             f"节点 '{node.name}' 存在 {orders_count} 笔未完成订单的预留占用，无法删除",
         )
 
+    from app.db.repositories.allocation_reservations import has_active_reservations_on_node
+
+    if await has_active_reservations_on_node(db, node_id):
+        raise AdminResourceError(
+            409,
+            f"节点 '{node.name}' 存在活跃的订单端口预留占用，无法删除",
+        )
+
     # 4. manager_hosts.pterodactyl_node_id has ON DELETE CASCADE — block direct deletion
     # so monitoring, alerts, certificate deployments and tunnels are not silently wiped.
     bound_host = (

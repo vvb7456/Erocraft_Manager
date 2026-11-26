@@ -28,7 +28,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from typing import Literal, cast
 
-from sqlalchemy import exists, or_, select, text, update
+from sqlalchemy import exists, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utc_naive_now
@@ -40,9 +40,14 @@ from app.db.models.billing import (
     BillingPayment,
     BillingRefund,
 )
-from app.db.models.manager import ServerMeta
-from app.db.models.pterodactyl import PteroServer
-from app.services import server_lifecycle
+from app.db.models.pterodactyl import PteroServer, PteroUser
+from app.db.repositories.allocation_reservations import (
+    InsufficientAllocationsError,
+    lock_and_ensure_order_allocations,
+    release_order_reservations,
+    restore_order_strong_reservations,
+)
+from app.services import panel_db, server_lifecycle
 from app.services.audit import log_manager_activity
 from app.core.contracts import ErrorInfo, OperationResult
 from app.services.billing import incidents
@@ -317,36 +322,35 @@ async def _effect_upgrade(db: AsyncSession, order: BillingOrder) -> int:
             allocation_limit=snap.get("allocation_limit"),
             oom_disabled=snap.get("oom_disabled"),
         )
-        # Update plan binding (don't touch expiration)
-        meta = await db.scalar(
-            select(ServerMeta)
-            .where(ServerMeta.server_id == server.id)
+        # Update plan binding directly on servers (don't touch expiration)
+        locked_server = await db.scalar(
+            select(PteroServer)
+            .where(PteroServer.id == server.id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
-        if meta is None:
-            meta = ServerMeta(server_id=server.id)
-        old_plan_id = meta.plan_id
-        meta.plan_id = snap.get("plan_id") or order.plan_id
-        db.add(meta)
-        await db.commit()
+        if locked_server is None:
+            raise ApplyOrphanError(f"server {server.id} 已删除")
+        now = utc_naive_now()
+        locked_server.plan_id = snap.get("plan_id") or order.plan_id
+        locked_server.updated_at = now
 
         # Write effect row for audit/reversal trail
-        now = utc_naive_now()
         db.add(
             BillingOrderEffect(
                 order_id=order.id,
-                server_id=server.id,
+                server_id=locked_server.id,
                 effect_type="upgrade",
                 days=0,  # upgrade doesn't add days
-                prev_expiration_date=server.expiration_date,
-                new_expiration_date=server.expiration_date,  # no change
+                prev_expiration_date=locked_server.expiration_date,
+                new_expiration_date=locked_server.expiration_date,  # no change
                 effect_committed_at=now,
                 post_actions_done_at=None,
             )
         )
         await db.commit()
 
-        return server.id
+        return locked_server.id
 
     except Exception:
         # server_management functions already do compensation rollback on
@@ -359,20 +363,22 @@ async def _effect_renew(db: AsyncSession, order: BillingOrder) -> int:
     if order.target_server_id is None:
         raise ApplyOrphanError(f"renew order {order.id} 缺少 target_server_id")
 
-    meta = await db.scalar(
-        select(ServerMeta)
-        .where(ServerMeta.server_id == order.target_server_id)
+    server = await db.scalar(
+        select(PteroServer)
+        .where(PteroServer.id == order.target_server_id)
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
-    if meta is None:
+    if server is None:
         raise ApplyOrphanError(
             f"server {order.target_server_id} 已删除"
         )
 
     today = await _local_today(db)
-    prev = meta.expiration_date
+    prev = server.expiration_date
     base = prev if prev and prev > today else today
     new_date = base + timedelta(days=order.total_days)
+    now = utc_naive_now()
 
     db.add(
         BillingOrderEffect(
@@ -382,11 +388,12 @@ async def _effect_renew(db: AsyncSession, order: BillingOrder) -> int:
             days=order.total_days,
             prev_expiration_date=prev,
             new_expiration_date=new_date,
-            effect_committed_at=utc_naive_now(),
+            effect_committed_at=now,
             post_actions_done_at=None,
         )
     )
-    meta.expiration_date = new_date
+    server.expiration_date = new_date
+    server.updated_at = now
     await db.commit()
     return order.target_server_id
 
@@ -394,8 +401,8 @@ async def _effect_renew(db: AsyncSession, order: BillingOrder) -> int:
 async def _effect_convert(db: AsyncSession, order: BillingOrder) -> int:
     """Convert = trial → linked standard plan renewal.
 
-    Adds the standard plan's purchased days, rebinds ``meta.plan_id`` to
-    the standard plan, clears ``meta.is_trial``, and syncs the Wings build
+    Adds the standard plan's purchased days, rebinds ``server.plan_id`` to
+    the standard plan, clears ``server.is_trial``, and syncs the Wings build
     to the standard plan's current resources (from the order snapshot).
     Without the build sync, a trial created before the standard plan's
     resources were edited would keep stale limits after conversion.
@@ -425,20 +432,22 @@ async def _effect_convert(db: AsyncSession, order: BillingOrder) -> int:
         oom_disabled=snap.get("oom_disabled"),
     )
 
-    meta = await db.scalar(
-        select(ServerMeta)
-        .where(ServerMeta.server_id == order.target_server_id)
+    locked_server = await db.scalar(
+        select(PteroServer)
+        .where(PteroServer.id == order.target_server_id)
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
-    if meta is None:
+    if locked_server is None:
         raise ApplyOrphanError(
             f"server {order.target_server_id} 已删除"
         )
 
     today = await _local_today(db)
-    prev = meta.expiration_date
+    prev = locked_server.expiration_date
     base = prev if prev and prev > today else today
     new_date = base + timedelta(days=order.total_days)
+    now = utc_naive_now()
 
     snap_plan_id = snap.get("plan_id") or order.plan_id
 
@@ -450,49 +459,195 @@ async def _effect_convert(db: AsyncSession, order: BillingOrder) -> int:
             days=order.total_days,
             prev_expiration_date=prev,
             new_expiration_date=new_date,
-            effect_committed_at=utc_naive_now(),
+            effect_committed_at=now,
             post_actions_done_at=None,
         )
     )
-    meta.expiration_date = new_date
-    meta.plan_id = snap_plan_id
-    meta.is_trial = False
+    locked_server.expiration_date = new_date
+    locked_server.plan_id = snap_plan_id
+    locked_server.is_trial = False
+    locked_server.updated_at = now
     await db.commit()
     return order.target_server_id
 
 
 async def _effect_new_purchase(db: AsyncSession, order: BillingOrder) -> int:
-    """Placeholder server → live server: first Wings push + external_id flip
-    + meta.expiration_date + meta.plan_id binding."""
-    server_id = order.target_server_id
-    if server_id is None:
-        raise ApplyOrphanError(f"order {order.id} 占位行丢失")
+    """Consume reserved allocations to provision a live server + Wings push."""
+    snap = order.plan_snapshot or {}
+    snap_plan_id = snap.get("plan_id") or order.plan_id
+    if snap_plan_id is None:
+        raise ApplyError(f"order {order.id} has no plan_id in snapshot or FK")
+    is_trial = snap.get("plan_type", "standard") == "trial"
 
-    server = await db.get(PteroServer, server_id)
-    if server is None:
-        raise ApplyOrphanError(f"placeholder server {server_id} 不存在")
-
-    target_external = f"order:{order.id}"
-    # 1) Outside-tx Wings push (idempotent — Wings returns OK on duplicate uuid).
-    try:
-        await wings_service.create_server(db, server.node_id, server.uuid)
-    except WingsServiceError as exc:
-        # Placeholder row stays in panel; retry cycles will re-attempt.
-        raise ApplyError(f"wings.create_server 失败: {exc}") from exc
-
-    # 2) In-tx: flip external_id, write effect row, set meta + plan_id binding.
     today = await _local_today(db)
     new_date = today + timedelta(days=order.total_days)
+    target_external = f"order:{order.id}"
+
+    # Branch A: idempotent resume when a previous attempt already inserted the
+    # server row (e.g. Wings timed out without confirming cleanup, or process
+    # crashed between Wings create and writing BillingOrderEffect).
+    if order.target_server_id is not None:
+        server = await db.get(PteroServer, order.target_server_id)
+        if server is None:
+            raise ApplyOrphanError(f"server {order.target_server_id} 不存在")
+        try:
+            await wings_service.create_server(db, server.node_id, server.uuid)
+        except WingsServiceError as exc:
+            raise ApplyError(f"wings.create_server 失败: {exc}") from exc
+
+        now = utc_naive_now()
+        await db.execute(
+            update(PteroServer)
+            .where(PteroServer.id == server.id)
+            .values(
+                external_id=target_external,
+                expiration_date=new_date,
+                plan_id=int(snap_plan_id),
+                is_trial=is_trial,
+                updated_at=now,
+            )
+        )
+        db.add(
+            BillingOrderEffect(
+                order_id=order.id,
+                server_id=server.id,
+                effect_type="new_purchase",
+                days=order.total_days,
+                prev_expiration_date=None,
+                new_expiration_date=new_date,
+                effect_committed_at=now,
+                post_actions_done_at=None,
+            )
+        )
+        await _mark_user_owned_server(db, server.owner_id)
+        await db.commit()
+        return int(server.id)
+
+    # Branch B: first delivery — consume reserved allocations and create live server.
+    user = await db.get(PteroUser, order.user_id)
+    if user is None:
+        raise ApplyOrphanError(f"user {order.user_id} 不存在")
+    node_id = order.reserved_node_id or snap.get("node_id")
+    if node_id is None:
+        raise ApplyOrphanError(f"order {order.id} 缺少目标节点信息")
+    alloc_count = max(1, int(snap.get("allocation_limit") or 1))
+
+    # Tx 1: lock & ensure allocations, insert PteroServer + server_variables,
+    # bind ports & clear reservation locks, and record order.target_server_id.
+    try:
+        primary_id, extra_ids = await lock_and_ensure_order_allocations(
+            db,
+            node_id=int(node_id),
+            order_id=order.id,
+            count=alloc_count,
+            preferred_primary_id=order.reserved_allocation_id,
+        )
+    except InsufficientAllocationsError as exc:
+        await db.rollback()
+        raise ApplyError(f"节点可用端口不足: {exc}") from exc
+
+    try:
+        order_row = await db.get(BillingOrder, order.id)
+        if order_row is None:
+            raise ApplyOrphanError(f"order {order.id} 不存在")
+        order_row.reserved_node_id = int(node_id)
+        order_row.reserved_allocation_id = primary_id
+        order_row.reserved_additional_allocations = extra_ids or None
+
+        created = await panel_db.create_server(
+            db,
+            owner_id=order.user_id,
+            node_id=int(node_id),
+            allocation_id=primary_id,
+            egg_id=int(snap["egg_id"]),
+            name=f"{user.username}-{order.order_no[-6:]}",
+            memory=snap["memory_mb"],
+            swap=snap["swap_mb"],
+            disk=snap["disk_mb"],
+            io=snap["io"],
+            cpu=snap["cpu"],
+            image=snap["docker_image"],
+            startup=snap["startup_command"],
+            environment={
+                key: str(value)
+                for key, value in (snap.get("env_snapshot") or {}).items()
+            },
+            database_limit=snap["database_limit"],
+            backup_limit=snap["backup_limit"],
+            allocation_limit=snap["allocation_limit"],
+            oom_disabled=snap["oom_disabled"],
+            description="",
+            external_id=target_external,
+            allocation_additional=extra_ids or None,
+            consuming_order_id=order.id,
+            expiration_date=new_date,
+            plan_id=int(snap_plan_id),
+            is_trial=is_trial,
+        )
+        order_row.target_server_id = created.id
+        await db.commit()
+        order.target_server_id = created.id
+    except ApplyOrphanError:
+        await db.rollback()
+        raise
+    except panel_db.PanelDBError as exc:
+        await db.rollback()
+        raise ApplyError(f"创建服务器记录失败: {exc}") from exc
+
+    # Outside-tx Wings push; commit above guarantees /api/remote/servers/{uuid}
+    # can see the newly created row when Wings reverse-pulls config.
+    try:
+        await wings_service.create_server(db, created.node_id, created.uuid)
+    except WingsServiceError as create_exc:
+        # Anti-duplicate-container compensation: only delete the DB row and
+        # restore strong port reservations if Wings confirms the node has no
+        # container left (delete_server treats 404 as clean). If the node is
+        # unreachable/timed out, keep the DB row and target_server_id so the
+        # next retry resumes via Branch A with the exact same UUID.
+        node_confirmed_clean = False
+        try:
+            await wings_service.delete_server(db, created.node_id, created.uuid)
+            node_confirmed_clean = True
+        except WingsServiceError as cleanup_exc:
+            logger.warning(
+                "wings.delete_server compensation unconfirmed for order %s server %s (%s): %s; "
+                "keeping row for same-UUID idempotent retry",
+                order.id,
+                created.id,
+                created.uuid,
+                cleanup_exc,
+            )
+
+        if node_confirmed_clean:
+            try:
+                await panel_db.delete_server_row(db, created.id)
+                await restore_order_strong_reservations(
+                    db, order.id, [primary_id, *extra_ids]
+                )
+                await db.execute(
+                    update(BillingOrder)
+                    .where(BillingOrder.id == order.id)
+                    .values(target_server_id=None, updated_at=utc_naive_now())
+                )
+                await db.commit()
+                order.target_server_id = None
+            except Exception:  # noqa: BLE001
+                await db.rollback()
+                logger.exception(
+                    "DB compensation rollback failed for order %s server %s; "
+                    "keeping row for same-UUID idempotent retry",
+                    order.id,
+                    created.id,
+                )
+
+        raise ApplyError(f"wings.create_server 失败: {create_exc}") from create_exc
+
+    # Tx 2: Wings succeeded — commit effect row and permanent ownership marker.
     now = utc_naive_now()
-    await db.execute(
-        update(PteroServer)
-        .where(PteroServer.id == server_id)
-        .values(external_id=target_external, updated_at=now)
-    )
     db.add(
         BillingOrderEffect(
             order_id=order.id,
-            server_id=server_id,
+            server_id=created.id,
             effect_type="new_purchase",
             days=order.total_days,
             prev_expiration_date=None,
@@ -501,55 +656,13 @@ async def _effect_new_purchase(db: AsyncSession, order: BillingOrder) -> int:
             post_actions_done_at=None,
         )
     )
-    # Read plan_id from the immutable snapshot rather than the live FK so
-    # that admin plan deletes between order placement and apply still bind
-    # the server to its purchased plan id.
-    snap_plan_id = (order.plan_snapshot or {}).get("plan_id") or order.plan_id
-    # Snapshot the plan_type at apply time so the server is correctly
-    # flagged as trial even if the plan is later edited/deleted.
-    snap_plan_type = (order.plan_snapshot or {}).get("plan_type", "standard")
-    is_trial = snap_plan_type == "trial"
-    if snap_plan_id is None:
-        raise ApplyError(f"order {order.id} has no plan_id in snapshot or FK")
-    await _upsert_meta_expiration_plan_trial(
-        db, server_id, new_date, snap_plan_id, is_trial
-    )
-    # Mark the owner as having owned a server — permanent, never reset.
-    await _mark_user_owned_server(db, server.owner_id)
+    await _mark_user_owned_server(db, order.user_id)
     await db.commit()
-    return server_id
-
-
-async def _upsert_meta_expiration_plan_trial(
-    db: AsyncSession,
-    server_id: int,
-    expiration: date,
-    plan_id: int,
-    is_trial: bool,
-) -> None:
-    """INSERT ... ON DUPLICATE KEY UPDATE for manager_server_meta."""
-    await db.execute(
-        text(
-            """
-            INSERT INTO manager_server_meta
-              (server_id, expiration_date, plan_id, is_trial)
-            VALUES (:sid, :exp, :pid, :trial)
-            ON DUPLICATE KEY UPDATE
-              expiration_date = VALUES(expiration_date),
-              plan_id = VALUES(plan_id),
-              is_trial = VALUES(is_trial)
-            """
-        ).bindparams(
-            sid=server_id, exp=expiration, pid=plan_id,
-            trial=1 if is_trial else 0,
-        )
-    )
+    return created.id
 
 
 async def _mark_user_owned_server(db: AsyncSession, user_id: int) -> None:
     """Set ``users.has_owned_server = 1`` (idempotent, permanent)."""
-    from app.db.models.pterodactyl import PteroUser  # local: avoid cycle
-
     user = await db.get(PteroUser, user_id)
     if user is not None and not user.has_owned_server:
         user.has_owned_server = True
@@ -648,10 +761,14 @@ async def _record_failure_and_release(
     if row.status != "processing":
         from app.services.billing.payments import update_order_state
         await update_order_state(db, row)
+        need_cleanup = False
+        if row.status == "refunded" and row.applied_at is None:
+            await release_order_reservations(db, row.id)
+            need_cleanup = row.kind == "new_purchase" and row.target_server_id is not None
         await db.commit()
-        if row.status == "refunded":
+        if need_cleanup:
             from app.services.billing.orders import cleanup_unapplied_order
-            await cleanup_unapplied_order(row.id)
+            await cleanup_unapplied_order(order_id)
         return ApplyResult.NOT_OUR_BUSINESS
     row.apply_retry_count += 1
     if row.apply_retry_count > len(RETRY_DELAYS):
@@ -748,8 +865,15 @@ async def _terminate_apply(
     row.next_apply_at = None
     row.lock_token = None
     row.locked_until = None
+    need_cleanup = False
+    if row.status == "refunded" and row.applied_at is None:
+        await release_order_reservations(db, row.id)
+        need_cleanup = row.kind == "new_purchase" and row.target_server_id is not None
     coupon_id = row.coupon_id
     await db.commit()
+    if need_cleanup:
+        from app.services.billing.orders import cleanup_unapplied_order
+        await cleanup_unapplied_order(order_id)
 
     await incidents.log_incident(
         "apply_retries_exhausted",

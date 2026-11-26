@@ -18,7 +18,6 @@ from app.core.security import (
 )
 from app.db.models.miniprogram import MiniProgramBinding, MiniProgramSession
 from app.db.models.pterodactyl import PanelNode, PteroServer, PteroUser
-from app.db.repositories.servers import exclude_placeholders
 from app.db.repositories.users import user_repository
 from app.services.wings import WingsServiceError, wings_service
 
@@ -78,7 +77,7 @@ async def revoke_user_external_sessions(
             (
                 await db.scalars(
                     select(PteroServer.node_id)
-                    .where(PteroServer.owner_id == user_id, exclude_placeholders())
+                    .where(PteroServer.owner_id == user_id)
                     .distinct()
                 )
             ).all()

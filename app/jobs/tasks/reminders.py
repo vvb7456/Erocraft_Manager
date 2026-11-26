@@ -268,7 +268,7 @@ async def _send_expired_reminders(
 ) -> tuple[int, int]:
     grouped: dict[int, list[PteroServer]] = {}
     for server in servers:
-        if server.meta and server.meta.is_trial:
+        if server.is_trial:
             continue
         # 仅对当前确实处于冻结状态的服务器发送已到期停机提醒
         if not server.is_suspended:

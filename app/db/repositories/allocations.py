@@ -10,15 +10,22 @@ the same FK semantics: ``servers.allocation_id`` → primary, and
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Iterable
 
-from sqlalchemy import String, cast, delete, func, or_, select
+from sqlalchemy import String, and_, cast, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager, joinedload
 
 from app.core.time import utc_naive_now_sec
+from app.db.models.billing import BillingOrder
 from app.db.models.pterodactyl import Allocation, PteroServer, PteroUser
+from app.db.repositories.allocation_reservations import (
+    is_allocation_actively_reserved,
+    is_allocation_free_clause,
+    is_allocation_reserved_clause,
+)
 from app.db.sorting import SortSpec, build_order_by
 
 
@@ -39,19 +46,28 @@ class AllocationRepository:
         node_id: int,
         *,
         assigned: bool | None = None,
+        reserved: bool | None = None,
         search: str | None = None,
         limit: int = 50,
         offset: int = 0,
         sort_by: str | None = None,
         sort_order: str = "asc",
-    ) -> tuple[list[Allocation], int]:
-        """Return ``(items, total)`` filtered by ``assigned`` and ``search``.
+        now: datetime | None = None,
+    ) -> tuple[list[tuple[Allocation, str | None]], int]:
+        """Return ``([(allocation, reserved_order_no), ...], total)``.
 
         ``search`` matches against port (numeric prefix), ip, ip_alias,
         notes, server name, server uuid_short — case-insensitive.
+        Uses an integer LEFT JOIN on ``Allocation.reserved_order_id == BillingOrder.id``
+        to load ``order_no`` safely regardless of table collation differences.
         """
+        ts = now if now is not None else utc_naive_now_sec()
         need_server_join = bool(search) or sort_by == "server"
-        stmt = select(Allocation).where(Allocation.node_id == node_id)
+        stmt = (
+            select(Allocation, BillingOrder.order_no)
+            .outerjoin(BillingOrder, Allocation.reserved_order_id == BillingOrder.id)
+            .where(Allocation.node_id == node_id)
+        )
         if need_server_join:
             stmt = stmt.outerjoin(
                 PteroServer, Allocation.server_id == PteroServer.id
@@ -70,38 +86,42 @@ class AllocationRepository:
             stmt = stmt.where(Allocation.server_id.is_(None))
             count_stmt = count_stmt.where(Allocation.server_id.is_(None))
 
+        if reserved is True:
+            reserved_cond = is_allocation_reserved_clause(ts)
+            stmt = stmt.where(reserved_cond)
+            count_stmt = count_stmt.where(reserved_cond)
+        elif reserved is False:
+            not_reserved_cond = ~is_allocation_reserved_clause(ts)
+            stmt = stmt.where(not_reserved_cond)
+            count_stmt = count_stmt.where(not_reserved_cond)
+
         if search:
             needle = f"%{search.strip()}%"
-            stmt = stmt.where(
-                or_(
-                    Allocation.ip.ilike(needle),
-                    Allocation.ip_alias.ilike(needle),
-                    Allocation.notes.ilike(needle),
-                    cast(Allocation.port, String).ilike(needle),
-                    PteroServer.name.ilike(needle),
-                    PteroServer.uuid_short.ilike(needle),
-                )
+            search_cond = or_(
+                Allocation.ip.ilike(needle),
+                Allocation.ip_alias.ilike(needle),
+                Allocation.notes.ilike(needle),
+                cast(Allocation.port, String).ilike(needle),
+                PteroServer.name.ilike(needle),
+                PteroServer.uuid_short.ilike(needle),
+                and_(is_allocation_reserved_clause(ts), BillingOrder.order_no.ilike(needle)),
             )
+            stmt = stmt.where(search_cond)
             count_stmt = (
                 select(func.count(func.distinct(Allocation.id)))
                 .select_from(Allocation)
                 .outerjoin(PteroServer, Allocation.server_id == PteroServer.id)
-                .where(
-                    Allocation.node_id == node_id,
-                    or_(
-                        Allocation.ip.ilike(needle),
-                        Allocation.ip_alias.ilike(needle),
-                        Allocation.notes.ilike(needle),
-                        cast(Allocation.port, String).ilike(needle),
-                        PteroServer.name.ilike(needle),
-                        PteroServer.uuid_short.ilike(needle),
-                    ),
-                )
+                .outerjoin(BillingOrder, Allocation.reserved_order_id == BillingOrder.id)
+                .where(Allocation.node_id == node_id, search_cond)
             )
             if assigned is True:
                 count_stmt = count_stmt.where(Allocation.server_id.isnot(None))
             elif assigned is False:
                 count_stmt = count_stmt.where(Allocation.server_id.is_(None))
+            if reserved is True:
+                count_stmt = count_stmt.where(is_allocation_reserved_clause(ts))
+            elif reserved is False:
+                count_stmt = count_stmt.where(~is_allocation_reserved_clause(ts))
 
         order_clauses = build_order_by(
             sort_by,
@@ -112,12 +132,15 @@ class AllocationRepository:
         )
         stmt = stmt.order_by(*order_clauses).limit(limit).offset(offset)
 
-        rows = (await db.execute(stmt)).unique().scalars().all()
+        rows = (await db.execute(stmt)).unique().all()
         total = (await db.execute(count_stmt)).scalar_one()
-        return list(rows), int(total)
+        return [(row[0], row[1]) for row in rows], int(total)
 
-    async def summary(self, db: AsyncSession, node_id: int) -> tuple[int, int]:
-        """Return ``(assigned, unassigned)`` counts for the node."""
+    async def summary(
+        self, db: AsyncSession, node_id: int, *, now: datetime | None = None
+    ) -> tuple[int, int, int]:
+        """Return ``(assigned, reserved, free)`` counts for the node."""
+        ts = now if now is not None else utc_naive_now_sec()
         assigned = (
             await db.execute(
                 select(func.count()).select_from(Allocation).where(
@@ -125,14 +148,36 @@ class AllocationRepository:
                 )
             )
         ).scalar_one()
-        unassigned = (
+        reserved = (
             await db.execute(
                 select(func.count()).select_from(Allocation).where(
-                    Allocation.node_id == node_id, Allocation.server_id.is_(None)
+                    Allocation.node_id == node_id, is_allocation_reserved_clause(ts)
                 )
             )
         ).scalar_one()
-        return int(assigned), int(unassigned)
+        free = (
+            await db.execute(
+                select(func.count()).select_from(Allocation).where(
+                    Allocation.node_id == node_id, is_allocation_free_clause(ts)
+                )
+            )
+        ).scalar_one()
+        return int(assigned), int(reserved), int(free)
+
+    async def get_order_nos(
+        self, db: AsyncSession, order_ids: Iterable[int]
+    ) -> dict[int, str]:
+        ids = sorted({int(i) for i in order_ids if i})
+        if not ids:
+            return {}
+        rows = (
+            await db.execute(
+                select(BillingOrder.id, BillingOrder.order_no).where(
+                    BillingOrder.id.in_(ids)
+                )
+            )
+        ).all()
+        return {int(r[0]): str(r[1]) for r in rows}
 
     async def get_owner_names(
         self, db: AsyncSession, owner_ids: Iterable[int]
@@ -221,12 +266,21 @@ class AllocationRepository:
         self, db: AsyncSession, node_id: int, allocation_id: int
     ) -> tuple[Allocation | None, str | None]:
         """Returns ``(deleted_row, error_code)``. ``error_code`` is one of
-        ``"not_found"`` / ``"in_use"`` / ``None``."""
-        row = await self.get(db, node_id, allocation_id)
+        ``"not_found"`` / ``"in_use"`` / ``"reserved"`` / ``None``."""
+        row = (
+            await db.execute(
+                select(Allocation)
+                .where(Allocation.id == allocation_id, Allocation.node_id == node_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
         if row is None:
             return None, "not_found"
         if row.server_id is not None:
             return row, "in_use"
+        if is_allocation_actively_reserved(row):
+            return row, "reserved"
         snapshot = Allocation(
             id=row.id, node_id=row.node_id, ip=row.ip, port=row.port,
             ip_alias=row.ip_alias, server_id=None, notes=row.notes,
@@ -238,20 +292,33 @@ class AllocationRepository:
     async def delete_many(
         self, db: AsyncSession, node_id: int, ids: list[int]
     ) -> tuple[list[Allocation], list[Allocation]]:
-        """Returns ``(deleted, conflicting)``. If any conflict (wrong node
-        or in-use), no rows are deleted — caller must roll back the
-        surrounding transaction."""
-        if not ids:
+        """Returns ``(deleted, conflicting)``. If any conflict (wrong node,
+        in-use, or actively reserved), no rows are deleted — caller must roll
+        back the surrounding transaction."""
+        sorted_ids = sorted({int(i) for i in ids})
+        if not sorted_ids:
             return [], []
-        rows = (
-            await db.execute(select(Allocation).where(Allocation.id.in_(ids)))
-        ).scalars().all()
-        rows = list(rows)
+        ts = utc_naive_now_sec()
+        rows = list(
+            (
+                await db.execute(
+                    select(Allocation)
+                    .where(Allocation.id.in_(sorted_ids))
+                    .order_by(Allocation.id.asc())
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).scalars().all()
+        )
 
         seen_ids = {r.id for r in rows}
-        missing = [i for i in ids if i not in seen_ids]
+        missing = [i for i in sorted_ids if i not in seen_ids]
         conflicting = [
-            r for r in rows if r.node_id != node_id or r.server_id is not None
+            r
+            for r in rows
+            if r.node_id != node_id
+            or r.server_id is not None
+            or is_allocation_actively_reserved(r, ts)
         ]
 
         if missing or conflicting:
@@ -262,7 +329,7 @@ class AllocationRepository:
                        ip_alias=r.ip_alias, server_id=None, notes=r.notes)
             for r in rows
         ]
-        await db.execute(delete(Allocation).where(Allocation.id.in_(ids)))
+        await db.execute(delete(Allocation).where(Allocation.id.in_(sorted_ids)))
         await db.flush()
         return snapshots, []
 

@@ -67,27 +67,13 @@ def serialize_invoice(invoice: BillingInvoice) -> OrderInvoiceOut:
 async def _resolve_target_server_name(
     db: AsyncSession, target_server_id: int | None
 ) -> str | None:
-    """Return server name only when the server exists and is not a placeholder.
-
-    Placeholder occupier rows have ``external_id LIKE 'pending:%'`` and should
-    be hidden from the user-facing detail view.
-    """
+    """Return server name when the target server exists."""
     if not target_server_id:
         return None
-    from sqlalchemy import select
-
-    row = await db.execute(
-        select(PteroServer.name, PteroServer.external_id).where(
-            PteroServer.id == target_server_id
-        )
+    name = await db.scalar(
+        select(PteroServer.name).where(PteroServer.id == target_server_id)
     )
-    record = row.first()
-    if record is None:
-        return None
-    name, external_id = record
-    if external_id and external_id.startswith("pending:"):
-        return None
-    return name
+    return str(name) if name is not None else None
 
 
 def _serialize_order(
@@ -98,11 +84,13 @@ def _serialize_order(
     coupon_code: str | None = None,
 ) -> OrderOut:
     snap = order.plan_snapshot
-    # 未交付的新购订单仅关联内部占位服务器行，不向用户暴露其 ID。
     visible_target_server_id = (
         None
-        if order.kind == "new_purchase" and order.applied_at is None
+        if (order.kind == "new_purchase" and order.applied_at is None)
         else order.target_server_id
+    )
+    visible_target_server_name = (
+        target_server_name if visible_target_server_id is not None else None
     )
     return OrderOut(
         id=order.id,
@@ -118,7 +106,7 @@ def _serialize_order(
         total_days=order.total_days,
         currency_code=snap["currency_code"],
         target_server_id=visible_target_server_id,
-        target_server_name=target_server_name,
+        target_server_name=visible_target_server_name,
         status=order.status,
         received_fen=order.received_fen,
         refunded_fen=order.refunded_fen,

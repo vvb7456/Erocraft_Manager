@@ -12,7 +12,6 @@ Action endpoints (§11.2 capability matrix):
 * ``POST   /admin/billing/orders/{id}/refund``
 * ``POST   /admin/billing/orders/{id}/force-apply``
 * ``POST   /admin/billing/orders/{id}/force-close``
-* ``POST   /admin/billing/orders/{id}/cleanup-placeholder``
 """
 
 from __future__ import annotations
@@ -43,7 +42,6 @@ from app.schemas.billing_admin_orders import (
     AdminInvoiceOut,
     AdminOrderListItem,
     AdminOrderOut,
-    CleanupPlaceholderRequest,
     ForceApplyRequest,
     ForceCloseRequest,
     OrderEffectOut,
@@ -622,27 +620,3 @@ async def force_close_endpoint(
         detail_params={"order_id": order_id, "note": payload.note},
     )
     return ActionAck(order_id=order_id, action="force_close", result="ok")
-
-
-@router.post("/{order_id}/cleanup-placeholder", response_model=ActionAck)
-async def cleanup_placeholder_endpoint(
-    order_id: int,
-    _payload: CleanupPlaceholderRequest = CleanupPlaceholderRequest(),
-    admin: PteroUser = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> ActionAck:
-    try:
-        await admin_actions.cleanup_placeholder(db, order_id, admin_id=admin.id)
-    except admin_actions.OrderNotFound as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except admin_actions.CannotCleanupPlaceholder as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    await log_manager_activity(
-        db,
-        actor=admin.username,
-        category="billing",
-        detail_key="billing.order.placeholder_cleaned",
-        operation=OperationResult(action="billing.order.placeholder_cleanup", phase="execution", outcome="success", target={"order_id": order_id}),
-        detail_params={"order_id": order_id},
-    )
-    return ActionAck(order_id=order_id, action="cleanup_placeholder", result="ok")

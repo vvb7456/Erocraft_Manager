@@ -20,11 +20,15 @@ class AllocationOut(BaseModel):
     port: int
     notes: str | None = None
     server: ServerBrief | None = None
+    reserved_order_id: int | None = None
+    reserved_order_no: str | None = None
+    reserved_until: str | None = None
 
 
 class AllocationSummary(BaseModel):
     total: int
     assigned: int
+    reserved: int = 0
     unassigned: int
 
 

@@ -14,6 +14,10 @@ from app.db.models.billing import (
     BillingInvoice, BillingInvoiceTransaction, BillingOrder, BillingPayment,
     BillingPaymentEvent, BillingRefund,
 )
+from app.db.repositories.allocation_reservations import (
+    promote_order_reservations,
+    release_order_reservations,
+)
 from app.services.billing._ids import gen_refund_no
 from app.services.billing.gateway_client import GatewayClient, GatewayError
 
@@ -168,19 +172,31 @@ async def update_order_state(db: AsyncSession, order: BillingOrder) -> None:
         order.close_reason = None
         invoice.status = "void"
         await release_for_order(db, order_id=order.id, commit=False)
+        if order.kind == "new_purchase":
+            await release_order_reservations(db, order.id)
         return
     if any(row.status == "review" for row in attempts) and order.status == "pending":
         order.status = "manual_review"
+        if order.kind == "new_purchase":
+            await promote_order_reservations(db, order.id)
     if usable >= order.total_fen:
         order.close_reason = None
         if order.applied_at is not None:
             order.status = "applied"
-        elif order.status not in ("processing", "apply_failed"):
-            order.status = "processing"
+        else:
+            if order.status not in ("processing", "apply_failed"):
+                order.status = "processing"
+            if order.kind == "new_purchase":
+                await promote_order_reservations(db, order.id)
     elif order.received_fen:
         order.status = "refunded" if order.refunded_fen == order.received_fen else "refunding" if blocked else "manual_review"
         order.next_apply_at = None
         order.close_reason = None
+        if order.applied_at is None and order.kind == "new_purchase":
+            if order.status == "manual_review":
+                await promote_order_reservations(db, order.id)
+            elif order.status == "refunded" and not order.lock_token:
+                await release_order_reservations(db, order.id)
         if order.applied_at is None and order.status == "refunded" and not order.lock_token:
             from app.services.billing.coupons import release_for_order
             await release_for_order(db, order_id=order.id, commit=False)
@@ -332,9 +348,13 @@ async def record_legacy_payment(db: AsyncSession, invoice: BillingInvoice, *, tr
     order.received_fen += amount_fen
     if order.status in ("closed", "cancelled"):
         order.status = "manual_review"
+        if order.kind == "new_purchase":
+            await promote_order_reservations(db, order.id)
     elif order.status == "pending":
         invoice.status = "paid"
         invoice.paid_at = paid_at
         order.status = "processing"
+        if order.kind == "new_purchase":
+            await promote_order_reservations(db, order.id)
     await db.commit()
     return tx

@@ -124,11 +124,11 @@ def _serialize_server(
         expirationDate=expiration_date.isoformat() if expiration_date else None,
         daysLeft=days_left,
         address=address,
-        planId=server.meta.plan_id if server.meta else None,
+        planId=server.plan_id,
         planCode=plan.code if plan else None,
         planName=plan.display_name if plan else None,
         hasUpgradeOptions=has_upgrade_options,
-        isTrial=bool(server.meta.is_trial) if server.meta else False,
+        isTrial=bool(server.is_trial),
         llmEnabled=llm_key is not None and llm_key.status != "revoked",
         llmStatus=llm_key.status if llm_key else None,
     )
@@ -168,7 +168,7 @@ async def list_user_servers(
         servers = await server_repository.list_for_owner(db, current_user.id)
 
     # Bulk load plans to avoid N+1
-    plan_ids = {s.meta.plan_id for s in servers if s.meta and s.meta.plan_id}
+    plan_ids = {s.plan_id for s in servers if s.plan_id is not None}
     plans: dict[int, BillingPlan] = {}
     if plan_ids:
         rows = await db.execute(select(BillingPlan).where(BillingPlan.id.in_(plan_ids)))
@@ -199,12 +199,12 @@ async def list_user_servers(
             return False
         if server.expiration_date is not None and server.expiration_date < today:
             return False
-        plan_id = server.meta.plan_id if server.meta else None
+        plan_id = server.plan_id
         if plan_id is None:
             return False
         # Trial servers can't upgrade until converted (frontend disables
         # the button; this is the backend truth source).
-        if server.meta and server.meta.is_trial:
+        if server.is_trial:
             return False
         old_plan = plans.get(plan_id)
         if old_plan is None:
@@ -219,7 +219,7 @@ async def list_user_servers(
         _serialize_server(
             server,
             today,
-            plan=plans.get(server.meta.plan_id) if server.meta and server.meta.plan_id else None,
+            plan=plans.get(server.plan_id) if server.plan_id is not None else None,
             has_upgrade_options=_has_upgrade(server),
             llm_key=llm_keys.get(server.id),
         )
@@ -235,12 +235,12 @@ async def get_user_server_detail(
     today = await _today(db)
     plan: BillingPlan | None = None
     has_upgrade = False
-    plan_id = server.meta.plan_id if server.meta else None
+    plan_id = server.plan_id
     if plan_id:
         plan = await db.get(BillingPlan, plan_id)
     if plan and not server.is_suspended and (server.expiration_date is None or server.expiration_date >= today):
         # Trial servers can't upgrade until converted to a standard plan.
-        if not (server.meta and server.meta.is_trial):
+        if not server.is_trial:
             candidates = await db.execute(
                 select(BillingPlan).where(
                     BillingPlan.is_active.is_(True),
@@ -296,7 +296,7 @@ async def get_upgrade_options(
     db: AsyncSession = Depends(get_db),
 ) -> UpgradeOptionsResponse:
     today = await _today(db)
-    plan_id = server.meta.plan_id if server.meta else None
+    plan_id = server.plan_id
     if plan_id is None:
         return UpgradeOptionsResponse(
             serverId=server.id, serverName=server.name,

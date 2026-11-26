@@ -6,15 +6,13 @@ from app.core.operation import batch_operation
 import asyncio
 import logging
 from datetime import date, timedelta
-from typing import Any, cast
+from typing import Any
 
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.mysql import insert as mysql_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import selectinload
 
 from app.api.deps.auth import require_admin
@@ -22,9 +20,9 @@ from app.api.deps.db import get_db
 from app.core.runtime_settings import AUTOMATION_SPECS, SETTINGS_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.time import local_today, utc_naive_now
-from app.db.models import Egg, PteroServer, PteroUser, ServerMeta
+from app.db.models import Egg, PteroServer, PteroUser
 from app.db.models.billing import BillingOrder, BillingOrderEffect, BillingPlan
-from app.db.repositories.servers import exclude_placeholders, server_repository
+from app.db.repositories.servers import server_repository
 from app.schemas.servers import (
     BatchServersRequest,
     BatchServersResponse,
@@ -127,15 +125,14 @@ async def _apply_plan_change(
     server: PteroServer,
     new_plan_id: int | None,
 ) -> tuple[BillingPlan | None, BillingPlan | None]:
-    """Update manager_server_meta.plan_id for a server (no resource side effects).
+    """Update servers.plan_id for a server (no resource side effects).
 
     Returns (old_plan, new_plan) where each may be None. Raises HTTPException if new_plan_id is invalid.
     """
     old_plan: BillingPlan | None = None
     new_plan: BillingPlan | None = None
 
-    meta = server.meta
-    old_plan_id = meta.plan_id if meta is not None else None
+    old_plan_id = server.plan_id
     if old_plan_id is not None:
         old_plan = await db.get(BillingPlan, old_plan_id)
 
@@ -144,42 +141,8 @@ async def _apply_plan_change(
         if new_plan is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="套餐不存在")
 
-    if meta is None:
-        db.add(ServerMeta(server_id=server.id, plan_id=new_plan_id))
-    else:
-        meta.plan_id = new_plan_id
-
+    server.plan_id = new_plan_id
     return old_plan, new_plan
-
-
-async def _set_meta_expiration(db: AsyncSession, server_id: int, expiration_date: date | None) -> None:
-    values = {"server_id": server_id, "expiration_date": expiration_date}
-    dialect_name = (await db.connection()).dialect.name
-
-    if dialect_name == "mysql":
-        stmt = mysql_insert(ServerMeta).values(**values)
-        await db.execute(
-            stmt.on_duplicate_key_update(
-                expiration_date=stmt.inserted.expiration_date,
-            )
-        )
-        return
-
-    if dialect_name == "sqlite":
-        stmt = cast(Any, sqlite_insert(ServerMeta).values(**values))
-        await db.execute(
-            stmt.on_conflict_do_update(
-                index_elements=[ServerMeta.server_id],
-                set_={"expiration_date": expiration_date},
-            )
-        )
-        return
-
-    meta = await db.get(ServerMeta, server_id)
-    if meta is None:
-        db.add(ServerMeta(**values))
-    else:
-        meta.expiration_date = expiration_date
 
 
 async def _persist_expiration_after_remote(
@@ -191,7 +154,11 @@ async def _persist_expiration_after_remote(
 ) -> None:
     original_exc: Exception | None = None
     try:
-        await _set_meta_expiration(db, server_id, new_date)
+        await db.execute(
+            update(PteroServer)
+            .where(PteroServer.id == server_id)
+            .values(expiration_date=new_date)
+        )
         await db.commit()
         return
     except Exception as exc:
@@ -211,11 +178,11 @@ async def _persist_expiration_after_remote(
             logger.exception("Failed to restore server %s suspension after local persistence failure", server_id)
 
     logger.exception(
-        "Failed to persist expiration metadata for server %s",
+        "Failed to persist expiration date for server %s",
         server_id,
         exc_info=original_exc,
     )
-    detail = "服务器解冻成功，但写入管理元数据失败" if resuspend_on_failure else "写入到期日期元数据失败"
+    detail = "服务器解冻成功，但写入到期日期失败" if resuspend_on_failure else "写入到期日期失败"
     if cleanup_attempted and not cleanup_failed:
         detail += "，已自动恢复冻结状态"
     elif cleanup_failed:
@@ -240,9 +207,9 @@ async def list_servers(
         egg_names = {egg_id: egg_name for egg_id, egg_name in rows.all()}
 
     plan_ids = sorted({
-        server.meta.plan_id
+        server.plan_id
         for server in servers
-        if server.meta is not None and server.meta.plan_id is not None
+        if server.plan_id is not None
     })
     plans: dict[int, BillingPlan] = {}
     if plan_ids:
@@ -255,9 +222,9 @@ async def list_servers(
     for server in servers:
         expiration_date = server.expiration_date
         days_left, status_label = _classify_server(expiration_date, today)
-        meta_plan_id = server.meta.plan_id if server.meta is not None else None
+        meta_plan_id = server.plan_id
         plan_obj = plans.get(meta_plan_id) if meta_plan_id is not None else None
-        is_trial = bool(server.meta and server.meta.is_trial)
+        is_trial = bool(server.is_trial)
         items.append(
             ServerListItem(
                 pteroId=server.id,
@@ -327,6 +294,15 @@ async def create_server(
                 detail=f"外部订单号 '{ext_id}' 已在订单 #{dup_order} 中录入，请勿重复使用",
             )
 
+    plan_obj: BillingPlan | None = None
+    if payload.plan_id is not None:
+        plan_obj = await db.get(BillingPlan, payload.plan_id)
+        if plan_obj is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"套餐 {payload.plan_id} 不存在",
+            )
+
     await db.commit()
 
     try:
@@ -347,6 +323,9 @@ async def create_server(
             database_limit=payload.databases,
             backup_limit=payload.backups,
             allocation_limit=payload.allocations,
+            expiration_date=expiration_date,
+            plan_id=payload.plan_id,
+            is_trial=bool(plan_obj is not None and plan_obj.plan_type == "trial"),
         )
     except LifecycleValidationError as exc:
         # User-correctable input error → 422 so the frontend can show a field-level message.
@@ -355,23 +334,8 @@ async def create_server(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     server_id = int(created.id)
-    plan_obj: BillingPlan | None = None
 
     try:
-        await _set_meta_expiration(db, server_id, expiration_date)
-        # Bind plan if requested (after meta row exists).
-        if payload.plan_id is not None:
-            plan_obj = await db.get(BillingPlan, payload.plan_id)
-            if plan_obj is None:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail=f"套餐 {payload.plan_id} 不存在",
-                )
-            meta = await db.get(ServerMeta, server_id)
-            if meta is not None:
-                meta.plan_id = payload.plan_id
-                meta.is_trial = (plan_obj.plan_type == "trial")
-
         # Generate BillingOrder for e-commerce channels
         if payload.channel in ("taobao", "xianyu") and payload.plan_id is not None and plan_obj is not None:
             amount_yuan = payload.amount_yuan if payload.amount_yuan is not None else (plan_obj.price_fen / 100)
@@ -534,8 +498,8 @@ async def renew_server(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="日期格式无效，请使用 YYYY-MM-DD") from exc
 
     # 1. 检查试用状态与确定有效套餐
-    is_trial = bool(server.meta and server.meta.is_trial)
-    meta_plan_id = server.meta.plan_id if server.meta else None
+    is_trial = bool(server.is_trial)
+    meta_plan_id = server.plan_id
     plan_obj: BillingPlan | None = None
     if meta_plan_id is not None:
         plan_obj = await db.get(BillingPlan, meta_plan_id)
@@ -674,15 +638,22 @@ async def renew_server(
             ) from exc
 
         # 清除试用标记、切换为标准套餐、更新到期日
-        if server.meta is None:
-            server.meta = ServerMeta(server_id=server_id)
-            db.add(server.meta)
-        server.meta.is_trial = False
-        server.meta.plan_id = effective_plan.id
-        server.meta.expiration_date = new_date
+        await db.execute(
+            update(PteroServer)
+            .where(PteroServer.id == server_id)
+            .values(
+                is_trial=False,
+                plan_id=effective_plan.id,
+                expiration_date=new_date,
+            )
+        )
     else:
         # 普通续期 / 设为永久
-        await _set_meta_expiration(db, server_id, new_date)
+        await db.execute(
+            update(PteroServer)
+            .where(PteroServer.id == server_id)
+            .values(expiration_date=new_date)
+        )
 
     # 若为电商渠道，生成订单与 effect
     if payload.channel in ("taobao", "xianyu") and new_date is not None and effective_plan is not None:
@@ -874,8 +845,7 @@ async def batch_servers(
         today = await _get_today(db)
         rows = await db.execute(
             select(PteroServer)
-            .options(selectinload(PteroServer.meta))
-            .where(PteroServer.id.in_(server_ids), exclude_placeholders())
+            .where(PteroServer.id.in_(server_ids))
             .order_by(PteroServer.id.asc())
         )
         servers = list(rows.scalars().all())
@@ -952,8 +922,7 @@ async def batch_servers(
 
         rows = await db.execute(
             select(PteroServer)
-            .options(selectinload(PteroServer.meta))
-            .where(PteroServer.id.in_(server_ids), exclude_placeholders())
+            .where(PteroServer.id.in_(server_ids))
             .order_by(PteroServer.id.asc())
         )
         servers = list(rows.scalars().all())
@@ -1001,8 +970,8 @@ async def batch_servers(
     delay = await get_email_delay(db)
     rows = await db.execute(
         select(PteroServer)
-        .options(selectinload(PteroServer.meta), selectinload(PteroServer.owner))
-        .where(PteroServer.id.in_(server_ids), exclude_placeholders())
+        .options(selectinload(PteroServer.owner))
+        .where(PteroServer.id.in_(server_ids))
         .order_by(PteroServer.id.asc())
     )
     servers = list(rows.scalars().all())
@@ -1130,8 +1099,6 @@ async def update_server_plan(
     server = await server_repository.get_by_id(db, server_id)
     if server is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="服务器不存在")
-    # Ensure meta is loaded
-    await db.refresh(server, attribute_names=["meta"])
 
     try:
         old_plan, new_plan = await _apply_plan_change(db, server, payload.planId)

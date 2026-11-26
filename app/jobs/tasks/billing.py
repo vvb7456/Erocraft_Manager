@@ -6,10 +6,10 @@ from datetime import timedelta
 from sqlalchemy import exists, or_, select
 
 from app.core.time import utc_naive_now
-from app.db.models.billing import BillingInvoice, BillingOrder, BillingPayment, BillingOrderEffect, BillingIncident
-from app.db.models.pterodactyl import PteroServer
+from app.db.models.billing import BillingInvoice, BillingOrder, BillingPayment
+from app.db.repositories.allocation_reservations import reclaim_terminal_order_reservations
 from app.db.session import get_session_factory
-from app.services.billing import orders, payments, refunds, incidents
+from app.services.billing import orders, payments, refunds
 from app.services.billing.apply_engine import apply_paid_order
 from app.services.billing.gateway_client import GatewayClient
 
@@ -18,7 +18,6 @@ ORDER_CLOSE_JOB_ID = "billing_order_close"
 ORDER_QUERY_JOB_ID = "billing_order_query"
 APPLY_RETRY_JOB_ID = "billing_apply_retry"
 REFUND_RETRY_JOB_ID = "billing_refund_retry"
-PLACEHOLDER_LEAK_JOB_ID = "billing_placeholder_leak_monitor"
 
 
 async def run_order_close() -> None:
@@ -48,6 +47,15 @@ async def run_order_close() -> None:
                 await payments.close_payment(db, payment, await GatewayClient.load(db))
             except Exception:
                 logger.exception("旧付款请求关单待重试，payment=%s", payment_id)
+    async with factory() as db:
+        try:
+            reclaimed = await reclaim_terminal_order_reservations(db)
+            await db.commit()
+            if reclaimed:
+                logger.info("已回收 %s 条终态订单残留端口预留", reclaimed)
+        except Exception:
+            await db.rollback()
+            logger.exception("回收终态订单残留端口预留失败")
 
 
 async def run_order_query() -> None:
@@ -97,19 +105,3 @@ async def run_refund_retry() -> None:
                 await refunds.reconcile_refund_once(db, refund_id)
             except Exception:
                 logger.exception("退款同步待重试，refund=%s", refund_id)
-
-
-async def run_placeholder_leak_monitor() -> None:
-    factory = get_session_factory()
-    async with factory() as db:
-        rows = (await db.execute(select(BillingOrder.id, BillingOrder.target_server_id).join(
-            PteroServer, PteroServer.id == BillingOrder.target_server_id,
-        ).where(
-            BillingOrder.kind == "new_purchase", BillingOrder.status.in_(("closed", "cancelled", "refunded")),
-            PteroServer.external_id.like("pending:%"),
-            ~exists().where(BillingOrderEffect.order_id == BillingOrder.id),
-            ~exists().where((BillingIncident.order_id == BillingOrder.id) & (BillingIncident.kind == "placeholder_leak") & (BillingIncident.status == "open")),
-        ).limit(100))).all()
-    for order_id, server_id in rows:
-        await incidents.log_incident("placeholder_leak", order_id=order_id, server_id=server_id,
-                                     payload={"reason": "未交付的已结束订单仍有占位服务器"})

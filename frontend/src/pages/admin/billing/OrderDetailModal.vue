@@ -220,11 +220,6 @@ function canForceClose(): boolean {
   return order.value.status === 'manual_review' || order.value.status === 'apply_failed'
 }
 
-function canCleanup(): boolean {
-  if (!order.value) return false
-  return order.value.kind === 'new_purchase' && order.value.effect === null && order.value.target_server_id != null
-}
-
 // ── Actions ──
 async function doForceApply() {
   if (!order.value) return
@@ -249,19 +244,6 @@ async function doForceClose() {
   if (!note) return
   const res = await post(`/api/admin/billing/orders/${order.value.id}/force-close`, { note })
   if (res) { toast(t('billing.admin.detail.forceCloseOk'), 'success'); close(); emit('saved') }
-}
-
-async function doCleanup() {
-  if (!order.value) return
-  const ok = await confirm({
-    title: t('billing.admin.detail.cleanup'),
-    message: t('billing.admin.detail.cleanupConfirm'),
-    variant: 'danger',
-    confirmText: t('billing.admin.detail.cleanup'),
-  })
-  if (!ok) return
-  const res = await post(`/api/admin/billing/orders/${order.value.id}/cleanup-placeholder`, {})
-  if (res) { toast(t('billing.admin.detail.cleanupOk'), 'success'); loadOrder(); emit('saved') }
 }
 
 // ── Refund (全额退款唯一动作) ──
@@ -584,7 +566,7 @@ async function queryRefund(refund: Refund) {
       </div>
 
       <!-- ═══ Actions ═══ -->
-      <div v-if="canRefund() || canForceApply() || canForceClose() || canCleanup()" class="sec">
+      <div v-if="canRefund() || canForceApply() || canForceClose()" class="sec">
         <h4 class="sec-title">{{ t('billing.admin.detail.actionsTitle') }}</h4>
         <div class="actions-row">
           <BaseButton v-if="canForceApply()" size="sm" variant="primary" @click="doForceApply">
@@ -595,9 +577,6 @@ async function queryRefund(refund: Refund) {
           </BaseButton>
           <BaseButton v-if="canForceClose()" size="sm" @click="doForceClose">
             <MsIcon name="cancel" size="xs" /> {{ t('billing.admin.detail.forceClose') }}
-          </BaseButton>
-          <BaseButton v-if="canCleanup()" size="sm" variant="warning" @click="doCleanup">
-            <MsIcon name="delete" size="xs" /> {{ t('billing.admin.detail.cleanup') }}
           </BaseButton>
         </div>
       </div>

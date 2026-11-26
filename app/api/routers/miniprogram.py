@@ -25,7 +25,7 @@ from app.core.time import to_iso_z, utc_naive_now
 from app.db.models.billing import BillingOrder
 from app.db.models.miniprogram import MiniProgramBinding, MiniProgramSession
 from app.db.models.pterodactyl import PteroServer, PteroUser
-from app.db.repositories.servers import exclude_placeholders, server_repository
+from app.db.repositories.servers import server_repository
 from app.db.repositories.users import user_repository
 from app.schemas.miniprogram import (
     MiniBindInput, MiniLoginInput, MiniLoginOut, MiniOrder, MiniOrders,
@@ -157,7 +157,7 @@ async def servers(user: PteroUser = Depends(get_mini_user), db: AsyncSession = D
 
 
 async def owned_server(server_id: int, user: PteroUser = Depends(get_mini_user), db: AsyncSession = Depends(get_db)) -> PteroServer:
-    server = await db.scalar(select(PteroServer).where(PteroServer.id == server_id, PteroServer.owner_id == user.id, exclude_placeholders()))
+    server = await db.scalar(select(PteroServer).where(PteroServer.id == server_id, PteroServer.owner_id == user.id))
     if server is None:
         raise ApiError(404, "resource.not_found")
     return server

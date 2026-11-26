@@ -110,6 +110,24 @@ export interface AllocationOut {
   port: number
   notes: string | null
   server: AllocationServerBrief | null
+  reserved_order_id?: number | null
+  reserved_order_no?: string | null
+  reserved_until?: string | null
+}
+
+export interface AllocationSummary {
+  total: number
+  assigned: number
+  unassigned: number
+  reserved?: number
+}
+
+export interface AllocationListResponse {
+  items: AllocationOut[]
+  page: number
+  per_page: number
+  total: number
+  summary?: AllocationSummary
 }
 
 export interface AllocationUpdateIn {

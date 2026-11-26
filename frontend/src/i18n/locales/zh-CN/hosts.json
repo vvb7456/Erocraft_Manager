@@ -305,10 +305,16 @@
   },
   "allocations": {
     "summaryFiltered": "共 {n} 个",
+    "summaryStats": {
+      "assigned": "已分配 {n}",
+      "reserved": "预留 {n}",
+      "free": "空闲 {n}"
+    },
     "filter": {
       "label": "状态",
       "all": "全部",
       "assigned": "已分配",
+      "reserved": "订单预留中",
       "unassigned": "未分配"
     },
     "search": {
@@ -320,12 +326,19 @@
       "alias": "别名",
       "port": "端口",
       "server": "关联服务器",
+      "order": "预留订单",
       "notes": "备注",
       "actions": "操作"
     },
     "badge": {
       "inUse": "占用中",
+      "reserved": "订单预留中",
       "free": "未分配"
+    },
+    "reserved": {
+      "until": "预留至 {time}",
+      "delivering": "已付款交付锁定",
+      "lockLabel": "预留状态"
     },
     "perPage": "条/页",
     "empty": "该节点尚未分配任何端口",
@@ -366,10 +379,12 @@
       "singleTitle": "删除端口",
       "singleMsg": "确定删除端口 :{port}？",
       "bulkTitle": "批量删除端口",
-      "bulkMsg": "确定删除选中的 {n} 个端口？已被服务器占用的端口不会被选中。",
+      "bulkMsg": "确定删除选中的 {n} 个端口？已被服务器占用或订单预留的端口不会被选中。",
       "toastOk": "已删除 {n} 个端口",
       "failed": "删除失败",
-      "inUse": "端口 :{port} 已被服务器占用，无法删除"
+      "inUse": "端口 :{port} 已被服务器占用，无法删除",
+      "reserved": "端口 :{port} 正被订单 {order} 预留，无法删除",
+      "conflict": "端口 :{port} 已被服务器占用或订单预留，无法删除"
     },
     "notWings": "仅 wings_node 主机可管理端口分配。"
   },

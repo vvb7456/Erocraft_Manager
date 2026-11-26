@@ -20,7 +20,7 @@ from app.api.deps.db import get_db
 from app.core.runtime_settings import LLM_SPECS, defaults_for
 from app.core.settings_store import get_settings_store
 from app.core.time import to_iso_z
-from app.db.models.manager import ServerLlmKey, ServerMeta
+from app.db.models.manager import ServerLlmKey
 from app.db.models.billing import BillingPlan
 from app.db.models.pterodactyl import PteroServer, PteroUser
 from app.services.llm_provision import newapi_client, provision as llm_provision
@@ -172,13 +172,12 @@ async def provision_server_llm(
     db: AsyncSession = Depends(get_db),
 ) -> AdminLlmUsageResponse:
     server = await _ensure_server(db, server_id)
-    meta = await db.get(ServerMeta, server_id)
-    if meta is None or meta.plan_id is None:
+    if server.plan_id is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="该服务器未绑定套餐，无法开通 LLM 额度",
         )
-    plan = await db.get(BillingPlan, meta.plan_id)
+    plan = await db.get(BillingPlan, server.plan_id)
     if plan is None or not plan.llm_enabled or plan.llm_quota_grant <= 0:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,

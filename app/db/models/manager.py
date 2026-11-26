@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
-from typing import TYPE_CHECKING, Any
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CHAR,
-    Date,
     DateTime,
     Enum,
     Float,
@@ -26,62 +25,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-if TYPE_CHECKING:
-    from app.db.models.pterodactyl import PteroServer
-
 
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
-
-
-class ServerMeta(Base):
-    __tablename__ = "manager_server_meta"
-    __table_args__ = (
-        Index("idx_server_meta_plan", "plan_id"),
-    )
-
-    server_id: Mapped[int] = mapped_column(
-        mysql.INTEGER(unsigned=True),
-        ForeignKey("servers.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    expiration_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    # v2 billing: which plan this server is currently bound to. Written by
-    # ``_effect_new_purchase`` (and Phase B ``_effect_upgrade``); never written
-    # by manual server creation. Renew reads this to look up price + period.
-    # See ``docs/BILLING_DESIGN.md`` §3.3.2.
-    plan_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    # Trial-plan flag (20260619_trial migration). Snapshot of the bound
-    # plan's ``plan_type`` at apply time, so a trial server stays
-    # identifiable even if its plan row is later deleted. Drives:
-    #   - exclusion from the global suspend/delete cadence
-    #   - zero-grace deletion by the daily trial_expire task
-    #   - the convert (trial → linked standard) renewal path
-    #   - upgrade block until converted
-    is_trial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # Set once when the "server installed" notification email has been sent
-    # for this server (or the row was backfilled on first deploy of the
-    # feature). Stays set across reinstalls so they don't re-trigger the
-    # email — only first-install completion notifies. NULL means "first
-    # install pending or notification not yet attempted".
-    install_notified_at: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True
-    )
-    # Install-notify retry state, mirroring BillingOrder.apply_retry_count +
-    # next_apply_at: ``install_notify_attempts`` counts failed send attempts;
-    # ``install_notify_next_at`` is the earliest the per-minute scan should
-    # retry. Failed sends back off on an exponential schedule (see
-    # RETRY_DELAYS in server_install_notify) so a permanently-undeliverable
-    # recipient does not spam the audit log every tick. After the retry
-    # budget is exhausted ``install_notified_at`` is set to give up.
-    install_notify_attempts: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
-    install_notify_next_at: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True
-    )
-
-    server: Mapped["PteroServer"] = relationship("PteroServer", back_populates="meta")
 
 
 class ServerLlmKey(Base):

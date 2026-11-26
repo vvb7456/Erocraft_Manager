@@ -13,6 +13,12 @@ import { useRouter } from 'vue-router'
 import { useApiFetch } from '@/composables/useApiFetch'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { useFormatDate } from '@/composables/useFormatDate'
+import type {
+  AllocationListResponse,
+  AllocationOut,
+  AllocationSummary,
+} from '@/api/adminNodesLocations'
 import ListToolbar from '@/components/ui/ListToolbar.vue'
 import PageHeaderActions from '@/components/layout/PageHeaderActions.vue'
 import FilterInput from '@/components/ui/FilterInput.vue'
@@ -35,47 +41,57 @@ import type { HostDetail } from '@/types/host'
 
 defineOptions({ name: 'HostAllocationsPane' })
 
-interface ServerBrief {
-  id: number
-  uuid_short: string
-  name: string
-  owner_id: number
-  owner_name: string | null
-}
-interface AllocationOut {
-  id: number
-  ip: string
-  alias: string | null
-  port: number
-  notes: string | null
-  server: ServerBrief | null
-}
-interface ListResponse {
-  items: AllocationOut[]
-  page: number
-  per_page: number
-  total: number
-}
-
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
 const { get, raw, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
+const { formatDateTime } = useFormatDate()
 
 const host = inject<Ref<HostDetail | null>>('hostDetail')!
 const hostId = computed(() => host.value?.id ?? null)
 const isWings = computed(() => host.value?.kind === 'wings_node')
 
 const items = ref<AllocationOut[]>([])
+const summary = ref<AllocationSummary | null>(null)
 
-type AssignedFilter = 'all' | 'assigned' | 'unassigned'
+function isReserved(a: AllocationOut): boolean {
+  return !a.server && a.reserved_order_id != null
+}
+
+function isLocked(a: AllocationOut): boolean {
+  return !!a.server || isReserved(a)
+}
+
+function reservedOrderLabel(a: AllocationOut): string {
+  return a.reserved_order_no || `#${a.reserved_order_id}`
+}
+
+function deleteDisabledTitle(a: AllocationOut): string | undefined {
+  if (a.server) return t('hosts.allocations.delete.inUse', { port: a.port })
+  if (isReserved(a)) {
+    return t('hosts.allocations.delete.reserved', {
+      port: a.port,
+      order: reservedOrderLabel(a),
+    })
+  }
+  return undefined
+}
+
+const reservedCount = computed(() => summary.value?.reserved ?? 0)
+const freeCount = computed(() => {
+  if (!summary.value) return 0
+  return Math.max(0, summary.value.total - summary.value.assigned - (summary.value.reserved ?? 0))
+})
+
+type AssignedFilter = 'all' | 'assigned' | 'reserved' | 'unassigned'
 const filterAssigned = ref<AssignedFilter>('all')
 const searchTerm = ref('')
 
 const filterOptions = computed(() => [
   { value: 'all',        label: t('hosts.allocations.filter.all') },
   { value: 'assigned',   label: t('hosts.allocations.filter.assigned') },
+  { value: 'reserved',   label: t('hosts.allocations.filter.reserved') },
   { value: 'unassigned', label: t('hosts.allocations.filter.unassigned') },
 ])
 
@@ -117,8 +133,12 @@ const {
   async ({ page: reqPage, perPage: reqPerPage, isCurrent }) => {
     if (!hostId.value) return null
     const params = new URLSearchParams()
-    if (filterAssigned.value === 'assigned')   params.set('assigned', 'true')
-    if (filterAssigned.value === 'unassigned') params.set('assigned', 'false')
+    if (filterAssigned.value === 'assigned') params.set('assigned', 'true')
+    if (filterAssigned.value === 'reserved') params.set('reserved', 'true')
+    if (filterAssigned.value === 'unassigned') {
+      params.set('assigned', 'false')
+      params.set('reserved', 'false')
+    }
     if (searchTerm.value.trim()) params.set('search', searchTerm.value.trim())
     params.set('page', String(reqPage))
     params.set('per_page', String(reqPerPage))
@@ -126,12 +146,13 @@ const {
       params.set('sort_by', sortBy.value)
       params.set('sort_order', sortOrder.value)
     }
-    const data = await get<ListResponse>(
+    const data = await get<AllocationListResponse>(
       `/api/admin/hosts/${hostId.value}/allocations?${params.toString()}`,
     )
     if (!data || !isCurrent()) return null
     items.value = data.items
-    const visible = new Set(data.items.filter(i => !i.server).map(i => i.id))
+    summary.value = data.summary ?? null
+    const visible = new Set(data.items.filter(i => !isLocked(i)).map(i => i.id))
     const next = new Set<number>()
     selectedIds.value.forEach(id => { if (visible.has(id)) next.add(id) })
     selectedIds.value = next
@@ -151,10 +172,10 @@ function load(silent = false) {
 }
 
 // ── Selection (multi-select via custom checkbox column) ──
-// Only "free" allocations (server === null) can be selected for delete.
+// Only "free" allocations (not bound to a server and not reserved by an order) can be selected for delete.
 const selectedIds = ref<Set<number>>(new Set())
 const batchBusy = ref(false)
-const selectableIds = computed(() => items.value.filter(a => !a.server).map(a => a.id))
+const selectableIds = computed(() => items.value.filter(a => !isLocked(a)).map(a => a.id))
 const allSelected = computed({
   get: () => {
     const sel = selectableIds.value
@@ -169,6 +190,8 @@ const allSelected = computed({
   },
 })
 function toggleSelect(id: number) {
+  const row = items.value.find(a => a.id === id)
+  if (row && isLocked(row)) return
   const next = new Set(selectedIds.value)
   if (next.has(id)) next.delete(id); else next.add(id)
   selectedIds.value = next
@@ -198,6 +221,7 @@ function onUpdated(updated: AllocationOut) {
 
 watch(hostId, (id, prev) => {
   if (id && id !== prev && isWings.value) {
+    summary.value = null
     resetStateWithoutFetch()
     void load()
   }
@@ -226,9 +250,19 @@ function openServer(a: AllocationOut) {
   router.push(`/admin/servers/${a.server.id}`)
 }
 
+function openReservedOrder(a: AllocationOut) {
+  if (!isReserved(a)) return
+  const q = a.reserved_order_no || String(a.reserved_order_id)
+  router.push({ name: 'admin-orders', query: { q } })
+}
+
 async function deleteOne(a: AllocationOut) {
   if (a.server) {
     toast(t('hosts.allocations.delete.inUse', { port: a.port }), 'error')
+    return
+  }
+  if (isReserved(a)) {
+    toast(t('hosts.allocations.delete.reserved', { port: a.port, order: reservedOrderLabel(a) }), 'error')
     return
   }
   const ok = await confirm({
@@ -249,7 +283,7 @@ async function deleteOne(a: AllocationOut) {
     }
   } catch (failure) {
     if (failure instanceof ApiError && failure.status === 409) {
-      toast(t('hosts.allocations.delete.inUse', { port: a.port }), 'error')
+      toast(t('hosts.allocations.delete.conflict', { port: a.port }), 'error')
       await load(true)
     } else toast(apiErrorMessage(failure), 'error')
   }
@@ -282,7 +316,7 @@ async function bulkDelete() {
     if (failure instanceof ApiError && failure.status === 409) {
       const ports = failure.problem.context?.conflicting_ports
       const msg = (Array.isArray(ports) && ports.length)
-        ? t('hosts.allocations.delete.inUse', { port: ports.join(', ') })
+        ? t('hosts.allocations.delete.conflict', { port: ports.join(', ') })
         : t('hosts.allocations.delete.failed')
       toast(msg, 'error')
       await load(true)
@@ -334,7 +368,15 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
           </button>
         </div>
         <div class="summary tb-status" role="status">
-          {{ t('hosts.allocations.summaryFiltered', { n: total }) }}
+          <span>{{ t('hosts.allocations.summaryFiltered', { n: total }) }}</span>
+          <template v-if="summary">
+            <span class="summary-sep">·</span>
+            <span class="summary-stat">{{ t('hosts.allocations.summaryStats.assigned', { n: summary.assigned }) }}</span>
+            <span class="summary-stat" :class="{ 'summary-stat--reserved': reservedCount > 0 }">
+              {{ t('hosts.allocations.summaryStats.reserved', { n: reservedCount }) }}
+            </span>
+            <span class="summary-stat">{{ t('hosts.allocations.summaryStats.free', { n: freeCount }) }}</span>
+          </template>
         </div>
       </template>
       <template #end>
@@ -397,7 +439,7 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
         <td class="col-check" @click.stop>
           <input
             type="checkbox"
-            :disabled="!!a.server"
+            :disabled="isLocked(a)"
             :checked="selectedIds.has(a.id)"
             :aria-label="String(a.port)"
             @change="toggleSelect(a.id)"
@@ -410,6 +452,9 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
             <span>:{{ a.port }}</span>
             <Badge v-if="a.server" color="var(--amber)" size="sm">
               {{ t('hosts.allocations.badge.inUse') }}
+            </Badge>
+            <Badge v-else-if="isReserved(a)" color="var(--blue)" size="sm">
+              {{ t('hosts.allocations.badge.reserved') }}
             </Badge>
             <Badge v-else color="var(--t3)" size="sm">
               {{ t('hosts.allocations.badge.free') }}
@@ -425,6 +470,19 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
           >
             <span class="server-name">{{ a.server.name }}</span>
             <span class="server-owner mono">{{ a.server.owner_name || `#${a.server.owner_id}` }}</span>
+          </a>
+          <a
+            v-else-if="isReserved(a)"
+            class="server-link"
+            href="#"
+            @click.prevent="openReservedOrder(a)"
+          >
+            <span class="server-name mono">{{ reservedOrderLabel(a) }}</span>
+            <span class="server-owner">
+              {{ a.reserved_until
+                ? t('hosts.allocations.reserved.until', { time: formatDateTime(a.reserved_until) })
+                : t('hosts.allocations.reserved.delivering') }}
+            </span>
           </a>
           <span v-else class="muted">—</span>
         </td>
@@ -443,8 +501,8 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
             <BaseButton
               size="sm"
               variant="danger"
-              :disabled="!!a.server"
-              :title="a.server ? t('hosts.allocations.delete.inUse', { port: a.port }) : undefined"
+              :disabled="isLocked(a)"
+              :title="deleteDisabledTitle(a)"
               @click.stop="deleteOne(a)"
             >
               <MsIcon name="delete" size="xs" /> {{ t('hosts.allocations.actions.delete') }}
@@ -456,12 +514,15 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
       <template #card="{ item: a }">
         <CardTap>
           <div class="card-row--main">
-            <input type="checkbox" :disabled="!!a.server" :checked="selectedIds.has(a.id)" :aria-label="t('common.selection.select', { name: `${a.ip}:${a.port}` })" @click.stop @change="toggleSelect(a.id)" />
+            <input type="checkbox" :disabled="isLocked(a)" :checked="selectedIds.has(a.id)" :aria-label="t('common.selection.select', { name: `${a.ip}:${a.port}` })" @click.stop @change="toggleSelect(a.id)" />
             <span class="card-name mono">
               {{ a.ip }}:{{ a.port }}
             </span>
             <Badge v-if="a.server" color="var(--amber)" size="sm">
               {{ t('hosts.allocations.badge.inUse') }}
+            </Badge>
+            <Badge v-else-if="isReserved(a)" color="var(--blue)" size="sm">
+              {{ t('hosts.allocations.badge.reserved') }}
             </Badge>
             <Badge v-else color="var(--t3)" size="sm">
               {{ t('hosts.allocations.badge.free') }}
@@ -469,14 +530,29 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
           </div>
           <div v-if="a.alias" class="card-row--sub">{{ a.alias }}</div>
           <div class="card-detail">
-            <CardKV :label="t('hosts.allocations.columns.server')">
+            <CardKV v-if="a.server" :label="t('hosts.allocations.columns.server')">
               <a
-                v-if="a.server"
                 class="server-link"
                 href="#"
                 @click.prevent.stop="openServer(a)"
               >{{ a.server.name }}</a>
-              <span v-else class="muted">—</span>
+            </CardKV>
+            <template v-else-if="isReserved(a)">
+              <CardKV :label="t('hosts.allocations.columns.order')">
+                <a
+                  class="server-link mono"
+                  href="#"
+                  @click.prevent.stop="openReservedOrder(a)"
+                >{{ reservedOrderLabel(a) }}</a>
+              </CardKV>
+              <CardKV :label="t('hosts.allocations.reserved.lockLabel')">
+                {{ a.reserved_until
+                  ? t('hosts.allocations.reserved.until', { time: formatDateTime(a.reserved_until) })
+                  : t('hosts.allocations.reserved.delivering') }}
+              </CardKV>
+            </template>
+            <CardKV v-else :label="t('hosts.allocations.columns.server')">
+              <span class="muted">—</span>
             </CardKV>
             <CardKV v-if="a.notes" :label="t('hosts.allocations.columns.notes')">
               {{ a.notes }}
@@ -494,7 +570,8 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
             <BaseButton
               size="sm"
               variant="danger"
-              :disabled="!!a.server"
+              :disabled="isLocked(a)"
+              :title="deleteDisabledTitle(a)"
               @click.stop="deleteOne(a)"
             >
               <MsIcon name="delete" size="xs" />
@@ -536,9 +613,27 @@ const emptyIcon = computed(() => isFiltered.value ? 'search_off' : 'lan')
 }
 
 .summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
   font-size: var(--text-sm);
   color: var(--t2);
   white-space: nowrap;
+}
+
+.summary-sep {
+  color: var(--t3);
+}
+
+.summary-stat {
+  color: var(--t2);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-stat--reserved {
+  color: var(--blue);
+  font-weight: 500;
 }
 
 

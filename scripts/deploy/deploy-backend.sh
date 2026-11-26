@@ -152,10 +152,9 @@ if [[ -n "$PREV" && -d "$ROOT/releases/$PREV" ]]; then
   echo "→ 回滚到 $PREV" >&2
   atomic_switch "$ROOT/releases" "$PREV" "$ROOT/current"
   if [[ "${SKIP_ALEMBIC:-0}" != "1" ]]; then
-    ( cd "$ROOT/releases/$PREV" && "$ROOT/venv/bin/alembic" -c alembic.ini downgrade -1 ) \
-      || echo "⚠ alembic 回滚失败，需手工处理" >&2
+    echo "⚠ 本次发布已执行数据库迁移，脚本不再自动运行 alembic downgrade -1，请立即人工核查 schema 兼容性或使用发版前冷备恢复数据库" >&2
   fi
   systemctl restart erocraft-manager-web erocraft-manager-jobs
-  echo "→ 已回滚到 $PREV（请人工排查 $TAG 的问题）" >&2
+  echo "→ 已回滚代码到 $PREV 并重启服务（请人工排查 $TAG 的问题）" >&2
 fi
 exit 1

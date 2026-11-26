@@ -21,9 +21,9 @@ class CreateOrderRequest(_Forbid):
     Cross-field rules:
 
     * ``kind == 'renew'``: ``target_server_id`` required, ``plan_code`` forbidden
-      (server's bound plan is read from ``server_meta.plan_id``).
+      (server's bound plan is read from ``servers.plan_id``).
     * ``kind == 'new_purchase'``: ``plan_code`` required, ``target_server_id``
-      forbidden (a placeholder server row is created during order placement).
+      forbidden (target allocations are reserved during order placement).
     * ``kind == 'upgrade'``: both ``target_server_id`` and ``plan_code`` required;
       ``period_count`` is forced to 1 server-side and total_fen is the prorated
       diff between new and old plan over the server's remaining days.

@@ -1,7 +1,7 @@
 """业务订单定价、资源预留与取消；付款请求由统一网关处理。"""
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
 
@@ -14,13 +14,16 @@ from app.core.runtime_settings import AUTOMATION_SPECS, BILLING_SPECS
 from app.core.settings_store import get_settings_store
 from app.core.time import local_today, utc_naive_now_sec
 from app.db.models.billing import BillingInvoice, BillingInvoiceItem, BillingOrder, BillingOrderEffect, BillingPayment, BillingPlan
-from app.db.models.manager import ServerMeta
-from app.db.models.pterodactyl import Allocation, PteroServer, PteroUser
-from app.db.repositories.servers import is_placeholder_server
+from app.db.models.pterodactyl import PteroServer, PteroUser
+from app.db.repositories.allocation_reservations import (
+    RESERVATION_GRACE_MINUTES,
+    InsufficientAllocationsError,
+    release_order_reservations,
+    reserve_allocations_for_order,
+)
 from app.schemas.billing_orders import CreateOrderRequest
-from app.services import panel_db, server_lifecycle
 from app.services.audit import log_manager_activity
-from app.services.billing import coupons, incidents, payments
+from app.services.billing import coupons, payments
 from app.services.billing._ids import gen_invoice_no, gen_order_no
 from app.services.billing._pricing import remaining_billable_days, upgrade_diff_fen
 from app.services.billing.gateway_client import GatewayClient, GatewayError
@@ -96,22 +99,21 @@ async def create_order(db: AsyncSession, user: PteroUser, payload: CreateOrderRe
             raise InvalidOrderRequest("试用套餐仅限从未拥有过服务器的用户购买")
     else:
         server = await db.get(PteroServer, payload.target_server_id)
-        if server is None or is_placeholder_server(server) or server.owner_id != user.id:
+        if server is None or server.owner_id != user.id:
             raise InvalidOrderRequest("服务器不存在或无权操作")
-        meta = await db.get(ServerMeta, server.id)
-        if meta is None or meta.plan_id is None:
+        if server.plan_id is None:
             raise PlanNotPurchasable("此服务器未绑定套餐")
-        old_plan = await db.get(BillingPlan, meta.plan_id)
+        old_plan = await db.get(BillingPlan, server.plan_id)
         if old_plan is None:
             raise PlanNotPurchasable("此服务器关联的套餐已被删除，请联系管理员")
         if payload.kind == "convert":
-            if not meta.is_trial:
+            if not server.is_trial:
                 raise InvalidOrderRequest("仅试用套餐可转换为标准套餐")
             plan = await db.get(BillingPlan, old_plan.linked_plan_id) if old_plan.linked_plan_id else None
             if plan is None:
                 raise PlanNotPurchasable("关联的标准套餐已被删除，请联系管理员")
         else:
-            if meta.is_trial:
+            if server.is_trial:
                 raise InvalidOrderRequest("试用套餐需先转换为标准套餐")
             plan = old_plan
             if payload.kind == "upgrade":
@@ -165,11 +167,11 @@ async def create_order(db: AsyncSession, user: PteroUser, payload: CreateOrderRe
                                                          "discount_fen": coupon.discount_fen, "applied_fen": discount}}
         if order.total_fen <= 0:
             raise InvalidOrderRequest("优惠券抵扣后订单金额必须大于0")
+        due_at = utc_naive_now_sec() + timedelta(minutes=timeout)
         if payload.kind == "new_purchase":
-            order.target_server_id = await _create_placeholder_server(db, user=user, order=order, plan=plan, snapshot=snapshot)
-            order.reserved_node_id = plan.node_id
+            await _reserve_order_allocations(db, order=order, plan=plan, due_at=due_at)
         invoice = BillingInvoice(invoice_no=gen_invoice_no(), order_id=order.id, user_id=user.id, status="pending",
-                                 total_fen=order.total_fen, currency_code="CNY", due_at=utc_naive_now_sec() + timedelta(minutes=timeout),
+                                 total_fen=order.total_fen, currency_code="CNY", due_at=due_at,
                                  gateway_code=None)
         db.add(invoice)
         await db.flush()
@@ -196,29 +198,26 @@ async def create_order(db: AsyncSession, user: PteroUser, payload: CreateOrderRe
                                operation=OperationResult(action="billing.order.create", phase="execution", outcome="success", target={"order_id": order.id}),
                                detail_key="billing.order.created", detail_params={"order_id": order.id, "order_no": order.order_no,
                                "order_kind": order.kind, "plan_code": plan.code, "amount_fen": order.total_fen, "period_count": order.period_count,
-                               "placeholder_server_id": order.target_server_id if order.kind == "new_purchase" else None})
+                               "reserved_allocation_id": order.reserved_allocation_id if order.kind == "new_purchase" else None})
     return order
 
 
-async def _create_placeholder_server(db: AsyncSession, *, user: PteroUser, order: BillingOrder, plan: BillingPlan, snapshot: dict) -> int:
+async def _reserve_order_allocations(db: AsyncSession, *, order: BillingOrder, plan: BillingPlan, due_at: datetime) -> None:
     count = max(1, plan.allocation_limit)
-    allocations = (await db.scalars(select(Allocation.id).where(
-        Allocation.node_id == plan.node_id, Allocation.server_id.is_(None),
-    ).order_by(Allocation.id).limit(count).with_for_update(skip_locked=True))).all()
-    if len(allocations) < count:
-        raise InvalidOrderRequest(f"节点可用端口不足，套餐需要 {count} 个端口")
-    primary, *extras = allocations
-    server = await panel_db.create_server(
-        db, owner_id=user.id, node_id=plan.node_id, allocation_id=primary, egg_id=plan.egg_id,
-        name=f"{user.username}-{order.order_no[-6:]}", memory=snapshot["memory_mb"], swap=snapshot["swap_mb"], disk=snapshot["disk_mb"],
-        io=snapshot["io"], cpu=snapshot["cpu"], image=snapshot["docker_image"], startup=snapshot["startup_command"],
-        environment={key: str(value) for key, value in snapshot["env_snapshot"].items()},
-        database_limit=snapshot["database_limit"], backup_limit=snapshot["backup_limit"], allocation_limit=snapshot["allocation_limit"],
-        oom_disabled=snapshot["oom_disabled"], description="", external_id=f"pending:order-{order.id}",
-        allocation_additional=extras or None,
-    )
-    order.reserved_allocation_id, order.reserved_additional_allocations = primary, extras or None
-    return server.id
+    try:
+        alloc_ids = await reserve_allocations_for_order(
+            db,
+            node_id=plan.node_id,
+            order_id=order.id,
+            count=count,
+            reserved_until=due_at + timedelta(minutes=RESERVATION_GRACE_MINUTES),
+        )
+    except InsufficientAllocationsError as exc:
+        raise InvalidOrderRequest(f"节点可用端口不足，套餐需要 {count} 个端口") from exc
+    primary, *extras = alloc_ids
+    order.reserved_node_id = plan.node_id
+    order.reserved_allocation_id = primary
+    order.reserved_additional_allocations = extras or None
 
 
 async def list_orders(db: AsyncSession, user: PteroUser, *, limit: int = 50, offset: int = 0) -> list[BillingOrder]:
@@ -239,22 +238,47 @@ async def get_invoice_for_order(db: AsyncSession, order_id: int) -> BillingInvoi
 
 async def cleanup_unapplied_order(order_id: int) -> None:
     from app.db.session import get_session_factory
+    from app.services import server_lifecycle
+    from app.services.billing import incidents
 
-    # 关单已经提交；资源清理失败的回滚不能使调用方正在同步的付款对象失效。
+    # 关单已经提交；独立会话幂等释放端口预留及可能残留的未交付服务器，不影响调用方正在同步的付款对象。
     async with get_session_factory()() as db:
-        order = (await db.scalars(select(BillingOrder).where(BillingOrder.id == order_id))).one()
-        if order.kind != "new_purchase" or order.target_server_id is None or (await db.get(BillingOrderEffect, order.id)) is not None:
+        order = await db.scalar(select(BillingOrder).where(BillingOrder.id == order_id))
+        if order is None or order.kind != "new_purchase" or (await db.get(BillingOrderEffect, order.id)) is not None:
             return
-        server_id = order.target_server_id
-        if (await db.get(PteroServer, server_id)) is None:
+        await release_order_reservations(db, order.id)
+        residual_server_id = order.target_server_id
+        if residual_server_id is None:
+            await db.commit()
             return
+
+        if await db.get(PteroServer, residual_server_id) is None:
+            order.target_server_id = None
+            await db.commit()
+            return
+
+        await db.commit()
         try:
-            await server_lifecycle.delete_server(db, server_id)
-        except Exception as exc:
+            await server_lifecycle.delete_server(db, int(residual_server_id))
+            refreshed = await db.scalar(select(BillingOrder).where(BillingOrder.id == order_id))
+            if refreshed is not None and refreshed.target_server_id == residual_server_id:
+                refreshed.target_server_id = None
+            await db.commit()
+        except Exception as exc:  # noqa: BLE001
             await db.rollback()
-            logger.exception("占位资源清理失败，订单 %s", order_id)
-            await incidents.log_incident("placeholder_cleanup_failed", order_id=order_id, server_id=server_id,
-                                          payload={"phase": "close_order", "error": str(exc)[:500]})
+            logger.warning(
+                "cleanup_unapplied_order: failed to delete residual server %s for order %s: %s",
+                residual_server_id,
+                order_id,
+                exc,
+                exc_info=True,
+            )
+            await incidents.log_incident(
+                "placeholder_cleanup_failed",
+                order_id=order_id,
+                server_id=int(residual_server_id),
+                payload={"error": str(exc)[:300]},
+            )
 
 
 async def close_order(db: AsyncSession, order_id: int, *, reason: str) -> BillingOrder:

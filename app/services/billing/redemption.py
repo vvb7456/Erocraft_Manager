@@ -26,8 +26,8 @@ from app.db.models.billing import (
     RedemptionCode,
     RedemptionExport,
 )
-from app.db.models.manager import ServerMeta
 from app.db.models.pterodactyl import Allocation, PteroServer, PteroUser
+from app.db.repositories.allocation_reservations import is_allocation_free_clause
 from app.db.sorting import SortSpec, build_order_by
 from app.schemas.redemption import (
     AgisoCardItem,
@@ -49,7 +49,6 @@ from app.schemas.redemption import (
 from app.services import server_lifecycle
 from app.services.audit import log_manager_activity
 from app.services.billing._ids import gen_order_no
-from app.services.billing.apply_engine import _upsert_meta_expiration_plan_trial
 from app.services.billing.orders import _build_snapshot
 from app.services.server_lifecycle import LifecycleError, LifecycleValidationError
 
@@ -1006,20 +1005,7 @@ async def _find_compatible_servers(
     if not rows:
         return []
 
-    visible_servers = [
-        s for s in rows if not (s.external_id and s.external_id.startswith("pending:"))
-    ]
-    if not visible_servers:
-        return []
-
-    sids = [int(s.id) for s in visible_servers]
-    metas = {
-        int(m.server_id): m
-        for m in (
-            await db.scalars(select(ServerMeta).where(ServerMeta.server_id.in_(sids)))
-        ).all()
-    }
-    bound_plan_ids = {m.plan_id for m in metas.values() if m.plan_id is not None}
+    bound_plan_ids = {s.plan_id for s in rows if s.plan_id is not None}
     bound_plans: dict[int, BillingPlan] = {}
     if bound_plan_ids:
         for p in (
@@ -1030,22 +1016,21 @@ async def _find_compatible_servers(
             bound_plans[p.id] = p
 
     compatible: list[RedeemCompatibleServerOut] = []
-    for srv in visible_servers:
-        meta = metas.get(int(srv.id))
-        if meta is None or meta.plan_id is None:
+    for srv in rows:
+        if srv.plan_id is None:
             continue
         kind: Literal["renew", "convert"] | None = None
-        if meta.is_trial:
-            trial_plan = bound_plans.get(meta.plan_id)
+        if srv.is_trial:
+            trial_plan = bound_plans.get(srv.plan_id)
             if trial_plan is not None and trial_plan.linked_plan_id == target_plan_id:
                 kind = "convert"
         else:
-            if meta.plan_id == target_plan_id:
+            if srv.plan_id == target_plan_id:
                 kind = "renew"
         if kind is None:
             continue
 
-        prev = meta.expiration_date
+        prev = srv.expiration_date
         base = prev if (prev is not None and prev > today) else today
         projected = base + timedelta(days=days)
         compatible.append(
@@ -1053,7 +1038,7 @@ async def _find_compatible_servers(
                 id=int(srv.id),
                 name=srv.name,
                 kind=kind,
-                is_trial=bool(meta.is_trial),
+                is_trial=bool(srv.is_trial),
                 is_suspended=bool(srv.is_suspended),
                 current_expiration_date=prev.isoformat() if prev else None,
                 projected_expiration_date=projected.isoformat(),
@@ -1198,23 +1183,20 @@ async def redeem_code(
 
     if target_server_id is not None:
         srv = await db.get(PteroServer, target_server_id)
-        if srv is None or srv.owner_id != user_id or (
-            srv.external_id and srv.external_id.startswith("pending:")
-        ):
+        if srv is None or srv.owner_id != user_id:
             await db.rollback()
             raise ApiError(422, "redemption.server_incompatible")
-        meta = await db.get(ServerMeta, target_server_id)
-        if meta is None or meta.plan_id is None:
+        if srv.plan_id is None:
             await db.rollback()
             raise ApiError(422, "redemption.server_incompatible")
-        if meta.is_trial:
-            trial_plan = await db.get(BillingPlan, meta.plan_id)
+        if srv.is_trial:
+            trial_plan = await db.get(BillingPlan, srv.plan_id)
             if trial_plan is None or trial_plan.linked_plan_id != plan.id:
                 await db.rollback()
                 raise ApiError(422, "redemption.server_incompatible")
             kind = "convert"
         else:
-            if meta.plan_id != plan.id:
+            if srv.plan_id != plan.id:
                 await db.rollback()
                 raise ApiError(422, "redemption.server_incompatible")
             kind = "renew"
@@ -1259,7 +1241,7 @@ async def redeem_code(
                         select(Allocation.id)
                         .where(
                             Allocation.node_id == plan_fresh.node_id,
-                            Allocation.server_id.is_(None),
+                            is_allocation_free_clause(),
                         )
                         .order_by(Allocation.id.asc())
                         .limit(alloc_count)
@@ -1298,6 +1280,9 @@ async def redeem_code(
                 backup_limit=plan_fresh.backup_limit,
                 allocation_limit=plan_fresh.allocation_limit,
                 oom_disabled=plan_fresh.oom_disabled,
+                expiration_date=new_exp,
+                plan_id=plan_fresh.id,
+                is_trial=False,
             )
             created_server_id = int(created.id)
             server_id = created_server_id
@@ -1335,20 +1320,22 @@ async def redeem_code(
                 )
                 converted_build_prev = (server_id, prev_build)
 
-            meta_locked = await db.scalar(
-                select(ServerMeta)
-                .where(ServerMeta.server_id == server_id)
+            srv_locked = await db.scalar(
+                select(PteroServer)
+                .where(PteroServer.id == server_id)
                 .with_for_update()
+                .execution_options(populate_existing=True)
             )
-            if meta_locked is None:
+            if srv_locked is None:
                 raise ApiError(422, "redemption.server_incompatible")
-            prev_exp = meta_locked.expiration_date
+            prev_exp = srv_locked.expiration_date
             base_date = prev_exp if (prev_exp is not None and prev_exp > today) else today
             new_exp = base_date + timedelta(days=code_days)
-            meta_locked.expiration_date = new_exp
+            srv_locked.expiration_date = new_exp
+            srv_locked.updated_at = utc_naive_now()
             if kind == "convert":
-                meta_locked.plan_id = plan_fresh.id
-                meta_locked.is_trial = False
+                srv_locked.plan_id = plan_fresh.id
+                srv_locked.is_trial = False
 
         # Guard against external_order_id collision if an admin manually entered the same external order id earlier.
         final_ext_id = code_ext_order_id
@@ -1403,9 +1390,6 @@ async def redeem_code(
         db.add(effect)
 
         if kind == "new_purchase":
-            await _upsert_meta_expiration_plan_trial(
-                db, server_id, new_exp, plan_fresh.id, False
-            )
             await db.execute(
                 update(PteroServer)
                 .where(PteroServer.id == server_id)

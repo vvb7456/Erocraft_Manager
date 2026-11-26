@@ -16,7 +16,6 @@ from app.db.models.manager import (
     ManagerHost,
     ManagerPasswordReset,
     ServerLlmKey,
-    ServerMeta,
     SystemSetting,
 )
 from app.db.models.monitoring import HostAlert, HostMetrics, HostProbeResult
@@ -38,8 +37,6 @@ from app.db.models.pterodactyl import (
     PteroUser,
     ServerTransfer,
     ServerVariable,
-    Subuser,
-    UserSshKey,
     mount_node,
     mount_server,
 )
@@ -78,10 +75,7 @@ __all__ = [
     "ServerTransfer",
     "ServerVariable",
     "ServerLlmKey",
-    "ServerMeta",
-    "Subuser",
     "SystemSetting",
-    "UserSshKey",
     "mount_node",
     "mount_server",
 ]

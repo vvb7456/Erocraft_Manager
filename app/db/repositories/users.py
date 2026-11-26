@@ -8,7 +8,6 @@ from sqlalchemy.orm import aliased
 
 from app.db.models.manager import UserReferral
 from app.db.models.pterodactyl import PteroServer, PteroUser
-from app.db.repositories.servers import exclude_placeholders
 
 
 class UserRepository:
@@ -53,7 +52,7 @@ class UserRepository:
             )
             .outerjoin(
                 PteroServer,
-                (PteroServer.owner_id == PteroUser.id) & exclude_placeholders(),
+                PteroServer.owner_id == PteroUser.id,
             )
             .outerjoin(
                 UserReferral,

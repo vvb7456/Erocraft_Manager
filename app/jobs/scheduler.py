@@ -17,12 +17,10 @@ from app.jobs.tasks.billing import (
     APPLY_RETRY_JOB_ID,
     ORDER_CLOSE_JOB_ID,
     ORDER_QUERY_JOB_ID,
-    PLACEHOLDER_LEAK_JOB_ID,
     REFUND_RETRY_JOB_ID,
     run_apply_retry,
     run_order_close,
     run_order_query,
-    run_placeholder_leak_monitor,
     run_refund_retry,
 )
 from app.jobs.tasks.certificates import (
@@ -248,15 +246,5 @@ def build_scheduler() -> AsyncIOScheduler:
         coalesce=True,
         max_instances=1,
         misfire_grace_time=60,
-    )
-    scheduler.add_job(
-        run_placeholder_leak_monitor,
-        id=PLACEHOLDER_LEAK_JOB_ID,
-        trigger="interval",
-        hours=1,
-        replace_existing=True,
-        coalesce=True,
-        max_instances=1,
-        misfire_grace_time=600,
     )
     return scheduler

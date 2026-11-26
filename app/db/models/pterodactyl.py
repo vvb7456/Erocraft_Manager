@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from datetime import UTC, date, datetime
 
 import bcrypt
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
+    Date,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -17,14 +19,12 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-
-if TYPE_CHECKING:
-    from app.db.models.manager import ServerMeta
 
 
 def _utc_now() -> datetime:
@@ -435,6 +435,13 @@ class Allocation(Base):
         UniqueConstraint(
             "node_id", "ip", "port", name="allocations_node_id_ip_port_unique"
         ),
+        Index("idx_allocations_reserved_order", "reserved_order_id"),
+        Index(
+            "idx_allocations_node_avail",
+            "node_id",
+            "server_id",
+            "reserved_until",
+        ),
     )
 
     id: Mapped[int] = mapped_column(
@@ -459,6 +466,16 @@ class Allocation(Base):
         nullable=True,
     )
     notes: Mapped[str | None] = mapped_column(String(191), nullable=True)
+    reserved_order_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "manager_billing_orders.id",
+            name="allocations_reserved_order_id_foreign",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+    reserved_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
 
@@ -484,6 +501,8 @@ class PteroServer(Base):
         UniqueConstraint("uuidShort", name="servers_uuidshort_unique"),
         UniqueConstraint("allocation_id", name="servers_allocation_id_unique"),
         UniqueConstraint("external_id", name="servers_external_id_unique"),
+        Index("idx_servers_plan_id", "plan_id"),
+        Index("idx_servers_expiration_trial", "expiration_date", "is_trial"),
     )
 
     id: Mapped[int] = mapped_column(
@@ -550,6 +569,13 @@ class PteroServer(Base):
     created_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
     installed_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
+    expiration_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # 不建外键：允许管理员删除套餐后保留实例/订单快照的 plan_id 绑定记录
+    plan_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    is_trial: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    install_notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     owner: Mapped[PteroUser] = relationship("PteroUser", back_populates="servers", lazy="joined")
     node: Mapped[PanelNode] = relationship("PanelNode", back_populates="servers", lazy="joined")
@@ -558,22 +584,12 @@ class PteroServer(Base):
         foreign_keys=[allocation_id],
         lazy="joined",
     )
-    meta: Mapped[ServerMeta | None] = relationship(
-        "ServerMeta",
-        back_populates="server",
-        uselist=False,
-        lazy="selectin",
-    )
     egg: Mapped[Egg] = relationship("Egg", lazy="joined")
     mounts: Mapped[list["Mount"]] = relationship("Mount", secondary=mount_server)
 
     @property
     def is_suspended(self) -> bool:
         return self.status == "suspended"
-
-    @property
-    def expiration_date(self):
-        return self.meta.expiration_date if self.meta else None
 
 
 class ActivityLog(Base):
@@ -672,52 +688,6 @@ class Backup(Base):
     created_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
-
-
-class UserSshKey(Base):
-    __tablename__ = "user_ssh_keys"
-
-    id: Mapped[int] = mapped_column(
-        mysql.INTEGER(unsigned=True), primary_key=True, autoincrement=True
-    )
-    user_id: Mapped[int] = mapped_column(
-        mysql.INTEGER(unsigned=True),
-        ForeignKey("users.id", name="user_ssh_keys_user_id_foreign", ondelete="CASCADE"),
-        nullable=False,
-    )
-    name: Mapped[str] = mapped_column(String(191), nullable=False)
-    fingerprint: Mapped[str] = mapped_column(String(191), nullable=False)
-    public_key: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
-    updated_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
-    deleted_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
-
-
-class Subuser(Base):
-    __tablename__ = "subusers"
-
-    id: Mapped[int] = mapped_column(
-        mysql.INTEGER(unsigned=True), primary_key=True, autoincrement=True
-    )
-    user_id: Mapped[int] = mapped_column(
-        mysql.INTEGER(unsigned=True),
-        ForeignKey("users.id", name="subusers_user_id_foreign", ondelete="CASCADE"),
-        nullable=False,
-    )
-    server_id: Mapped[int] = mapped_column(
-        mysql.INTEGER(unsigned=True),
-        ForeignKey("servers.id", name="subusers_server_id_foreign", ondelete="CASCADE"),
-        nullable=False,
-    )
-    permissions: Mapped[str | None] = mapped_column(
-        mysql.LONGTEXT(charset="utf8mb4", collation="utf8mb4_bin"), nullable=True
-    )
-    created_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
-    updated_at: Mapped[datetime | None] = mapped_column(mysql.TIMESTAMP(), nullable=True)
-
-    @property
-    def permission_list(self) -> list[str]:
-        return parse_json_str_list(self.permissions) or []
 
 
 class ServerTransfer(Base):

@@ -9,6 +9,7 @@ See docs/PTERO_API_DECOUPLING.md for the architecture.
 from __future__ import annotations
 
 import logging
+from datetime import date
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -133,6 +134,10 @@ async def create_server(
     threads: str | None = None,
     external_id: str | None = None,
     allocation_additional: list[int] | None = None,
+    consuming_order_id: int | None = None,
+    expiration_date: date | None = None,
+    plan_id: int | None = None,
+    is_trial: bool = False,
     start_on_completion: bool = False,
 ) -> CreatedServer:
     """Insert server + variables, then notify Wings (reverse-pull).
@@ -165,6 +170,10 @@ async def create_server(
             threads=threads,
             external_id=external_id,
             allocation_additional=allocation_additional,
+            consuming_order_id=consuming_order_id,
+            expiration_date=expiration_date,
+            plan_id=plan_id,
+            is_trial=is_trial,
         )
     except PanelDBError as exc:
         raise _wrap_panel_db(exc) from exc
@@ -410,7 +419,7 @@ async def delete_server(db: AsyncSession, server_id: int, *, force: bool = False
     2. Destroy the Wings container/volume. 404 → success; any other error is
        fatal so the operator can retry unless ``force=True``.
     3. Delete the panel ``servers`` row (FK CASCADE handles
-       ``server_variables`` / ``manager_server_meta`` / ``backups``;
+       ``server_variables`` / ``manager_server_llm_keys`` / ``backups``;
        allocations FK ``ON DELETE SET NULL`` releases the ports).
     """
     try:

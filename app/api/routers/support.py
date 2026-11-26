@@ -24,7 +24,6 @@ from app.core.settings_store import get_settings_store
 from app.core.time import to_iso_z, utc_naive_now
 from app.db.models.pterodactyl import PteroServer, PteroUser
 from app.db.models.support import SupportConversation, SupportMessage
-from app.db.repositories.servers import exclude_placeholders
 from app.services import support_images
 
 router = APIRouter(prefix="/support", tags=["support"])
@@ -147,7 +146,6 @@ async def list_conversations(
     # Ownership is current, not the permanent trial-eligibility flag; expired servers still count.
     has_server = select(PteroServer.id).where(
         PteroServer.owner_id == SupportConversation.user_id,
-        exclude_placeholders(),
     ).correlate(SupportConversation).exists()
     stmt = (
         select(SupportConversation, PteroUser.username, unread, SupportMessage.content, SupportMessage.image_type, has_server)

@@ -225,17 +225,12 @@ class ForceApplyRequest(_Forbid):
     """``POST /api/admin/billing/orders/:id/force-apply`` (no body needed)."""
 
 
-class CleanupPlaceholderRequest(_Forbid):
-    """``POST /api/admin/billing/orders/:id/cleanup-placeholder`` (no body)."""
-
-
 class ActionAck(_Forbid):
-    """Common ACK envelope for admin order actions (force-apply / force-close /
-    cleanup-placeholder).
+    """Common ACK envelope for admin order actions (force-apply / force-close).
 
     ``result`` is a free-form action-specific outcome string
     (e.g. ``apply_engine.ApplyResult`` value for ``force-apply``;
-    ``"ok"`` for the other two).
+    ``"ok"`` for ``force-close``).
     """
 
     order_id: int

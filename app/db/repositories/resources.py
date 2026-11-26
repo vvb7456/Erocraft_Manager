@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.pterodactyl import Allocation, Egg, EggVariable, Nest, PanelNode, PteroUser
+from app.db.repositories.allocation_reservations import is_allocation_free_clause
 
 
 class ResourceRepository:
@@ -24,7 +25,7 @@ class ResourceRepository:
     async def list_unassigned_allocations(self, db: AsyncSession, node_id: int) -> list[Allocation]:
         result = await db.execute(
             select(Allocation)
-            .where(Allocation.node_id == node_id, Allocation.server_id.is_(None))
+            .where(Allocation.node_id == node_id, is_allocation_free_clause())
             .order_by(Allocation.port.asc())
         )
         return list(result.scalars().all())

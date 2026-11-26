@@ -305,10 +305,16 @@
   },
   "allocations": {
     "summaryFiltered": "{n} total",
+    "summaryStats": {
+      "assigned": "{n} assigned",
+      "reserved": "{n} reserved",
+      "free": "{n} free"
+    },
     "filter": {
       "label": "Status",
       "all": "All",
       "assigned": "Assigned",
+      "reserved": "Reserved",
       "unassigned": "Unassigned"
     },
     "search": {
@@ -320,12 +326,19 @@
       "alias": "Alias",
       "port": "Port",
       "server": "Server",
+      "order": "Reserved order",
       "notes": "Notes",
       "actions": "Actions"
     },
     "badge": {
       "inUse": "In use",
+      "reserved": "Reserved",
       "free": "Free"
+    },
+    "reserved": {
+      "until": "Until {time}",
+      "delivering": "Paid · locked for delivery",
+      "lockLabel": "Reservation"
     },
     "perPage": "per page",
     "empty": "No allocations on this node yet.",
@@ -366,10 +379,12 @@
       "singleTitle": "Delete allocation",
       "singleMsg": "Delete port :{port}?",
       "bulkTitle": "Delete allocations",
-      "bulkMsg": "Delete the {n} selected port(s)? Allocations in use are not selectable.",
+      "bulkMsg": "Delete the {n} selected port(s)? Allocations in use or reserved by orders are not selectable.",
       "toastOk": "Deleted {n} allocation(s)",
       "failed": "Delete failed",
-      "inUse": "Port :{port} is in use and cannot be deleted"
+      "inUse": "Port :{port} is in use and cannot be deleted",
+      "reserved": "Port :{port} is reserved by order {order} and cannot be deleted",
+      "conflict": "Port :{port} is in use or reserved by an order and cannot be deleted"
     },
     "notWings": "Allocations are only available for wings_node hosts."
   },

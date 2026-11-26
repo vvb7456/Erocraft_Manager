@@ -8,12 +8,15 @@ from typing import Any
 from sqlalchemy import and_, delete as sql_delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.time import utc_naive_now_sec
 from app.db.models import Allocation, Egg, EggVariable, ManagerHost, Nest, PteroServer, PteroUser, ServerVariable
 from app.db.models.pterodactyl import parse_egg_docker_images
 from app.db.models.billing import BillingPlan
+from app.db.repositories.allocation_reservations import (
+    is_allocation_actively_reserved,
+    is_allocation_free_clause,
+)
 from app.schemas.admin_server_detail import (
     AdminServerDetailResponse,
     AdminServerSummary,
@@ -57,9 +60,7 @@ class ServerNotFoundError(ServerManagementValidationError):
 
 async def _get_server(db: AsyncSession, server_id: int) -> PteroServer:
     result = await db.execute(
-        select(PteroServer)
-        .options(selectinload(PteroServer.meta))
-        .where(PteroServer.id == server_id)
+        select(PteroServer).where(PteroServer.id == server_id)
     )
     server = result.scalar_one_or_none()
     if server is None:
@@ -107,7 +108,7 @@ async def get_server_detail(db: AsyncSession, server_id: int) -> AdminServerDeta
     )
     variable_pairs = list(variable_rows.all())
 
-    plan_id = server.meta.plan_id if server.meta is not None else None
+    plan_id = server.plan_id
     plan_obj: BillingPlan | None = None
     if plan_id is not None:
         plan_obj = await db.get(BillingPlan, plan_id)
@@ -145,7 +146,7 @@ async def get_server_detail(db: AsyncSession, server_id: int) -> AdminServerDeta
             updated_at=server.updated_at,
             installed_at=server.installed_at,
             expiration_date=server.expiration_date.isoformat() if server.expiration_date else None,
-            is_trial=bool(server.meta and server.meta.is_trial),
+            is_trial=bool(server.is_trial),
             plan_id=plan_id,
             plan_code=plan_obj.code if plan_obj else None,
             plan_name=plan_obj.display_name if plan_obj else None,
@@ -230,7 +231,7 @@ async def list_available_allocations(
     server = await _get_server(db, server_id)
     rows = await db.execute(
         select(Allocation)
-        .where(Allocation.node_id == server.node_id, Allocation.server_id.is_(None))
+        .where(Allocation.node_id == server.node_id, is_allocation_free_clause())
         .order_by(Allocation.ip.asc(), Allocation.port.asc())
     )
     return [
@@ -474,9 +475,23 @@ async def add_allocations(
 ) -> None:
     server = await _get_server(db, server_id)
     unique_ids = list(dict.fromkeys(int(item) for item in allocation_ids))
+    sorted_ids = sorted(unique_ids)
+    now = utc_naive_now_sec()
+    locked_rows = list(
+        (
+            await db.scalars(
+                select(Allocation)
+                .where(Allocation.id.in_(sorted_ids))
+                .order_by(Allocation.id.asc())
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+    )
+    alloc_map = {int(row.id): row for row in locked_rows}
     snapshot = await _allocation_snapshot(db, server, unique_ids)
     for allocation_id in unique_ids:
-        allocation = await db.get(Allocation, allocation_id)
+        allocation = alloc_map.get(allocation_id)
         if allocation is None:
             raise ServerManagementValidationError(f"分配 {allocation_id} 不存在")
         if allocation.node_id != server.node_id:
@@ -485,9 +500,15 @@ async def add_allocations(
             raise ServerManagementValidationError(
                 f"分配 {allocation_id} 已被服务器 {allocation.server_id} 占用"
             )
+        if allocation.server_id is None and is_allocation_actively_reserved(allocation, now):
+            raise ServerManagementValidationError(
+                f"分配 {allocation_id} 已被订单 #{allocation.reserved_order_id} 预留锁定"
+            )
         allocation.server_id = server_id
-        allocation.updated_at = utc_naive_now_sec()
-    server.updated_at = utc_naive_now_sec()
+        allocation.reserved_order_id = None
+        allocation.reserved_until = None
+        allocation.updated_at = now
+    server.updated_at = now
     await db.flush()
     await _commit_then_sync_server(db, server, snapshot=snapshot)
 
@@ -513,7 +534,16 @@ async def set_primary_allocation(
     db: AsyncSession, server_id: int, allocation_id: int
 ) -> None:
     server = await _get_server(db, server_id)
-    allocation = await db.get(Allocation, allocation_id)
+    now = utc_naive_now_sec()
+    allocation = (
+        await db.execute(
+            select(Allocation)
+            .where(Allocation.id == allocation_id)
+            .order_by(Allocation.id.asc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
     if allocation is None:
         raise ServerManagementValidationError(f"分配 {allocation_id} 不存在")
     if allocation.node_id != server.node_id:
@@ -522,12 +552,18 @@ async def set_primary_allocation(
         raise ServerManagementValidationError(
             f"分配 {allocation_id} 已被服务器 {allocation.server_id} 占用"
         )
+    if allocation.server_id is None and is_allocation_actively_reserved(allocation, now):
+        raise ServerManagementValidationError(
+            f"分配 {allocation_id} 已被订单 #{allocation.reserved_order_id} 预留锁定"
+        )
 
     snapshot = await _allocation_snapshot(db, server, [allocation_id])
     allocation.server_id = server_id
-    allocation.updated_at = utc_naive_now_sec()
+    allocation.reserved_order_id = None
+    allocation.reserved_until = None
+    allocation.updated_at = now
     server.allocation_id = allocation_id
-    server.updated_at = utc_naive_now_sec()
+    server.updated_at = now
     await db.flush()
     await _commit_then_sync_server(db, server, snapshot=snapshot)
 

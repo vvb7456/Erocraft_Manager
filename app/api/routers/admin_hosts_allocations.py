@@ -17,6 +17,7 @@ Design: ``docs/HOST_ALLOCATIONS_DESIGN.md``.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -28,8 +29,9 @@ from app.api.utils.port_expression import (
     PortExpressionError,
     parse_port_expression,
 )
-from app.core.time import utc_naive_now_sec
+from app.core.time import to_iso_z, utc_naive_now_sec
 from app.db.models.pterodactyl import Allocation, PanelNode, PteroUser
+from app.db.repositories.allocation_reservations import is_allocation_actively_reserved
 from app.db.repositories.allocations import allocation_repository
 from app.schemas.allocations import (
     AllocationBulkDeleteIn,
@@ -87,7 +89,13 @@ async def _resolve_node_id(db: AsyncSession, host_id: int) -> int:
     return host.pterodactyl_node_id
 
 
-def _serialize(row: Allocation, owner_name: str | None) -> AllocationOut:
+def _serialize(
+    row: Allocation,
+    owner_name: str | None,
+    *,
+    reserved_order_no: str | None = None,
+    now: datetime | None = None,
+) -> AllocationOut:
     server = row.server
     server_brief: ServerBrief | None = None
     if server is not None:
@@ -98,6 +106,7 @@ def _serialize(row: Allocation, owner_name: str | None) -> AllocationOut:
             owner_id=server.owner_id,
             owner_name=owner_name,
         )
+    actively_reserved = is_allocation_actively_reserved(row, now)
     return AllocationOut(
         id=row.id,
         ip=row.ip,
@@ -105,16 +114,48 @@ def _serialize(row: Allocation, owner_name: str | None) -> AllocationOut:
         port=row.port,
         notes=row.notes,
         server=server_brief,
+        reserved_order_id=row.reserved_order_id if actively_reserved else None,
+        reserved_order_no=reserved_order_no if actively_reserved else None,
+        reserved_until=(
+            to_iso_z(row.reserved_until)
+            if actively_reserved and row.reserved_until is not None
+            else None
+        ),
     )
 
 
 async def _serialize_many(
-    db: AsyncSession, rows: list[Allocation]
+    db: AsyncSession,
+    rows: list[Allocation],
+    *,
+    order_nos_by_id: dict[int, str | None] | None = None,
+    now: datetime | None = None,
 ) -> list[AllocationOut]:
+    ts = now if now is not None else utc_naive_now_sec()
     owner_ids = {r.server.owner_id for r in rows if r.server is not None}
     owners = await allocation_repository.get_owner_names(db, owner_ids)
+    order_nos: dict[int, str | None]
+    if order_nos_by_id is not None:
+        order_nos = order_nos_by_id
+    else:
+        reserved_ids = {
+            int(r.reserved_order_id)
+            for r in rows
+            if is_allocation_actively_reserved(r, ts) and r.reserved_order_id is not None
+        }
+        fetched = await allocation_repository.get_order_nos(db, reserved_ids)
+        order_nos = {oid: ono for oid, ono in fetched.items()}
     return [
-        _serialize(r, owners.get(r.server.owner_id) if r.server else None)
+        _serialize(
+            r,
+            owners.get(r.server.owner_id) if r.server else None,
+            reserved_order_no=(
+                order_nos.get(int(r.reserved_order_id))
+                if r.reserved_order_id is not None
+                else None
+            ),
+            now=ts,
+        )
         for r in rows
     ]
 
@@ -130,6 +171,7 @@ async def _serialize_many(
 async def list_host_allocations(
     host_id: int,
     assigned: bool | None = Query(default=None),
+    reserved: bool | None = Query(default=None),
     search: str | None = Query(default=None, max_length=191),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=50, ge=1, le=200),
@@ -140,22 +182,35 @@ async def list_host_allocations(
 ) -> AllocationListResponse:
     node_id = await _resolve_node_id(db, host_id)
     offset = (page - 1) * per_page
-    items, total = await allocation_repository.list_all(
-        db, node_id, assigned=assigned, search=search,
+    ts = utc_naive_now_sec()
+    pairs, total = await allocation_repository.list_all(
+        db, node_id, assigned=assigned, reserved=reserved, search=search,
         limit=per_page, offset=offset,
         sort_by=sort_by, sort_order=sort_order,
+        now=ts,
     )
-    serialized = await _serialize_many(db, items)
-    assigned_count, unassigned_count = await allocation_repository.summary(db, node_id)
+    items = [alloc for alloc, _ in pairs]
+    order_nos_by_id = {
+        int(alloc.reserved_order_id): order_no
+        for alloc, order_no in pairs
+        if alloc.reserved_order_id is not None
+    }
+    serialized = await _serialize_many(
+        db, items, order_nos_by_id=order_nos_by_id, now=ts
+    )
+    assigned_count, reserved_count, free_count = await allocation_repository.summary(
+        db, node_id, now=ts
+    )
     return AllocationListResponse(
         items=serialized,
         page=page,
         per_page=per_page,
         total=total,
         summary=AllocationSummary(
-            total=assigned_count + unassigned_count,
+            total=assigned_count + reserved_count + free_count,
             assigned=assigned_count,
-            unassigned=unassigned_count,
+            reserved=reserved_count,
+            unassigned=free_count,
         ),
     )
 
@@ -308,19 +363,27 @@ async def delete_host_allocation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"allocation {allocation_id} not found on host {host_id}",
         )
-    if error == "in_use":
+    if error in ("in_use", "reserved"):
+        actor_name = str(admin.username)
+        port_val = int(snapshot.port) if snapshot is not None else None
+        await db.rollback()
         await log_manager_activity(
-            db, actor=admin.username, category="server",
+            db, actor=actor_name, category="server",
             operation=OperationResult(action="allocation.delete", phase="request", outcome="failed", target={"host_id": host_id, "allocation_id": allocation_id}), detail_key="allocation.delete.in_use",
             detail_params={
                 "host_id": host_id, "node_id": node_id,
                 "allocation_id": allocation_id,
-                "port": snapshot.port if snapshot else None,
+                "port": port_val,
             },
+        )
+        detail_msg = (
+            f"allocation {allocation_id} is reserved by an active order"
+            if error == "reserved"
+            else f"allocation {allocation_id} is in use"
         )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"allocation {allocation_id} is in use",
+            detail=detail_msg,
         )
 
     await db.commit()
@@ -353,9 +416,11 @@ async def bulk_delete_host_allocations(
     )
 
     if not deleted:
-        conflict_ports = [r.port for r in conflicting]
+        actor_name = str(admin.username)
+        conflict_ports = [int(r.port) for r in conflicting]
+        await db.rollback()
         await log_manager_activity(
-            db, actor=admin.username, category="server",
+            db, actor=actor_name, category="server",
             operation=OperationResult(action="allocation.batch_delete", phase="request", outcome="failed", target={"host_id": host_id, "allocation_ids": body.ids}), detail_key="allocation.delete.bulk_blocked",
             detail_params={
                 "host_id": host_id, "node_id": node_id,

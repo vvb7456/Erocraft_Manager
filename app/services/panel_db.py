@@ -14,6 +14,7 @@ import asyncio
 import logging
 import uuid as _uuid
 from dataclasses import dataclass
+from datetime import date
 
 from sqlalchemy import delete as sql_delete, select, update
 from sqlalchemy.exc import IntegrityError
@@ -27,6 +28,10 @@ from app.db.models.pterodactyl import (
     EggVariable,
     PanelNode,
     ServerVariable,
+)
+from app.db.repositories.allocation_reservations import (
+    is_allocation_actively_reserved,
+    is_allocation_free_clause,
 )
 
 logger = logging.getLogger(__name__)
@@ -217,7 +222,7 @@ async def find_available_allocation(
     """
     stmt = (
         select(Allocation.id)
-        .where(Allocation.node_id == node_id, Allocation.server_id.is_(None))
+        .where(Allocation.node_id == node_id, is_allocation_free_clause())
         .order_by(Allocation.id.asc())
         .limit(1)
     )
@@ -263,13 +268,18 @@ async def create_server(
     threads: str | None = None,
     external_id: str | None = None,
     allocation_additional: list[int] | None = None,
+    consuming_order_id: int | None = None,
+    expiration_date: date | None = None,
+    plan_id: int | None = None,
+    is_trial: bool = False,
 ) -> CreatedServer:
     """Insert a server with its variables and bind the allocation(s).
 
     Mirrors Pterodactyl's ``ServerCreationService``:
 
-    - Validates that the primary allocation belongs to ``node_id`` and is
-      unassigned (and same for every entry in ``allocation_additional``).
+    - Locks every requested allocation in ``Allocation.id ASC`` order
+      (``FOR UPDATE``) and validates that each belongs to ``node_id``, is
+      unassigned, and is not actively reserved by another order.
     - Runs every egg variable's ``rules`` through
       :mod:`app.services.egg_validator`.
     - Sets ``status='installing'`` so Wings will run the install pipeline
@@ -294,33 +304,45 @@ async def create_server(
     if egg is None:
         raise PanelDBValidationError(f"Egg {egg_id} 不存在")
 
-    # Validate primary allocation
-    alloc = await db.get(Allocation, allocation_id)
-    if alloc is None:
-        raise PanelDBValidationError(f"分配 {allocation_id} 不存在")
-    if alloc.node_id != node_id:
-        raise PanelDBValidationError(
-            f"分配 {allocation_id} 不在节点 {node_id} 上（实际节点 {alloc.node_id}）"
-        )
-    if alloc.server_id is not None:
-        raise PanelDBValidationError(f"分配 {allocation_id} 已被服务器 {alloc.server_id} 占用")
+    now = utc_naive_now_sec()
+    primary_id = int(allocation_id)
+    extra_ids = list(
+        dict.fromkeys(int(eid) for eid in (allocation_additional or ()) if int(eid) != primary_id)
+    )
+    requested_ids = sorted({primary_id, *extra_ids})
 
-    # Validate additional allocations
-    additional_allocs: list[Allocation] = []
-    if allocation_additional:
-        for extra_id in allocation_additional:
-            extra = await db.get(Allocation, extra_id)
-            if extra is None:
-                raise PanelDBValidationError(f"附加分配 {extra_id} 不存在")
-            if extra.node_id != node_id:
+    locked_rows = list(
+        (
+            await db.scalars(
+                select(Allocation)
+                .where(Allocation.id.in_(requested_ids))
+                .order_by(Allocation.id.asc())
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+    )
+    alloc_map = {int(row.id): row for row in locked_rows}
+
+    def _validate_alloc(aid: int, *, label: str) -> Allocation:
+        row = alloc_map.get(aid)
+        if row is None:
+            raise PanelDBValidationError(f"{label} {aid} 不存在")
+        if row.node_id != node_id:
+            raise PanelDBValidationError(
+                f"{label} {aid} 不在节点 {node_id} 上（实际节点 {row.node_id}）"
+            )
+        if row.server_id is not None:
+            raise PanelDBValidationError(f"{label} {aid} 已被服务器 {row.server_id} 占用")
+        if is_allocation_actively_reserved(row, now):
+            if consuming_order_id is None or row.reserved_order_id != consuming_order_id:
                 raise PanelDBValidationError(
-                    f"附加分配 {extra_id} 不在节点 {node_id} 上（实际节点 {extra.node_id}）"
+                    f"{label} {aid} 已被订单 #{row.reserved_order_id} 预留锁定"
                 )
-            if extra.server_id is not None:
-                raise PanelDBValidationError(
-                    f"附加分配 {extra_id} 已被服务器 {extra.server_id} 占用"
-                )
-            additional_allocs.append(extra)
+        return row
+
+    alloc = _validate_alloc(primary_id, label="分配")
+    additional_allocs = [_validate_alloc(eid, label="附加分配") for eid in extra_ids]
 
     # Pre-fetch egg variables once and validate environment values against rules
     egg_var_rows = await db.execute(
@@ -352,7 +374,7 @@ async def create_server(
         cpu=int(cpu),
         threads=threads,
         oom_disabled=bool(oom_disabled),
-        allocation_id=int(allocation_id),
+        allocation_id=primary_id,
         nest_id=egg.nest_id,
         egg_id=int(egg_id),
         startup=startup,
@@ -360,9 +382,12 @@ async def create_server(
         allocation_limit=allocation_limit,
         database_limit=int(database_limit),
         backup_limit=int(backup_limit),
-        created_at=utc_naive_now_sec(),
-        updated_at=utc_naive_now_sec(),
+        created_at=now,
+        updated_at=now,
         installed_at=None,
+        expiration_date=expiration_date,
+        plan_id=plan_id,
+        is_trial=bool(is_trial),
     )
     db.add(server)
     try:
@@ -372,12 +397,16 @@ async def create_server(
 
     server_id = int(server.id)
 
-    # Bind primary + additional allocations to the new server
+    # Bind primary + additional allocations to the new server and clear reservation lock
     alloc.server_id = server_id
-    alloc.updated_at = utc_naive_now_sec()
+    alloc.reserved_order_id = None
+    alloc.reserved_until = None
+    alloc.updated_at = now
     for extra in additional_allocs:
         extra.server_id = server_id
-        extra.updated_at = utc_naive_now_sec()
+        extra.reserved_order_id = None
+        extra.reserved_until = None
+        extra.updated_at = now
 
     # Insert all server_variables (one per egg_variable). Missing → default.
     for ev in egg_vars:
@@ -387,8 +416,8 @@ async def create_server(
                 server_id=server_id,
                 variable_id=int(ev.id),
                 variable_value=str(value),
-                created_at=utc_naive_now_sec(),
-                updated_at=utc_naive_now_sec(),
+                created_at=now,
+                updated_at=now,
             )
         )
 
@@ -488,12 +517,11 @@ async def delete_server_row(db: AsyncSession, server_id: int) -> None:
        clears the friendly name before unbinding).
     2. ``allocations.server_id`` FK is ``ON DELETE SET NULL`` → ports are
        auto-released by the FK trigger when the server row is deleted.
-    3. ``server_variables``, ``manager_server_meta`` and similar tables
-       have ``ON DELETE CASCADE``; the database removes them itself.
+    3. ``server_variables``, ``manager_server_llm_keys`` and similar child
+       tables have ``ON DELETE CASCADE``; the database removes them itself.
 
     Uses a raw DELETE so we delegate child cleanup to the database — the
-    ORM doesn't know about every child table (e.g. manager_server_meta has
-    a composite PK that SQLAlchemy refuses to NULL out).
+    ORM doesn't know about every child table with composite/FK primary keys.
 
     NOTE: this function only handles server_id and allocations. Wings
     container destruction, backup-archive cleanup and remote MySQL DROPs
