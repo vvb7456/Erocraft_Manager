@@ -15,9 +15,9 @@
     "viewServers": "查看该状态服务器"
   },
   "kpi": {
-    "servers": "实例",
+    "servers": "服务器",
     "users": "用户",
-    "usersWithServers": "持有实例",
+    "usersWithServers": "持有服务器",
     "hosts": "主机",
     "certs": "证书将到期",
     "certTotal": "证书总数",
@@ -26,7 +26,7 @@
   "section": {
     "infrastructure": "基础设施",
     "alerts": "实时告警",
-    "expiring": "即将到期 (7 天内)",
+    "expiring": "即将到期（7 天内）",
     "activity": "近期活动",
     "trends": "集群趋势"
   },
@@ -35,14 +35,14 @@
   },
   "empty": {
     "alerts": "一切正常",
-    "expiring": "近 7 天无到期实例",
+    "expiring": "近 7 天无到期服务器",
     "activity": "暂无活动记录",
     "trends": "暂无趋势数据"
   },
   "host": {
     "add": "添加主机",
     "empty": "空闲槽位",
-    "unpin": "从仪表盘移除",
+    "unpin": "从概览移除",
     "pickerTitle": "选择要展示的主机",
     "pickerSubtitle": "还可添加 {remaining} 个",
     "allPinned": "所有主机已展示"

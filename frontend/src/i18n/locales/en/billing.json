@@ -20,10 +20,10 @@
     "resDisk": "{n} GB Storage",
     "buyNow": "Buy now",
     "trialBadge": "Trial",
-    "renewHintBanner": "To renew an existing server, go to \"My Servers\" and click the renew button in the console.",
+    "renewHintBanner": "To renew an existing server, go to “My Servers”.",
     "newPurchaseConfirm": {
       "title": "Buying a new server?",
-      "message": "You already have a server. This will create a brand-new server, not renew your existing one. To renew, click the button below to go to My Servers and click the Renew button in the console.",
+      "message": "You already have a server. Continuing will create a new one. To renew an existing server, go to My Servers instead.",
       "confirm": "Yes, buy new server",
       "alt": "Go to My Servers"
     },
@@ -38,9 +38,9 @@
     "renewAfter": "New expiration date: {date}",
     "convertTitle": "Convert to Standard Plan",
     "convertTarget": "Target",
-    "convertHint": "Conversion binds the standard plan; expiration date will be pushed forward.",
+    "convertHint": "Conversion binds the standard plan and extends your current expiration date.",
     "periodSection": "Billing Period",
-    "periodMonth": "{count} months",
+    "periodMonth": "{count} month(s)",
     "periodPerMonth": "¥{amount}/mo",
     "periodSaved": "Save ¥{amount}",
     "periodDiscountTag": "-{pct}%",
@@ -71,7 +71,7 @@
       "refunded": "Refund-related"
     },
     "table": {
-      "orderNo": "Order no",
+      "orderNo": "Order No.",
       "plan": "Plan",
       "period": "Period",
       "amount": "Amount",
@@ -132,7 +132,7 @@
     "kindNew": "New",
     "kindRenew": "Renew",
     "kindUpgrade": "Upgrade",
-    "kindConvert": "Trial upgrade",
+    "kindConvert": "Trial conversion",
     "totals": {
       "discount": "Discount",
       "amount": "Amount due",
@@ -144,7 +144,7 @@
       "linkedServer": "Linked server"
     },
     "status": {
-      "pending": "Pending",
+      "pending": "Awaiting payment",
       "processing": "Processing",
       "applied": "Completed",
       "apply_failed": "Provision failed",
@@ -193,7 +193,7 @@
       "received": "Received",
       "refunded": "Refunded",
       "created": "Created",
-      "applied": "Applied",
+      "applied": "Provisioned",
       "retries": "Retries",
       "invoiceNo": "Invoice No",
       "invoiceStatus": "Status",
@@ -210,10 +210,10 @@
       "externalRefundNoPlaceholder": "Enter the external refund or after-sales number",
       "refundRetries": "Retries",
       "refund": "Refund",
-      "forceApply": "Force Apply",
-      "forceApplyConfirm": "Force apply {orderNo}? Retry counter will reset.",
-      "forceApplyOk": "Applied",
-      "forceApplyFail": "Apply Failed",
+      "forceApply": "Force Provision",
+      "forceApplyConfirm": "Force provision order {orderNo}? Retry count will reset and provisioning will run immediately.",
+      "forceApplyOk": "Provisioned",
+      "forceApplyFail": "Provisioning failed",
       "forceApplyScheduled": "Retry scheduled. Check the order status later",
       "forceClose": "Force Close",
       "forceCloseNote": "Close Note",
@@ -224,7 +224,7 @@
       "refundFullAmount": "Refund amount",
       "refundReasonPlaceholder": "Refund reason (up to 80 characters)",
       "refundQuery": "Check refund",
-      "refundAgain": "Apply for a new refund",
+      "refundAgain": "Retry refund",
       "refundMerchantAction": "Resolve the original refund in the merchant portal, then check its result.",
       "nextApply": "Next retry",
       "closed": "Closed",
@@ -256,17 +256,17 @@
     "incidents": {
       "kind": {
         "manual_review_required": "Manual Review",
-        "apply_retries_exhausted": "Apply Retries Exhausted",
+        "apply_retries_exhausted": "Provisioning Retries Exhausted",
         "refund_retries_exhausted": "Refund Retries Exhausted",
-        "placeholder_leak": "Placeholder Leak",
-        "placeholder_cleanup_failed": "Cleanup Failed"
+        "placeholder_leak": "Residual Resource Leak",
+        "placeholder_cleanup_failed": "Residual Cleanup Failed"
       },
       "subkind": {
         "amount_mismatch": "Amount Mismatch",
         "cross_invoice_transaction": "Cross-Invoice TX",
         "unknown_invoice_payment": "Unknown Invoice Payment",
-        "late_payment_on_void_invoice": "Late Payment on Void",
-        "late_payment_on_refunded_order": "Late Payment on Refunded",
+        "late_payment_on_void_invoice": "Late Payment on Void Invoice",
+        "late_payment_on_refunded_order": "Late Payment on Refunded Order",
         "stuck_processing": "Stuck Processing"
       },
       "status": {
@@ -287,19 +287,19 @@
       "kindNewPurchase": "New",
       "kindRenew": "Renew",
       "kindUpgrade": "Upgrade",
-      "kindConvert": "Trial upgrade",
+      "kindConvert": "Trial conversion",
       "view": "View",
-      "forceApply": "Force Apply",
-      "forceApplyTitle": "Force Apply Order",
-      "forceApplyConfirm": "Force apply {orderNo}? Retry counter will be reset and apply will run immediately.",
+      "forceApply": "Force Provision",
+      "forceApplyTitle": "Force Provision Order",
+      "forceApplyConfirm": "Force provision order {orderNo}? Retry count will reset and provisioning will run immediately.",
       "forceApplyResult": "Result: {result}",
-      "deletedUser": "User # {id} deleted",
-      "deletedServer": "Server # {id} deleted",
+      "deletedUser": "User #{id} deleted",
+      "deletedServer": "Server #{id} deleted",
       "totalCount": "{n} orders",
       "empty": "No orders yet",
-      "emptySearch": "No orders matching \"{q}\"",
+      "emptySearch": "No orders matching “{q}”",
       "col": {
-        "orderNo": "Order No",
+        "orderNo": "Order No.",
         "channel": "Channel",
         "user": "User",
         "plan": "Plan",
@@ -361,7 +361,7 @@
         "resources": "Resources",
         "runtime": "Runtime",
         "pricing": "Pricing",
-        "llm": "LLM",
+        "llm": "AI Quota",
         "display": "Display"
       },
       "fields": {
@@ -372,9 +372,9 @@
         "nest": "Nest",
         "egg": "Egg",
         "cpu": "CPU limit (%)",
-        "memory": "Memory (MB)",
-        "disk": "Disk (MB)",
-        "swap": "Swap (MB)",
+        "memory": "Memory (MiB)",
+        "disk": "Disk (MiB)",
+        "swap": "Swap (MiB)",
         "io": "Disk IO weight",
         "databaseLimit": "Database limit",
         "backupLimit": "Backup limit",
@@ -391,7 +391,7 @@
         "displayOrder": "Display order",
         "planType": "Plan type",
         "linkedPlan": "Linked standard plan",
-        "llmEnabled": "Enable LLM free quota",
+        "llmEnabled": "Enable free AI quota",
         "llmQuotaGrant": "Monthly quota ($)",
         "llmGroup": "NewAPI Group"
       },
@@ -405,17 +405,17 @@
         "code": "Unique identifier; avoid changing after creation",
         "description": "Markdown supported; shown on the user-facing plans page",
         "cpu": "100 = 1 CPU core",
-        "memory": "In MB. 1024 = 1 GB",
+        "memory": "In MiB. 1024 = 1 GiB",
         "swap": "-1 = unlimited, 0 = disabled",
         "io": "10–1000, default 500",
         "allocation": "≥ 1, default 1",
-        "category": "Used to group plans on the user-facing plans page. Plans sharing the same category label are merged under one heading; leave blank to fall into the \"Other\" group.",
+        "category": "Used to group plans on the user-facing plans page. Plans sharing the same category label appear together; leave blank to group under “Other plans”.",
         "displayOrder": "Lower numbers appear first",
-        "switchEggReset": "Switching Egg will reset env defaults to the new Egg’s defaults.",
+        "switchEggReset": "Switching eggs resets environment variable defaults to the new egg’s defaults.",
         "periodCount1Locked": "1-period option is required and cannot be deleted",
-        "trial": "Trial plans mirror the linked standard plan's resource config automatically. Trial plans can only be purchased once by users who have never owned a server, and are deleted immediately on expiry (no grace period). Users can only renew by converting to the standard plan.",
-        "llmEnabled": "When enabled, servers purchased under this plan receive a monthly free LLM API quota. Requires NewAPI connection configured in Settings → LLM Quota.",
-        "llmQuotaGrant": "Monthly quota in USD. Maps to the NewAPI subscription TotalAmount; resets monthly.",
+        "trial": "Trial plans automatically mirror the linked standard plan's resources. Limited to one purchase per user with no prior servers; deleted immediately on expiry (no grace period) and must convert to renew.",
+        "llmEnabled": "When enabled, servers purchased under this plan receive a monthly free AI quota. Requires a NewAPI connection configured in Settings → Model Services.",
+        "llmQuotaGrant": "Monthly AI quota in USD (maps to NewAPI subscription TotalAmount); resets monthly.",
         "llmGroup": "Select the NewAPI user group for this plan. A NewAPI user is automatically created under this group when a subscription is provisioned."
       },
       "periods": {
@@ -489,7 +489,7 @@
         "channel": "Channel",
         "quantity": "Quantity",
         "validDays": "Valid Days",
-        "validDaysPlaceholder": "Never expires"
+        "validDaysPlaceholder": "Leave blank for no expiry"
       },
       "detail": {
         "title": "Batch Details: {name}",
@@ -662,9 +662,9 @@
     "rulesBody": "When a friend signs up through your link and pays their first order, both of you receive a coupon.",
     "banner": {
       "enabledHeadline": "Invite friends, both of you save",
-      "enabledDetail": "When a friend signs up through your invite link and completes an order of at least {minOrder}, you automatically receive a {inviterAmount} coupon (valid for {inviterDays} days) and your friend gets a {inviteeAmount} coupon (valid for {inviteeDays} days). Coupons apply automatically to your next purchase, renewal, or upgrade.",
-      "disabledHeadline": "Invite is on, rewards not configured",
-      "disabledDetail": "The administrator hasn’t enabled invite rewards yet, or the reward coupon templates are missing. You can still share your link — rewards will apply to future invites once the admin turns them on."
+      "enabledDetail": "When a friend signs up through your invite link and completes their first qualifying order of at least {minOrder}, you receive a {inviterAmount} coupon (valid for {inviterDays} days) and your friend gets a {inviteeAmount} coupon (valid for {inviteeDays} days). Coupons can be applied to your next purchase, renewal, or upgrade.",
+      "disabledHeadline": "Invite is on, rewards not yet enabled",
+      "disabledDetail": "Invite rewards are not enabled yet. You can still share your link — rewards will apply to new invites once enabled."
     },
     "history": "Referral history",
     "empty": "No referrals yet",

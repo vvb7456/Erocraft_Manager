@@ -41,10 +41,10 @@
     "title": "Order Paid"
   },
   "orderApplyFailed": {
-    "title": "Order Apply Failed"
+    "title": "Order Provisioning Failed"
   },
   "orderApplyAlert": {
-    "title": "Order Apply Alert"
+    "title": "Order Provisioning Alert"
   },
   "orderRefunded": {
     "title": "Order Refunded"
@@ -73,8 +73,8 @@
     "new_email": "New Email Address",
     "verification_code": "Verification Code",
     "reset_url": "Password Setup Link",
-    "node_name": "Node Name",
-    "node_id": "Node ID",
+    "node_name": "Host Name",
+    "node_id": "Host ID",
     "alert_type": "Alert Type Key",
     "alert_type_label": "Alert Type Label",
     "severity": "Severity Key",
@@ -89,14 +89,14 @@
     "total_yuan": "Total Amount (Yuan)",
     "currency_code": "Currency Code",
     "paid_at": "Paid At",
-    "applied_at": "Applied At",
+    "applied_at": "Provisioned At",
     "server_uuid": "Server UUID",
     "refund_no": "Refund Number",
     "refund_amount_yuan": "Refund Amount (Yuan)",
     "refund_reason": "Refund Reason",
     "refunded_at": "Refunded At",
-    "apply_error": "Apply Error",
-    "apply_retry_count": "Apply Retry Count",
+    "apply_error": "Provisioning Error",
+    "apply_retry_count": "Provisioning Retry Count",
     "installed_at": "Installed At",
     "invitee_username": "Invitee Username",
     "coupon_code": "Coupon Code",

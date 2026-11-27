@@ -5,7 +5,7 @@
   "viewAll": "查看全部",
   "feature": {
     "normal": { "title": "服务器列表", "description": "查看运行状态，管理服务器配置与文件。", "action": "查看服务器" },
-    "renewal": { "title": "服务器续费", "description": "有服务器即将到期或已过期，请及时续费。", "action": "立即续费" },
+    "renewal": { "title": "服务器续费", "description": "有服务器即将到期或已到期，请及时续费。", "action": "立即续费" },
     "empty": { "label": "开通服务器", "title": "你的专属酒馆，\n手机电脑都能用。", "action": "查看套餐" }
   },
   "emptyTitle": "还没有服务器",

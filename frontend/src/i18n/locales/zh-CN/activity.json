@@ -21,7 +21,7 @@
   },
   "props": {
     "filesCount": "等 {n} 个文件",
-    "inDir": "目录: {dir}"
+    "inDir": "目录：{dir}"
   },
   "pagination": {
     "perPage": "条/页"
@@ -61,11 +61,20 @@
     "startup": {
       "edit": "修改启动参数"
     },
+    "backup": {
+      "complete": "备份完成",
+      "fail": "备份失败",
+      "restore-complete": "备份恢复完成",
+      "restore-failed": "备份恢复失败"
+    },
     "reinstall": "重装服务器"
   },
   "auth": {
     "fail": "登录失败",
-    "success": "登录成功"
+    "success": "登录成功",
+    "sftp": {
+      "fail": "SFTP 登录失败"
+    }
   },
   "event": {
     "password-reset": "重置密码"

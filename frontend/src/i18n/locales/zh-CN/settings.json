@@ -45,10 +45,10 @@
     "brandName": "品牌名称",
     "systemName": "系统名称",
     "siteUrl": "系统地址",
-    "bannerUrl": "Banner URL",
+    "bannerUrl": "横幅图片地址",
     "icpRecord": "ICP 备案号",
     "tutorialUrl": "使用教程链接",
-    "tutorialUrl_tip": "填写后用户侧侧边栏会出现「使用教程」入口，点击新标签页打开该链接。留空则隐藏。",
+    "tutorialUrl_tip": "填写后，用户端侧边栏将显示「使用教程」入口，点击后在新标签页打开；留空则隐藏。",
     "allowRegistration": "允许公开注册",
     "allowRegistration_tip": "关闭后登录页隐藏注册按钮，用户仅能由管理员创建。",
     "support": {
@@ -93,37 +93,37 @@
     "miniHint": "用于小程序账户绑定、服务器管理和客服。",
     "quotas": {
       "title": "付款有效期",
-      "desc": "业务订单的付款期限，更换付款方式时沿用原期限。"
+      "desc": "订单的付款有效期；更换付款方式时沿用原截止时间。"
     },
-    "payTimeout": "付款有效期 (分钟)",
-    "payTimeout_tip": "从创建业务订单开始计时，到期后关闭付款并释放预留资源。"
+    "payTimeout": "付款有效期（分钟）",
+    "payTimeout_tip": "从创建订单开始计时，到期后关闭付款并释放预留资源。"
   },
   "automation": {
     "title": "自动化任务",
     "time": {
       "title": "任务时区",
-      "desc": "自动暂停、删除和邮件提醒使用的时区。"
+      "desc": "自动冻结、删除和邮件提醒使用的时区。"
     },
     "timezone": "时区",
     "suspend": {
-      "title": "自动暂停",
-      "desc": "定时暂停到期服务器，管理服务到期后的使用状态。",
-      "enabled": "启用自动暂停",
-      "runHour": "执行时间 (时)",
-      "runMinute": "执行时间 (分)"
+      "title": "自动冻结",
+      "desc": "定时冻结已到期服务器。",
+      "enabled": "启用自动冻结",
+      "runHour": "执行时间（时）",
+      "runMinute": "执行时间（分）"
     },
     "delete": {
       "title": "自动删除",
-      "desc": "清理超过保留期限的已暂停服务器，释放主机资源。",
+      "desc": "清理超过保留期限的已冻结服务器，释放主机资源。",
       "enabled": "启用自动删除",
-      "days": "暂停后删除天数"
+      "days": "冻结后删除天数"
     },
     "email": {
       "title": "到期邮件提醒",
-      "desc": "在服务器到期前自动发送提醒邮件",
+      "desc": "在服务器到期前自动发送提醒邮件。",
       "enabled": "启用邮件提醒",
-      "runHour": "发送时间 (时)",
-      "runMinute": "发送时间 (分)"
+      "runHour": "发送时间（时）",
+      "runMinute": "发送时间（分）"
     }
   },
   "marketing": {
@@ -135,16 +135,16 @@
       "enabledHint": "关闭后邀请关系仍会被记录，但不再自动发券。",
       "inviterTemplate": "邀请人奖励优惠券",
       "inviteeTemplate": "被邀请人奖励优惠券",
-      "inviterTemplateHint": "发放给邀请人（你的现有用户）的优惠券模板。仅显示已激活的模板，可在“计费 · 优惠券模板”页面创建或编辑。",
-      "inviteeTemplateHint": "发放给被邀请人（新注册用户）的优惠券模板。仅显示已激活的模板，可在“计费 · 优惠券模板”页面创建或编辑。",
+      "inviterTemplateHint": "发放给邀请人（现有用户）的优惠券模板。仅显示已启用的模板，可在「券码管理 · 优惠券模板」页面创建或编辑。",
+      "inviteeTemplateHint": "发放给被邀请人（新注册用户）的优惠券模板。仅显示已启用的模板，可在「券码管理 · 优惠券模板」页面创建或编辑。",
       "templatePlaceholder": "请选择优惠券模板",
-      "minFen": "起起金额（元）",
-      "minFenHint": "需要实付不低于此金额的订单才会触发奖励。设为 0.01 则任何已付款订单均可；提高可过滤小额订单，防止套利。",
+      "minFen": "最低订单金额（元）",
+      "minFenHint": "仅实付不低于此金额的订单可触发奖励；调高门槛可过滤小额订单、防止套利。",
       "qualifyingKinds": "合格订单类型",
       "qualifyingKindsHint": "仅以下类型的订单会触发奖励。取消某项则该类型订单不参与。",
       "qualifyingKindsPlaceholder": "选择合格订单类型",
       "kindOption": {
-        "new_purchase": "新购买",
+        "new_purchase": "新购",
         "renew": "续费",
         "upgrade": "升级"
       }
@@ -159,8 +159,8 @@
     "validDays": "默认有效天数",
     "validDaysTip": "0 表示永不过期",
     "guideTitle": "接口参数",
-    "guideUrl": "请求地址 (POST)",
-    "guideHeader": "请求头 (Headers)",
+    "guideUrl": "请求地址（POST）",
+    "guideHeader": "请求头（Headers）",
     "guideBody": "请求体 JSON",
     "guideJsonPath": "JSONPath"
   },
@@ -171,22 +171,22 @@
     "title": "模型服务",
     "general": {
       "title": "套餐赠送额度",
-      "desc": "为包含 LLM 权益的套餐提供模型调用额度。",
-      "enabled": "启用 LLM 免费额度",
-      "enabledHint": "启用后，订购含 LLM 额度套餐的用户将获得免费 LLM API 密钥，自动注入 SillyTavern 容器。"
+      "desc": "为包含 AI 额度权益的套餐提供模型调用额度。",
+      "enabled": "启用 AI 免费额度",
+      "enabledHint": "启用后，订购含 AI 额度套餐的用户将获得免费 AI API Key，自动注入 SillyTavern 容器。"
     },
     "connection": {
       "title": "NewAPI 连接",
       "desc": "连接用于管理用户密钥与模型额度的 NewAPI 服务。",
-      "baseUrl": "Base URL",
-      "adminToken": "Admin Token",
-      "adminPassword": "Admin 密码",
+      "baseUrl": "接口地址（Base URL）",
+      "adminToken": "管理员 Token",
+      "adminPassword": "管理员密码",
       "adminPasswordHint": "删除 NewAPI 子账号时用于换取一次性安全验证证明。请使用未开启两步验证或通行密钥的专用管理员账号。"
     },
     "injection": {
       "title": "SillyTavern 接口",
       "desc": "SillyTavern 调用模型服务使用的 API 地址。",
-      "stEndpoint": "ST 端点 URL"
+      "stEndpoint": "SillyTavern 接口地址"
     }
   }
 }

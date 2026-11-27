@@ -24,7 +24,7 @@
     "inDir": "Directory: {dir}"
   },
   "pagination": {
-    "perPage": "/ page"
+    "perPage": "rows/page"
   },
   "server": {
     "power": {
@@ -45,7 +45,7 @@
       "delete": "Delete file",
       "compress": "Compress",
       "decompress": "Decompress",
-      "create-directory": "Create folder",
+      "create-directory": "Create directory",
       "download": "Download file",
       "upload": "Upload file",
       "uploaded": "Upload complete"
@@ -61,11 +61,20 @@
     "startup": {
       "edit": "Edit startup variable"
     },
+    "backup": {
+      "complete": "Backup completed",
+      "fail": "Backup failed",
+      "restore-complete": "Backup restored",
+      "restore-failed": "Backup restore failed"
+    },
     "reinstall": "Reinstall server"
   },
   "auth": {
     "fail": "Login failed",
-    "success": "Login succeeded"
+    "success": "Login succeeded",
+    "sftp": {
+      "fail": "SFTP login failed"
+    }
   },
   "event": {
     "password-reset": "Reset password"

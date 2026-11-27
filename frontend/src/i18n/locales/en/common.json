@@ -43,7 +43,7 @@
     "show": "Show",
     "hide": "Hide",
     "collapse": "Collapse",
-    "logout": "Logout"
+    "logout": "Sign out"
   },
   "sidebar": {
     "toggle": "Collapse/Expand"
@@ -77,7 +77,7 @@
   "upload": {
     "drop_hint": "Drop file here",
     "click_hint": "or click to select",
-    "pick_label": "Pick from input",
+    "pick_label": "Choose file",
     "upload_label": "Drag & drop or click to upload",
     "or_divider": "or",
     "unsupported_type": "Unsupported file type: {name}"
@@ -114,7 +114,7 @@
       "command_unsupported": "The agent does not support this command"
     },
     "agreements": {
-      "egg_scope_requires_egg_id": "An egg-scoped agreement requires an egg_id",
+      "egg_scope_requires_egg_id": "An egg-scoped agreement requires an egg",
       "invalid_context": "Invalid agreement context",
       "no_current_version_to_patch": "The agreement has no published version to patch",
       "not_found": "Agreement not found or not published",
@@ -211,7 +211,7 @@
       "email_taken": "This email is already registered",
       "invalid_code": "Invalid verification code",
       "invalid_username": "Username may only contain letters, digits, underscores, dots and hyphens (3-32 chars)",
-      "site_url_not_configured": "The system has not configured a public site URL. Please contact an administrator.",
+      "site_url_not_configured": "The site URL is not configured. Contact an administrator",
       "username_taken": "This username is already taken"
     },
     "request": {

@@ -52,7 +52,7 @@
     "update_plan": "Change Plan"
   },
   "batch": {
-    "select_action": "Batch action...",
+    "select_action": "Batch action…",
     "execute": "Execute",
     "selected": "{n} servers selected",
     "suspend": "Suspend",
@@ -90,7 +90,7 @@
     }
   },
   "pagination": {
-    "per_page": "per page"
+    "per_page": "rows/page"
   },
   "create": {
     "title": "Create Server",
@@ -120,8 +120,8 @@
     "allocation_hint": "Select a node first",
     "no_allocations": "No available ports",
     "cpu": "CPU Limit (%)",
-    "memory": "Memory (MB)",
-    "disk": "Disk (MB)",
+    "memory": "Memory (MiB)",
+    "disk": "Disk (MiB)",
     "databases": "Databases",
     "backups": "Backups",
     "extra_allocations": "Extra Ports",
@@ -157,8 +157,8 @@
     "server_name": "Server",
     "current_expiration": "Current Expiration",
     "new_expiration": "New Expiration",
-    "confirm_btn": "Confirm Renew",
-    "validation_plan_required": "This server is not bound to a plan. Please select 'Other' source.",
+    "confirm_btn": "Confirm Renewal",
+    "validation_plan_required": "This server is not bound to a plan and cannot create an e-commerce order. Please select “Other” as the order channel.",
     "validation_order_required": "External order ID is required for e-commerce channels.",
     "validation_amount_required": "A valid positive amount is required for e-commerce channels."
   }

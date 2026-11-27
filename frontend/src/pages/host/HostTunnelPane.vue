@@ -74,7 +74,7 @@ interface ServerTunnelRow {
 }
 
 const host = inject<Ref<HostDetail | null>>('hostDetail')!
-const { t } = useI18n({ useScope: 'global' })
+const { t, te } = useI18n({ useScope: 'global' })
 const { get, post, put, del, handleError } = useApiFetch()
 const { toast } = useToast()
 const { confirm } = useConfirm()
@@ -379,6 +379,10 @@ function statusBadgeColor(s: string): string {
   if (s === 'failed') return 'var(--red)'
   return 'var(--t3)'
 }
+
+function serverStatusLabel(s: string): string {
+  return te(`hosts.tunnel.serverStatus.${s}`) ? t(`hosts.tunnel.serverStatus.${s}`) : s
+}
 </script>
 
 <template>
@@ -545,7 +549,7 @@ function statusBadgeColor(s: string): string {
           </td>
           <td class="col-hostname"><code>{{ item.hostname }}</code></td>
           <td class="col-upstream"><code>{{ item.upstream }}</code></td>
-          <td class="col-status"><Badge size="sm" :color="statusBadgeColor(item.status)">{{ item.status }}</Badge></td>
+          <td class="col-status"><Badge size="sm" :color="statusBadgeColor(item.status)">{{ serverStatusLabel(item.status) }}</Badge></td>
         </template>
         <template #card="{ item }">
           <div>
@@ -554,7 +558,7 @@ function statusBadgeColor(s: string): string {
             </RouterLink>
           </div>
           <div class="meta-text">{{ item.hostname }} → {{ item.upstream }}</div>
-          <Badge size="sm" :color="statusBadgeColor(item.status)">{{ item.status }}</Badge>
+          <Badge size="sm" :color="statusBadgeColor(item.status)">{{ serverStatusLabel(item.status) }}</Badge>
         </template>
       </DataTable>
     </BaseCard>

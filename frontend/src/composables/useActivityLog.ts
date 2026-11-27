@@ -43,7 +43,7 @@ export function useActivityLog() {
     const operation = params.operation as OperationResult | undefined
     params.operation_result = t(`logs.status_label.${operation?.outcome || log.status}`)
     params.error = operation?.error ? errorText(operation.error) : params.error || params.agent_error || params.wings_error || ''
-    for (const [field, prefix] of Object.entries({ template: 'emailTemplates', type: 'logs.reminderType', kind: 'hosts.kind', language: 'logs.language', alert_type: 'hosts.alerting.types', severity: 'logs.severity' })) {
+    for (const [field, prefix] of Object.entries({ template: 'emailTemplates', type: 'logs.reminderType', kind: 'hosts.kind', language: 'logs.language', alert_type: 'hosts.setting.alerting.types', severity: 'logs.severity' })) {
       const value = params[field]
       if (typeof value !== 'string') continue
       const key = `${prefix}.${value}${field === 'template' ? '.title' : ''}`
@@ -52,6 +52,12 @@ export function useActivityLog() {
     if (typeof params.duration_seconds === 'number') params.duration_human = duration(params.duration_seconds)
     if (typeof params.old_root_admin === 'boolean') params.old_root_admin = t(params.old_root_admin ? 'users.role.admin' : 'users.role.user')
     if (typeof params.new_root_admin === 'boolean') params.new_root_admin = t(params.new_root_admin ? 'users.role.admin' : 'users.role.user')
+    if (typeof params.enabled === 'boolean' || params.enabled === 'true' || params.enabled === 'false') {
+      const enabledKey = String(params.enabled)
+      if (te(`logs.enabledState.${enabledKey}`)) params.enabled = t(`logs.enabledState.${enabledKey}`)
+    }
+    if (typeof params.order_kind === 'string' && te(`logs.orderKind.${params.order_kind}`)) params.order_kind = t(`logs.orderKind.${params.order_kind}`)
+    if (typeof params.source === 'string' && te(`logs.applySource.${params.source}`)) params.source = t(`logs.applySource.${params.source}`)
     if (typeof params.result === 'string' && te(`logs.applyResult.${params.result}`)) params.result = t(`logs.applyResult.${params.result}`)
     if (typeof params.outcome === 'string' && te(`logs.refundResult.${params.outcome}`)) params.outcome = t(`logs.refundResult.${params.outcome}`)
     if (typeof params.action === 'string' && te(`logs.alertAction.${params.action}`)) params.action = t(`logs.alertAction.${params.action}`)

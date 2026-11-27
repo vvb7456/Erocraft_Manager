@@ -1,6 +1,6 @@
 {
-  "title": "Server detail",
-  "loading": "Loading server detail…",
+  "title": "Server Details",
+  "loading": "Loading server details…",
   "status": {
     "running": "Running",
     "starting": "Starting",
@@ -34,7 +34,7 @@
       "image": "Image",
       "quota": "Quota",
       "address": "Address",
-      "extraAllocations": "Extras",
+      "extraAllocations": "Extra ports",
       "sftp": "SFTP",
       "expirationDate": "Expires",
       "createdAt": "Created",
@@ -131,7 +131,7 @@
       "restartHint": "Saved. Stop and start the server for the new port to take effect inside the container.",
       "confirm": {
         "title": "Update allocations",
-        "message": "This will remove {rm} port(s) and swap the primary {swap} time(s), disconnecting any sessions using them. Continue?",
+        "message": "Update port allocations? Removing ports or changing the primary port will immediately disconnect active sessions using them.",
         "confirmText": "Save"
       }
     },
@@ -181,11 +181,11 @@
     "suspend": {
       "sectionTitle": "Suspend",
       "suspendTitle": "Suspend server",
-      "unsuspendTitle": "Restore server",
+      "unsuspendTitle": "Unsuspend server",
       "suspendMessage": "Suspend server {name}? This immediately affects user access.",
-      "unsuspendMessage": "Restore server {name}?",
+      "unsuspendMessage": "Unsuspend server {name}?",
       "suspendAction": "Suspend server",
-      "unsuspendAction": "Restore server"
+      "unsuspendAction": "Unsuspend server"
     },
     "renew": {
       "sectionTitle": "Renew",
@@ -225,20 +225,20 @@
       "confirmTitle": "Delete server",
       "forceConfirmTitle": "Force delete server",
       "confirmMessage": "Delete server {name}? This action cannot be undone.",
-      "forceConfirmMessage": "About to force delete server {name}. Database records will be removed even if Wings deletion fails. Please confirm the risk."
+      "forceConfirmMessage": "Force delete server {name}? Database records will still be removed even if Wings deletion fails. Proceed anyway?"
     }
   },
   "llm": {
     "loadFailed": "Failed to load",
     "notProvisioned": "This server has no AI quota provisioned",
     "provision": {
-      "title": "Provision LLM Quota",
-      "hint": "LLM quota is not provisioned for this server. This may be due to a failure during creation. You can manually retry.",
-      "btn": "Provision LLM Quota",
-      "confirmTitle": "Provision LLM Quota",
+      "title": "Provision AI Quota",
+      "hint": "AI quota is not provisioned for this server. This may be due to a failure during creation. You can manually retry.",
+      "btn": "Provision AI Quota",
+      "confirmTitle": "Provision AI Quota",
       "confirmMessage": "This will create a NewAPI user, bind a subscription, and generate an API Key for this server. Continue?",
       "confirm": "Confirm",
-      "toast": "LLM quota provisioned",
+      "toast": "AI quota provisioned",
       "failedToast": "Provision failed, please retry or check logs"
     },
     "statusSection": "Status & Usage",
@@ -261,28 +261,28 @@
     "apiKey": "API Key",
     "toggle": {
       "title": "Enable / disable key",
-      "desc": "Temporarily block or restore this key (synced to NewAPI). Disabled keys cannot call the API.",
+      "desc": "Temporarily disable or re-enable this key (synced to NewAPI). Disabled keys cannot call the API.",
       "enable": "Enable",
       "disable": "Disable"
     },
     "resetUsage": {
-      "rowTitle": "Refill monthly quota",
-      "rowDesc": "Restore available quota to the grant limit and clear used amount. For manual top-ups.",
-      "btn": "Refill",
-      "title": "Refill monthly quota",
-      "message": "Restore this server's available quota to the grant limit?",
-      "confirm": "Confirm refill"
+      "rowTitle": "Reset monthly quota",
+      "rowDesc": "Clear used amount and restore available quota to the grant limit.",
+      "btn": "Reset quota",
+      "title": "Reset monthly quota",
+      "message": "Clear used amount and restore this server's available quota to the grant limit?",
+      "confirm": "Confirm reset"
     },
     "revoke": {
       "rowTitle": "Revoke quota",
-      "rowDesc": "Delete the NewAPI token and local record, fully removing this server's AI quota.",
+      "rowDesc": "Delete the NewAPI key and local record, fully removing this server's AI quota.",
       "btn": "Revoke",
       "title": "Revoke AI quota",
       "message": "Revoke this server's AI quota? This action cannot be undone.",
       "confirm": "Confirm revoke"
     },
     "toast": {
-      "usageReset": "Quota refilled",
+      "usageReset": "Monthly quota reset",
       "enabled": "Key enabled",
       "disabled": "Key disabled",
       "revoked": "Quota revoked"

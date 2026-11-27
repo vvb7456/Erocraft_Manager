@@ -14,7 +14,7 @@
     "title": "到期提醒"
   },
   "expired": {
-    "title": "已到期停机提醒"
+    "title": "已到期冻结提醒"
   },
   "preDelete": {
     "title": "删除前提醒"
@@ -73,12 +73,12 @@
     "new_email": "新邮箱地址",
     "verification_code": "验证码",
     "reset_url": "密码设置链接",
-    "node_name": "节点名称",
-    "node_id": "节点 ID",
-    "alert_type": "告警类型键",
+    "node_name": "主机名称",
+    "node_id": "主机 ID",
+    "alert_type": "告警类型标识",
     "alert_type_label": "告警类型名称",
-    "severity": "严重程度键",
-    "severity_label": "严重程度名称",
+    "severity": "告警等级标识",
+    "severity_label": "告警等级名称",
     "message": "告警消息",
     "fired_at": "触发时间",
     "resolved_at": "恢复时间",

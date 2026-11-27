@@ -46,7 +46,7 @@
     "password": "新密码",
     "password_hint": "留空则不修改密码",
     "language": "默认语言",
-    "self_demote_disabled": "不能取消当前登录管理员自身的管理员权限。",
+    "self_demote_disabled": "不能取消当前登录账号的管理员权限。",
     "success": "用户已更新"
   },
   "confirm": {
@@ -58,7 +58,7 @@
     "batch_email_msg": "确定要向选中的 {n} 位用户发送通知邮件吗？"
   },
   "batch": {
-    "select_action": "批量操作...",
+    "select_action": "批量操作…",
     "execute": "执行",
     "selected": "已选择 {n} 位用户",
     "email": "发邮件",

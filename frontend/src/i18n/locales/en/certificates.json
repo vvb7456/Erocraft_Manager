@@ -60,10 +60,10 @@
     "disabled": "Disabled"
   },
   "nodes": {
-    "title": "Managed Nodes",
+    "title": "Managed Hosts",
     "empty": "No certificate deployment targets",
-    "perPage": "Rows/page",
-    "host": "Node",
+    "perPage": "rows/page",
+    "host": "Host",
     "agent": "Agent",
     "sync": "Sync",
     "domains": "Domains",
@@ -79,7 +79,7 @@
   },
   "confirm": {
     "renewTitle": "Force Renew Certificate",
-    "renewMessage": "This will run acme.sh --renew --force for {name}. If the fingerprint changes, Manager will dispatch it to deployment targets and restart target services.",
+    "renewMessage": "This will run acme.sh --renew --force for {name}. If the fingerprint changes, Manager will deploy it to targets and restart target services.",
     "syncTitle": "Force Sync Certificate",
     "syncMessage": "This will install the certificate on {host} and restart the target service."
   },

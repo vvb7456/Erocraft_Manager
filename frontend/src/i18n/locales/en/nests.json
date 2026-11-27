@@ -79,8 +79,8 @@
       "desc": "Remove egg templates that are no longer needed.",
       "deleteHint": "Deletion is blocked if servers, child eggs, billing plans, or agreements reference this egg."
     },
-    "specialRegistryNotice": "“{name}” matches the built-in special egg registry (custom panel, tunnel, and LLM rules). Rename or edit core variables with care.",
-    "specialRenameDanger": "Warning: You are renaming special egg “{name}”! Saving will disable custom panel UI (e.g. SillyTavern panel), tunnel, and LLM rules for matching servers!",
+    "specialRegistryNotice": "“{name}” matches the built-in special egg registry (custom panel, tunnel, and AI quota rules). Rename or edit core variables with care.",
+    "specialRenameDanger": "Warning: You are renaming special egg “{name}”! Saving will disable custom panel UI (e.g. SillyTavern panel), tunnel, and AI quota rules for matching servers!",
     "configFromNone": "None (standalone)",
     "jsonObjectRequired": "Must be a valid JSON object (starting with {'{'})",
     "addImage": "Add Image",
@@ -136,7 +136,7 @@
       "onePerLine": "One entry per line. Leave blank for none.",
       "fileDenylistInherited": "When config_from is set, runtime always inherits the parent egg's file denylist.",
       "configFrom": "Only 1-hop inheritance within the same nest is allowed.",
-      "configFromLocked": "Other eggs inherit configuration from this egg; cannot set a parent."
+      "configFromLocked": "Other eggs inherit configuration from this egg, so a parent cannot be set."
     }
   },
   "variables": {
@@ -202,7 +202,7 @@
     },
     "tips": {
       "copyFrom": "Only 1-hop script inheritance within the same nest is allowed.",
-      "copyFromLocked": "Other eggs depend on this script; cannot inherit from another egg.",
+      "copyFromLocked": "Other eggs depend on this script, so it cannot inherit from another egg.",
       "privileged": "Most official install scripts require privileged mode to adjust permissions."
     },
     "errors": {

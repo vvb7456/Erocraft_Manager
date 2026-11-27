@@ -103,9 +103,7 @@ async function save(): Promise<boolean> {
   if (d.removed.length > 0 || d.primaryChanged) {
     const ok = await confirm({
       title: t('adminServer.settings.allocations.confirm.title'),
-      message: t('adminServer.settings.allocations.confirm.message', {
-        rm: d.removed.length, swap: d.primaryChanged ? 1 : 0,
-      }),
+      message: t('adminServer.settings.allocations.confirm.message'),
       variant: 'danger',
       confirmText: t('adminServer.settings.allocations.confirm.confirmText'),
     })

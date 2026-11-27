@@ -58,7 +58,7 @@
     "batch_email_msg": "Are you sure you want to send notification emails to {n} selected users?"
   },
   "batch": {
-    "select_action": "Batch action...",
+    "select_action": "Batch action…",
     "execute": "Execute",
     "selected": "{n} users selected",
     "email": "Email",
@@ -66,6 +66,6 @@
   },
   "empty": "No users found",
   "pagination": {
-    "per_page": "per page"
+    "per_page": "rows/page"
   }
 }

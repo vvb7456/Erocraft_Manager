@@ -1,7 +1,7 @@
 {
   "title": "预设管理",
   "tabs": {
-    "eggs": "预设模板",
+    "eggs": "预设",
     "nests": "预设组"
   },
   "eggs": {
@@ -58,7 +58,7 @@
   },
   "egg": {
     "empty": "暂无预设，点击右上角「新建预设」手动创建或导入 JSON。",
-    "createTitle": "新建预设（Egg）",
+    "createTitle": "新建预设",
     "createBtn": "创建预设",
     "createTabs": {
       "basic": "基本配置",
@@ -79,8 +79,8 @@
       "desc": "移除不再使用的预设模板。",
       "deleteHint": "若存在关联服务器、子预设、套餐或用户协议，将禁止删除。"
     },
-    "specialRegistryNotice": "「{name}」命中系统专属预设注册表（包含定制面板、隧道、LLM 额度等规则），请谨慎修改名称与核心变量。",
-    "specialRenameDanger": "警告：您正在修改专属预设「{name}」的名称！保存后将导致对应服务器的专属面板（如 SillyTavern 面板）、隧道与 LLM 规则全部失效！",
+    "specialRegistryNotice": "「{name}」命中系统专属预设注册表（包含定制面板、隧道、AI 额度等规则），请谨慎修改名称与核心变量。",
+    "specialRenameDanger": "警告：你正在修改专属预设「{name}」的名称！保存后将导致对应服务器的专属面板（如 SillyTavern 面板）、隧道与 AI 额度规则全部失效！",
     "configFromNone": "无（独立配置）",
     "jsonObjectRequired": "必须是合法的 JSON 对象（以 {'{'} 开头）",
     "addImage": "添加镜像",
@@ -120,22 +120,22 @@
       "startup": "启动命令",
       "startupPlaceholder": "java -Xms128M -Xmx{'{{'}SERVER_MEMORY{'}}'}M -jar {'{{'}SERVER_JARFILE{'}}'}",
       "dockerImages": "Docker 镜像",
-      "forceOutgoingIp": "强制出站 IP（Force Outgoing IP）",
-      "updateUrl": "更新地址（Update URL）",
-      "features": "特性列表（Features）",
-      "fileDenylist": "文件黑名单（File Denylist）",
-      "configFrom": "继承配置自（Config From）",
-      "configStop": "停止命令（Config Stop）",
-      "configStartup": "启动完成判定（Config Startup JSON）",
-      "configFiles": "配置文件解析（Config Files JSON）",
-      "configLogs": "日志配置（Config Logs JSON）"
+      "forceOutgoingIp": "强制出站 IP",
+      "updateUrl": "更新地址",
+      "features": "特性列表",
+      "fileDenylist": "文件黑名单",
+      "configFrom": "继承配置自",
+      "configStop": "停止命令",
+      "configStartup": "启动完成判定（JSON）",
+      "configFiles": "配置文件解析（JSON）",
+      "configLogs": "日志配置（JSON）"
     },
     "tips": {
       "startup": "支持 {'{{VARIABLE}}'} 模板语法，创建服务器时将自动注入变量值。",
-      "forceOutgoingIp": "启用后容器所有出站流量都将强制绑定主分配 IP。",
+      "forceOutgoingIp": "启用后容器所有出站流量都将强制绑定主端口 IP。",
       "onePerLine": "每行填写一项，留空表示无。",
-      "fileDenylistInherited": "已设置 config_from 时，运行期始终继承父预设的文件黑名单。",
-      "configFrom": "仅支持同预设组内 1 跳继承（不可指向已继承他人的预设）。",
+      "fileDenylistInherited": "已设置配置继承时，运行期始终继承父预设的文件黑名单。",
+      "configFrom": "仅支持同预设组内单级继承（不可指向已继承其他预设的项）。",
       "configFromLocked": "当前已有子预设依赖本预设配置，无法再设置父预设。"
     }
   },
@@ -193,15 +193,15 @@
     "copyFromActiveNotice": "当前已设置脚本复用：服务器安装时将实际执行父预设的安装脚本、容器镜像与入口点。",
     "effectiveTitle": "继承解析后的实际生效脚本（只读）",
     "fields": {
-      "copyScriptFrom": "复用脚本自（Copy Script From）",
+      "copyScriptFrom": "复用脚本自",
       "container": "安装容器镜像",
-      "entry": "入口点（Entrypoint）",
+      "entry": "入口点",
       "privileged": "特权模式运行",
       "installScript": "安装脚本文本",
       "installPlaceholder": "#!/bin/ash\n# 在此编写服务器初始化安装脚本…"
     },
     "tips": {
-      "copyFrom": "仅支持同预设组内 1 跳复用。",
+      "copyFrom": "仅支持同预设组内单级复用。",
       "copyFromLocked": "已有子预设依赖本预设脚本，无法再指向父预设。",
       "privileged": "大多数官方安装脚本需要开启特权模式以调整文件权限。"
     },
@@ -221,7 +221,7 @@
     "nameRequired": "名称不能为空",
     "startupRequired": "启动命令不能为空",
     "dockerImagesInvalid": "请至少配置一个完整的 Docker 镜像（名称与地址均不能为空）",
-    "dockerImageIncomplete": "存在未填写完整的镜像行，请补全显示名称和镜像地址，或删除该行",
+    "dockerImageIncomplete": "请补全所有镜像的名称和地址，或删除未填完整的行",
     "dockerImageTooLong": "Docker 镜像地址长度不能超过 191 字符",
     "dockerImageDuplicateLabel": "Docker 镜像显示名称「{label}」重复，请使用唯一名称",
     "configStopRequired": "未继承配置时，停止命令不能为空"

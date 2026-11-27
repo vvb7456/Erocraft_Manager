@@ -20,7 +20,7 @@
     "send": "发送验证码",
     "resendCountdown": "{seconds}s 后重发",
     "sent": "验证码已发送，请查收邮件。",
-    "resetSent": "如果该邮箱已注册，验证码已发送至您的邮箱。",
+    "resetSent": "如果该邮箱已注册，验证码已发送至你的邮箱。",
     "invalid": "请输入 6 位数字验证码"
   },
   "passwordValidation": {
@@ -43,7 +43,7 @@
     "show": "显示",
     "hide": "隐藏",
     "collapse": "收起",
-    "logout": "登出"
+    "logout": "退出登录"
   },
   "sidebar": {
     "toggle": "收起/展开"
@@ -78,10 +78,10 @@
   "upload": {
     "drop_hint": "拖拽文件到此处",
     "click_hint": "或点击选择文件",
-    "pick_label": "从 input 选择",
+    "pick_label": "选择文件",
     "upload_label": "拖放或点击上传",
     "or_divider": "或",
-    "unsupported_type": "不支持的文件类型: {name}"
+    "unsupported_type": "不支持的文件类型：{name}"
   },
   "on": "启用",
   "off": "禁用",
@@ -110,12 +110,12 @@
       "file_required": "请指定文件"
     },
     "agent": {
-      "command_failed": "节点命令执行失败",
-      "command_invalid_params": "节点命令参数无效",
-      "command_unsupported": "节点不支持此命令"
+      "command_failed": "Agent 命令执行失败",
+      "command_invalid_params": "Agent 命令参数无效",
+      "command_unsupported": "Agent 不支持此命令"
     },
     "agreements": {
-      "egg_scope_requires_egg_id": "egg 作用域协议必须指定 egg_id",
+      "egg_scope_requires_egg_id": "预设作用域协议必须指定所属预设",
       "invalid_context": "无效的协议场景",
       "no_current_version_to_patch": "当前协议尚无已发布版本，无法订正",
       "not_found": "协议不存在或未发布",
@@ -126,7 +126,7 @@
       "forbidden": "没有执行此操作的权限",
       "invalid_credentials": "用户名或密码无效",
       "invalid_token": "认证令牌无效",
-      "origin_forbidden": "请求来源不受允许",
+      "origin_forbidden": "不允许的请求来源",
       "session_required": "请重新登录"
     },
     "billing": {
@@ -170,7 +170,7 @@
       "name_too_long": "文件名过长",
       "no_files_specified": "未指定要操作的文件",
       "no_space": "服务器磁盘空间不足",
-      "not_a_directory": "路径中的某一部分不是目录",
+      "not_a_directory": "路径中包含非目录项",
       "not_found": "文件或目录不存在",
       "permission_denied": "权限不足",
       "text_busy": "文件正在被其他进程使用，请稍后再试",
@@ -206,13 +206,13 @@
       "agreement_required": "请阅读并同意所有必选协议后继续",
       "code_expired": "验证码已过期，请重新获取",
       "code_rate_limited": "验证码发送过于频繁，请稍后再试",
-      "create_failed": "账号创建失败，请重新注册或联系管理员",
+      "create_failed": "账户创建失败，请重新注册或联系管理员",
       "disabled": "当前系统已关闭公开注册",
       "email_send_failed": "验证邮件发送失败，请稍后重试",
       "email_taken": "该邮箱已被注册",
       "invalid_code": "验证码无效",
       "invalid_username": "用户名只能包含字母、数字、下划线、点和连字符（3-32 位）",
-      "site_url_not_configured": "系统未配置外部访问地址，请联系管理员",
+      "site_url_not_configured": "系统未配置网站地址，请联系管理员",
       "username_taken": "该用户名已被使用"
     },
     "request": {
@@ -245,7 +245,7 @@
     "tunnel": {
       "cf_api_error": "域名服务请求失败",
       "cf_auth_failed": "域名服务认证失败",
-      "cf_rate_limited": "域名服务暂时限制了请求",
+      "cf_rate_limited": "域名服务请求过于频繁，请稍后再试",
       "host_not_found": "隧道主机不存在",
       "host_not_ready": "主机隧道尚未就绪",
       "invalid_subdomain": "子域名格式不正确",

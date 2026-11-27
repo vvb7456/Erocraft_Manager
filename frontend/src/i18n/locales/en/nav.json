@@ -11,7 +11,7 @@
   "nests": "Nests & Eggs",
   "certificates": "Certificate Management",
   "users": "User Management",
-  "activityLogs": "Activity Logs",
+  "activityLogs": "Audit Logs",
   "adminBilling": "Billing Management",
   "adminOrders": "Orders",
   "adminPlans": "Plans",

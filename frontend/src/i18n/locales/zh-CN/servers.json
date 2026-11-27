@@ -1,7 +1,7 @@
 {
   "title": "服务器管理",
   "total": "共 {n} 台",
-  "search_placeholder": "搜索 名称 / 所有者 / 邮箱 / ID / UUID …",
+  "search_placeholder": "搜索名称 / 所有者 / 邮箱 / ID / UUID…",
   "filter": {
     "label": "状态",
     "all": "全部",
@@ -24,7 +24,7 @@
   },
   "status": {
     "normal": "正常",
-    "expired": "已过期",
+    "expired": "已到期",
     "suspended": "已冻结",
     "permanent": "永久",
     "days_left": "{n} 天",
@@ -52,7 +52,7 @@
     "update_plan": "修改套餐"
   },
   "batch": {
-    "select_action": "批量操作...",
+    "select_action": "批量操作…",
     "execute": "执行",
     "selected": "已选择 {n} 台服务器",
     "suspend": "冻结",
@@ -106,22 +106,22 @@
     "user_placeholder": "选择用户…",
     "server_name": "服务器名称",
     "server_name_placeholder": "输入服务器名称",
-    "nest": "预设组 (Nest)",
+    "nest": "预设组",
     "nest_placeholder": "选择预设组…",
-    "egg": "预设 (Egg)",
+    "egg": "预设",
     "egg_placeholder": "选择预设…",
     "egg_hint": "请先选择预设组",
     "docker_image": "Docker 镜像",
-    "startup_command": "启动指令",
+    "startup_command": "启动命令",
     "node": "节点",
     "node_placeholder": "选择节点…",
     "allocation": "主端口",
     "allocation_placeholder": "选择端口…",
     "allocation_hint": "请先选择节点",
     "no_allocations": "无可用端口",
-    "cpu": "CPU 限制 (%)",
-    "memory": "内存 (MB)",
-    "disk": "磁盘 (MB)",
+    "cpu": "CPU 限制（%）",
+    "memory": "内存（MiB）",
+    "disk": "磁盘（MiB）",
     "databases": "数据库数量",
     "backups": "备份数量",
     "extra_allocations": "额外端口数",
@@ -130,7 +130,7 @@
     "success": "服务器创建成功",
     "validation": {
       "requiredFields": "请填写必填项",
-      "planRequiredForChannel": "电商渠道开通必须选择套餐",
+      "planRequiredForChannel": "通过电商渠道开通时必须选择套餐",
       "orderIdRequired": "请输入外部订单号",
       "amountRequired": "请输入有效金额"
     }
@@ -145,7 +145,7 @@
     "amount": "金额",
     "amount_placeholder": "0.00",
     "note": "备注",
-    "note_placeholder": "备注 (可选)"
+    "note_placeholder": "备注（可选）"
   },
   "renew_modal": {
     "title": "续期确认",
@@ -153,13 +153,13 @@
     "convert_action": "试用转正",
     "convert_badge": "转正套餐",
     "target_plan": "生效套餐",
-    "convert_notice": "当前服务器处于试用状态。续期将自动执行转正：清除试用标记、切换为标准套餐并同步对应资源配额，避免到期被试用清理任务删除。",
+    "convert_notice": "该服务器当前为试用版，续期将自动转为标准套餐并同步资源配额，避免到期被自动清理。",
     "server_name": "服务器",
     "current_expiration": "当前到期",
     "new_expiration": "续期后到期",
     "confirm_btn": "确认续期",
-    "validation_plan_required": "该服务器未绑定套餐，无法生成电商订单，请选择“其他”来源",
-    "validation_order_required": "电商渠道续期必须填写外部订单号",
-    "validation_amount_required": "电商渠道续期必须填写有效金额"
+    "validation_plan_required": "该服务器未绑定套餐，无法生成电商订单，请选择「其他」来源",
+    "validation_order_required": "通过电商渠道续期时必须填写外部订单号",
+    "validation_amount_required": "通过电商渠道续期时必须填写大于 0 的有效金额"
   }
 }

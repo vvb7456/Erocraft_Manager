@@ -30,7 +30,7 @@ const timeAgo = computed(() => {
 })
 
 const alertTypeLabel = computed(() => {
-  const key = `monitoring.alertType.${props.alertType}`
+  const key = `hosts.setting.alerting.types.${props.alertType}`
   return te(key) ? t(key) : props.alertType
 })
 

@@ -34,9 +34,9 @@
       "image": "镜像",
       "quota": "配额",
       "address": "地址",
-      "extraAllocations": "附加端口",
+      "extraAllocations": "额外端口",
       "sftp": "SFTP",
-      "expirationDate": "到期",
+      "expirationDate": "到期时间",
       "createdAt": "创建于",
       "installedAt": "安装于",
       "updatedAt": "更新于",
@@ -48,8 +48,8 @@
       "powerState": "电源状态"
     },
     "spark": {
-      "cpu": "CPU 5min",
-      "mem": "MEM 5min"
+      "cpu": "近 5 分钟 CPU",
+      "mem": "近 5 分钟内存"
     },
     "values": {
       "permanent": "永久",
@@ -57,7 +57,7 @@
       "noExtra": "—",
       "stale": "数据过期"
     },
-    "expired": "已过期",
+    "expired": "已到期",
     "daysLeft": "剩 {n} 天",
     "copy": "复制",
     "copied": "已复制",
@@ -71,10 +71,10 @@
     "unsavedTitle": "尚未保存",
     "unsavedMessage": "当前页面有未保存的更改，是否保存？",
     "unsavedSave": "保存",
-    "unsavedDiscard": "丢弃",
-    "unsavedStay": "留下",
+    "unsavedDiscard": "放弃更改",
+    "unsavedStay": "留在此页",
     "saveBtn": "保存",
-    "discardBtn": "重置",
+    "discardBtn": "放弃更改",
     "invalidHint": "{n} 个字段需要修正",
     "details": {
       "title": "基础信息",
@@ -88,23 +88,23 @@
       "current": "当前所有者",
       "select": "新所有者",
       "placeholder": "搜索用户名 / 邮箱…",
-      "warning": "Wings 旧 token 撤销失败：{msg}",
+      "warning": "Wings 旧访问令牌撤销失败：{msg}",
       "noUsers": "未找到匹配的用户",
       "confirm": {
         "title": "切换所有者",
-        "message": "切换所有者会撤销原所有者在 Wings 上的访问 token，并强制其下线。是否继续？",
+        "message": "切换所有者会撤销原所有者在 Wings 上的访问令牌，并强制其下线。确定继续吗？",
         "confirmText": "切换"
       }
     },
     "build": {
       "title": "资源配置",
       "desc": "设置服务器的计算、存储与附加资源配额。",
-      "cpu": "CPU 限制 (%)",
+      "cpu": "CPU 限制（%）",
       "cpuHint": "0 表示不限",
-      "memory": "内存 (MiB)",
-      "swap": "Swap (MiB)",
+      "memory": "内存（MiB）",
+      "swap": "Swap（MiB）",
       "swapHint": "-1 表示不限，0 禁用",
-      "disk": "磁盘 (MiB)",
+      "disk": "磁盘（MiB）",
       "io": "Block IO 权重",
       "ioHint": "10–1000",
       "threads": "CPU 亲和性",
@@ -117,7 +117,7 @@
     "allocations": {
       "title": "端口分配",
       "desc": "管理服务器对外提供服务的 IP 地址与端口。",
-      "current": "当前分配",
+      "current": "已分配端口",
       "hint": "首个标记为「主」的端口为主端口；删除全部并重新添加即可切换主端口。至少保留一个端口。",
       "primary": "主",
       "remove": "移除",
@@ -131,26 +131,26 @@
       "restartHint": "已保存。需停止并启动服务器后，新端口才会在容器中生效。",
       "confirm": {
         "title": "更新端口分配",
-        "message": "本次操作将移除 {rm} 个端口，并切换主端口 {swap} 次。这会立即断开正在使用这些端口的连接，确定继续吗？",
+        "message": "确定更新端口分配吗？移除端口或切换主端口会立即断开当前使用这些端口的连接。",
         "confirmText": "保存"
       }
     },
     "startup": {
       "title": "启动配置",
-      "desc": "配置运行环境、容器镜像、启动命令与应用变量。",
-      "nest": "Nest",
-      "egg": "Egg",
+      "desc": "配置运行环境、容器镜像、启动命令与预设变量。",
+      "nest": "预设组",
+      "egg": "预设",
       "image": "Docker 镜像",
       "imageCustom": "自定义镜像",
       "imageCustomLabel": "自定义",
       "startup": "启动命令",
       "skipScripts": "跳过安装脚本",
-      "variables": "Egg 变量",
-      "noVariables": "该 Egg 无可配置变量",
+      "variables": "预设变量",
+      "noVariables": "该预设无可配置变量",
       "errors": {
         "invalid": "{n} 个变量未通过校验",
         "imageRequired": "Docker 镜像不能为空",
-        "eggRequired": "请选择一个 Egg"
+        "eggRequired": "请选择一个预设"
       },
       "varErrors": {
         "required": "此项必填",
@@ -171,8 +171,8 @@
     },
     "egg": {
       "confirm": {
-        "title": "切换 Egg",
-        "message": "切换 Egg 会重建该服务器的环境变量并触发重装，可能影响游戏数据。确定继续吗？",
+        "title": "切换预设",
+        "message": "切换预设会重建环境变量并触发重装，可能影响数据。确定继续吗？",
         "confirmText": "切换并重装"
       }
     }
@@ -181,35 +181,35 @@
     "suspend": {
       "sectionTitle": "冻结",
       "suspendTitle": "冻结服务器",
-      "unsuspendTitle": "恢复服务器",
-      "suspendMessage": "确定冻结服务器 {name} 吗？该操作会立即影响用户访问。",
-      "unsuspendMessage": "确定恢复服务器 {name} 吗？",
+      "unsuspendTitle": "解冻服务器",
+      "suspendMessage": "确定冻结服务器「{name}」吗？该操作会立即影响用户访问。",
+      "unsuspendMessage": "确定解冻服务器「{name}」吗？",
       "suspendAction": "冻结服务器",
-      "unsuspendAction": "恢复服务器"
+      "unsuspendAction": "解冻服务器"
     },
     "renew": {
       "sectionTitle": "续期",
       "convertSectionTitle": "试用转正 / 续期",
-      "trialNotice": "当前服务器处于试用状态。执行续期将自动转为标准正式版，重绑标准套餐并同步资源。",
+      "trialNotice": "该服务器当前为试用版，续期将自动转为标准套餐并同步资源配额。",
       "currentExpiration": "到期时间：",
       "targetDate": "目标日期",
-      "quickDays": "+{n}天",
+      "quickDays": "+{n} 天",
       "action": "续期服务器",
       "convertAction": "试用转正",
       "clearAction": "设为永久",
       "clearConfirmTitle": "设为永久",
-      "clearConfirmMessage": "目标日期为空，确认将服务器 {name} 设为永久（清除到期时间）吗？"
+      "clearConfirmMessage": "目标日期为空，确认将服务器「{name}」设为永久（清除到期时间）吗？"
     },
     "expiration": {
-      "expired": "{date}（已过期）",
+      "expired": "{date}（已到期）",
       "today": "{date}（今天到期）",
       "daysLeft": "{date}（剩 {n} 天）"
     },
     "reinstall": {
       "sectionTitle": "重装",
-      "installingHint": "服务器当前已处于安装流程中，暂不允许再次触发重装。",
+      "installingHint": "服务器正在安装中，暂无法再次重装。",
       "title": "开始重装",
-      "confirmMessage": "确定开始重装服务器 {name} 吗？该操作会重新执行安装流程。",
+      "confirmMessage": "确定开始重装服务器「{name}」吗？该操作会重新执行安装流程。",
       "action": "重装服务器"
     },
     "plan": {
@@ -219,26 +219,26 @@
     },
     "delete": {
       "sectionTitle": "删除",
-      "warning": "删除后不保留该服务器数据。强制删除仅用于远端异常、常规删除无法完成的场景。",
+      "warning": "删除后将清除所有数据。强制删除仅用于节点异常导致常规删除失败时。",
       "action": "删除服务器",
       "forceAction": "强制删除服务器",
       "confirmTitle": "删除服务器",
       "forceConfirmTitle": "强制删除服务器",
-      "confirmMessage": "确定要删除服务器 {name} 吗？此操作不可撤销。",
-      "forceConfirmMessage": "即将强制删除服务器 {name}。即使 Wings 删除失败也会移除数据库记录，请确认风险。"
+      "confirmMessage": "确定要删除服务器「{name}」吗？此操作不可撤销。",
+      "forceConfirmMessage": "确定要强制删除服务器「{name}」吗？即使 Wings 删除失败，数据库记录也会被移除，请确认风险。"
     }
   },
   "llm": {
     "loadFailed": "加载失败",
     "notProvisioned": "此服务器未开通 AI 额度",
     "provision": {
-      "title": "开通 LLM 额度",
-      "hint": "此服务器的 LLM 额度尚未开通。可能是创建时自动开通失败，可手动重试。",
-      "btn": "开通 LLM 额度",
-      "confirmTitle": "开通 LLM 额度",
-      "confirmMessage": "将为该服务器创建 NewAPI 用户、绑定订阅并生成 API Key。确定继续？",
+      "title": "开通 AI 额度",
+      "hint": "此服务器的 AI 额度尚未开通，可能是创建时自动开通失败，可手动重试。",
+      "btn": "开通 AI 额度",
+      "confirmTitle": "开通 AI 额度",
+      "confirmMessage": "将为该服务器创建 NewAPI 用户、绑定订阅并生成 API Key。确定继续吗？",
       "confirm": "确认开通",
-      "toast": "LLM 额度已开通",
+      "toast": "AI 额度已开通",
       "failedToast": "开通失败，请稍后重试或检查日志"
     },
     "statusSection": "状态与用量",
@@ -261,28 +261,28 @@
     "apiKey": "API Key",
     "toggle": {
       "title": "启用 / 停用密钥",
-      "desc": "临时封禁或恢复该密钥（同步到 NewAPI）。停用后无法调用 API。",
+      "desc": "临时停用或重新启用该密钥（同步到 NewAPI），停用后无法调用 API。",
       "enable": "启用",
       "disable": "停用"
     },
     "resetUsage": {
-      "rowTitle": "重发本月额度",
-      "rowDesc": "将剩余额度恢复到配额上限并清零已用量。用于手动补发额度。",
-      "btn": "重发额度",
-      "title": "重发本月额度",
-      "message": "确定将该服务器的剩余额度恢复到配额上限吗？",
-      "confirm": "确认重发"
+      "rowTitle": "重置本月额度",
+      "rowDesc": "清零已用量并将剩余额度恢复至配额上限。",
+      "btn": "重置额度",
+      "title": "重置本月额度",
+      "message": "确定清零已用量并将该服务器的剩余额度恢复至配额上限吗？",
+      "confirm": "确认重置"
     },
     "revoke": {
       "rowTitle": "吊销额度",
-      "rowDesc": "删除 NewAPI 令牌与本地记录，彻底移除该服务器的 AI 额度。",
+      "rowDesc": "删除 NewAPI 密钥与本地记录，彻底移除该服务器的 AI 额度。",
       "btn": "吊销",
       "title": "吊销 AI 额度",
       "message": "确定要吊销该服务器的 AI 额度吗？此操作不可撤销。",
       "confirm": "确认吊销"
     },
     "toast": {
-      "usageReset": "额度已重发",
+      "usageReset": "本月额度已重置",
       "enabled": "密钥已启用",
       "disabled": "密钥已停用",
       "revoked": "额度已吊销"

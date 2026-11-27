@@ -10,7 +10,7 @@
     "modalTitle": "Upgrade Plan",
     "currentPlan": "Current plan: {name} · {days} days left",
     "selectTarget": "Select target plan",
-    "diffLabel": "Upgrade difference",
+    "diffLabel": "Price difference",
     "noOptions": "No upgrade options available",
     "restartRequired": "Restart the server after upgrading to apply the new configuration."
   },
@@ -22,9 +22,9 @@
     "button": "Convert to Standard",
     "failed": "Failed to load standard plan details"
   },
-  "searchPlaceholder": "Search servers...",
+  "searchPlaceholder": "Search servers…",
   "pagination": {
-    "perPage": "/ page"
+    "perPage": "rows/page"
   },
   "table": {
     "name": "Server Name",
@@ -79,7 +79,7 @@
     "clientIos": "iOS",
     "clientAndroid": "Android"
   },
-  "commandPlaceholder": "Type a command...",
+  "commandPlaceholder": "Type a command…",
   "consoleActions": {
     "copyTitle": "Terminal actions",
     "copyAll": "Copy all output",
@@ -90,7 +90,7 @@
   "consoleDisconnected": "Connection lost",
   "consoleReconnect": "Reconnect",
   "reconnected": "Reconnected",
-  "reconnecting": "Connection failed ({current}/{max}), retrying in {seconds}s...",
+  "reconnecting": "Connection failed ({current}/{max}), retrying in {seconds}s…",
   "reconnectFailed": "Cannot connect to server node",
   "suspendedHint": "Server has expired. Please renew to continue.",
   "reconnectHint": "Please check your network or contact us",
@@ -128,7 +128,7 @@
     "modified": "Modified",
     "empty": "This directory is empty",
     "noResults": "No matching files",
-    "searchPlaceholder": "Search files...",
+    "searchPlaceholder": "Search files…",
     "newFile": "New File",
     "newFolder": "New Folder",
     "upload": "Upload",
@@ -172,7 +172,7 @@
     "uploadProgress": "Uploading",
     "uploadComplete": "Upload complete",
     "uploadFailed": "Upload failed",
-    "uploadWaiting": "Waiting...",
+    "uploadWaiting": "Waiting…",
     "root": "Root",
     "moreActions": "More actions",
     "openFile": "Open file",
@@ -201,8 +201,8 @@
     "subdomainInvalid": "Invalid format",
     "subdomainRequired": "Please enter a URL prefix",
     "warning": {
-      "title": "Read this before turning it on",
-      "body": "A custom domain routes your traffic through an extra network hop. In many cases this actually makes the connection slower, laggier, or even drops it. If the direct address works fine for you, leave this off. Only turn it on if the direct address is completely unreachable. This feature is provided by Cloudflare; all traffic passes through Cloudflare’s servers."
+      "title": "Please note",
+      "body": "Using a custom domain routes traffic through an extra network path, so connection quality may be worse than the direct address. Enable it if the direct connection is laggy or if you are accessing from outside mainland China."
     },
     "hostNotReady": {
       "title": "Custom domain isn’t available on this host yet",

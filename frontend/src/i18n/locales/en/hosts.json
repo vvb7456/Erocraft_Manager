@@ -60,17 +60,17 @@
     "title": "Add host",
     "fields": {
       "name": "Name",
-      "nameHint": "Display name; duplicates are allowed.",
+      "nameHint": "Display name (duplicates allowed); matching the Wings node name is recommended.",
       "kind": "Kind",
-      "kindHint": "Use wings_node for Wings nodes; other kinds describe infrastructure hosts.",
+      "kindHint": "Select “Wings host” for Wings nodes, or “Linux” for general infrastructure hosts.",
       "hostname": "Hostname",
       "hostnameHint": "DNS name or IP; shown in UI and alert context.",
       "agentUrl": "Agent URL",
       "agentUrlHint": "e.g. http://10.0.0.22:48765 — Manager pulls data from this URL.",
       "agentToken": "Agent Token",
-      "agentTokenHint": "Start the agent on the host first. If token is empty in config, the agent will auto-generate one, write it back, and print AGENT_BOOTSTRAP_TOKEN in systemctl/journal logs. Paste that value here.",
+      "agentTokenHint": "Start the Agent on the host first. If the token is empty, check journalctl for the auto-generated AGENT_BOOTSTRAP_TOKEN and paste it here.",
       "pteroNode": "Wings node",
-      "pteroNodeHint": "Required for wings_node: the matching node in the Wings Nodes tab.",
+      "pteroNodeHint": "Required for Wings hosts: select a node from the Wings Nodes tab.",
       "enabled": "Enabled",
       "enabledHint": "When disabled, Manager does not poll this host."
     },
@@ -135,7 +135,7 @@
     },
     "nonWings": {
       "title": "No activity data available",
-      "message": "Non wings_node hosts do not collect resource history or wings process logs."
+      "message": "Non-Wings hosts do not collect resource history or Wings process logs."
     }
   },
   "overview": {
@@ -143,7 +143,7 @@
     "activeAlerts": "Active alerts",
     "noActiveAlerts": "No active alerts",
     "noMetrics": "No metrics collected yet",
-    "noMetricsNonWings": "Metrics collection for non wings_node hosts is not enabled; only heartbeat status is shown.",
+    "noMetricsNonWings": "System metrics are not collected for non-Wings hosts; only heartbeat status is shown.",
     "yes": "Yes",
     "no": "No",
     "fields": {
@@ -183,11 +183,11 @@
       "panelNodeLocked": "Wings node binding is fixed; recreate the host to change it.",
       "enabledHint": "When disabled, Manager stops polling this host.",
       "tokenLabel": "Agent token",
-      "tokenHint": "Click reset to generate a new token; once saved, update the agent config.yaml to match.",
-      "tokenPendingHint": "New token generated. Save to apply, then copy and update the agent config.yaml on the node.",
+      "tokenHint": "Click reset to generate a new token; once saved, update the Agent config.yaml to match.",
+      "tokenPendingHint": "New token generated. Save to apply, then copy and update the Agent config.yaml on the host.",
       "tokenReset": "Reset",
       "tokenCancelReset": "Cancel reset",
-      "tokenWarning": "Warning: the old token stops working as soon as you save; failing to update the agent config.yaml will break collection.",
+      "tokenWarning": "Warning: the old token stops working as soon as you save; failing to update the Agent config.yaml will break collection.",
       "probe": "Probe"
     },
     "wings": {
@@ -195,7 +195,7 @@
       "desc": "Manage node connectivity, resource capacity, and the server runtime.",
       "notWings": "This host is not a Wings node",
       "saved": "Saved ({n} field(s) changed)",
-      "savedNotApplied": "Configuration saved, but the node could not apply it. Check the node status",
+      "savedNotApplied": "Configuration saved, but the node could not apply it. Check the node status.",
       "cancel": "Cancel",
       "serviceError": "Wings service status unavailable: {err}",
       "serviceState": {
@@ -231,16 +231,16 @@
         "behindProxy": "Behind proxy",
         "maintenance": "Maintenance mode",
         "memory": "Memory (MiB)",
-        "memoryOver": "Memory overallocate (%)",
+        "memoryOver": "Memory overallocation (%)",
         "disk": "Disk (MiB)",
-        "diskOver": "Disk overallocate (%)",
+        "diskOver": "Disk overallocation (%)",
         "uploadSize": "Upload limit (MiB)",
         "daemonListen": "Daemon port",
         "daemonSftp": "SFTP port",
         "daemonBase": "Data directory"
       },
       "tips": {
-        "behindProxy": "When enabled, wings trusts X-Forwarded-* headers; required behind nginx/Traefik.",
+        "behindProxy": "When enabled, Wings trusts X-Forwarded-* headers; required behind nginx/Traefik.",
         "maintenance": "Servers will not be auto-deployed onto this node while in maintenance mode.",
         "overallocate": "-1 = unlimited; 0 = no overallocation; N = stop allocating after N% over capacity.",
         "uploadSize": "Per-file upload limit, in MiB.",
@@ -259,41 +259,44 @@
       "pullSection": "Monitoring Data Collection",
       "pullDesc": "Set timeouts and retries for collecting monitoring data from this host's Agent.",
       "threshold": "Threshold",
-      "warningThreshold": "warning %",
-      "criticalThreshold": "critical %",
-      "sustainMin": "Sustain min",
+      "warningThreshold": "Warning threshold (%)",
+      "criticalThreshold": "Critical threshold (%)",
+      "sustainMin": "Duration (minutes)",
       "on": "on",
       "off": "off",
       "fields": {
         "emailEnabled": "Email notifications",
         "recipients": "Recipients",
-        "minSeverity": "Minimum severity",
+        "minSeverity": "Minimum alert severity",
         "notifyResolve": "Notify on resolve",
-        "cooldown": "Cooldown (minutes)",
+        "cooldown": "Repeat interval (minutes)",
         "pullTimeout": "Pull timeout (seconds)",
         "pullAttempts": "Maximum pull attempts"
       },
       "tips": {
         "inherit": "Inherits the global default when unset: {v}",
         "recipients": "Empty = use the global default recipient list.",
-        "cooldown": "Same alert type for the same host won't re-fire within the cooldown window.",
-        "pull": "Timeout and retry count for the Manager's metrics pull against this host's agent.",
+        "cooldown": "Same alert type for the same host won't re-fire within the repeat interval.",
+        "pull": "Timeout and retry count for the Manager's metrics pull against this host's Agent.",
         "pullTimeout": "Timeout in seconds for a single pull request.",
         "pullAttempts": "Total number of pull attempts before giving up."
       },
       "types": {
         "node_offline": "Host offline",
-        "agent_only_down": "Only agent unreachable",
-        "wings_only_down": "Only wings unreachable",
+        "agent_only_down": "Only Agent unreachable",
+        "wings_only_down": "Only Wings unreachable",
         "network_down": "Public network down",
         "clash_down": "Clash unreachable",
+        "cert_source_unknown": "Certificate source status unknown",
         "cert_source_expiring": "Certificate expiring soon",
+        "cert_deployment_outdated": "Certificate deployment outdated",
+        "cert_deployment_unreachable": "Certificate deployment target unreachable",
         "cpu_high": "CPU high",
         "mem_high": "Memory high",
         "swap_high": "Swap high",
         "load_high": "Load high",
-        "disk_high": "Disk warning",
-        "disk_critical": "Disk critical"
+        "disk_high": "Disk usage warning",
+        "disk_critical": "Disk usage critical"
       }
     },
     "danger": {
@@ -340,8 +343,8 @@
       "delivering": "Paid · locked for delivery",
       "lockLabel": "Reservation"
     },
-    "perPage": "per page",
-    "empty": "No allocations on this node yet.",
+    "perPage": "rows/page",
+    "empty": "No allocations on this host yet.",
     "emptyFiltered": "No allocations match the current filter.",
     "selection": {
       "bulkDelete": "Delete"
@@ -367,7 +370,7 @@
       "aliasHint": "Defaults to the node FQDN; editable.",
       "ports": "Ports",
       "portsHint": "Supports 8000, 8000-8010, 8000,8005-8010,9000.",
-      "preview": "Will create {n} ports",
+      "preview": "Will create {n} port(s)",
       "previewError": "Invalid port expression: {err}",
       "submit": "Create",
       "cancel": "Cancel",
@@ -386,7 +389,7 @@
       "reserved": "Port :{port} is reserved by order {order} and cannot be deleted",
       "conflict": "Port :{port} is in use or reserved by an order and cannot be deleted"
     },
-    "notWings": "Allocations are only available for wings_node hosts."
+    "notWings": "Port allocations are only available for Wings hosts."
   },
   "certs": {
     "desc": "Manage certificate bindings, deployment, and synchronization for this host.",
@@ -400,12 +403,12 @@
     "selectCert": "Select certificate",
     "selectTarget": "Select target",
     "confirmAdd": "Confirm deploy",
-    "sync": "Sync",
+    "sync": "Force sync",
     "remove": "Remove",
     "confirmSyncTitle": "Force sync certificate",
-    "confirmSyncMessage": "Re-deploy certificate「{name}」to this host and restart the target service.",
+    "confirmSyncMessage": "Re-deploy certificate “{name}” to this host and restart the target service.",
     "confirmRemoveTitle": "Remove certificate deployment",
-    "confirmRemoveMessage": "Remove certificate「{name}」deployment from this host. Existing certificate files on the host will not be deleted.",
+    "confirmRemoveMessage": "Remove deployment of certificate “{name}” from this host. Existing certificate files on the host will not be deleted.",
     "toastBound": "Certificate deployed",
     "toastSynced": "Certificate synced",
     "toastRemoved": "Deployment removed"
@@ -433,6 +436,12 @@
       "inactive": "Stopped",
       "no_unit": "Unit missing",
       "active": "Running"
+    },
+    "serverStatus": {
+      "active": "Active",
+      "disabling": "Disabling",
+      "deleted": "Removed",
+      "failed": "Failed"
     },
     "liveProbeFailed": "Agent live probe failed",
     "fields": {

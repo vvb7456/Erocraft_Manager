@@ -54,7 +54,7 @@
   },
   "confirm": {
     "delete_title": "删除主机",
-    "delete_msg": "确定删除主机 \"{name}\"？此操作不可撤销。"
+    "delete_msg": "确定删除主机「{name}」吗？此操作不可撤销。"
   },
   "create": {
     "title": "新建主机",
@@ -62,15 +62,15 @@
       "name": "名称",
       "nameHint": "展示用名，可重复，建议与 Wings 节点名保持一致。",
       "kind": "类型",
-      "kindHint": "wings_node 用于 Wings 节点；其它为基础设施主机。",
+      "kindHint": "「Wings 主机」用于关联 Wings 节点；「Linux」用于其他基础设施主机。",
       "hostname": "主机名",
       "hostnameHint": "DNS 或 IP，用于展示与告警上下文。",
       "agentUrl": "Agent 地址",
-      "agentUrlHint": "形如 http://10.0.0.22:48765，Manager 将访问此地址 Pull 数据。",
+      "agentUrlHint": "形如 http://10.0.0.22:48765，Manager 将通过此地址拉取监控数据。",
       "agentToken": "Agent Token",
-      "agentTokenHint": "先在主机上启动 agent；若配置中 token 为空，agent 会自动生成并写回配置，并在 systemctl/journal 日志里打印 AGENT_BOOTSTRAP_TOKEN。将该值粘贴到这里。",
+      "agentTokenHint": "启动主机上的 Agent 后，若配置中 Token 为空，可在系统日志（journalctl）中查看自动生成的 AGENT_BOOTSTRAP_TOKEN 并粘贴至此。",
       "pteroNode": "Wings 节点",
-      "pteroNodeHint": "wings_node 必填：对应「Wings 节点」标签页中的节点。",
+      "pteroNodeHint": "类型为「Wings 主机」时必填：对应「Wings 节点」标签页中的节点。",
       "enabled": "启用",
       "enabledHint": "禁用后 Manager 不再轮询此主机。"
     },
@@ -135,7 +135,7 @@
     },
     "nonWings": {
       "title": "无可用活动数据",
-      "message": "非 wings_node 主机目前不采集资源历史与 wings 进程日志。"
+      "message": "非 Wings 主机暂不采集资源历史与 Wings 进程日志。"
     }
   },
   "overview": {
@@ -143,7 +143,7 @@
     "activeAlerts": "活跃告警",
     "noActiveAlerts": "暂无活跃告警",
     "noMetrics": "还未采集到指标数据",
-    "noMetricsNonWings": "非 wings_node 主机暂不采集系统指标，仅展示心跳状态。",
+    "noMetricsNonWings": "非 Wings 主机暂不采集系统指标，仅展示心跳状态。",
     "yes": "是",
     "no": "否",
     "fields": {
@@ -165,8 +165,8 @@
       "containers": "容器"
     },
     "hero": {
-      "cpu": "CPU 近 1h",
-      "mem": "内存 近 1h"
+      "cpu": "近 1 小时 CPU",
+      "mem": "近 1 小时内存"
     },
     "chart": {
       "empty": "暂无数据点"
@@ -174,7 +174,7 @@
   },
   "setting": {
     "saved": "保存成功",
-    "probeOk": "探测成功 ({ms} ms)",
+    "probeOk": "探测成功（{ms} ms）",
     "probeFail": "探测失败：{err}",
     "agent": {
       "desc": "管理主机身份、Agent 连接地址与访问凭据。",
@@ -183,11 +183,11 @@
       "panelNodeLocked": "Wings 节点绑定不可修改。如需更换节点请重建主机。",
       "enabledHint": "禁用后 Manager 不再轮询此主机。",
       "tokenLabel": "Agent Token",
-      "tokenHint": "点击「重置」生成一个新 token，保存后同步更新主机 config.yaml。",
-      "tokenPendingHint": "新 token 已生成，保存后生效。请立即复制并更新节点上的 agent config.yaml。",
+      "tokenHint": "点击「重置」生成新 Token，保存后同步更新主机上的 Agent config.yaml。",
+      "tokenPendingHint": "新 Token 已生成，保存后生效。请立即复制并更新主机上的 Agent config.yaml。",
       "tokenReset": "重置",
       "tokenCancelReset": "取消重置",
-      "tokenWarning": "警告：保存后旧 token 立即作废；agent config.yaml 未同步会导致采集中断。",
+      "tokenWarning": "警告：保存后旧 Token 立即作废；未同步更新 Agent config.yaml 会导致采集中断。",
       "probe": "探测连通"
     },
     "wings": {
@@ -230,21 +230,21 @@
         "scheme": "协议",
         "behindProxy": "位于反代后",
         "maintenance": "维护模式",
-        "memory": "内存 (MiB)",
-        "memoryOver": "内存超配 (%)",
-        "disk": "磁盘 (MiB)",
-        "diskOver": "磁盘超配 (%)",
-        "uploadSize": "上传大小 (MiB)",
-        "daemonListen": "daemon 端口",
+        "memory": "内存（MiB）",
+        "memoryOver": "内存超配（%）",
+        "disk": "磁盘（MiB）",
+        "diskOver": "磁盘超配（%）",
+        "uploadSize": "上传大小（MiB）",
+        "daemonListen": "守护进程端口",
         "daemonSftp": "SFTP 端口",
         "daemonBase": "数据目录"
       },
       "tips": {
-        "behindProxy": "启用后 wings 会信任 X-Forwarded-* 头部，需 nginx/Traefik 等反代。",
-        "maintenance": "维护模式下产品不会调度新服务器。",
+        "behindProxy": "启用后 Wings 会信任 X-Forwarded-* 头部，需配合 Nginx / Traefik 等反代使用。",
+        "maintenance": "维护模式下系统不会向此节点自动调度新服务器。",
         "overallocate": "-1 = 不限制；0 = 禁止超配；N = 超过 N% 后不再分配。",
-        "uploadSize": "单个上传文件上限，MiB。",
-        "daemonBase": "服务器文件存放路径。修改后需重启 Wings。"
+        "uploadSize": "单个上传文件上限（MiB）。",
+        "daemonBase": "服务器文件存放路径，修改后需重启 Wings。"
       }
     },
     "alerting": {
@@ -259,25 +259,25 @@
       "pullSection": "监控数据采集",
       "pullDesc": "设置从本主机 Agent 获取监控数据的超时与重试次数。",
       "threshold": "阈值",
-      "warningThreshold": "warning %",
-      "criticalThreshold": "critical %",
-      "sustainMin": "持续分钟",
+      "warningThreshold": "警告阈值（%）",
+      "criticalThreshold": "严重阈值（%）",
+      "sustainMin": "持续时间（分钟）",
       "on": "开",
       "off": "关",
       "fields": {
         "emailEnabled": "邮件通知",
         "recipients": "收件人",
-        "minSeverity": "最低严重级别",
+        "minSeverity": "最低告警等级",
         "notifyResolve": "恢复后发送通知",
-        "cooldown": "冷却时间（分钟）",
+        "cooldown": "重复提醒间隔（分钟）",
         "pullTimeout": "拉取超时（秒）",
         "pullAttempts": "最多拉取次数"
       },
       "tips": {
         "inherit": "未设置时使用全局默认：{v}",
         "recipients": "为空表示使用全局默认收件人列表。",
-        "cooldown": "同一主机同一告警类型在冷却期内不重复发送。",
-        "pull": "Manager 拉取本节点 Agent 指标的超时与重试次数。跨境链路延迟高可适当调大。",
+        "cooldown": "同一主机同一告警类型在间隔期内不重复发送。",
+        "pull": "Manager 拉取本主机 Agent 指标的超时与重试次数。跨境链路延迟高可适当调大。",
         "pullTimeout": "单次拉取请求的超时秒数。",
         "pullAttempts": "拉取失败后的总尝试次数。"
       },
@@ -287,13 +287,16 @@
         "wings_only_down": "仅 Wings 不可达",
         "network_down": "公网不通",
         "clash_down": "Clash 不可达",
+        "cert_source_unknown": "证书源状态未知",
         "cert_source_expiring": "证书即将过期",
+        "cert_deployment_outdated": "证书部署落后",
+        "cert_deployment_unreachable": "证书部署目标不可达",
         "cpu_high": "CPU 过高",
         "mem_high": "内存过高",
         "swap_high": "Swap 过高",
         "load_high": "负载过高",
-        "disk_high": "磁盘警告",
-        "disk_critical": "磁盘严重"
+        "disk_high": "磁盘占用警告",
+        "disk_critical": "磁盘占用严重"
       }
     },
     "danger": {
@@ -308,7 +311,7 @@
     "summaryStats": {
       "assigned": "已分配 {n}",
       "reserved": "预留 {n}",
-      "free": "空闲 {n}"
+      "free": "未分配 {n}"
     },
     "filter": {
       "label": "状态",
@@ -341,7 +344,7 @@
       "lockLabel": "预留状态"
     },
     "perPage": "条/页",
-    "empty": "该节点尚未分配任何端口",
+    "empty": "该主机尚未创建任何端口分配",
     "emptyFiltered": "无匹配端口",
     "selection": {
       "bulkDelete": "删除"
@@ -386,7 +389,7 @@
       "reserved": "端口 :{port} 正被订单 {order} 预留，无法删除",
       "conflict": "端口 :{port} 已被服务器占用或订单预留，无法删除"
     },
-    "notWings": "仅 wings_node 主机可管理端口分配。"
+    "notWings": "仅 Wings 主机可管理端口分配。"
   },
   "certs": {
     "desc": "管理本主机的证书绑定、部署与同步。",
@@ -400,7 +403,7 @@
     "selectCert": "选择证书",
     "selectTarget": "选择目标",
     "confirmAdd": "确认部署",
-    "sync": "同步",
+    "sync": "强制同步",
     "remove": "移除",
     "confirmSyncTitle": "强制同步证书",
     "confirmSyncMessage": "将向该主机重新下发证书「{name}」并重启目标服务。",
@@ -434,6 +437,12 @@
       "no_unit": "未注册",
       "active": "运行中"
     },
+    "serverStatus": {
+      "active": "已启用",
+      "disabling": "停用中",
+      "deleted": "已移除",
+      "failed": "失败"
+    },
     "liveProbeFailed": "Agent 实时探测失败",
     "fields": {
       "account": "CF Account ID",
@@ -446,7 +455,7 @@
     },
     "tips": {
       "account": "登录 Cloudflare Dashboard 后，右侧栏「Account ID」下方点击复制。URL 形如 dash.cloudflare.com/<Account ID>。",
-      "token": "在 Cloudflare Dashboard → 右上角头像 → My Profile → API Tokens → Create Token 创建。需勾选权限：Account.Cloudflare Tunnel:Edit 与 Zone.DNS:Edit。Token 仅用于该主机，在库里加密存储。"
+      "token": "在 Cloudflare Dashboard → 右上角头像 → My Profile → API Tokens → Create Token 创建。需勾选权限：Account.Cloudflare Tunnel:Edit 与 Zone.DNS:Edit。Token 仅用于该主机，并以加密形式保存。"
     },
     "actions": {
       "bind": "绑定",
@@ -464,10 +473,10 @@
     },
     "confirm": {
       "restartTitle": "重启 cloudflared？",
-      "restartMsg": "重启期间（几秒）该主机的隧道服务器将临时不可访问。",
+      "restartMsg": "重启期间（约数秒），通过该隧道代理的服务器将暂时不可访问。",
       "uninstallTitle": "卸载 Cloudflare Tunnel",
       "uninstallMsg": "将停止并移除主机上的 cloudflared，同时删除 Cloudflare 侧的 Tunnel 记录。本操作不可逆。",
-      "uninstallBusyMsg": "当前仍有 {n} 个服务器在使用该隧道。卸载后这些服务器将无法通过隧道访问。"
+      "uninstallBusyMsg": "当前仍有 {n} 台服务器在使用该隧道，卸载后这些服务器将无法通过隧道访问。"
     },
     "cols": {
       "serverId": "服务器",
@@ -475,7 +484,7 @@
       "upstream": "本地目标",
       "status": "状态"
     },
-    "serversEmptyNoTunnel": "隧道未安装，该列表将在部署完成后可用。",
+    "serversEmptyNoTunnel": "隧道尚未安装，安装完成后将在此显示接入的服务器。",
     "serversEmptyReady": "还没有服务器启用隧道访问。在服务器详情页为其分配子域名后会出现在这里。"
   },
   "locations": {

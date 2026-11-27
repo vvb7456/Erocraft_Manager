@@ -13,7 +13,7 @@ export interface UseConsoleWsOptions {
 }
 
 export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
-  const { t } = useI18n({ useScope: 'global' })
+  const { t, te } = useI18n({ useScope: 'global' })
   const { get, raw } = useApiFetch()
   const { toast } = useToast()
   const { copy: copyToClipboard } = useClipboard()
@@ -88,10 +88,13 @@ export function useConsoleWs({ serverId, termEl }: UseConsoleWsOptions) {
           case 'daemon error':
             term?.writeln('\x1b[1m\x1b[41m' + msg.args[0] + '\x1b[0m')
             break
-          case 'status':
+          case 'status': {
             resourceStore.updateOne(boundServerId, { state: msg.args[0] })
-            term?.writeln('\x1b[1m\x1b[33m* ' + t('userServers.status.' + msg.args[0]) + '\x1b[0m')
+            const stateKey = msg.args[0] === 'stopped' ? 'offline' : msg.args[0]
+            const stateLabel = te(`userServers.status.${stateKey}`) ? t(`userServers.status.${stateKey}`) : stateKey
+            term?.writeln('\x1b[1m\x1b[33m* ' + stateLabel + '\x1b[0m')
             break
+          }
           case 'stats':
             try {
               const stats = JSON.parse(msg.args[0])

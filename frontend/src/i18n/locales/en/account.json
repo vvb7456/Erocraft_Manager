@@ -1,6 +1,6 @@
 {
   "title": "Account Settings",
-  "loading": "Loading account information...",
+  "loading": "Loading account information…",
   "otherSettings": "Other settings",
   "otherSettingsDesc": "Choose the interface language and chat notification sound.",
   "profile": {
@@ -24,7 +24,7 @@
     "placeholder": "Enter new email",
     "currentPassword": "Current Password",
     "submit": "Change Email",
-    "success": "Your email address has been updated.",
+    "success": "Email updated",
     "validation": {
       "required": "Please enter a new email address",
       "format": "Enter a valid email address",

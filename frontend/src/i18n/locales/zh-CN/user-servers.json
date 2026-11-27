@@ -19,10 +19,10 @@
     "noPlan": "此服务器未绑定套餐，无法续费"
   },
   "convert": {
-    "button": "转为正式版",
+    "button": "转为标准套餐",
     "failed": "加载标准套餐信息失败"
   },
-  "searchPlaceholder": "搜索服务器...",
+  "searchPlaceholder": "搜索服务器…",
   "pagination": {
     "perPage": "条/页"
   },
@@ -79,7 +79,7 @@
     "clientIos": "iOS",
     "clientAndroid": "Android"
   },
-  "commandPlaceholder": "输入命令...",
+  "commandPlaceholder": "输入命令…",
   "consoleActions": {
     "copyTitle": "终端操作",
     "copyAll": "复制全部输出",
@@ -90,7 +90,7 @@
   "consoleDisconnected": "连接已断开",
   "consoleReconnect": "重新连接",
   "reconnected": "已重连",
-  "reconnecting": "连接失败({current}/{max})，{seconds} 秒后重试...",
+  "reconnecting": "连接失败（{current}/{max}），{seconds} 秒后重试…",
   "reconnectFailed": "无法连接到服务器节点",
   "suspendedHint": "服务器已到期，请及时续费",
   "reconnectHint": "请检查网络或联系我们",
@@ -128,7 +128,7 @@
     "modified": "修改时间",
     "empty": "此目录为空",
     "noResults": "没有匹配的文件",
-    "searchPlaceholder": "搜索文件名...",
+    "searchPlaceholder": "搜索文件名…",
     "newFile": "新建文件",
     "newFolder": "新建文件夹",
     "upload": "上传",
@@ -148,7 +148,7 @@
     "save": "保存",
     "saved": "文件已保存",
     "unsavedChangesTitle": "放弃未保存的更改？",
-    "unsavedChangesMessage": "当前文件 “{name}” 有未保存的更改，关闭后将丢失。",
+    "unsavedChangesMessage": "当前文件「{name}」有未保存的更改，关闭后将丢失。",
     "unsavedChangesDiscard": "放弃更改",
     "confirmDelete": "确定要删除选中的 {n} 个文件吗？",
     "folderName": "文件夹名称",
@@ -167,12 +167,12 @@
       "emptyName": "名称不能为空",
       "invalidChars": "名称包含非法字符",
       "reservedName": "名称不能为 . 或 ..",
-      "nameTooLong": "名称过长（最多255个字符）"
+      "nameTooLong": "名称过长（最多 255 个字符）"
     },
     "uploadProgress": "上传中",
     "uploadComplete": "上传完成",
     "uploadFailed": "上传失败",
-    "uploadWaiting": "等待中...",
+    "uploadWaiting": "等待中…",
     "root": "根目录",
     "moreActions": "更多操作",
     "openFile": "打开文件",
@@ -191,13 +191,13 @@
     "copyAddress": "复制",
     "section": "自定义域名",
     "enableLabel": "启用自定义域名",
-    "enableHint": "启用后，本服务器将获得一个简洁、易记的访问网址，无需输入端口号即可在浏览器中打开。",
+    "enableHint": "开启后可通过专属网址直接访问，无需输入端口号。",
     "statusActive": "已启用",
     "statusFailed": "出错了",
     "statusFailedHint": "可尝试重新启用。如反复失败，请联系管理员。",
     "subdomainLabel": "网址前缀",
     "subdomainPlaceholder": "例如 mychat",
-    "subdomainHint": "只能包含小写字母、数字、连字符 (-)，最长 32 个字符。开头和结尾不能是 -。",
+    "subdomainHint": "只能包含小写字母、数字和连字符（-），最长 32 个字符，不能以 - 开头或结尾。",
     "subdomainInvalid": "格式不正确",
     "subdomainRequired": "请填写网址前缀",
     "warning": {
