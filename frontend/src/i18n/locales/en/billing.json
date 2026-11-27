@@ -186,7 +186,7 @@
     "detail": {
       "title": "Order Detail",
       "overview": "Overview",
-      "invoices": "Invoices & Transactions",
+      "paymentInfo": "Payment & Transactions",
       "effect": "Effect",
       "refunds": "Refunds",
       "periodCount": "Periods",
@@ -236,6 +236,9 @@
       "invoiceStatus_paid": "Paid",
       "invoiceStatus_void": "Void",
       "txId": "Transaction ID",
+      "txStatus": "Transaction status",
+      "txAmount": "Charged amount",
+      "txChannel": "Charge method",
       "txStatus_succeeded": "Succeeded",
       "txStatus_failed": "Failed",
       "txStatus_refunded": "Refunded",
@@ -246,11 +249,8 @@
       "refundStatus_succeeded": "Succeeded",
       "refundStatus_failed": "Failed",
       "refundInitiatedBy": "Initiated by",
-      "externalOrder": "External Order Info",
       "externalOrderNo": "External Order No",
-      "channel": "Channel",
       "operator": "Operator",
-      "channelAmount": "Received Amount",
       "channelNote": "Note"
     },
     "incidents": {

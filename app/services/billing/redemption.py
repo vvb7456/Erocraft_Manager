@@ -1357,7 +1357,7 @@ async def redeem_code(
             kind=kind,
             channel=code_channel,
             external_order_id=final_ext_id,
-            operator="redemption",
+            operator="system",
             channel_note=note,
             period_count=1,
             discount_pct=Decimal("0"),

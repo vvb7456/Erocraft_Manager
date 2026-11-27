@@ -200,6 +200,163 @@ function channelLabel(ch: string): string {
   return ch === '' ? '—' : t('billing.channel.' + ch)
 }
 
+function invoiceStatusColor(s: string): string {
+  return s === 'paid' ? 'var(--green)' : 'var(--t3)'
+}
+
+function txStatusColor(s: string): string {
+  if (s === 'succeeded') return 'var(--green)'
+  if (s === 'refunded') return 'var(--t2)'
+  return 'var(--red)'
+}
+
+interface PaymentField {
+  key: string
+  label: string
+  value: string
+  kind?: 'text' | 'code' | 'mono' | 'badge'
+  badgeColor?: string
+  muted?: boolean
+}
+
+interface PaymentCard {
+  key: string
+  fields: PaymentField[]
+  transactions: Transaction[]
+}
+
+const paymentCards = computed<PaymentCard[]>(() => {
+  const o = order.value
+  if (!o) return []
+
+  if (!isGatewayOrder.value) {
+    const fields: PaymentField[] = [
+      {
+        key: 'channel',
+        label: t('billing.admin.orders.col.channel'),
+        value: channelLabel(o.channel),
+        kind: 'badge',
+        badgeColor: orderChannelColor(o.channel),
+      },
+      {
+        key: 'amount',
+        label: t('billing.admin.orders.col.amount'),
+        value: `¥${fenToYuan(o.received_fen || o.total_fen)}`,
+        kind: 'mono',
+      },
+      {
+        key: 'extNo',
+        label: t('billing.admin.detail.externalOrderNo'),
+        value: o.external_order_id || '—',
+        kind: o.external_order_id ? 'code' : 'text',
+        muted: !o.external_order_id,
+      },
+    ]
+    if (o.channel_note) {
+      fields.push({
+        key: 'note',
+        label: t('billing.admin.detail.channelNote'),
+        value: o.channel_note,
+      })
+    }
+    return [{ key: `external-${o.id}`, fields, transactions: [] }]
+  }
+
+  return o.invoices.map((inv) => {
+    const txs = o.transactions.filter(tx => tx.invoice_id === inv.id)
+    const fields: PaymentField[] = [
+      {
+        key: 'invoiceNo',
+        label: t('billing.admin.detail.invoiceNo'),
+        value: inv.invoice_no,
+        kind: 'code',
+      },
+      {
+        key: 'status',
+        label: t('billing.admin.detail.invoiceStatus'),
+        value: t('billing.admin.detail.invoiceStatus_' + inv.status),
+        kind: 'badge',
+        badgeColor: invoiceStatusColor(inv.status),
+      },
+      {
+        key: 'amount',
+        label: t('billing.admin.orders.col.amount'),
+        value: `¥${fenToYuan(inv.total_fen)}`,
+        kind: 'mono',
+      },
+      {
+        key: 'gateway',
+        label: t('billing.admin.detail.invoiceGateway'),
+        value: inv.gateway_code === null ? '—' : channelLabel(inv.gateway_code),
+        muted: inv.gateway_code === null,
+      },
+    ]
+
+    if (inv.paid_at) {
+      fields.push({
+        key: 'paidAt',
+        label: t('billing.admin.detail.invoicePaidAt'),
+        value: fmtTs(inv.paid_at),
+      })
+    } else if (inv.due_at) {
+      fields.push({
+        key: 'dueAt',
+        label: t('billing.admin.detail.invoiceDue'),
+        value: fmtTs(inv.due_at),
+      })
+    }
+
+    // 单笔交易直接并入发票键值列表，避免重复字段与窄屏表格挤压；仅在存在差异或异常时补充对应字段
+    if (txs.length === 1) {
+      const tx = txs[0]
+      fields.push({
+        key: 'txId',
+        label: t('billing.admin.detail.txId'),
+        value: tx.transaction_id,
+        kind: 'code',
+      })
+      if (tx.status !== 'succeeded') {
+        fields.push({
+          key: 'txStatus',
+          label: t('billing.admin.detail.txStatus'),
+          value: t('billing.admin.detail.txStatus_' + tx.status),
+          kind: 'badge',
+          badgeColor: txStatusColor(tx.status),
+        })
+      }
+      if (tx.refunded_fen > 0) {
+        fields.push({
+          key: 'txRefunded',
+          label: t('billing.admin.detail.refunded'),
+          value: `¥${fenToYuan(tx.refunded_fen)}`,
+          kind: 'mono',
+        })
+      }
+      if (tx.amount_fen !== inv.total_fen) {
+        fields.push({
+          key: 'txAmount',
+          label: t('billing.admin.detail.txAmount'),
+          value: `¥${fenToYuan(tx.amount_fen)}`,
+          kind: 'mono',
+        })
+      }
+      if (inv.gateway_code !== null && tx.gateway_code !== inv.gateway_code) {
+        fields.push({
+          key: 'txChannel',
+          label: t('billing.admin.detail.txChannel'),
+          value: channelLabel(tx.gateway_code),
+        })
+      }
+    }
+
+    return {
+      key: `inv-${inv.id}`,
+      fields,
+      transactions: txs.length > 1 ? txs : [],
+    }
+  })
+})
+
 // ── Action conditions ──
 const isGatewayOrder = computed(() => (order.value?.invoices.length ?? 0) > 0)
 const refundableTransactions = computed(() => order.value?.transactions.filter(tx => tx.payment_id !== null && tx.status === 'succeeded'
@@ -381,6 +538,9 @@ async function queryRefund(refund: Refund) {
             <span v-else class="muted">—</span>
           </dd>
 
+          <dt>{{ t('billing.admin.detail.operator') }}</dt>
+          <dd :title="order.operator || 'system'">{{ order.operator || 'system' }}</dd>
+
           <dt>{{ t('billing.admin.detail.retries') }}</dt>
           <dd>{{ order.apply_retry_count }} <span v-if="order.next_apply_at" class="muted"> / {{ t('billing.admin.detail.nextApply') }} {{ fmtTs(order.next_apply_at) }}</span></dd>
 
@@ -407,76 +567,35 @@ async function queryRefund(refund: Refund) {
         <div v-if="order.last_apply_error" class="err-block">{{ order.last_apply_error }}</div>
       </div>
 
-      <!-- ═══ External Order Transaction Info ═══ -->
-      <div v-if="!isGatewayOrder" class="sec">
-        <h4 class="sec-title">{{ t('billing.admin.detail.externalOrder') }}</h4>
-        <div class="subcard">
+      <!-- ═══ Payment & Transactions (unified across gateway / external / redemption orders) ═══ -->
+      <div v-if="paymentCards.length" class="sec">
+        <h4 class="sec-title">{{ t('billing.admin.detail.paymentInfo') }}</h4>
+        <div v-for="card in paymentCards" :key="card.key" class="subcard">
           <dl class="dl dl--dual">
-            <dt>{{ t('billing.admin.detail.externalOrderNo') }}</dt>
-            <dd><code>{{ order.external_order_id || '—' }}</code></dd>
-
-            <dt>{{ t('billing.admin.detail.channel') }}</dt>
-            <dd>
-              <Badge :color="orderChannelColor(order.channel)">{{ channelLabel(order.channel) }}</Badge>
-            </dd>
-
-            <dt>{{ t('billing.admin.detail.operator') }}</dt>
-            <dd>{{ order.operator || '—' }}</dd>
-
-            <dt>{{ t('billing.admin.detail.channelAmount') }}</dt>
-            <dd class="mono">¥{{ fenToYuan(order.total_fen) }}</dd>
-
-            <dt>{{ t('billing.admin.detail.channelNote') }}</dt>
-            <dd>{{ order.channel_note || '—' }}</dd>
-          </dl>
-        </div>
-      </div>
-
-      <div v-else-if="order.invoices.length" class="sec">
-        <h4 class="sec-title">{{ t('billing.admin.detail.invoices') }}</h4>
-        <div v-for="inv in order.invoices" :key="inv.id" class="subcard">
-          <dl class="dl dl--dual">
-            <dt>{{ t('billing.admin.detail.invoiceNo') }}</dt>
-            <dd><code>{{ inv.invoice_no }}</code></dd>
-
-            <dt>{{ t('billing.admin.detail.invoiceStatus') }}</dt>
-            <dd><Badge :color="inv.status === 'paid' ? 'var(--green)' : inv.status === 'void' ? 'var(--t3)' : 'var(--t3)'">{{ t('billing.admin.detail.invoiceStatus_' + inv.status) }}</Badge></dd>
-
-            <dt>{{ t('billing.admin.orders.col.amount') }}</dt>
-            <dd class="mono">¥{{ fenToYuan(inv.total_fen) }}</dd>
-
-            <dt>{{ t('billing.admin.detail.invoiceGateway') }}</dt>
-            <dd>{{ inv.gateway_code === null ? '—' : channelLabel(inv.gateway_code) }}</dd>
-
-            <dt>{{ t('billing.admin.detail.invoiceDue') }}</dt>
-            <dd>{{ fmtTs(inv.due_at) }}</dd>
-
-            <dt>{{ t('billing.admin.detail.invoicePaidAt') }}</dt>
-            <dd>{{ fmtTs(inv.paid_at) }}</dd>
+            <template v-for="f in card.fields" :key="f.key">
+              <dt>{{ f.label }}</dt>
+              <dd :class="{ mono: f.kind === 'mono', muted: f.muted }" :title="f.kind === 'badge' ? undefined : f.value">
+                <Badge v-if="f.kind === 'badge'" :color="f.badgeColor">{{ f.value }}</Badge>
+                <code v-else-if="f.kind === 'code'" class="code-trunc">{{ f.value }}</code>
+                <template v-else>{{ f.value }}</template>
+              </dd>
+            </template>
           </dl>
 
-          <table v-if="order.transactions.some(tx => tx.invoice_id === inv.id)" class="tx-table">
-            <thead>
-              <tr>
-                <th>{{ t('billing.admin.detail.txId') }}</th>
-                <th>{{ t('billing.admin.orders.col.channel') }}</th>
-                <th class="r">{{ t('billing.admin.orders.col.amount') }}</th>
-                <th class="r">{{ t('billing.admin.detail.refunded') }}</th>
-                <th>{{ t('billing.admin.orders.col.status') }}</th>
-                <th>{{ t('billing.admin.orders.col.time') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="tx in order.transactions.filter(tx => tx.invoice_id === inv.id)" :key="tx.id">
-                <td><code>{{ tx.transaction_id }}</code></td>
-                <td>{{ channelLabel(tx.gateway_code) }}</td>
-                <td class="mono r">¥{{ fenToYuan(tx.amount_fen) }}</td>
-                <td class="mono r">{{ tx.refunded_fen > 0 ? '¥' + fenToYuan(tx.refunded_fen) : '—' }}</td>
-                <td><Badge :color="tx.status === 'succeeded' ? 'var(--green)' : tx.status === 'refunded' ? 'var(--t2)' : 'var(--red)'">{{ t('billing.admin.detail.txStatus_' + tx.status) }}</Badge></td>
-                <td>{{ fmtTs(tx.created_at) }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-if="card.transactions.length" class="tx-list">
+            <div v-for="tx in card.transactions" :key="tx.id" class="tx-item">
+              <div class="tx-item-head">
+                <code class="code-trunc" :title="tx.transaction_id">{{ tx.transaction_id }}</code>
+                <Badge size="sm" :color="txStatusColor(tx.status)">{{ t('billing.admin.detail.txStatus_' + tx.status) }}</Badge>
+              </div>
+              <div class="tx-item-meta">
+                <span>{{ channelLabel(tx.gateway_code) }}</span>
+                <span class="mono">¥{{ fenToYuan(tx.amount_fen) }}</span>
+                <span v-if="tx.refunded_fen > 0" class="mono muted">{{ t('billing.admin.detail.refunded') }} ¥{{ fenToYuan(tx.refunded_fen) }}</span>
+                <span class="muted">{{ fmtTs(tx.created_at) }}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -519,7 +638,7 @@ async function queryRefund(refund: Refund) {
         <div v-for="r in order.refunds" :key="r.id" class="subcard">
           <dl class="dl dl--dual">
             <dt>{{ t('billing.admin.detail.refundNo') }}</dt>
-            <dd><code>{{ r.refund_no }}</code></dd>
+            <dd :title="r.refund_no"><code class="code-trunc">{{ r.refund_no }}</code></dd>
 
             <dt>{{ t('billing.admin.orders.col.amount') }}</dt>
             <dd class="mono">¥{{ fenToYuan(r.amount_fen) }}</dd>
@@ -531,7 +650,7 @@ async function queryRefund(refund: Refund) {
             <dd>{{ r.reason || '—' }}</dd>
 
             <dt>{{ t(r.external_refund_id ? 'billing.admin.detail.externalRefundNo' : 'billing.admin.detail.refundGatewayId') }}</dt>
-            <dd><code v-if="r.external_refund_id || r.gateway_refund_id">{{ r.external_refund_id || r.gateway_refund_id }}</code><span v-else class="muted">—</span></dd>
+            <dd :title="(r.external_refund_id || r.gateway_refund_id) || undefined"><code v-if="r.external_refund_id || r.gateway_refund_id" class="code-trunc">{{ r.external_refund_id || r.gateway_refund_id }}</code><span v-else class="muted">—</span></dd>
 
             <template v-if="!r.payment_id && !r.external_refund_id">
               <dt>{{ t('billing.admin.detail.refundRetries') }}</dt>
@@ -588,7 +707,7 @@ async function queryRefund(refund: Refund) {
       <BaseSelect v-if="refundOptions.length > 1" v-model="selectedTransaction" :options="refundOptions" :label="t('billing.admin.detail.txId')" />
       <div class="refund-tx-info mono">
         <span class="muted">{{ t(isGatewayOrder ? 'billing.admin.detail.txId' : 'billing.admin.detail.externalOrderNo') }}</span>
-        <code>{{ isGatewayOrder ? refundTx?.transaction_id : order?.external_order_id }}</code>
+        <code class="code-trunc" :title="(isGatewayOrder ? refundTx?.transaction_id : order?.external_order_id) || undefined">{{ isGatewayOrder ? refundTx?.transaction_id : order?.external_order_id }}</code>
         <span class="muted">{{ t('billing.admin.detail.refundFullAmount') }}</span>
         <span class="mono">¥{{ fenToYuan(refundAmount) }}</span>
       </div>
@@ -643,11 +762,27 @@ async function queryRefund(refund: Refund) {
   border-radius: var(--r-sm); padding: var(--sp-3); margin-bottom: var(--sp-3);
 }
 
-/* ── Transaction table ── */
-.tx-table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: var(--sp-3); }
-.tx-table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--t3); padding: var(--sp-1) var(--sp-2); border-bottom: 1px solid var(--bd); }
-.tx-table td { padding: var(--sp-1) var(--sp-2); border-bottom: 1px solid var(--bd); }
-.tx-table .r { text-align: right; }
+/* ── Transaction list (multi-transaction fallback) ── */
+.tx-list {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px solid var(--bd);
+}
+.tx-item {
+  display: flex; flex-direction: column; gap: 4px;
+  padding-top: var(--sp-2); border-top: 1px dashed var(--bd);
+  min-width: 0;
+}
+.tx-item:first-child { padding-top: 0; border-top: none; }
+.tx-item-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-2); min-width: 0;
+}
+.tx-item-head > :last-child { flex-shrink: 0; }
+.tx-item-meta {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 2px var(--sp-3); font-size: var(--text-xs); color: var(--t2);
+}
 
 /* ── Incidents ── */
 .incident-row {
@@ -678,6 +813,11 @@ code {
   font-family: var(--font-mono);
   font-size: var(--text-xs); background: var(--bg-in);
   padding: 1px 5px; border-radius: var(--r-xs); color: var(--t1);
+}
+.code-trunc {
+  display: inline-block; max-width: 100%; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  vertical-align: bottom;
 }
 .mono  { font-family: var(--font-mono); }
 .muted { color: var(--t3); }

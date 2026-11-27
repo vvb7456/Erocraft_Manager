@@ -186,7 +186,7 @@
     "detail": {
       "title": "订单详情",
       "overview": "概览",
-      "invoices": "发票与交易",
+      "paymentInfo": "支付与交易",
       "effect": "业务效果",
       "refunds": "退款记录",
       "periodCount": "周期数",
@@ -236,6 +236,9 @@
       "invoiceStatus_paid": "已支付",
       "invoiceStatus_void": "已作废",
       "txId": "交易号",
+      "txStatus": "交易状态",
+      "txAmount": "扣款金额",
+      "txChannel": "扣款方式",
       "txStatus_succeeded": "已扣款",
       "txStatus_failed": "失败",
       "txStatus_refunded": "已退款",
@@ -246,12 +249,9 @@
       "refundStatus_succeeded": "退款成功",
       "refundStatus_failed": "退款失败",
       "refundInitiatedBy": "发起人",
-      "externalOrder": "外部交易信息",
       "externalOrderNo": "外部订单号",
-      "channel": "来源平台",
       "operator": "操作者",
-      "channelAmount": "实收金额",
-      "channelNote": "客服备注"
+      "channelNote": "备注"
     },
     "incidents": {
       "kind": {
