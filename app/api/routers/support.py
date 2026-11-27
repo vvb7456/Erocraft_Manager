@@ -258,11 +258,14 @@ async def send_message(cid: int, request: Request, user: SupportUser = Depends(g
 
 @router.post("/conversations/{cid}/read")
 async def mark_read(cid: int, payload: ReadInput, user: SupportUser = Depends(get_support_user), db: AsyncSession = Depends(get_db)) -> dict:
-    row = await conversation(db, cid, user)
+    # 结束鉴权依赖开启的只读事务，避免 MariaDB 11.8 快照隔离下复用旧 ReadView 触发 1020。
+    await db.commit()
+    row = await conversation(db, cid, user, lock=True)
     cursor = min(payload.message_id, row.last_message_id)
     column = SupportConversation.admin_read_id if user.root_admin else SupportConversation.user_read_id
     changed = cursor > (row.admin_read_id if user.root_admin else row.user_read_id)
-    await db.execute(update(SupportConversation).where(SupportConversation.id == cid, column < cursor).values({column.key: cursor}))
+    if changed:
+        await db.execute(update(SupportConversation).where(SupportConversation.id == cid, column < cursor).values({column.key: cursor}))
     await db.commit()
     if changed:
         notify_change(row.user_id)
